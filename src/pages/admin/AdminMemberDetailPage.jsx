@@ -1,0 +1,196 @@
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { usersService } from '@/services/usersService'
+import { Card, Avatar, Select, Textarea, Button, Spinner, Checkbox, EmptyState } from '@/components/ui'
+import { formatDate, formatPhone, hitungUmur } from '@/lib/utils'
+
+export default function AdminMemberDetailPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+
+  const [member, setMember] = useState(null)
+  const [ministries, setMinistries] = useState([])
+  const [komselList, setKomselList] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const [form, setForm] = useState({
+    role: '', status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
+  })
+
+  useEffect(() => { load() }, [id])
+
+  async function load() {
+    setLoading(true)
+    try {
+      const [data, allMinistries, allKomsel] = await Promise.all([
+        usersService.getById(id),
+        usersService.getAllMinistries(),
+        usersService.getAllKomsel(),
+      ])
+      setMember(data)
+      setMinistries(allMinistries)
+      setKomselList(allKomsel)
+      setForm({
+        role: data.role || 'Jemaat',
+        status: data.status || 'Aktif',
+        sp_level: data.sp_level || 'Aman',
+        sp_notes: data.sp_notes || '',
+        komsel_id: data.komsel_id || '',
+        ministry_ids: data.ministry_ids || [],
+      })
+    } catch (err) {
+      setError(err.message || 'Gagal memuat data jemaat.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
+
+  function toggleMinistry(ministryId) {
+    setForm(p => ({
+      ...p,
+      ministry_ids: p.ministry_ids.includes(ministryId)
+        ? p.ministry_ids.filter(m => m !== ministryId)
+        : [...p.ministry_ids, ministryId],
+    }))
+  }
+
+  async function handleSave() {
+    setError(''); setSuccess(''); setSaving(true)
+    try {
+      const updated = await usersService.update(id, {
+        ...form,
+        komsel_id: form.komsel_id || null,
+      })
+      setMember(updated)
+      setSuccess('Perubahan tersimpan.')
+    } catch (err) {
+      setError(err.message || 'Gagal menyimpan perubahan.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
+
+  if (!member) {
+    return (
+      <div>
+        <button onClick={() => navigate('/admin/jemaat')} className="flex items-center gap-1 text-sm text-gray-500 mb-4">
+          <ArrowLeft size={16} /> Kembali
+        </button>
+        <EmptyState title="Jemaat tidak ditemukan" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <button onClick={() => navigate('/admin/jemaat')} className="flex items-center gap-1 text-sm text-gray-500 mb-4">
+        <ArrowLeft size={16} /> Kembali ke Daftar Jemaat
+      </button>
+
+      {error && (
+        <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>
+      )}
+      {success && (
+        <div className="bg-green-50 border border-green-100 text-green-600 text-sm rounded-xl px-4 py-3 mb-4">{success}</div>
+      )}
+
+      {/* Profil */}
+      <Card className="p-4 mb-4">
+        <div className="flex items-center gap-4">
+          <Avatar name={member.name} src={member.photo_url} size="xl" />
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-gray-900">{member.name}</p>
+            <p className="text-sm text-gray-400">{member.email || '-'}</p>
+            <p className="text-sm text-gray-400">{formatPhone(member.phone)}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+          <div>
+            <p className="text-xs text-gray-400">Tanggal Lahir</p>
+            <p className="text-gray-700">{member.birth_date ? `${formatDate(member.birth_date)} (${hitungUmur(member.birth_date)})` : '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Tempat Lahir</p>
+            <p className="text-gray-700">{member.birth_place || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Jenis Kelamin</p>
+            <p className="text-gray-700">{member.gender || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Golongan Darah</p>
+            <p className="text-gray-700">{member.blood_type || '-'}</p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-xs text-gray-400">Alamat</p>
+            <p className="text-gray-700">{member.address || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">NIK</p>
+            <p className="text-gray-700">{member.nik || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Terdaftar</p>
+            <p className="text-gray-700">{formatDate(member.created_at)}</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Pengaturan akun */}
+      <Card className="p-4 mb-4 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-900">Pengaturan Akun</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <Select label="Role" value={form.role} onChange={e => set('role', e.target.value)}>
+            {['Jemaat', 'Volunteer', 'PKS', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
+          </Select>
+          <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
+            <option value="Aktif">Aktif</option>
+            <option value="Nonaktif">Nonaktif</option>
+          </Select>
+        </div>
+        <Select label="Komsel" value={form.komsel_id} onChange={e => set('komsel_id', e.target.value)}>
+          <option value="">Belum ada komsel</option>
+          {komselList.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
+        </Select>
+      </Card>
+
+      {/* Ministry */}
+      <Card className="p-4 mb-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-900">Ministry</h2>
+        {ministries.length === 0 ? (
+          <p className="text-sm text-gray-400">Belum ada data ministry.</p>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-2">
+            {ministries.map(m => (
+              <Checkbox
+                key={m.ministry_id}
+                label={m.name}
+                checked={form.ministry_ids.includes(m.ministry_id)}
+                onChange={() => toggleMinistry(m.ministry_id)}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Surat Peringatan */}
+      <Card className="p-4 mb-4 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-900">Surat Peringatan (SP)</h2>
+        <Select label="Status SP" value={form.sp_level} onChange={e => set('sp_level', e.target.value)}>
+          {['Aman', 'SP 1', 'SP 2', 'SP 3'].map(s => <option key={s} value={s}>{s}</option>)}
+        </Select>
+        <Textarea label="Catatan SP" rows={3} placeholder="Alasan / catatan SP (opsional)" value={form.sp_notes} onChange={e => set('sp_notes', e.target.value)} />
+      </Card>
+
+      <Button className="w-full" loading={saving} onClick={handleSave}>Simpan Perubahan</Button>
+    </div>
+  )
+}

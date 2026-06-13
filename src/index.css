@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #FF6B35;
+  --color-primary-dark: #E63946;
+  --color-primary-deeper: #2d0a0a;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background-color: #f9fafb;
+}
+
+/* Gradient utama aplikasi */
+.gradient-main {
+  background: linear-gradient(135deg, #FF6B35 0%, #E63946 60%, #2d0a0a 100%);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #FF6B35, #E63946);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Scrollbar tipis */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #FF6B35; border-radius: 2px; }
