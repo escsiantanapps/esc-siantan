@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom'
 import { Bell, ChevronRight, Calendar, ClipboardList, BookOpen, Droplets, Heart, Clock, MapPin, Church } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { newsService, eventsService, classesService } from '@/services/contentService'
-import { Card, Spinner, Badge } from '@/components/ui'
+import { Card, Spinner } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
+import EventCarousel from '@/components/EventCarousel'
 import { formatDate, spColor } from '@/lib/utils'
 
 export default function HomePage() {
@@ -30,9 +31,6 @@ export default function HomePage() {
     { to: '/pemberkatan-nikah',  icon: Heart,         label: 'Nikah',    color: 'bg-pink-100 text-pink-600' },
     { to: '/status-pendaftaran', icon: Bell,          label: 'Status',   color: 'bg-purple-100 text-purple-600' },
   ]
-
-  const featured = events[0]
-  const otherEvents = events.slice(1)
 
   return (
     <div className="pb-4">
@@ -72,30 +70,17 @@ export default function HomePage() {
 
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
 
-        {/* Featured event ala Stitch */}
-        {featured && (
-          <Link to={`/events/${featured.event_id}`} className="block mb-6 animate-fade-in-up" style={{ animationDelay: '90ms' }}>
-            <div className="relative rounded-3xl overflow-hidden ambient-shadow active:scale-[0.99] transition-transform">
-              {featured.thumbnail_url
-                ? <img src={featured.thumbnail_url} alt={featured.name} className="w-full h-44 object-cover" />
-                : <div className="w-full h-44 gradient-main" />}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-              <span className="absolute top-3 left-3 bg-surface/90 text-brand-600 text-[11px] font-semibold px-2.5 py-1 rounded-full">
-                EVENT TERDEKAT
-              </span>
-              <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                <p className="text-xs flex items-center gap-1 text-white/85">
-                  <Calendar size={12} /> {formatDate(featured.event_date)}{featured.event_time ? ` · ${featured.event_time}` : ''}
-                </p>
-                <h2 className="text-lg font-bold mt-0.5 text-white">{featured.name}</h2>
-                {featured.location && (
-                  <p className="text-xs flex items-center gap-1 text-white/85 mt-0.5">
-                    <MapPin size={12} /> {featured.location}
-                  </p>
-                )}
-              </div>
+        {/* Event — carousel yang bisa digeser */}
+        {events.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900">Event</h3>
+              <Link to="/events" className="text-xs text-brand-500 flex items-center gap-0.5">
+                Semua <ChevronRight size={13} />
+              </Link>
             </div>
-          </Link>
+            <EventCarousel events={events.slice(0, 6)} />
+          </section>
         )}
 
         {/* Quick actions */}
@@ -138,37 +123,6 @@ export default function HomePage() {
                       <p className="text-xs text-gray-400 mt-0.5">{formatDate(item.created_at)}</p>
                     </div>
                     <ChevronRight size={16} className="text-gray-300 flex-shrink-0 mt-1" />
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Event lainnya */}
-        {otherEvents.length > 0 && (
-          <section className="mb-6 animate-fade-in-up" style={{ animationDelay: '160ms' }}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Event Berlangsung</h3>
-              <Link to="/events" className="text-xs text-brand-500 flex items-center gap-0.5">
-                Semua <ChevronRight size={13} />
-              </Link>
-            </div>
-            <div className="space-y-2.5">
-              {otherEvents.slice(0, 3).map(ev => (
-                <Link key={ev.event_id} to={`/events/${ev.event_id}`} className="block">
-                  <Card glass className="p-3.5 flex items-start gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
-                    <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-                      <Calendar size={18} className="text-red-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{ev.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1 flex-wrap">
-                        <span className="flex items-center gap-1"><Clock size={11} /> {formatDate(ev.event_date)}</span>
-                        {ev.location && <span className="flex items-center gap-1"><MapPin size={11} /> {ev.location}</span>}
-                      </p>
-                    </div>
-                    <Badge color="orange">Daftar</Badge>
                   </Card>
                 </Link>
               ))}

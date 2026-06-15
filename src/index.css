@@ -87,6 +87,10 @@ h1, h2, h3 {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #00BFFF; border-radius: 2px; }
 
+/* Sembunyikan scrollbar (mis. pada carousel yang digeser) */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* ─── Animasi ─────────────────────────────────────────── */
 @keyframes fade-in-up {
   from { opacity: 0; transform: translateY(14px); }

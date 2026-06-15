@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BarChart3, CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { BarChart3, CheckCircle2, Clock, XCircle, Printer } from 'lucide-react'
 import { tasksService } from '@/services/tasksService'
 import { usersService } from '@/services/usersService'
 import { evaluationService } from '@/services/evaluationService'
-import { Card, PageHeader, Spinner, EmptyState, Input, Select, StatusBadge, Avatar, Badge } from '@/components/ui'
+import { Card, PageHeader, Button, Spinner, EmptyState, Input, Select, StatusBadge, Avatar, Badge } from '@/components/ui'
+import { formatDate } from '@/lib/utils'
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+}
 
 function toISODate(d) {
   return d.toISOString().slice(0, 10)
@@ -66,9 +71,94 @@ export default function AdminEvaluationPage() {
     KOSONG: filteredRows.filter(r => r.status === 'KOSONG').length,
   }), [filteredRows])
 
+  // Cetak laporan: buka jendela print-friendly berisi ringkasan + tabel sesuai
+  // filter aktif. Memakai window.print() bawaan (tanpa dependensi PDF).
+  function printReport() {
+    const tmplTitle = templates.find(t => t.form_id === formId)?.title || '-'
+    const periode = `${formatDate(startDate)} – ${formatDate(endDate)}`
+    const meta = [
+      ['Tugas / Form', tmplTitle],
+      ['Periode', periode],
+      ['Role', role || 'Semua'],
+      ['Ministry', ministryId ? (ministryMap[ministryId] || '-') : 'Semua'],
+      ['Komsel', komselId ? (komselMap[komselId] || '-') : 'Semua'],
+    ]
+
+    const rowsHtml = filteredRows.map((r, i) => {
+      const tags = [
+        ...(r.user.ministry_ids || []).map(id => ministryMap[id]).filter(Boolean),
+        r.user.komsel_id ? komselMap[r.user.komsel_id] : null,
+      ].filter(Boolean).join(', ')
+      return `<tr>
+        <td class="c">${i + 1}</td>
+        <td>${esc(r.user.name)}</td>
+        <td>${esc(tags || '-')}</td>
+        <td class="c">${esc(r.filled)}/${esc(r.target)}</td>
+        <td class="c">${esc(r.minLulus)}</td>
+        <td class="c status-${esc(r.status)}">${esc(r.status)}</td>
+      </tr>`
+    }).join('')
+
+    const html = `<!doctype html><html lang="id"><head><meta charset="utf-8">
+<title>Laporan Evaluasi — ${esc(tmplTitle)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1d22; margin: 32px; }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  .sub { color: #6b7280; font-size: 12px; margin-bottom: 16px; }
+  .meta { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; }
+  .meta td { padding: 3px 8px; }
+  .meta td:first-child { color: #6b7280; width: 130px; }
+  .summary { display: flex; gap: 10px; margin-bottom: 16px; }
+  .summary div { flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; text-align: center; }
+  .summary b { display: block; font-size: 22px; }
+  table.data { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.data th, table.data td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+  table.data th { background: #f3f4f6; }
+  td.c { text-align: center; }
+  .status-TERPENUHI { color: #059669; font-weight: 600; }
+  .status-PROSES { color: #d97706; font-weight: 600; }
+  .status-KOSONG { color: #dc2626; font-weight: 600; }
+  .foot { margin-top: 20px; font-size: 11px; color: #9ca3af; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+  <h1>Laporan Evaluasi Tugas</h1>
+  <div class="sub">ESC Siantan</div>
+  <table class="meta">${meta.map(([k, v]) => `<tr><td>${esc(k)}</td><td>: ${esc(v)}</td></tr>`).join('')}</table>
+  <div class="summary">
+    <div style="color:#059669"><b>${summary.TERPENUHI}</b>Terpenuhi</div>
+    <div style="color:#d97706"><b>${summary.PROSES}</b>Proses</div>
+    <div style="color:#dc2626"><b>${summary.KOSONG}</b>Kosong</div>
+  </div>
+  <table class="data">
+    <thead><tr><th>#</th><th>Nama</th><th>Ministry / Komsel</th><th>Terisi/Target</th><th>Min.</th><th>Status</th></tr></thead>
+    <tbody>${rowsHtml || '<tr><td colspan="6" class="c">Tidak ada data</td></tr>'}</tbody>
+  </table>
+  <div class="foot">Dicetak ${esc(formatDate(new Date(), 'd MMMM yyyy, HH:mm'))} • Total ${filteredRows.length} jemaat</div>
+</body></html>`
+
+    const w = window.open('', '_blank')
+    if (!w) return
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    // Beri waktu render sebelum dialog cetak muncul.
+    setTimeout(() => w.print(), 350)
+  }
+
+  const canPrint = !loading && !loadingMeta && templates.length > 0
+
   return (
     <div>
-      <PageHeader title="Evaluasi & Laporan" subtitle="Pantau pemenuhan target tugas pelayanan" />
+      <PageHeader
+        title="Evaluasi & Laporan"
+        subtitle="Pantau pemenuhan target tugas pelayanan"
+        action={
+          <Button size="sm" variant="outline" disabled={!canPrint} onClick={printReport}>
+            <Printer size={15} /> Cetak Laporan
+          </Button>
+        }
+      />
 
       {/* Filter section */}
       <Card className="p-4 mb-4 space-y-3">

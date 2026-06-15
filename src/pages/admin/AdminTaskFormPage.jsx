@@ -13,6 +13,7 @@ const FIELD_TYPES = [
   { value: 'date', label: 'Tanggal' },
   { value: 'select', label: 'Pilihan (Dropdown)' },
   { value: 'checkbox', label: 'Checkbox' },
+  { value: 'image', label: 'Upload Foto' },
   { value: 'file', label: 'Upload File' },
 ]
 
@@ -247,7 +248,7 @@ export default function AdminTaskFormPage() {
             <Select label="Tipe" value={field.type} onChange={e => updateField(i, { type: e.target.value })}>
               {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </Select>
-            {field.type !== 'checkbox' && field.type !== 'file' && (
+            {field.type !== 'checkbox' && field.type !== 'file' && field.type !== 'image' && (
               <Input label="Placeholder" value={field.placeholder || ''} onChange={e => updateField(i, { placeholder: e.target.value })} />
             )}
             {field.type === 'select' && (

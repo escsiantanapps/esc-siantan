@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { startOfWeek, startOfMonth } from 'date-fns'
-import { ClipboardList, CheckCircle2, Paperclip, Lock } from 'lucide-react'
+import { ClipboardList, CheckCircle2, Paperclip, Lock, Image as ImageIcon } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
@@ -64,10 +64,10 @@ export default function TaskDetailPage() {
     setUploadingKey(field.key)
     setError('')
     try {
-      validateUpload(file, { maxMB: 10 })
+      validateUpload(file, { maxMB: 10, image: field.type === 'image' })
       const url = await tasksService.uploadResponseFile(profile.user_id, file)
       set(field.key, url)
-      toast.success('File berhasil diunggah.')
+      toast.success(field.type === 'image' ? 'Foto berhasil diunggah.' : 'File berhasil diunggah.')
     } catch (err) {
       setError(err.message || 'Gagal mengunggah file.')
       toast.error(err.message || 'Gagal mengunggah file.')
@@ -206,6 +206,24 @@ export default function TaskDetailPage() {
                   onChange={e => set(field.key, e.target.checked)}
                 />
               )}
+              {field.type === 'image' && (
+                <div className="space-y-1.5">
+                  <label className="text-sm text-gray-600 font-medium">
+                    {field.label}{field.required && <span className="text-red-500 ml-0.5">*</span>}
+                  </label>
+                  {form[field.key] && (
+                    <img src={form[field.key]} alt={field.label} className="w-full max-h-56 object-cover rounded-xl border border-gray-100" />
+                  )}
+                  <label className="flex items-center gap-2 px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl cursor-pointer text-gray-500">
+                    {uploadingKey === field.key
+                      ? <Spinner size="sm" />
+                      : <ImageIcon size={15} />
+                    }
+                    {form[field.key] ? 'Ganti foto' : 'Ambil / pilih foto'}
+                    <input type="file" accept="image/*" className="hidden" onChange={e => handleFileChange(field, e)} />
+                  </label>
+                </div>
+              )}
               {field.type === 'file' && (
                 <div className="space-y-1">
                   <label className="text-sm text-gray-600 font-medium">
@@ -219,6 +237,9 @@ export default function TaskDetailPage() {
                     {form[field.key] ? 'File terunggah' : 'Pilih file'}
                     <input type="file" className="hidden" onChange={e => handleFileChange(field, e)} />
                   </label>
+                  {form[field.key] && (
+                    <a href={form[field.key]} target="_blank" rel="noreferrer" className="text-xs text-brand-500 underline">Lihat file terunggah</a>
+                  )}
                 </div>
               )}
               {(!field.type || field.type === 'text') && (
