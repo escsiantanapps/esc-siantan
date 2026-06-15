@@ -1,6 +1,5 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { Home, Calendar, BookOpen, ClipboardList, User } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth'
 
 const NAV_ITEMS = [
   { to: '/',          icon: Home,          label: 'Beranda',  exact: true },
@@ -11,7 +10,6 @@ const NAV_ITEMS = [
 ]
 
 export default function UserLayout() {
-  const { isAdmin } = useAuth()
   const location = useLocation()
 
   return (
@@ -22,7 +20,7 @@ export default function UserLayout() {
       </main>
 
       {/* Bottom navigation */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-100 z-50">
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-surface border-t border-gray-100 z-50">
         <div className="flex">
           {NAV_ITEMS.map(({ to, icon: Icon, label, exact }) => {
             const active = exact ? location.pathname === to : location.pathname.startsWith(to)
@@ -43,16 +41,6 @@ export default function UserLayout() {
           })}
         </div>
       </nav>
-
-      {/* Admin shortcut badge */}
-      {isAdmin && (
-        <NavLink
-          to="/admin"
-          className="fixed top-4 right-4 z-50 bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-md"
-        >
-          Admin
-        </NavLink>
-      )}
     </div>
   )
 }

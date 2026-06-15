@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
+import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
 import { Card, Avatar, Select, Textarea, Button, Spinner, Checkbox, EmptyState } from '@/components/ui'
 import { formatDate, formatPhone, hitungUmur } from '@/lib/utils'
@@ -8,6 +10,9 @@ import { formatDate, formatPhone, hitungUmur } from '@/lib/utils'
 export default function AdminMemberDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { profile } = useAuth()
+  const { toast } = useToast()
+  const canEditRole = profile?.role === 'Super Admin'
 
   const [member, setMember] = useState(null)
   const [ministries, setMinistries] = useState([])
@@ -18,7 +23,7 @@ export default function AdminMemberDetailPage() {
   const [success, setSuccess] = useState('')
 
   const [form, setForm] = useState({
-    role: '', status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
+    role: '', status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [], is_pks: false,
   })
 
   useEffect(() => { load() }, [id])
@@ -41,6 +46,7 @@ export default function AdminMemberDetailPage() {
         sp_notes: data.sp_notes || '',
         komsel_id: data.komsel_id || '',
         ministry_ids: data.ministry_ids || [],
+        is_pks: data.is_pks || false,
       })
     } catch (err) {
       setError(err.message || 'Gagal memuat data jemaat.')
@@ -69,8 +75,27 @@ export default function AdminMemberDetailPage() {
       })
       setMember(updated)
       setSuccess('Perubahan tersimpan.')
+      toast.success('Perubahan tersimpan.')
     } catch (err) {
       setError(err.message || 'Gagal menyimpan perubahan.')
+      toast.error(err.message || 'Gagal menyimpan perubahan.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleApproval(status) {
+    setError(''); setSuccess(''); setSaving(true)
+    try {
+      const updated = await usersService.update(id, { status })
+      setMember(updated)
+      set('status', status)
+      const msg = status === 'Aktif' ? 'Pendaftaran disetujui.' : 'Pendaftaran ditolak.'
+      setSuccess(msg)
+      toast.success(msg)
+    } catch (err) {
+      setError(err.message || 'Gagal memperbarui status.')
+      toast.error(err.message || 'Gagal memperbarui status.')
     } finally {
       setSaving(false)
     }
@@ -100,6 +125,20 @@ export default function AdminMemberDetailPage() {
       )}
       {success && (
         <div className="bg-green-50 border border-green-100 text-green-600 text-sm rounded-xl px-4 py-3 mb-4">{success}</div>
+      )}
+
+      {/* Persetujuan pendaftaran */}
+      {member.status === 'Menunggu Persetujuan' && (
+        <Card className="p-4 mb-4 border-orange-200 bg-orange-50 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <p className="text-sm font-semibold text-orange-700">Menunggu persetujuan pendaftaran</p>
+            <p className="text-xs text-orange-600">Setujui agar jemaat ini bisa mengakses akunnya.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="danger" loading={saving} onClick={() => handleApproval('Nonaktif')}>Tolak</Button>
+            <Button size="sm" loading={saving} onClick={() => handleApproval('Aktif')}>Setujui</Button>
+          </div>
+        </Card>
       )}
 
       {/* Profil */}
@@ -148,10 +187,21 @@ export default function AdminMemberDetailPage() {
       <Card className="p-4 mb-4 space-y-4">
         <h2 className="text-sm font-semibold text-gray-900">Pengaturan Akun</h2>
         <div className="grid grid-cols-2 gap-3">
-          <Select label="Role" value={form.role} onChange={e => set('role', e.target.value)}>
-            {['Jemaat', 'Volunteer', 'PKS', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
-          </Select>
+          {canEditRole ? (
+            <Select label="Role" value={form.role} onChange={e => set('role', e.target.value)}>
+              {['Jemaat', 'Volunteer', 'PKS', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
+            </Select>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-sm text-gray-600 font-medium">Role</label>
+              <div className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+                <span className="text-sm text-gray-700">{form.role}</span>
+              </div>
+              <p className="text-xs text-gray-400">Hanya Super Admin yang dapat mengubah role.</p>
+            </div>
+          )}
           <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
+            <option value="Menunggu Persetujuan">Menunggu Persetujuan</option>
             <option value="Aktif">Aktif</option>
             <option value="Nonaktif">Nonaktif</option>
           </Select>
@@ -160,6 +210,11 @@ export default function AdminMemberDetailPage() {
           <option value="">Belum ada komsel</option>
           {komselList.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
         </Select>
+        <Checkbox
+          label="Jadikan PKS (Pemimpin Komsel)"
+          checked={form.is_pks}
+          onChange={e => set('is_pks', e.target.checked)}
+        />
       </Card>
 
       {/* Ministry */}

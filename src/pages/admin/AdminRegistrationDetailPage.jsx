@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { registrationService } from '@/services/contentService'
+import { useToast } from '@/hooks/useToast'
 import { Card, Select, Textarea, Input, Button, Spinner, StatusBadge, EmptyState } from '@/components/ui'
 import { formatDate, formatPhone, hitungUmur } from '@/lib/utils'
 
@@ -30,6 +31,7 @@ export default function AdminRegistrationDetailPage() {
   const { id } = useParams()
   const { pathname } = useLocation()
   const navigate = useNavigate()
+  const { toast } = useToast()
   const type = pathname.startsWith('/admin/nikah') ? 'wedding' : 'baptism'
   const backTo = type === 'wedding' ? '/admin/nikah' : '/admin/baptisan'
   const docs = type === 'wedding' ? WEDDING_DOCS : BAPTISM_DOCS
@@ -73,8 +75,10 @@ export default function AdminRegistrationDetailPage() {
       })
       setReg(updated)
       setSuccess('Status pendaftaran berhasil diperbarui.')
+      toast.success('Status pendaftaran berhasil diperbarui.')
     } catch (err) {
       setError(err.message || 'Gagal memperbarui status.')
+      toast.error(err.message || 'Gagal memperbarui status.')
     } finally {
       setSaving(false)
     }

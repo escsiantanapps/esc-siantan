@@ -1,0 +1,167 @@
+import { useEffect, useMemo, useState } from 'react'
+import { BarChart3, CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { tasksService } from '@/services/tasksService'
+import { usersService } from '@/services/usersService'
+import { evaluationService } from '@/services/evaluationService'
+import { Card, PageHeader, Spinner, EmptyState, Input, Select, StatusBadge, Avatar, Badge } from '@/components/ui'
+
+function toISODate(d) {
+  return d.toISOString().slice(0, 10)
+}
+
+function startOfMonthISO() {
+  const d = new Date()
+  return toISODate(new Date(d.getFullYear(), d.getMonth(), 1))
+}
+
+export default function AdminEvaluationPage() {
+  const [templates, setTemplates] = useState([])
+  const [ministries, setMinistries] = useState([])
+  const [komselList, setKomselList] = useState([])
+  const [startDate, setStartDate] = useState(startOfMonthISO())
+  const [endDate, setEndDate] = useState(toISODate(new Date()))
+  const [formId, setFormId] = useState('')
+  const [ministryId, setMinistryId] = useState('')
+  const [komselId, setKomselId] = useState('')
+  const [role, setRole] = useState('')
+  const [search, setSearch] = useState('')
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadingMeta, setLoadingMeta] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      tasksService.getTemplates(),
+      usersService.getAllMinistries(),
+      usersService.getAllKomsel(),
+    ]).then(([tmpls, mins, komsel]) => {
+      setTemplates(tmpls)
+      setMinistries(mins)
+      setKomselList(komsel)
+      if (tmpls.length > 0) setFormId(tmpls[0].form_id)
+    }).catch(() => {}).finally(() => setLoadingMeta(false))
+  }, [])
+
+  useEffect(() => {
+    if (loadingMeta || !formId) { setLoading(false); return }
+    setLoading(true)
+    evaluationService.getEvaluation({ startDate, endDate, formId, ministryId, komselId, role })
+      .then(setRows)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [loadingMeta, formId, startDate, endDate, ministryId, komselId, role])
+
+  const ministryMap = useMemo(() => Object.fromEntries(ministries.map(m => [m.ministry_id, m.name])), [ministries])
+  const komselMap = useMemo(() => Object.fromEntries(komselList.map(k => [k.komsel_id, k.name])), [komselList])
+
+  const filteredRows = useMemo(() => {
+    if (!search) return rows
+    const q = search.toLowerCase()
+    return rows.filter(r => r.user.name.toLowerCase().includes(q))
+  }, [rows, search])
+
+  const summary = useMemo(() => ({
+    TERPENUHI: filteredRows.filter(r => r.status === 'TERPENUHI').length,
+    PROSES: filteredRows.filter(r => r.status === 'PROSES').length,
+    KOSONG: filteredRows.filter(r => r.status === 'KOSONG').length,
+  }), [filteredRows])
+
+  return (
+    <div>
+      <PageHeader title="Evaluasi & Laporan" subtitle="Pantau pemenuhan target tugas pelayanan" />
+
+      {/* Filter section */}
+      <Card className="p-4 mb-4 space-y-3">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Input type="date" label="Tanggal Mulai" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <Input type="date" label="Tanggal Akhir" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Select label="Form" value={formId} onChange={e => setFormId(e.target.value)}>
+            {templates.length === 0 && <option value="">Belum ada form</option>}
+            {templates.map(t => <option key={t.form_id} value={t.form_id}>{t.title}</option>)}
+          </Select>
+          <Select label="Role" value={role} onChange={e => setRole(e.target.value)}>
+            <option value="">Semua Role</option>
+            {['Volunteer', 'Jemaat', 'PKS'].map(r => <option key={r} value={r}>{r}</option>)}
+          </Select>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3">
+          <Select label="Ministry" value={ministryId} onChange={e => setMinistryId(e.target.value)}>
+            <option value="">Semua Ministry</option>
+            {ministries.map(m => <option key={m.ministry_id} value={m.ministry_id}>{m.name}</option>)}
+          </Select>
+          <Select label="Komsel" value={komselId} onChange={e => setKomselId(e.target.value)}>
+            <option value="">Semua Komsel</option>
+            {komselList.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
+          </Select>
+          <Input label="Cari Nama" placeholder="Cari nama..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+      </Card>
+
+      {(loading || loadingMeta) && <div className="flex justify-center py-12"><Spinner /></div>}
+
+      {!loading && !loadingMeta && templates.length === 0 && (
+        <EmptyState icon={BarChart3} title="Belum ada form tugas" description="Buat form tugas terlebih dahulu di menu Tugas & Form." />
+      )}
+
+      {!loading && !loadingMeta && templates.length > 0 && (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <Card className="p-4 text-center">
+              <div className="w-9 h-9 mx-auto rounded-xl bg-green-50 flex items-center justify-center mb-2">
+                <CheckCircle2 size={18} className="text-green-500" />
+              </div>
+              <p className="text-2xl font-bold text-green-600">{summary.TERPENUHI}</p>
+              <p className="text-xs text-gray-400 mt-0.5">Terpenuhi</p>
+            </Card>
+            <Card className="p-4 text-center">
+              <div className="w-9 h-9 mx-auto rounded-xl bg-amber-50 flex items-center justify-center mb-2">
+                <Clock size={18} className="text-amber-500" />
+              </div>
+              <p className="text-2xl font-bold text-amber-600">{summary.PROSES}</p>
+              <p className="text-xs text-gray-400 mt-0.5">Proses</p>
+            </Card>
+            <Card className="p-4 text-center">
+              <div className="w-9 h-9 mx-auto rounded-xl bg-red-50 flex items-center justify-center mb-2">
+                <XCircle size={18} className="text-red-500" />
+              </div>
+              <p className="text-2xl font-bold text-red-600">{summary.KOSONG}</p>
+              <p className="text-xs text-gray-400 mt-0.5">Kosong</p>
+            </Card>
+          </div>
+
+          {/* Table */}
+          {filteredRows.length === 0 ? (
+            <EmptyState icon={BarChart3} title="Tidak ada data" description="Tidak ada jemaat/volunteer yang sesuai filter ini." />
+          ) : (
+            <Card className="divide-y divide-gray-100">
+              {filteredRows.map(r => (
+                <div key={r.user.user_id} className="flex items-center gap-3 p-3.5">
+                  <Avatar name={r.user.name} src={r.user.photo_url} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{r.user.name}</p>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {(r.user.ministry_ids || []).slice(0, 2).map(id => (
+                        ministryMap[id] && <Badge key={id} color="gray" className="text-[10px]! py-0!">{ministryMap[id]}</Badge>
+                      ))}
+                      {r.user.komsel_id && komselMap[r.user.komsel_id] && (
+                        <Badge color="blue" className="text-[10px]! py-0!">{komselMap[r.user.komsel_id]}</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-semibold text-gray-900">{r.filled}/{r.target}</p>
+                    <p className="text-[10px] text-gray-400">min. {r.minLulus}</p>
+                  </div>
+                  <StatusBadge status={r.status} />
+                </div>
+              ))}
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  )
+}

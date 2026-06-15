@@ -1,12 +1,13 @@
 import { supabase } from '@/lib/supabase'
 
 export const usersService = {
-  async getAll({ search = '', role = '', status = '', ministry = '', page = 1, limit = 20 } = {}) {
+  async getAll({ search = '', role = '', status = '', ministry = '', komsel = '', page = 1, limit = 20 } = {}) {
     let query = supabase.from('users').select('*', { count: 'exact' })
     if (search) query = query.ilike('name', `%${search}%`)
     if (role) query = query.eq('role', role)
     if (status) query = query.eq('status', status)
     if (ministry) query = query.contains('ministry_ids', [ministry])
+    if (komsel) query = query.eq('komsel_id', komsel)
     const from = (page - 1) * limit
     query = query.range(from, from + limit - 1).order('name')
     const { data, error, count } = await query

@@ -2,11 +2,13 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Camera } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
 import { Avatar, Button, Input, Select, Textarea, GradientHeader, Spinner } from '@/components/ui'
 
 export default function EditProfilePage() {
   const { profile, updateProfile } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
 
@@ -35,8 +37,10 @@ export default function EditProfilePage() {
     try {
       const url = await usersService.uploadAvatar(profile.user_id, file)
       set('photo_url', url)
+      toast.success('Foto berhasil diunggah.')
     } catch (err) {
       setError(err.message || 'Gagal mengunggah foto.')
+      toast.error(err.message || 'Gagal mengunggah foto.')
     } finally {
       setUploading(false)
     }
@@ -52,9 +56,11 @@ export default function EditProfilePage() {
         blood_type: form.blood_type || null,
         birth_date: form.birth_date || null,
       })
+      toast.success('Profil berhasil disimpan.')
       navigate('/profil')
     } catch (err) {
       setError(err.message || 'Gagal menyimpan profil.')
+      toast.error(err.message || 'Gagal menyimpan profil.')
     } finally {
       setSaving(false)
     }

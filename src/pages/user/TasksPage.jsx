@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, CheckCircle, Circle } from 'lucide-react'
+import { ClipboardList, CheckCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { tasksService } from '@/services/tasksService'
-import { Card, GradientHeader, Badge, Spinner, EmptyState } from '@/components/ui'
+import { tasksService, canAccessTemplate } from '@/services/tasksService'
+import { Card, GradientHeader, Spinner, EmptyState } from '@/components/ui'
 import { startOfWeek } from 'date-fns'
 
 export default function TasksPage() {
@@ -20,8 +20,9 @@ export default function TasksPage() {
 
   async function loadTasks() {
     try {
-      const ministryId = profile?.ministry_ids?.[0]
-      const tmpls = await tasksService.getTemplates({ ministryId })
+      const all = await tasksService.getTemplates()
+      // Saring tugas sesuai ministry user (tugas terbuka tetap tampil)
+      const tmpls = all.filter(t => canAccessTemplate(t, profile))
       setTemplates(tmpls)
 
       // Cek progress minggu ini
@@ -57,37 +58,44 @@ export default function TasksPage() {
           const complete = done >= target
 
           return (
-            <Card key={t.form_id} className="p-4 cursor-pointer active:scale-[0.99] transition-transform"
+            <Card key={t.form_id} glass className="p-4 cursor-pointer active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300"
               onClick={() => navigate(`/tugas/${t.form_id}`)}>
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="flex items-start gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${complete ? 'bg-green-100' : 'bg-orange-100'}`}>
-                    {complete
-                      ? <CheckCircle size={20} className="text-green-500" />
-                      : <Circle size={20} className="text-orange-500" />
-                    }
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{t.title}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Target: {target}× / {t.period === 'bulan' ? 'bulan' : 'minggu'}
-                    </p>
-                  </div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold text-gray-900">{t.title}</h2>
+                  {t.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{t.description}</p>}
                 </div>
-                <Badge color={complete ? 'green' : done > 0 ? 'orange' : 'gray'}>
-                  {done}/{target}
-                </Badge>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${complete ? 'bg-green-100' : 'bg-orange-100'}`}>
+                  {complete
+                    ? <CheckCircle size={18} className="text-green-500" />
+                    : <ClipboardList size={18} className="text-orange-500" />
+                  }
+                </div>
               </div>
 
-              {/* Progress bar */}
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${pct}%`,
-                    background: complete ? '#22c55e' : 'linear-gradient(90deg, #FF6B35, #E63946)'
-                  }}
-                />
+              {/* Progress ala Stitch */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  {complete ? (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-700 text-[11px] font-semibold">
+                      <CheckCircle size={13} /> Selesai
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-[11px] font-semibold">
+                      {done} dari {target} target — Berjalan
+                    </span>
+                  )}
+                  <span className="text-[11px] font-semibold text-gray-400">{Math.round(pct)}%</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${pct}%`,
+                      background: complete ? '#22c55e' : 'linear-gradient(90deg, #00BFFF, #0077B6)'
+                    }}
+                  />
+                </div>
               </div>
             </Card>
           )

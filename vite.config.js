@@ -11,13 +11,13 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['church-icon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'GerejaKu - ESC Siantan',
-        short_name: 'GerejaKu',
+        name: 'ESC Siantan',
+        short_name: 'ESC Siantan',
         description: 'Aplikasi Manajemen Jemaat ESC Siantan',
         start_url: '/',
         display: 'standalone',
         background_color: '#ffffff',
-        theme_color: '#FF6B35',
+        theme_color: '#00BFFF',
         orientation: 'portrait',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
@@ -28,6 +28,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // Impor handler push ke dalam service worker hasil generate Workbox
+        importScripts: ['push-sw.js'],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.origin.includes('supabase.co') && url.pathname.includes('/storage/'),

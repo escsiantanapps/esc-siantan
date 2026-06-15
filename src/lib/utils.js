@@ -58,6 +58,13 @@ export function avatarColor(name) {
   return colors[idx]
 }
 
+// [DUMMY/PREVIEW] Gambar placeholder deterministik saat thumbnail asli kosong.
+// Tiap seed menghasilkan gambar yang tetap sama. Hapus pemakaiannya bila
+// thumbnail asli sudah tersedia di database.
+export function dummyThumb(seed, w = 600, h = 400) {
+  return `https://picsum.photos/seed/esc-${String(seed ?? 'x')}/${w}/${h}`
+}
+
 // Status SP badge color
 export function spColor(status) {
   const map = {

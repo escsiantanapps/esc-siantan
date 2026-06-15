@@ -12,7 +12,7 @@ CREATE TABLE users (
   email         TEXT,
   phone         TEXT,
   role          TEXT DEFAULT 'Jemaat' CHECK (role IN ('Jemaat','Volunteer','PKS','Admin','Super Admin')),
-  status        TEXT DEFAULT 'Aktif' CHECK (status IN ('Aktif','Nonaktif')),
+  status        TEXT DEFAULT 'Aktif' CHECK (status IN ('Aktif','Nonaktif','Menunggu Persetujuan')),
   gender        TEXT CHECK (gender IN ('Laki-laki','Perempuan')),
   birth_date    DATE,
   birth_place   TEXT,
@@ -26,16 +26,6 @@ CREATE TABLE users (
   sp_level      TEXT DEFAULT 'Aman' CHECK (sp_level IN ('Aman','SP 1','SP 2','SP 3')),
   sp_notes      TEXT,
   created_at    TIMESTAMPTZ DEFAULT now()
-);
-
--- 2. ADMIN DATA
-CREATE TABLE admin_data (
-  admin_id    TEXT PRIMARY KEY DEFAULT 'ADM-' || extract(epoch from now())::bigint,
-  auth_id     UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
-  username    TEXT UNIQUE,
-  name        TEXT NOT NULL,
-  role        TEXT DEFAULT 'Admin' CHECK (role IN ('Admin','Super Admin','PKS')),
-  created_at  TIMESTAMPTZ DEFAULT now()
 );
 
 -- 3. MINISTRY
@@ -197,8 +187,20 @@ CREATE POLICY "users_insert_own" ON users FOR INSERT WITH CHECK (auth.uid() = au
 CREATE POLICY "news_read_all"   ON news   FOR SELECT USING (true);
 CREATE POLICY "events_read_all" ON events FOR SELECT USING (true);
 
--- Form templates: semua bisa baca
-CREATE POLICY "templates_read_all" ON form_templates FOR SELECT USING (true);
+-- Form templates: hanya bisa dibaca bila terbuka (allowed_ministry kosong),
+-- oleh Admin/Super Admin, atau bila ministry user cocok dengan allowed_ministry.
+CREATE POLICY "templates_read_by_ministry" ON form_templates
+  FOR SELECT USING (
+    cardinality(allowed_ministry) = 0
+    OR EXISTS (
+      SELECT 1 FROM users u
+      WHERE u.auth_id = auth.uid()
+        AND (
+          u.role IN ('Admin', 'Super Admin')
+          OR u.ministry_ids && allowed_ministry
+        )
+    )
+  );
 
 -- Form responses: user bisa baca/tulis milik sendiri
 CREATE POLICY "responses_own" ON form_responses

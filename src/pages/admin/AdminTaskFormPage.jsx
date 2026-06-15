@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { tasksService } from '@/services/tasksService'
 import { usersService } from '@/services/usersService'
+import { useToast } from '@/hooks/useToast'
 import { Card, Input, Textarea, Select, Checkbox, Button, Spinner } from '@/components/ui'
 
 const FIELD_TYPES = [
@@ -21,13 +22,26 @@ function slugify(str) {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 }
 
+// Buat "key" otomatis dari label, dijamin unik antar-field (tidak ditampilkan ke admin)
+function makeKey(label, fields, idx) {
+  const base = slugify(label) || `field_${idx + 1}`
+  const taken = fields.filter((_, j) => j !== idx).map(f => f.key).filter(Boolean)
+  if (!taken.includes(base)) return base
+  let n = 2
+  while (taken.includes(`${base}_${n}`)) n++
+  return `${base}_${n}`
+}
+
 function emptyField() {
-  return { key: '', label: '', type: 'text', required: false, placeholder: '', options: [] }
+  // _isNew menandai field baru agar key-nya mengikuti label; field lama (saat edit)
+  // mempertahankan key supaya jawaban yang sudah masuk tidak rusak.
+  return { key: '', label: '', type: 'text', required: false, placeholder: '', options: [], _isNew: true }
 }
 
 export default function AdminTaskFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { toast, confirm } = useToast()
   const isEdit = !!id
 
   const [loading, setLoading] = useState(isEdit)
@@ -86,6 +100,16 @@ export default function AdminTaskFormPage() {
   function updateField(i, patch) {
     setForm(p => ({ ...p, fields_json: p.fields_json.map((f, idx) => idx === i ? { ...f, ...patch } : f) }))
   }
+  function setFieldLabel(i, label) {
+    setForm(p => ({
+      ...p,
+      fields_json: p.fields_json.map((f, idx) => {
+        if (idx !== i) return f
+        // Field baru: key ikut label. Field lama: key dipertahankan.
+        return { ...f, label, key: f._isNew ? makeKey(label, p.fields_json, idx) : f.key }
+      }),
+    }))
+  }
   function removeField(i) {
     setForm(p => ({ ...p, fields_json: p.fields_json.filter((_, idx) => idx !== i) }))
   }
@@ -98,28 +122,42 @@ export default function AdminTaskFormPage() {
     }
     setSaving(true)
     try {
-      const payload = { ...form, weekly_goal: Number(form.weekly_goal) || 1 }
+      const payload = {
+        ...form,
+        weekly_goal: Number(form.weekly_goal) || 1,
+        fields_json: form.fields_json.map(({ _isNew, ...f }) => f),
+      }
       if (isEdit) {
         await tasksService.updateTemplate(id, payload)
       } else {
         await tasksService.createTemplate(payload)
       }
+      toast.success(isEdit ? 'Template berhasil diperbarui.' : 'Template berhasil dibuat.')
       navigate('/admin/tugas')
     } catch (err) {
       setError(err.message || 'Gagal menyimpan template.')
+      toast.error(err.message || 'Gagal menyimpan template.')
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete() {
-    if (!confirm('Hapus template tugas ini? Semua jawaban terkait juga akan terhapus.')) return
+    const ok = await confirm({
+      title: 'Hapus template tugas?',
+      message: 'Template ini akan dihapus permanen beserta semua jawaban terkait.',
+      confirmText: 'Hapus',
+      danger: true,
+    })
+    if (!ok) return
     setDeleting(true)
     try {
       await tasksService.deleteTemplate(id)
+      toast.success('Template berhasil dihapus.')
       navigate('/admin/tugas')
     } catch (err) {
       setError(err.message || 'Gagal menghapus template.')
+      toast.error(err.message || 'Gagal menghapus template.')
       setDeleting(false)
     }
   }
@@ -204,17 +242,11 @@ export default function AdminTaskFormPage() {
             <Input
               label="Label Pertanyaan" required
               value={field.label}
-              onChange={e => {
-                const label = e.target.value
-                updateField(i, { label, key: field.key || slugify(label) })
-              }}
+              onChange={e => setFieldLabel(i, e.target.value)}
             />
-            <div className="grid grid-cols-2 gap-3">
-              <Select label="Tipe" value={field.type} onChange={e => updateField(i, { type: e.target.value })}>
-                {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </Select>
-              <Input label="Key (nama data)" value={field.key} onChange={e => updateField(i, { key: slugify(e.target.value) })} />
-            </div>
+            <Select label="Tipe" value={field.type} onChange={e => updateField(i, { type: e.target.value })}>
+              {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </Select>
             {field.type !== 'checkbox' && field.type !== 'file' && (
               <Input label="Placeholder" value={field.placeholder || ''} onChange={e => updateField(i, { placeholder: e.target.value })} />
             )}

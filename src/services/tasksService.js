@@ -1,11 +1,24 @@
 import { supabase } from '@/lib/supabase'
 
+// Cek apakah seorang user berhak mengakses sebuah template tugas.
+// Aturan: allowed_ministry kosong = terbuka untuk semua; Admin/Super Admin
+// selalu boleh; selain itu, salah satu ministry user harus ada di allowed_ministry.
+export function canAccessTemplate(template, profile) {
+  const allowed = template?.allowed_ministry || []
+  if (allowed.length === 0) return true
+  if (['Admin', 'Super Admin'].includes(profile?.role)) return true
+  const mine = (profile?.ministry_ids || []).map(String)
+  return allowed.map(String).some(m => mine.includes(m))
+}
+
 export const tasksService = {
-  // Form Templates
-  async getTemplates({ ministryId = null } = {}) {
-    let query = supabase.from('form_templates').select('*').order('created_at', { ascending: false })
-    if (ministryId) query = query.or(`allowed_ministry.cs.{"${ministryId}"},allowed_ministry.eq.[]`)
-    const { data, error } = await query
+  // Form Templates.
+  // Pembatasan ministry tidak lagi dilakukan lewat query yang rapuh — gunakan
+  // canAccessTemplate() di sisi pemanggil (mis. TasksPage) untuk menyaring, agar
+  // tugas terbuka (allowed_ministry kosong) tidak ikut tersaring keluar.
+  async getTemplates() {
+    const { data, error } = await supabase
+      .from('form_templates').select('*').order('created_at', { ascending: false })
     if (error) throw error
     return data
   },
@@ -52,12 +65,15 @@ export const tasksService = {
     return data
   },
 
-  async getAllResponses(formId, { page = 1, limit = 30 } = {}) {
+  async getAllResponses(formId, { page = 1, limit = 30, startDate = null, endDate = null } = {}) {
     const from = (page - 1) * limit
-    const { data, error, count } = await supabase
+    let query = supabase
       .from('form_responses')
       .select('*, users(name, role, ministry_ids)', { count: 'exact' })
       .eq('form_id', formId)
+    if (startDate) query = query.gte('submitted_at', startDate)
+    if (endDate) query = query.lte('submitted_at', endDate)
+    const { data, error, count } = await query
       .order('submitted_at', { ascending: false })
       .range(from, from + limit - 1)
     if (error) throw error

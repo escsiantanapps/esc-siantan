@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Calendar, MapPin, ChevronRight } from 'lucide-react'
+import { Calendar, MapPin, Clock } from 'lucide-react'
 import { eventsService } from '@/services/contentService'
 import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
-import { formatDate } from '@/lib/utils'
+import { formatDate, dummyThumb } from '@/lib/utils'
 
 const TABS = ['Aktif', 'Selesai', 'Semua']
 
@@ -20,6 +20,9 @@ export default function EventsPage() {
     if (tab === 'Semua') return events
     return events.filter(ev => ev.status === tab)
   }, [events, tab])
+
+  const featured = filtered[0]
+  const rest = filtered.slice(1)
 
   return (
     <div className="pb-4">
@@ -47,27 +50,49 @@ export default function EventsPage() {
           <EmptyState icon={Calendar} title="Belum ada event" description="Belum ada kegiatan untuk kategori ini." />
         )}
 
+        {/* Featured event ala Stitch */}
+        {featured && (
+          <Link to={`/events/${featured.event_id}`} className="block mb-5">
+            <div className="relative rounded-3xl overflow-hidden ambient-shadow h-56 active:scale-[0.99] transition-transform">
+              <img src={featured.thumbnail_url || dummyThumb(featured.event_id)} alt={featured.name} className="absolute inset-0 w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+              <div className="absolute top-3 right-3"><StatusBadge status={featured.status} /></div>
+              <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                <span className="inline-block px-2.5 py-1 rounded-full bg-surface/90 text-orange-600 text-[11px] font-semibold mb-2">
+                  EVENT UTAMA
+                </span>
+                <h3 className="text-xl font-bold text-white">{featured.name}</h3>
+                <div className="flex flex-wrap items-center gap-3 mt-1.5 text-white/90 text-xs">
+                  <span className="flex items-center gap-1">
+                    <Calendar size={13} /> {formatDate(featured.event_date)}{featured.event_time ? ` · ${featured.event_time}` : ''}
+                  </span>
+                  {featured.location && <span className="flex items-center gap-1"><MapPin size={13} /> {featured.location}</span>}
+                </div>
+              </div>
+            </div>
+          </Link>
+        )}
+
+        {/* Daftar event lain — kartu dengan tile tanggal */}
         <div className="space-y-2.5">
-          {filtered.map(ev => (
+          {rest.map(ev => (
             <Link key={ev.event_id} to={`/events/${ev.event_id}`}>
-              <Card className="p-3.5 flex items-start gap-3">
-                {ev.thumbnail_url ? (
-                  <img src={ev.thumbnail_url} alt={ev.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
-                ) : (
-                  <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-                    <Calendar size={20} className="text-red-500" />
-                  </div>
-                )}
+              <Card glass className="p-3 flex items-stretch gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
+                <div className="w-16 shrink-0 rounded-xl gradient-main text-white flex flex-col items-center justify-center leading-none py-2">
+                  <span className="text-[11px] font-semibold uppercase">{formatDate(ev.event_date, 'EEE')}</span>
+                  <span className="text-2xl font-bold mt-1">{formatDate(ev.event_date, 'd')}</span>
+                </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">{ev.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{formatDate(ev.event_date)}{ev.event_time ? ` · ${ev.event_time}` : ''}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-gray-900">{ev.name}</p>
+                    <StatusBadge status={ev.status} />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                    <Clock size={11} /> {ev.event_time || formatDate(ev.event_date)}
+                  </p>
                   {ev.location && (
                     <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1"><MapPin size={11} /> {ev.location}</p>
                   )}
-                </div>
-                <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                  <StatusBadge status={ev.status} />
-                  <ChevronRight size={16} className="text-gray-300" />
                 </div>
               </Card>
             </Link>

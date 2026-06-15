@@ -42,7 +42,7 @@ export function AuthProvider({ children }) {
           name: authUser.email?.split('@')[0] || 'Jemaat',
           email: authUser.email,
           role: 'Jemaat',
-          status: 'Aktif',
+          status: 'Menunggu Persetujuan',
           sp_level: 'Aman',
         })
         .select()
@@ -67,15 +67,23 @@ export function AuthProvider({ children }) {
     })
     if (error) throw error
 
-    // Simpan data profil ke tabel users
+    const orNull = v => (v === '' || v === undefined ? null : v)
+
+    // Simpan data profil ke tabel users, termasuk data diri dari step 2
     const { error: profileError } = await supabase.from('users').insert({
       auth_id: data.user.id,
       name: formData.name,
       email: formData.email,
       phone: formData.phone,
       role: 'Jemaat',
-      status: 'Aktif',
+      status: 'Menunggu Persetujuan',
       sp_level: 'Aman',
+      gender: orNull(formData.gender),
+      birth_date: orNull(formData.birth_date),
+      birth_place: orNull(formData.birth_place),
+      address: orNull(formData.address),
+      blood_type: orNull(formData.blood_type),
+      social_media: orNull(formData.social_media),
     })
     if (profileError) throw profileError
     return data
@@ -83,6 +91,18 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     await supabase.auth.signOut()
+  }
+
+  async function resetPassword(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    if (error) throw error
+  }
+
+  async function updatePassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) throw error
   }
 
   async function updateProfile(updates) {
@@ -95,12 +115,13 @@ export function AuthProvider({ children }) {
   }
 
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
-  const isPKS = profile?.role === 'PKS'
+  const isPKS = profile?.is_pks === true || profile?.role === 'PKS'
 
   return (
     <AuthContext.Provider value={{
       user, profile, loading,
       login, register, logout, updateProfile,
+      resetPassword, updatePassword,
       isAdmin, isPKS,
     }}>
       {children}

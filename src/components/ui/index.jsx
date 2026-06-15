@@ -1,3 +1,6 @@
+import { Sun, Moon, ArrowLeft } from 'lucide-react'
+import { useTheme } from '@/hooks/useTheme'
+
 // ─── Button ──────────────────────────────────────────────
 export function Button({ children, variant = 'primary', size = 'md', loading, className = '', ...props }) {
   const base = 'inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed'
@@ -18,7 +21,7 @@ export function Button({ children, variant = 'primary', size = 'md', loading, cl
 }
 
 // ─── Input ───────────────────────────────────────────────
-export function Input({ label, error, required, className = '', ...props }) {
+export function Input({ label, error, required, icon: Icon, rightElement, className = '', ...props }) {
   return (
     <div className="space-y-1">
       {label && (
@@ -26,11 +29,16 @@ export function Input({ label, error, required, className = '', ...props }) {
           {label}{required && <span className="text-red-500 ml-0.5">*</span>}
         </label>
       )}
-      <input
-        className={`w-full px-3 py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition
-          ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
-        {...props}
-      />
+      <div className="relative">
+        {Icon && <Icon size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />}
+        <input
+          className={`w-full py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition
+            ${Icon ? 'pl-10' : 'pl-3'} ${rightElement ? 'pr-10' : 'pr-3'}
+            ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
+          {...props}
+        />
+        {rightElement}
+      </div>
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   )
@@ -92,10 +100,11 @@ export function Checkbox({ label, className = '', ...props }) {
 }
 
 // ─── Card ────────────────────────────────────────────────
-export function Card({ children, className = '', onClick, ...props }) {
+export function Card({ children, className = '', onClick, glass = false, ...props }) {
+  const surface = glass ? 'glass-card' : 'bg-surface border border-gray-100'
   return (
     <div
-      className={`bg-white rounded-2xl border border-gray-100 ${onClick ? 'cursor-pointer active:scale-[0.99] transition-transform' : ''} ${className}`}
+      className={`${surface} rounded-2xl ambient-shadow transition-colors duration-300 ${onClick ? 'cursor-pointer active:scale-[0.99] transition-transform' : ''} ${className}`}
       onClick={onClick}
       {...props}
     >
@@ -158,10 +167,17 @@ export function StatusBadge({ status }) {
     'Ditolak':        { color: 'red',    label: 'Ditolak' },
     'Aktif':          { color: 'green',  label: 'Aktif' },
     'Nonaktif':       { color: 'red',    label: 'Nonaktif' },
+    'Menunggu Persetujuan': { color: 'orange', label: 'Menunggu Persetujuan' },
     'Aman':           { color: 'green',  label: 'Aman' },
     'SP 1':           { color: 'orange', label: 'SP 1' },
     'SP 2':           { color: 'red',    label: 'SP 2' },
     'SP 3':           { color: 'red',    label: 'SP 3' },
+    'Hadir':          { color: 'green',  label: 'Hadir' },
+    'Tidak Hadir':    { color: 'red',    label: 'Tidak Hadir' },
+    'Izin':           { color: 'amber',  label: 'Izin' },
+    'TERPENUHI':      { color: 'green',  label: 'Terpenuhi' },
+    'PROSES':         { color: 'amber',  label: 'Proses' },
+    'KOSONG':         { color: 'red',    label: 'Kosong' },
   }
   const { color, label } = map[status] || { color: 'gray', label: status }
   return <Badge color={color}>{label}</Badge>
@@ -186,17 +202,51 @@ export function Spinner({ size = 'md' }) {
 }
 
 // ─── GradientHeader ──────────────────────────────────────
-export function GradientHeader({ title, subtitle, back, children }) {
+export function GradientHeader({ title, subtitle, back, children, wave = true }) {
   return (
-    <div className="gradient-main px-4 pt-safe pb-4">
-      {back && (
-        <button onClick={back} className="flex items-center gap-1 text-white/70 text-sm mb-3 mt-2">
-          ← Kembali
-        </button>
+    <div className={`gradient-main relative overflow-hidden px-4 pt-safe ${wave ? 'pb-9' : 'pb-4'}`}>
+      {/* Glow dekoratif ala Stitch */}
+      <div className="pointer-events-none absolute -top-16 -right-12 w-52 h-52 rounded-full bg-white/15 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-black/10 blur-2xl" />
+
+      <div className="relative z-10">
+        {back && (
+          <button
+            onClick={back}
+            aria-label="Kembali"
+            className="w-9 h-9 -ml-1.5 mt-2 mb-3 rounded-full bg-white/15 text-white flex items-center justify-center transition-colors hover:bg-white/25 active:scale-90"
+          >
+            <ArrowLeft size={18} />
+          </button>
+        )}
+        <h1 className="font-display text-white text-lg font-semibold">{title}</h1>
+        {subtitle && <p className="text-white/70 text-sm mt-1">{subtitle}</p>}
+        {children}
+      </div>
+
+      {/* Wave divider ala Stitch — menyatu dengan latar konten (gray-50) */}
+      {wave && (
+        <div className="absolute bottom-0 left-0 w-full leading-none translate-y-px text-gray-50">
+          <svg className="block w-full h-5" viewBox="0 0 1200 120" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V120H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z" fill="currentColor" />
+          </svg>
+        </div>
       )}
-      <h1 className="text-white text-lg font-semibold">{title}</h1>
-      {subtitle && <p className="text-white/70 text-sm mt-1">{subtitle}</p>}
-      {children}
     </div>
+  )
+}
+
+// ─── Theme Toggle ────────────────────────────────────────
+export function ThemeToggle({ className = '' }) {
+  const { theme, toggleTheme } = useTheme()
+  return (
+    <button
+      onClick={toggleTheme}
+      aria-label="Ganti tema"
+      title={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}
+      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 ${className || 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+    >
+      {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
   )
 }

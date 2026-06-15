@@ -1,10 +1,29 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --color-primary: #FF6B35;
-  --color-primary-dark: #E63946;
-  --color-primary-deeper: #2d0a0a;
+  --color-primary: #00BFFF;
+  --color-primary-dark: #0094CC;
+  --color-primary-deeper: #0077B6;
+  --color-surface: #ffffff;
+  /* Latar biru-muda lembut ala desain Stitch (surface/background: #f8fdff) */
+  --color-gray-50: #f5fbfe;
   --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+
+  /* Skala "orange" brand di-remap ke biru langit. Semua utility orange
+     (background, teks, ring fokus) di seluruh app otomatis berubah jadi biru. */
+  --color-orange-50:  #e8f8ff;
+  --color-orange-100: #cceeff;
+  --color-orange-200: #a3e1ff;
+  --color-orange-300: #66ccf5;
+  --color-orange-400: #1fb6ef;
+  --color-orange-500: #00BFFF;
+  --color-orange-600: #0098cc;
+  --color-orange-700: #0077B6;
+  --color-orange-800: #005c8e;
+  --color-orange-900: #00415f;
 }
 
 * {
@@ -15,16 +34,49 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  background-color: #f9fafb;
+  background-color: var(--color-gray-50);
+  color: var(--color-gray-900);
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* Gradient utama aplikasi */
+/* Heading pakai display font Plus Jakarta Sans (gaya Stitch) */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Gradient utama aplikasi (biru langit ala Stitch) */
 .gradient-main {
-  background: linear-gradient(135deg, #FF6B35 0%, #E63946 60%, #2d0a0a 100%);
+  background: linear-gradient(135deg, #00C6FF 0%, #00A3E0 55%, #0077B6 100%);
+}
+
+/* ─── Gaya Stitch: glass card & ambient shadow ─────────── */
+.glass-card {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.dark .glass-card {
+  background: rgba(26, 29, 34, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Bayangan lembut beraura biru brand untuk kartu */
+.ambient-shadow {
+  box-shadow: 0 10px 30px -14px rgba(0, 162, 224, 0.25);
+}
+.dark .ambient-shadow {
+  box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.6);
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #FF6B35, #E63946);
+  background: linear-gradient(135deg, #00BFFF, #0077B6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -33,4 +85,97 @@ body {
 /* Scrollbar tipis */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #FF6B35; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: #00BFFF; border-radius: 2px; }
+
+/* ─── Animasi ─────────────────────────────────────────── */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out both;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-12px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
+  .animate-fade-in,
+  .animate-toast-in {
+    animation: none;
+  }
+}
+
+/* ─── Dark mode ───────────────────────────────────────── */
+.dark {
+  --color-surface: #1a1d22;
+
+  --color-gray-50:  #0f1115;
+  --color-gray-100: #1a1d23;
+  --color-gray-200: #262a32;
+  --color-gray-300: #3a4049;
+  --color-gray-400: #6b7280;
+  --color-gray-500: #9aa3b0;
+  --color-gray-600: #b6bec9;
+  --color-gray-700: #d1d6dd;
+  --color-gray-800: #e8ebee;
+  --color-gray-900: #f5f6f8;
+
+  --color-orange-50:  #07232e;
+  --color-orange-100: #0a3344;
+  --color-orange-700: #7fd4ff;
+  --color-orange-800: #b3e5fc;
+
+  --color-red-50:  #2a1414;
+  --color-red-100: #3d1d1d;
+  --color-red-200: #4f2626;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+  --color-red-900: #fee2e2;
+
+  --color-green-50:  #102018;
+  --color-green-100: #173526;
+  --color-green-700: #86efac;
+  --color-green-800: #bbf7d0;
+
+  --color-blue-50:  #10202e;
+  --color-blue-100: #173247;
+  --color-blue-700: #93c5fd;
+  --color-blue-800: #bfdbfe;
+
+  --color-amber-50:  #2a2210;
+  --color-amber-100: #3d3018;
+  --color-amber-700: #fde68a;
+  --color-amber-800: #fef3c7;
+
+  --color-purple-100: #2e2447;
+  --color-purple-700: #d8b4fe;
+  --color-purple-800: #e9d5ff;
+
+  --color-teal-50:  #0f2624;
+  --color-teal-100: #17392f;
+
+  --color-pink-50:  #2a1722;
+  --color-pink-100: #3d2030;
+}
+
+.dark .gradient-text {
+  -webkit-text-fill-color: transparent;
+}

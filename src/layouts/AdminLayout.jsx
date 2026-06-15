@@ -1,45 +1,98 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, Calendar, Newspaper, BookOpen,
-  ClipboardList, Droplets, Heart, AlertTriangle,
-  Layers, Network, LogOut, ChevronRight, Menu, X
+  LayoutDashboard, LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { useToast } from '@/hooks/useToast'
+import { ThemeToggle, Spinner } from '@/components/ui'
+import { permissionsService } from '@/services/permissionsService'
+import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 
-const MENU = [
-  { section: 'Utama' },
-  { to: '/admin',             icon: LayoutDashboard, label: 'Dashboard', exact: true },
-  { to: '/admin/jemaat',      icon: Users,           label: 'Jemaat' },
-  { section: 'Konten' },
-  { to: '/admin/berita',      icon: Newspaper,       label: 'Berita & Info' },
-  { to: '/admin/events',      icon: Calendar,        label: 'Events' },
-  { to: '/admin/kelas',       icon: BookOpen,        label: 'Kelas' },
-  { section: 'Pelayanan' },
-  { to: '/admin/tugas',       icon: ClipboardList,   label: 'Tugas & Form' },
-  { to: '/admin/baptisan',    icon: Droplets,        label: 'Baptisan' },
-  { to: '/admin/nikah',       icon: Heart,           label: 'Pemberkatan Nikah' },
-  { section: 'Organisasi' },
-  { to: '/admin/sp',          icon: AlertTriangle,   label: 'Surat Peringatan' },
-  { to: '/admin/ministry',    icon: Layers,          label: 'Ministry' },
-  { to: '/admin/komsel',      icon: Network,         label: 'Komsel' },
-]
+function buildMenu(isSuperAdmin, allowedPages) {
+  const items = [
+    { section: 'Utama' },
+    { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', exact: true },
+  ]
+
+  let lastSection = 'Utama'
+  for (const page of ADMIN_PAGES) {
+    if (!isSuperAdmin && allowedPages && !allowedPages.includes(page.to)) continue
+    if (page.section !== lastSection) {
+      items.push({ section: page.section })
+      lastSection = page.section
+    }
+    items.push(page)
+  }
+
+  if (isSuperAdmin) {
+    items.push({ section: 'Sistem' })
+    items.push({ to: '/admin/hak-akses', icon: KeyRound, label: 'Hak Akses' })
+  }
+
+  return items
+}
 
 export default function AdminLayout() {
   const [open, setOpen] = useState(false)
   const { profile, logout } = useAuth()
+  const { confirm } = useToast()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  const isSuperAdmin = profile?.role === 'Super Admin'
+  const isAdminOnly = profile?.role === 'Admin'
+  const isPKS = profile?.is_pks === true || profile?.role === 'PKS'
+  const [allowedPages, setAllowedPages] = useState(null)
+  const [permLoading, setPermLoading] = useState(!isSuperAdmin)
+
+  useEffect(() => {
+    if (isSuperAdmin) { setPermLoading(false); return }
+    setPermLoading(true)
+    permissionsService.getAdminPermissions()
+      .then(setAllowedPages)
+      .catch(() => setAllowedPages(null))
+      .finally(() => setPermLoading(false))
+  }, [isSuperAdmin])
 
   async function handleLogout() {
+    const ok = await confirm({
+      title: 'Keluar dari akun?',
+      message: 'Anda akan keluar dari panel admin dan perlu masuk kembali.',
+      confirmText: 'Keluar',
+      danger: true,
+    })
+    if (!ok) return
     await logout()
     navigate('/login')
   }
+
+  if (permLoading) return (
+    <div className="flex items-center justify-center h-screen">
+      <Spinner size="lg" />
+    </div>
+  )
+
+  // Halaman Hak Akses khusus Super Admin
+  if (location.pathname === '/admin/hak-akses' && !isSuperAdmin) {
+    return <Navigate to="/admin" replace />
+  }
+
+  // Batasi akses Admin ke halaman yang belum diizinkan Super Admin
+  if (!isSuperAdmin && allowedPages) {
+    const page = matchAdminPage(location.pathname)
+    if (page && !allowedPages.includes(page.to)) {
+      return <Navigate to="/admin" replace />
+    }
+  }
+
+  const MENU = buildMenu(isSuperAdmin, allowedPages)
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar desktop */}
       <aside className={`
-        fixed inset-y-0 left-0 z-40 w-60 bg-white border-r border-gray-100
+        fixed inset-y-0 left-0 z-40 w-60 bg-surface border-r border-gray-100
         flex flex-col transition-transform duration-200
         ${open ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0 lg:static lg:flex
@@ -48,19 +101,39 @@ export default function AdminLayout() {
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl gradient-main flex items-center justify-center">
-              <span className="text-white text-sm font-bold">GK</span>
+              <span className="text-white text-sm font-bold">ES</span>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">GerejaKu</p>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900">ESC Siantan</p>
               <p className="text-xs text-gray-500">Admin Panel</p>
             </div>
+            <ThemeToggle />
           </div>
         </div>
+
+        {/* Panel switcher */}
+        {(!isAdminOnly || isPKS) && (
+          <div className="p-3 border-b border-gray-100">
+            <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+              <NavLink
+                to={isAdminOnly ? '/pks' : '/'}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <Smartphone size={14} strokeWidth={1.5} />
+                {isAdminOnly ? 'Panel PKS' : 'Aplikasi'}
+              </NavLink>
+              <span className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold bg-surface text-orange-600 shadow-sm">
+                <ShieldCheck size={14} strokeWidth={2} />
+                Admin
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
           {MENU.map((item, i) => {
-            if (item.section) return (
+            if (!item.to) return (
               <p key={i} className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 pt-4 pb-1">
                 {item.section}
               </p>
@@ -121,11 +194,12 @@ export default function AdminLayout() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar mobile */}
-        <header className="lg:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-20">
+        <header className="lg:hidden bg-surface border-b border-gray-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-20">
           <button onClick={() => setOpen(true)} className="p-1 text-gray-500">
             <Menu size={22} />
           </button>
-          <span className="font-semibold text-gray-900 text-sm">ESC Admin</span>
+          <span className="font-semibold text-gray-900 text-sm flex-1">ESC Admin</span>
+          <ThemeToggle />
         </header>
 
         <main className="flex-1 p-4 lg:p-6 overflow-y-auto">

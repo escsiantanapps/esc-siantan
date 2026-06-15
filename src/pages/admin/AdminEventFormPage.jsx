@@ -1,0 +1,171 @@
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, ImagePlus } from 'lucide-react'
+import { eventsService } from '@/services/contentService'
+import { useToast } from '@/hooks/useToast'
+import { Card, Input, Textarea, Select, Button, Spinner } from '@/components/ui'
+
+export default function AdminEventFormPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const { toast, confirm } = useToast()
+  const isEdit = !!id
+
+  const [loading, setLoading] = useState(isEdit)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+
+  const [form, setForm] = useState({
+    name: '', description: '', event_date: '', event_time: '', location: '',
+    capacity: '', status: 'Aktif', thumbnail_url: '', contact_wa: '',
+  })
+
+  useEffect(() => {
+    if (!isEdit) return
+    eventsService.getById(id)
+      .then(ev => setForm({
+        name: ev.name || '',
+        description: ev.description || '',
+        event_date: ev.event_date || '',
+        event_time: ev.event_time || '',
+        location: ev.location || '',
+        capacity: ev.capacity ?? '',
+        status: ev.status || 'Aktif',
+        thumbnail_url: ev.thumbnail_url || '',
+        contact_wa: ev.contact_wa || '',
+      }))
+      .catch(err => setError(err.message || 'Gagal memuat event.'))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
+
+  async function handleUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const url = await eventsService.uploadThumbnail(file)
+      set('thumbnail_url', url)
+      toast.success('Gambar berhasil diunggah.')
+    } catch (err) {
+      setError(err.message || 'Gagal mengunggah gambar.')
+      toast.error(err.message || 'Gagal mengunggah gambar.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleSubmit() {
+    setError('')
+    if (!form.name.trim()) { setError('Nama event wajib diisi.'); return }
+    if (!form.event_date) { setError('Tanggal event wajib diisi.'); return }
+    setSaving(true)
+    try {
+      const payload = {
+        ...form,
+        capacity: form.capacity === '' ? null : Number(form.capacity),
+        event_time: form.event_time || null,
+      }
+      if (isEdit) {
+        await eventsService.update(id, payload)
+      } else {
+        await eventsService.create(payload)
+      }
+      toast.success(isEdit ? 'Event berhasil diperbarui.' : 'Event berhasil ditambahkan.')
+      navigate('/admin/events')
+    } catch (err) {
+      setError(err.message || 'Gagal menyimpan event.')
+      toast.error(err.message || 'Gagal menyimpan event.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    const ok = await confirm({
+      title: 'Hapus event?',
+      message: 'Event ini akan dihapus permanen beserta pendaftaran terkait.',
+      confirmText: 'Hapus',
+      danger: true,
+    })
+    if (!ok) return
+    setDeleting(true)
+    try {
+      await eventsService.delete(id)
+      toast.success('Event berhasil dihapus.')
+      navigate('/admin/events')
+    } catch (err) {
+      setError(err.message || 'Gagal menghapus event.')
+      toast.error(err.message || 'Gagal menghapus event.')
+      setDeleting(false)
+    }
+  }
+
+  if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
+
+  return (
+    <div className="max-w-2xl">
+      <button onClick={() => navigate('/admin/events')} className="flex items-center gap-1 text-sm text-gray-500 mb-4">
+        <ArrowLeft size={16} /> Kembali ke Kelola Events
+      </button>
+
+      {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>}
+
+      <Card className="p-4 mb-4 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-900">Informasi Event</h2>
+
+        <div className="space-y-1">
+          <label className="text-sm text-gray-600 font-medium">Gambar Sampul</label>
+          <div className="flex items-center gap-3">
+            {form.thumbnail_url ? (
+              <img src={form.thumbnail_url} alt="" className="w-16 h-16 rounded-xl object-cover" />
+            ) : (
+              <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400">
+                <ImagePlus size={22} />
+              </div>
+            )}
+            <label className="cursor-pointer">
+              <span className="text-xs font-medium text-orange-500 hover:underline">
+                {uploading ? 'Mengunggah...' : 'Unggah Gambar'}
+              </span>
+              <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
+            </label>
+          </div>
+        </div>
+
+        <Input label="Nama Event" required value={form.name} onChange={e => set('name', e.target.value)} />
+        <Textarea label="Deskripsi" rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Tanggal" type="date" required value={form.event_date} onChange={e => set('event_date', e.target.value)} />
+          <Input label="Jam" type="time" value={form.event_time} onChange={e => set('event_time', e.target.value)} />
+        </div>
+
+        <Input label="Lokasi" value={form.location} onChange={e => set('location', e.target.value)} />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Kapasitas" type="number" min="0" value={form.capacity} onChange={e => set('capacity', e.target.value)} />
+          <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
+            <option value="Aktif">Aktif</option>
+            <option value="Selesai">Selesai</option>
+            <option value="Dibatalkan">Dibatalkan</option>
+          </Select>
+        </div>
+
+        <Input label="Kontak WhatsApp" placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
+      </Card>
+
+      <div className="flex gap-2">
+        {isEdit && (
+          <Button variant="danger" loading={deleting} onClick={handleDelete}>Hapus</Button>
+        )}
+        <Button className="flex-1" loading={saving} onClick={handleSubmit}>
+          {isEdit ? 'Simpan Perubahan' : 'Tambah Event'}
+        </Button>
+      </div>
+    </div>
+  )
+}

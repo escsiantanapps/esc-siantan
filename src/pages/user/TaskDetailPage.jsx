@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { startOfWeek, startOfMonth } from 'date-fns'
-import { ClipboardList, CheckCircle2, Paperclip } from 'lucide-react'
+import { ClipboardList, CheckCircle2, Paperclip, Lock } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { tasksService } from '@/services/tasksService'
+import { useToast } from '@/hooks/useToast'
+import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { Card, Spinner, EmptyState, GradientHeader, Button, Input, Textarea, Select, Checkbox, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
@@ -11,6 +12,7 @@ export default function TaskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const { toast } = useToast()
 
   const [template, setTemplate] = useState(null)
   const [responses, setResponses] = useState([])
@@ -19,6 +21,7 @@ export default function TaskDetailPage() {
   const [uploadingKey, setUploadingKey] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [denied, setDenied] = useState(false)
 
   useEffect(() => {
     if (!profile) return
@@ -29,6 +32,11 @@ export default function TaskDetailPage() {
     setLoading(true)
     try {
       const tmpl = await tasksService.getTemplateById(id)
+      // Cegah akses ke tugas yang dibatasi untuk ministry tertentu
+      if (!canAccessTemplate(tmpl, profile)) {
+        setDenied(true)
+        return
+      }
       setTemplate(tmpl)
       const all = await tasksService.getMyResponses(profile.user_id, id)
       setResponses(all.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at)))
@@ -58,8 +66,10 @@ export default function TaskDetailPage() {
     try {
       const url = await tasksService.uploadResponseFile(profile.user_id, file)
       set(field.key, url)
+      toast.success('File berhasil diunggah.')
     } catch (err) {
       setError(err.message || 'Gagal mengunggah file.')
+      toast.error(err.message || 'Gagal mengunggah file.')
     } finally {
       setUploadingKey(null)
     }
@@ -85,14 +95,29 @@ export default function TaskDetailPage() {
       const all = await tasksService.getMyResponses(profile.user_id, id)
       setResponses(all.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at)))
       setForm(initialForm(template))
+      toast.success('Jawaban berhasil dikirim.')
     } catch (err) {
       setError(err.message || 'Gagal mengirim jawaban.')
+      toast.error(err.message || 'Gagal mengirim jawaban.')
     } finally {
       setSaving(false)
     }
   }
 
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
+
+  if (denied) {
+    return (
+      <div className="pb-4">
+        <GradientHeader title="Akses Ditolak" back={() => navigate('/tugas')} />
+        <EmptyState
+          icon={Lock}
+          title="Tugas khusus ministry tertentu"
+          description="Tugas ini hanya dapat diisi oleh anggota ministry yang ditentukan. Hubungi admin/PKS jika menurut Anda ini keliru."
+        />
+      </div>
+    )
+  }
 
   if (!template) {
     return (

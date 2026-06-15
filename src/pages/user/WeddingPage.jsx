@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Paperclip } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
 import { Card, Button, Input, Textarea, Checkbox, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
@@ -18,6 +19,7 @@ const DOCS = [
 export default function WeddingPage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const { toast } = useToast()
 
   const [loading, setLoading] = useState(true)
   const [existing, setExisting] = useState(null)
@@ -55,8 +57,10 @@ export default function WeddingPage() {
     try {
       const url = await registrationService.uploadDocument(`wedding/${profile.user_id}`, file)
       setDoc(key, url)
+      toast.success('Dokumen berhasil diunggah.')
     } catch (err) {
       setError(err.message || 'Gagal mengunggah dokumen.')
+      toast.error(err.message || 'Gagal mengunggah dokumen.')
     } finally {
       setUploadingKey(null)
     }
@@ -91,8 +95,10 @@ export default function WeddingPage() {
         user_id: profile.user_id,
       })
       setExisting(result)
+      toast.success('Pendaftaran pemberkatan nikah berhasil dikirim.')
     } catch (err) {
       setError(err.message || 'Gagal mengirim pendaftaran.')
+      toast.error(err.message || 'Gagal mengirim pendaftaran.')
     } finally {
       setSaving(false)
     }

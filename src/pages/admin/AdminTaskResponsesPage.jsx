@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { tasksService } from '@/services/tasksService'
-import { Card, Spinner, EmptyState } from '@/components/ui'
+import { Card, Spinner, EmptyState, Input } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
 const LIMIT = 20
@@ -15,12 +15,19 @@ export default function AdminTaskResponsesPage() {
   const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
 
   useEffect(() => {
     setLoading(true)
     Promise.all([
       tasksService.getTemplateById(id),
-      tasksService.getAllResponses(id, { page, limit: LIMIT }),
+      tasksService.getAllResponses(id, {
+        page,
+        limit: LIMIT,
+        startDate: startDate || null,
+        endDate: endDate ? `${endDate}T23:59:59` : null,
+      }),
     ])
       .then(([tmpl, { data, count }]) => {
         setTemplate(tmpl)
@@ -29,11 +36,19 @@ export default function AdminTaskResponsesPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [id, page])
+  }, [id, page, startDate, endDate])
+
+  function resetFilter() {
+    setStartDate('')
+    setEndDate('')
+    setPage(1)
+  }
 
   const totalPages = Math.max(1, Math.ceil(count / LIMIT))
 
-  if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
+  if (loading && !template) return <div className="flex justify-center items-center h-60"><Spinner /></div>
+
+  const filterActive = !!(startDate || endDate)
 
   return (
     <div className="max-w-2xl">
@@ -42,14 +57,50 @@ export default function AdminTaskResponsesPage() {
       </button>
 
       <h1 className="text-lg font-semibold text-gray-900 mb-1">{template?.title}</h1>
-      <p className="text-sm text-gray-500 mb-4">{count} jawaban terkumpul</p>
+      <p className="text-sm text-gray-500 mb-4">
+        {count} jawaban{filterActive ? ' (terfilter)' : ' terkumpul'}
+      </p>
 
-      {responses.length === 0 && (
-        <EmptyState title="Belum ada jawaban" description="Jawaban dari jemaat/volunteer akan muncul di sini." />
+      {/* Filter rentang tanggal */}
+      <Card className="p-4 mb-4">
+        <div className="flex items-end gap-3">
+          <div className="flex-1">
+            <Input
+              label="Dari tanggal"
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={e => { setStartDate(e.target.value); setPage(1) }}
+            />
+          </div>
+          <div className="flex-1">
+            <Input
+              label="Sampai tanggal"
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={e => { setEndDate(e.target.value); setPage(1) }}
+            />
+          </div>
+        </div>
+        {filterActive && (
+          <button onClick={resetFilter} className="mt-3 inline-flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600">
+            <X size={13} /> Reset filter
+          </button>
+        )}
+      </Card>
+
+      {loading && <div className="flex justify-center py-8"><Spinner /></div>}
+
+      {!loading && responses.length === 0 && (
+        <EmptyState
+          title={filterActive ? 'Tidak ada jawaban pada rentang ini' : 'Belum ada jawaban'}
+          description={filterActive ? 'Coba ubah atau reset rentang tanggal.' : 'Jawaban dari jemaat/volunteer akan muncul di sini.'}
+        />
       )}
 
       <div className="space-y-3">
-        {responses.map(r => (
+        {!loading && responses.map(r => (
           <Card key={r.response_id} className="p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-gray-900">{r.users?.name || 'Tanpa nama'}</p>
