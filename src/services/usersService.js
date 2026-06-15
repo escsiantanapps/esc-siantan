@@ -29,6 +29,24 @@ export const usersService = {
     return data
   },
 
+  // Hapus akun permanen (auth + profil) via serverless function dengan service
+  // role. Hanya Admin/Super Admin yang diizinkan (diverifikasi di server).
+  async deleteAccount(userId) {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) throw new Error('Sesi tidak ditemukan.')
+    const res = await fetch('/api/delete-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ userId }),
+    })
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}))
+      throw new Error(e.error || 'Gagal menghapus akun.')
+    }
+    return res.json()
+  },
+
   async uploadAvatar(userId, file) {
     const ext = file.name.split('.').pop()
     const path = `avatars/${userId}.${ext}`

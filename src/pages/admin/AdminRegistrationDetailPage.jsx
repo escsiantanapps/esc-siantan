@@ -200,7 +200,7 @@ export default function AdminRegistrationDetailPage() {
         ) : (
           docs.map(d => reg.documents?.[d.key] && (
             <a key={d.key} href={reg.documents[d.key]} target="_blank" rel="noreferrer"
-              className="flex items-center gap-2 text-sm text-orange-500 hover:underline">
+              className="flex items-center gap-2 text-sm text-brand-500 hover:underline">
               <FileText size={15} /> {d.label}
             </a>
           ))

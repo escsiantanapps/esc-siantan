@@ -31,8 +31,8 @@ export default function InformationPage() {
                 {item.thumbnail_url ? (
                   <img src={item.thumbnail_url} alt={item.title} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
                 ) : (
-                  <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
-                    <Bell size={20} className="text-orange-500" />
+                  <div className="w-12 h-12 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
+                    <Bell size={20} className="text-brand-500" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">

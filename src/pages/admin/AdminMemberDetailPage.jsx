@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Trash2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
@@ -11,7 +11,7 @@ export default function AdminMemberDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
-  const { toast } = useToast()
+  const { toast, confirm } = useToast()
   const canEditRole = profile?.role === 'Super Admin'
 
   const [member, setMember] = useState(null)
@@ -19,6 +19,7 @@ export default function AdminMemberDetailPage() {
   const [komselList, setKomselList] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -101,6 +102,31 @@ export default function AdminMemberDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    const ok = await confirm({
+      title: 'Hapus akun jemaat?',
+      message: `Akun "${member.name}" akan dihapus permanen — termasuk akses login. Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: 'Hapus Permanen',
+      danger: true,
+    })
+    if (!ok) return
+    setError(''); setSuccess(''); setDeleting(true)
+    try {
+      await usersService.deleteAccount(id)
+      toast.success('Akun berhasil dihapus.')
+      navigate('/admin/jemaat')
+    } catch (err) {
+      setError(err.message || 'Gagal menghapus akun.')
+      toast.error(err.message || 'Gagal menghapus akun.')
+      setDeleting(false)
+    }
+  }
+
+  // Aturan ini juga ditegakkan di server (api/delete-user).
+  const isSelf = member?.user_id === profile?.user_id
+  const targetIsAdmin = ['Admin', 'Super Admin'].includes(member?.role)
+  const canDelete = !isSelf && (!targetIsAdmin || profile?.role === 'Super Admin')
+
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
 
   if (!member) {
@@ -129,10 +155,10 @@ export default function AdminMemberDetailPage() {
 
       {/* Persetujuan pendaftaran */}
       {member.status === 'Menunggu Persetujuan' && (
-        <Card className="p-4 mb-4 border-orange-200 bg-orange-50 flex items-center justify-between gap-3 flex-wrap">
+        <Card className="p-4 mb-4 border-brand-200 bg-brand-50 flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <p className="text-sm font-semibold text-orange-700">Menunggu persetujuan pendaftaran</p>
-            <p className="text-xs text-orange-600">Setujui agar jemaat ini bisa mengakses akunnya.</p>
+            <p className="text-sm font-semibold text-brand-700">Menunggu persetujuan pendaftaran</p>
+            <p className="text-xs text-brand-600">Setujui agar jemaat ini bisa mengakses akunnya.</p>
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant="danger" loading={saving} onClick={() => handleApproval('Nonaktif')}>Tolak</Button>
@@ -246,6 +272,22 @@ export default function AdminMemberDetailPage() {
       </Card>
 
       <Button className="w-full" loading={saving} onClick={handleSave}>Simpan Perubahan</Button>
+
+      {/* Zona berbahaya — hapus akun permanen */}
+      {canDelete && (
+        <Card className="p-4 mt-4 border-red-200 bg-red-50">
+          <h2 className="text-sm font-semibold text-red-700">Zona Berbahaya</h2>
+          <p className="text-xs text-red-600 mt-1">
+            Menghapus akun akan menghilangkan akses login dan data profil jemaat ini secara permanen.
+          </p>
+          <Button variant="danger" className="mt-3" loading={deleting} onClick={handleDelete}>
+            <Trash2 size={15} /> Hapus Akun Permanen
+          </Button>
+        </Card>
+      )}
+      {isSelf && (
+        <p className="text-xs text-gray-400 text-center mt-4">Anda tidak dapat menghapus akun Anda sendiri.</p>
+      )}
     </div>
   )
 }

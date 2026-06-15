@@ -71,7 +71,7 @@ export default function ForgotPasswordPage() {
               </form>
 
               <div className="mt-6 text-center">
-                <Link to="/login" className="text-sm text-orange-500">← Kembali ke login</Link>
+                <Link to="/login" className="text-sm text-brand-500">← Kembali ke login</Link>
               </div>
             </>
           )}

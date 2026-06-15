@@ -31,10 +31,10 @@ export default function UserLayout() {
               >
                 <Icon
                   size={22}
-                  className={active ? 'text-orange-500' : 'text-gray-400'}
+                  className={active ? 'text-brand-500' : 'text-gray-400'}
                   strokeWidth={active ? 2 : 1.5}
                 />
-                <span className={`text-[10px] font-medium ${active ? 'text-orange-500' : 'text-gray-400'}`}>
+                <span className={`text-[10px] font-medium ${active ? 'text-brand-500' : 'text-gray-400'}`}>
                   {label}
                 </span>
               </NavLink>

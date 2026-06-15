@@ -65,7 +65,7 @@ export default function EventsPage() {
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
               <div className="absolute top-3 right-3"><StatusBadge status={featured.status} /></div>
               <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                <span className="inline-block px-2.5 py-1 rounded-full bg-surface/90 text-orange-600 text-[11px] font-semibold mb-2">
+                <span className="inline-block px-2.5 py-1 rounded-full bg-surface/90 text-brand-600 text-[11px] font-semibold mb-2">
                   EVENT UTAMA
                 </span>
                 <h3 className="text-xl font-bold text-white">{featured.name}</h3>

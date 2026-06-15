@@ -153,7 +153,7 @@ export default function AdminClassesPage() {
               <button onClick={() => openAttendance(cls)} title="Daftar Hadir" className="p-2 text-gray-400 hover:text-green-500 shrink-0">
                 <ClipboardCheck size={16} />
               </button>
-              <button onClick={() => openEdit(cls)} className="p-2 text-gray-400 hover:text-orange-500 shrink-0">
+              <button onClick={() => openEdit(cls)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
                 <Pencil size={16} />
               </button>
               <button onClick={() => handleDelete(cls)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">

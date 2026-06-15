@@ -12,18 +12,18 @@
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
 
-  /* Skala "orange" brand di-remap ke biru langit. Semua utility orange
-     (background, teks, ring fokus) di seluruh app otomatis berubah jadi biru. */
-  --color-orange-50:  #e8f8ff;
-  --color-orange-100: #cceeff;
-  --color-orange-200: #a3e1ff;
-  --color-orange-300: #66ccf5;
-  --color-orange-400: #1fb6ef;
-  --color-orange-500: #00BFFF;
-  --color-orange-600: #0098cc;
-  --color-orange-700: #0077B6;
-  --color-orange-800: #005c8e;
-  --color-orange-900: #00415f;
+  /* Skala warna brand (biru langit). Dipakai lewat utility brand-* di seluruh
+     app, mis. bg-brand-500, text-brand-700, focus:ring-brand-400. */
+  --color-brand-50:  #e8f8ff;
+  --color-brand-100: #cceeff;
+  --color-brand-200: #a3e1ff;
+  --color-brand-300: #66ccf5;
+  --color-brand-400: #1fb6ef;
+  --color-brand-500: #00BFFF;
+  --color-brand-600: #0098cc;
+  --color-brand-700: #0077B6;
+  --color-brand-800: #005c8e;
+  --color-brand-900: #00415f;
 }
 
 * {
@@ -138,10 +138,10 @@ h1, h2, h3 {
   --color-gray-800: #e8ebee;
   --color-gray-900: #f5f6f8;
 
-  --color-orange-50:  #07232e;
-  --color-orange-100: #0a3344;
-  --color-orange-700: #7fd4ff;
-  --color-orange-800: #b3e5fc;
+  --color-brand-50:  #07232e;
+  --color-brand-100: #0a3344;
+  --color-brand-700: #7fd4ff;
+  --color-brand-800: #b3e5fc;
 
   --color-red-50:  #2a1414;
   --color-red-100: #3d1d1d;

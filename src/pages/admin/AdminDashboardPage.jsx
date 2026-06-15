@@ -65,7 +65,7 @@ export default function AdminDashboardPage() {
   }
 
   const statCards = [
-    { label: 'Total Jemaat',  value: stats.members,     icon: Users,         color: 'text-orange-500', bg: 'bg-orange-50', to: '/admin/jemaat' },
+    { label: 'Total Jemaat',  value: stats.members,     icon: Users,         color: 'text-brand-500', bg: 'bg-brand-50', to: '/admin/jemaat' },
     { label: 'Akun Baru',     value: stats.pendingUsers, icon: UserPlus,      color: 'text-amber-500',  bg: 'bg-amber-50',  to: '/admin/jemaat?status=Menunggu+Persetujuan' },
     { label: 'Events Aktif',  value: stats.events,      icon: Calendar,      color: 'text-red-500',    bg: 'bg-red-50',    to: '/admin/events' },
     { label: 'Form Tugas',    value: stats.tasks,       icon: ClipboardList, color: 'text-blue-500',   bg: 'bg-blue-50',   to: '/admin/tugas' },
@@ -105,7 +105,7 @@ export default function AdminDashboardPage() {
       <Card className="p-4 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-gray-900">Evaluasi Minggu Ini</h3>
-          <Link to="/admin/evaluasi" className="text-xs text-orange-500 flex items-center gap-0.5">
+          <Link to="/admin/evaluasi" className="text-xs text-brand-500 flex items-center gap-0.5">
             Detail <ChevronRight size={13} />
           </Link>
         </div>
@@ -143,7 +143,7 @@ export default function AdminDashboardPage() {
         <Card className="p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-900">Jemaat Terbaru</h3>
-            <Link to="/admin/jemaat" className="text-xs text-orange-500 flex items-center gap-0.5">
+            <Link to="/admin/jemaat" className="text-xs text-brand-500 flex items-center gap-0.5">
               Semua <ChevronRight size={13} />
             </Link>
           </div>
@@ -167,7 +167,7 @@ export default function AdminDashboardPage() {
         <Card className="p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-900">Antrian Pendaftaran</h3>
-            <Link to="/admin/baptisan" className="text-xs text-orange-500 flex items-center gap-0.5">
+            <Link to="/admin/baptisan" className="text-xs text-brand-500 flex items-center gap-0.5">
               Lihat <ChevronRight size={13} />
             </Link>
           </div>

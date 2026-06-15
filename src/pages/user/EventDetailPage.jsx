@@ -64,16 +64,16 @@ export default function EventDetailPage() {
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Calendar size={15} className="text-orange-500" /> {formatDate(event.event_date)}
+                    <Calendar size={15} className="text-brand-500" /> {formatDate(event.event_date)}
                   </div>
                   {event.event_time && (
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Clock size={15} className="text-orange-500" /> {event.event_time}
+                      <Clock size={15} className="text-brand-500" /> {event.event_time}
                     </div>
                   )}
                   {event.location && (
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <MapPin size={15} className="text-orange-500" /> {event.location}
+                      <MapPin size={15} className="text-brand-500" /> {event.location}
                     </div>
                   )}
                 </div>

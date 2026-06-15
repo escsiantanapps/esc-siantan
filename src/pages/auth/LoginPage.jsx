@@ -83,7 +83,7 @@ export default function LoginPage() {
             />
 
             <div className="text-right">
-              <Link to="/lupa-password" className="text-sm text-orange-500 font-medium hover:text-orange-600 transition">Lupa kata sandi?</Link>
+              <Link to="/lupa-password" className="text-sm text-brand-500 font-medium hover:text-brand-600 transition">Lupa kata sandi?</Link>
             </div>
 
             <Button type="submit" loading={loading} className="w-full" size="lg">
@@ -95,7 +95,7 @@ export default function LoginPage() {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
               Belum punya akun?{' '}
-              <Link to="/register" className="text-orange-500 font-semibold hover:text-orange-600 transition">Daftar sekarang</Link>
+              <Link to="/register" className="text-brand-500 font-semibold hover:text-brand-600 transition">Daftar sekarang</Link>
             </p>
           </div>
         </div>

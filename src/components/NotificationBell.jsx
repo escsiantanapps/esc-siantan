@@ -107,7 +107,7 @@ export default function NotificationBell() {
       >
         <Bell size={18} />
         {unread > 0 && (
-          <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-surface">
+          <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-brand-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-surface">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -131,8 +131,8 @@ export default function NotificationBell() {
                 onClick={() => setOpen(false)}
                 className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
               >
-                <div className="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
-                  <n.icon size={16} className="text-orange-500" />
+                <div className="w-9 h-9 rounded-full bg-brand-100 flex items-center justify-center shrink-0">
+                  <n.icon size={16} className="text-brand-500" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{n.title}</p>

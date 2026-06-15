@@ -118,7 +118,7 @@ export default function BaptismPage() {
               <p className="text-sm text-gray-600">Dijadwalkan: {formatDate(existing.scheduled_at, 'd MMMM yyyy, HH:mm')}</p>
             )}
             {existing.admin_note && (
-              <div className="bg-orange-50 border border-orange-100 rounded-xl px-3 py-2 text-sm text-orange-700">{existing.admin_note}</div>
+              <div className="bg-brand-50 border border-brand-100 rounded-xl px-3 py-2 text-sm text-brand-700">{existing.admin_note}</div>
             )}
           </Card>
           <p className="text-xs text-gray-400 text-center">Pendaftaran sedang diproses. Kamu akan dihubungi melalui WhatsApp untuk informasi lebih lanjut.</p>

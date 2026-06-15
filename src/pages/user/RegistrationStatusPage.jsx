@@ -90,8 +90,8 @@ export default function RegistrationStatusPage() {
               {events.map(item => (
                 <Link key={item.ticket_id} to={`/events/${item.event_id}`} className="block">
                   <Card className="p-3.5 flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
-                      <Calendar size={18} className="text-orange-500" />
+                    <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center shrink-0">
+                      <Calendar size={18} className="text-brand-500" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900">{item.events?.name}</p>

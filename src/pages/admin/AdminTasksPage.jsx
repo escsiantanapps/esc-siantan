@@ -39,7 +39,7 @@ export default function AdminTasksPage() {
               <Link to={`/admin/tugas/${t.form_id}/jawaban`} className="text-xs text-blue-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-blue-50 flex-shrink-0">
                 <BarChart2 size={13} /> Jawaban
               </Link>
-              <Link to={`/admin/tugas/${t.form_id}/edit`} className="text-xs text-orange-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-orange-50 flex-shrink-0">
+              <Link to={`/admin/tugas/${t.form_id}/edit`} className="text-xs text-brand-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-brand-50 flex-shrink-0">
                 Edit <ChevronRight size={13} />
               </Link>
             </div>

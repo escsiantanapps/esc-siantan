@@ -45,10 +45,10 @@ export default function RegisterPage() {
           {[1, 2, 3].map(s => (
             <div key={s} className="flex items-center gap-2 flex-1">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0
-                ${s < step ? 'gradient-main text-white' : s === step ? 'border-2 border-orange-500 text-orange-500' : 'border-2 border-gray-200 text-gray-300'}`}>
+                ${s < step ? 'gradient-main text-white' : s === step ? 'border-2 border-brand-500 text-brand-500' : 'border-2 border-gray-200 text-gray-300'}`}>
                 {s < step ? '✓' : s}
               </div>
-              <span className={`text-xs ${s === step ? 'text-orange-500 font-medium' : 'text-gray-400'}`}>
+              <span className={`text-xs ${s === step ? 'text-brand-500 font-medium' : 'text-gray-400'}`}>
                 {['Akun', 'Data Diri', 'Selesai'][s - 1]}
               </span>
               {s < 3 && <div className="flex-1 h-px bg-gray-200" />}
@@ -109,7 +109,7 @@ export default function RegisterPage() {
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Sudah punya akun?{' '}
-            <Link to="/login" className="text-orange-500 font-medium">Masuk</Link>
+            <Link to="/login" className="text-brand-500 font-medium">Masuk</Link>
           </p>
         </div>
       </div>

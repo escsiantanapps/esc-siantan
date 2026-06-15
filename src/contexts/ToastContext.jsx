@@ -91,8 +91,8 @@ export function ToastProvider({ children }) {
           />
           <div className="relative w-full max-w-sm bg-surface rounded-2xl shadow-2xl shadow-black/20 p-6 animate-toast-in">
             <div className="flex flex-col items-center text-center">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${confirmState.danger ? 'bg-red-50' : 'bg-orange-50'}`}>
-                <AlertTriangle size={22} className={confirmState.danger ? 'text-red-500' : 'text-orange-500'} />
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${confirmState.danger ? 'bg-red-50' : 'bg-brand-50'}`}>
+                <AlertTriangle size={22} className={confirmState.danger ? 'text-red-500' : 'text-brand-500'} />
               </div>
               <h2 className="text-base font-semibold text-gray-900">{confirmState.title}</h2>
               <p className="text-sm text-gray-500 mt-1.5">{confirmState.message}</p>

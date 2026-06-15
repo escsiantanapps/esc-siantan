@@ -122,7 +122,7 @@ export default function AdminLayout() {
                 <Smartphone size={14} strokeWidth={1.5} />
                 {isAdminOnly ? 'Panel PKS' : 'Aplikasi'}
               </NavLink>
-              <span className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold bg-surface text-orange-600 shadow-sm">
+              <span className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold bg-surface text-brand-600 shadow-sm">
                 <ShieldCheck size={14} strokeWidth={2} />
                 Admin
               </span>
@@ -145,7 +145,7 @@ export default function AdminLayout() {
                 className={({ isActive }) =>
                   `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors
                   ${isActive
-                    ? 'bg-orange-50 text-orange-600'
+                    ? 'bg-brand-50 text-brand-600'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }`
                 }

@@ -145,25 +145,25 @@ export default function PKSDashboardPage() {
             <div className="flex gap-1.5 mb-4">
               <button
                 onClick={() => setTab('anggota')}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'anggota' ? 'bg-orange-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'anggota' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
                 <Users size={15} /> Anggota
               </button>
               <button
                 onClick={() => setTab('absensi')}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'absensi' ? 'bg-orange-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'absensi' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
                 <ClipboardCheck size={15} /> Absensi
               </button>
               <button
                 onClick={() => setTab('evaluasi')}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'evaluasi' ? 'bg-orange-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'evaluasi' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
                 <BarChart3 size={15} /> Evaluasi
               </button>
               <button
                 onClick={() => setTab('profil')}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'profil' ? 'bg-orange-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'profil' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
                 <UserCircle size={15} /> Profil
               </button>

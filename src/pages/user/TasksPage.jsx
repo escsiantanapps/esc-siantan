@@ -69,10 +69,10 @@ export default function TasksPage() {
                   <h2 className="text-base font-semibold text-gray-900">{t.title}</h2>
                   {t.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{t.description}</p>}
                 </div>
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${complete ? 'bg-green-100' : 'bg-orange-100'}`}>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${complete ? 'bg-green-100' : 'bg-brand-100'}`}>
                   {complete
                     ? <CheckCircle size={18} className="text-green-500" />
-                    : <ClipboardList size={18} className="text-orange-500" />
+                    : <ClipboardList size={18} className="text-brand-500" />
                   }
                 </div>
               </div>
@@ -85,7 +85,7 @@ export default function TasksPage() {
                       <CheckCircle size={13} /> Selesai
                     </span>
                   ) : (
-                    <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-[11px] font-semibold">
+                    <span className="px-3 py-1 rounded-full bg-brand-100 text-brand-700 text-[11px] font-semibold">
                       {done} dari {target} target — Berjalan
                     </span>
                   )}

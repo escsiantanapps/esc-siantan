@@ -46,7 +46,7 @@ export function truncate(str, n = 80) {
 // Warna avatar dari nama (konsisten)
 export function avatarColor(name) {
   const colors = [
-    'bg-orange-100 text-orange-800',
+    'bg-brand-100 text-brand-800',
     'bg-red-100 text-red-800',
     'bg-blue-100 text-blue-800',
     'bg-green-100 text-green-800',
@@ -73,7 +73,7 @@ export function validateUpload(file, { maxMB = 5, image = false } = {}) {
 export function spColor(status) {
   const map = {
     'Aman': 'bg-green-100 text-green-800',
-    'SP 1': 'bg-orange-100 text-orange-800',
+    'SP 1': 'bg-brand-100 text-brand-800',
     'SP 2': 'bg-red-100 text-red-800',
     'SP 3': 'bg-red-200 text-red-900',
   }

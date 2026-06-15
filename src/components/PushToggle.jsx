@@ -45,8 +45,8 @@ export default function PushToggle() {
       return (
         <Card className="p-4">
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
-              <BellRing size={15} className="text-orange-500" />
+            <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center flex-shrink-0">
+              <BellRing size={15} className="text-brand-500" />
             </div>
             <div>
               <p className="text-sm text-gray-800 font-medium">Notifikasi Push</p>
@@ -66,8 +66,8 @@ export default function PushToggle() {
     <Card className="p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
-            <BellRing size={15} className="text-orange-500" />
+          <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center flex-shrink-0">
+            <BellRing size={15} className="text-brand-500" />
           </div>
           <div>
             <p className="text-sm text-gray-800 font-medium">Notifikasi Push</p>
@@ -80,7 +80,7 @@ export default function PushToggle() {
           role="switch"
           aria-checked={subscribed}
           aria-label="Aktifkan notifikasi push"
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${subscribed ? 'bg-orange-500' : 'bg-gray-200'}`}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${subscribed ? 'bg-brand-500' : 'bg-gray-200'}`}
         >
           <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${subscribed ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>

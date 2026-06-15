@@ -132,7 +132,7 @@ export default function AdminNewsFormPage() {
               </div>
             )}
             <label className="cursor-pointer">
-              <span className="text-xs font-medium text-orange-500 hover:underline">
+              <span className="text-xs font-medium text-brand-500 hover:underline">
                 {uploading ? 'Mengunggah...' : 'Unggah Gambar'}
               </span>
               <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />

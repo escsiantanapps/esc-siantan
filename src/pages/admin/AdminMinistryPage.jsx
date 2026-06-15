@@ -102,7 +102,7 @@ export default function AdminMinistryPage() {
                 <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
                 {item.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{item.description}</p>}
               </div>
-              <button onClick={() => openEdit(item)} className="p-2 text-gray-400 hover:text-orange-500 shrink-0">
+              <button onClick={() => openEdit(item)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
                 <Pencil size={16} />
               </button>
               <button onClick={() => handleDelete(item)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">

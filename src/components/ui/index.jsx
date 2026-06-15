@@ -32,7 +32,7 @@ export function Input({ label, error, required, icon: Icon, rightElement, classN
       <div className="relative">
         {Icon && <Icon size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />}
         <input
-          className={`w-full py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition
+          className={`w-full py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition
             ${Icon ? 'pl-10' : 'pl-3'} ${rightElement ? 'pr-10' : 'pr-3'}
             ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
           {...props}
@@ -55,7 +55,7 @@ export function Textarea({ label, error, required, rows = 3, className = '', ...
       )}
       <textarea
         rows={rows}
-        className={`w-full px-3 py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none transition
+        className={`w-full px-3 py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent resize-none transition
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
         {...props}
       />
@@ -74,7 +74,7 @@ export function Select({ label, error, required, children, className = '', ...pr
         </label>
       )}
       <select
-        className={`w-full px-3 py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition
+        className={`w-full px-3 py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
         {...props}
       >
@@ -91,7 +91,7 @@ export function Checkbox({ label, className = '', ...props }) {
     <label className={`flex items-center gap-2.5 cursor-pointer ${className}`}>
       <input
         type="checkbox"
-        className="w-4.5 h-4.5 rounded-md border-gray-300 text-orange-500 focus:ring-orange-400"
+        className="w-4.5 h-4.5 rounded-md border-gray-300 text-brand-500 focus:ring-brand-400"
         {...props}
       />
       {label && <span className="text-sm text-gray-700">{label}</span>}
@@ -117,7 +117,7 @@ export function Card({ children, className = '', onClick, glass = false, ...prop
 export function Badge({ children, color = 'gray', className = '' }) {
   const colors = {
     gray:   'bg-gray-100 text-gray-700',
-    orange: 'bg-orange-100 text-orange-700',
+    orange: 'bg-brand-100 text-brand-700',
     red:    'bg-red-100 text-red-700',
     green:  'bg-green-100 text-green-700',
     blue:   'bg-blue-100 text-blue-700',
@@ -198,7 +198,7 @@ export function EmptyState({ icon: Icon, title, description, action }) {
 // ─── Loading Spinner ─────────────────────────────────────
 export function Spinner({ size = 'md' }) {
   const s = { sm: 'w-4 h-4', md: 'w-6 h-6', lg: 'w-10 h-10' }
-  return <div className={`${s[size]} border-2 border-orange-500 border-t-transparent rounded-full animate-spin`} />
+  return <div className={`${s[size]} border-2 border-brand-500 border-t-transparent rounded-full animate-spin`} />
 }
 
 // ─── GradientHeader ──────────────────────────────────────

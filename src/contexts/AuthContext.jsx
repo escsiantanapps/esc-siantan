@@ -9,49 +9,66 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Lacak id user yang profilnya sedang/sudah diambil agar getSession dan
+    // onAuthStateChange tidak men-fetch profil dua kali untuk user yang sama.
+    let fetchedFor = null
+
     // Cek session awal
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user)
+      if (session?.user) { fetchedFor = session.user.id; fetchProfile(session.user) }
       else setLoading(false)
     })
 
     // Listen perubahan auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user)
-      else { setProfile(null); setLoading(false) }
+      if (session?.user) {
+        if (fetchedFor === session.user.id) return // sudah/ sedang di-fetch
+        fetchedFor = session.user.id
+        fetchProfile(session.user)
+      } else { fetchedFor = null; setProfile(null); setLoading(false) }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
   async function fetchProfile(authUser) {
-    let { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('auth_id', authUser.id)
-      .maybeSingle()
-
-    // Akun auth ada tapi baris profil belum ada (mis. gagal saat registrasi) -> buat otomatis
-    if (!data) {
-      const { data: created } = await supabase
+    try {
+      let { data, error } = await supabase
         .from('users')
-        .insert({
-          auth_id: authUser.id,
-          name: authUser.email?.split('@')[0] || 'Jemaat',
-          email: authUser.email,
-          role: 'Jemaat',
-          status: 'Menunggu Persetujuan',
-          sp_level: 'Aman',
-        })
-        .select()
+        .select('*')
+        .eq('auth_id', authUser.id)
         .maybeSingle()
-      data = created
-    }
 
-    setProfile(data)
-    setLoading(false)
+      if (error) throw error
+
+      // Akun auth ada tapi baris profil belum ada (mis. gagal saat registrasi) -> buat otomatis
+      if (!data) {
+        const { data: created, error: insertErr } = await supabase
+          .from('users')
+          .insert({
+            auth_id: authUser.id,
+            name: authUser.email?.split('@')[0] || 'Jemaat',
+            email: authUser.email,
+            role: 'Jemaat',
+            status: 'Menunggu Persetujuan',
+            sp_level: 'Aman',
+          })
+          .select()
+          .maybeSingle()
+        if (insertErr) throw insertErr
+        data = created
+      }
+
+      setProfile(data)
+    } catch {
+      // Gagal memuat profil (mis. jaringan putus). Jangan biarkan user terjebak
+      // di layar spinner — biarkan profile null agar UI bisa menampilkan login.
+      setProfile(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function login(email, password) {

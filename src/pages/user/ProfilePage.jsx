@@ -119,8 +119,8 @@ export default function ProfilePage() {
           <div className="space-y-3">
             {profile.gender && (
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
-                  <Users size={15} className="text-orange-500" />
+                <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center flex-shrink-0">
+                  <Users size={15} className="text-brand-500" />
                 </div>
                 <div>
                   <p className="text-xs text-gray-400">Jenis Kelamin</p>
@@ -130,8 +130,8 @@ export default function ProfilePage() {
             )}
             {info.map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
-                  <Icon size={15} className="text-orange-500" />
+                <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center flex-shrink-0">
+                  <Icon size={15} className="text-brand-500" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-gray-400">{label}</p>

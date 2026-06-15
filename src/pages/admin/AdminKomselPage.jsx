@@ -128,7 +128,7 @@ export default function AdminKomselPage() {
               <button onClick={() => viewMembers(item)} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
                 <Eye size={16} />
               </button>
-              <button onClick={() => openEdit(item)} className="p-2 text-gray-400 hover:text-orange-500 shrink-0">
+              <button onClick={() => openEdit(item)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
                 <Pencil size={16} />
               </button>
               <button onClick={() => handleDelete(item)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">

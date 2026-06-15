@@ -4,6 +4,8 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { ToastProvider } from '@/contexts/ToastContext'
 import { useAuth } from '@/hooks/useAuth'
+import ErrorBoundary from '@/components/ErrorBoundary'
+import OfflineBanner from '@/components/OfflineBanner'
 
 // Auth
 import LoginPage from '@/pages/auth/LoginPage'
@@ -62,7 +64,7 @@ function PrivateRoute({ children }) {
   const location = useLocation()
   if (loading) return (
     <div className="flex items-center justify-center h-screen">
-      <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
   if (!user) return <Navigate to="/login" replace />
@@ -78,7 +80,7 @@ function AdminRoute({ children }) {
   const { user, profile, loading } = useAuth()
   if (loading) return (
     <div className="flex items-center justify-center h-screen">
-      <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
   if (!user) return <Navigate to="/login" replace />
@@ -91,7 +93,7 @@ function PKSRoute({ children }) {
   const { user, profile, loading } = useAuth()
   if (loading) return (
     <div className="flex items-center justify-center h-screen">
-      <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
   if (!user) return <Navigate to="/login" replace />
@@ -106,13 +108,15 @@ function PublicRoute({ children }) {
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <ThemeProvider>
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
+        <OfflineBanner />
         <Suspense fallback={
           <div className="flex items-center justify-center h-screen">
-            <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
           </div>
         }>
         <Routes>
@@ -173,5 +177,6 @@ export default function App() {
       </AuthProvider>
     </BrowserRouter>
     </ThemeProvider>
+    </ErrorBoundary>
   )
 }

@@ -30,6 +30,10 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         // Impor handler push ke dalam service worker hasil generate Workbox
         importScripts: ['push-sw.js'],
+        // Navigasi offline jatuh ke shell SPA yang sudah ter-precache,
+        // kecuali endpoint API (jangan di-serve dari cache).
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.origin.includes('supabase.co') && url.pathname.includes('/storage/'),

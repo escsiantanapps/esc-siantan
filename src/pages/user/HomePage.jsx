@@ -23,7 +23,7 @@ export default function HomePage() {
   }, [])
 
   const quickLinks = [
-    { to: '/tugas',              icon: ClipboardList, label: 'Tugas',    color: 'bg-orange-100 text-orange-600' },
+    { to: '/tugas',              icon: ClipboardList, label: 'Tugas',    color: 'bg-brand-100 text-brand-600' },
     { to: '/events',             icon: Calendar,      label: 'Events',   color: 'bg-red-100 text-red-600' },
     { to: '/kelas',              icon: BookOpen,      label: 'Kelas',    color: 'bg-blue-100 text-blue-600' },
     { to: '/baptisan',           icon: Droplets,      label: 'Baptisan', color: 'bg-teal-100 text-teal-600' },
@@ -43,7 +43,7 @@ export default function HomePage() {
             <div className="w-9 h-9 rounded-full gradient-main flex items-center justify-center text-white">
               <Church size={18} />
             </div>
-            <span className="font-display font-bold text-orange-500 text-base">ESC Siantan</span>
+            <span className="font-display font-bold text-brand-500 text-base">ESC Siantan</span>
           </div>
           <NotificationBell />
         </div>
@@ -53,7 +53,7 @@ export default function HomePage() {
         {/* Welcome */}
         <section className="mb-5 animate-fade-in-up">
           <h1 className="text-2xl font-bold text-gray-900">
-            Shalom, <span className="text-orange-500">{profile?.name?.split(' ')[0] || 'Jemaat'}</span> 👋
+            Shalom, <span className="text-brand-500">{profile?.name?.split(' ')[0] || 'Jemaat'}</span> 👋
           </h1>
           <p className="text-sm text-gray-500 mt-1 italic">
             "Selamat datang. Kiranya damai sejahtera menyertaimu hari ini."
@@ -80,7 +80,7 @@ export default function HomePage() {
                 ? <img src={featured.thumbnail_url} alt={featured.name} className="w-full h-44 object-cover" />
                 : <div className="w-full h-44 gradient-main" />}
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-              <span className="absolute top-3 left-3 bg-surface/90 text-orange-600 text-[11px] font-semibold px-2.5 py-1 rounded-full">
+              <span className="absolute top-3 left-3 bg-surface/90 text-brand-600 text-[11px] font-semibold px-2.5 py-1 rounded-full">
                 EVENT TERDEKAT
               </span>
               <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
@@ -122,7 +122,7 @@ export default function HomePage() {
           <section className="mb-6 animate-fade-in-up" style={{ animationDelay: '120ms' }}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-900">Pengumuman</h3>
-              <Link to="/informasi" className="text-xs text-orange-500 flex items-center gap-0.5">
+              <Link to="/informasi" className="text-xs text-brand-500 flex items-center gap-0.5">
                 Semua <ChevronRight size={13} />
               </Link>
             </div>
@@ -130,8 +130,8 @@ export default function HomePage() {
               {news.slice(0, 3).map(item => (
                 <Link key={item.news_id} to={`/informasi/${item.news_id}`} className="block">
                   <Card glass className="p-3.5 flex items-start gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
-                    <div className="w-11 h-11 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
-                      <Bell size={18} className="text-orange-500" />
+                    <div className="w-11 h-11 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
+                      <Bell size={18} className="text-brand-500" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
@@ -150,7 +150,7 @@ export default function HomePage() {
           <section className="mb-6 animate-fade-in-up" style={{ animationDelay: '160ms' }}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-900">Event Berlangsung</h3>
-              <Link to="/events" className="text-xs text-orange-500 flex items-center gap-0.5">
+              <Link to="/events" className="text-xs text-brand-500 flex items-center gap-0.5">
                 Semua <ChevronRight size={13} />
               </Link>
             </div>
@@ -181,7 +181,7 @@ export default function HomePage() {
           <section className="animate-fade-in-up" style={{ animationDelay: '200ms' }}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-900">Kelas Tersedia</h3>
-              <Link to="/kelas" className="text-xs text-orange-500 flex items-center gap-0.5">
+              <Link to="/kelas" className="text-xs text-brand-500 flex items-center gap-0.5">
                 Semua <ChevronRight size={13} />
               </Link>
             </div>

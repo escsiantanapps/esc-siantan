@@ -84,7 +84,7 @@ export default function AdminTaskResponsesPage() {
           </div>
         </div>
         {filterActive && (
-          <button onClick={resetFilter} className="mt-3 inline-flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600">
+          <button onClick={resetFilter} className="mt-3 inline-flex items-center gap-1 text-xs text-brand-500 hover:text-brand-600">
             <X size={13} /> Reset filter
           </button>
         )}
@@ -114,7 +114,7 @@ export default function AdminTaskResponsesPage() {
                   <div key={field.key} className="text-sm">
                     <span className="text-gray-400">{field.label}: </span>
                     {field.type === 'file' && r.data_json?.[field.key] ? (
-                      <a href={r.data_json[field.key]} target="_blank" rel="noreferrer" className="text-orange-500 underline">Lihat file</a>
+                      <a href={r.data_json[field.key]} target="_blank" rel="noreferrer" className="text-brand-500 underline">Lihat file</a>
                     ) : field.type === 'checkbox' ? (
                       <span className="text-gray-700">{r.data_json?.[field.key] ? 'Ya' : 'Tidak'}</span>
                     ) : (
