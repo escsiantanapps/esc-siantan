@@ -1,8 +1,9 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Home, Calendar, BookOpen, ClipboardList, User } from 'lucide-react'
+import { Home, Newspaper, Calendar, BookOpen, ClipboardList, User } from 'lucide-react'
 
 const NAV_ITEMS = [
   { to: '/',          icon: Home,          label: 'Beranda',  exact: true },
+  { to: '/informasi', icon: Newspaper,     label: 'Info' },
   { to: '/events',    icon: Calendar,      label: 'Events' },
   { to: '/kelas',     icon: BookOpen,      label: 'Kelas' },
   { to: '/tugas',     icon: ClipboardList, label: 'Tugas' },

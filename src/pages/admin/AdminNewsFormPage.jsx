@@ -62,6 +62,11 @@ export default function AdminNewsFormPage() {
     try {
       if (isEdit) {
         await newsService.update(id, form)
+        pushService.broadcast({
+          title: 'Pengumuman Diperbarui',
+          body: form.title,
+          url: `/informasi/${id}`,
+        }).catch(() => {})
       } else {
         const created = await newsService.create(form)
         // Kirim notifikasi push ke semua jemaat (tidak menggagalkan simpan bila gagal)

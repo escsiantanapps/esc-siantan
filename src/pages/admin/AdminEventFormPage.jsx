@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ImagePlus } from 'lucide-react'
 import { eventsService } from '@/services/contentService'
+import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Input, Textarea, Select, Button, Spinner } from '@/components/ui'
 import { validateUpload } from '@/lib/utils'
@@ -71,11 +72,19 @@ export default function AdminEventFormPage() {
         capacity: form.capacity === '' ? null : Number(form.capacity),
         event_time: form.event_time || null,
       }
+      let eventId = id
       if (isEdit) {
         await eventsService.update(id, payload)
       } else {
-        await eventsService.create(payload)
+        const created = await eventsService.create(payload)
+        eventId = created?.event_id
       }
+      // Notifikasi push ke semua jemaat (tidak menggagalkan simpan bila gagal)
+      pushService.broadcast({
+        title: isEdit ? 'Event Diperbarui' : 'Event Baru',
+        body: form.name,
+        url: eventId ? `/events/${eventId}` : '/events',
+      }).catch(() => {})
       toast.success(isEdit ? 'Event berhasil diperbarui.' : 'Event berhasil ditambahkan.')
       navigate('/admin/events')
     } catch (err) {

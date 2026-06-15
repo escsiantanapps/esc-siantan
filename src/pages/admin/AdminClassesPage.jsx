@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { BookOpen, Plus, Pencil, Trash2, X, QrCode, ClipboardCheck, Download } from 'lucide-react'
 import { classesService } from '@/services/contentService'
 import { classAttendanceService } from '@/services/attendanceService'
+import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { Card, PageHeader, Button, Input, Textarea, Select, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
@@ -59,11 +60,19 @@ export default function AdminClassesPage() {
     if (!form.name.trim()) { setError('Nama kelas wajib diisi.'); return }
     setSaving(true)
     try {
+      let classId = editing?.class_id
       if (editing) {
         await classesService.update(editing.class_id, form)
       } else {
-        await classesService.create(form)
+        const created = await classesService.create(form)
+        classId = created?.class_id
       }
+      // Notifikasi push ke semua jemaat (tidak menggagalkan simpan bila gagal)
+      pushService.broadcast({
+        title: editing ? 'Kelas Diperbarui' : 'Kelas Baru',
+        body: form.name,
+        url: classId ? `/kelas/${classId}` : '/kelas',
+      }).catch(() => {})
       setShowModal(false)
       toast.success(editing ? 'Kelas berhasil diperbarui.' : 'Kelas berhasil ditambahkan.')
       load()
