@@ -3,14 +3,18 @@ import { Link } from 'react-router-dom'
 import { BookOpen, MapPin, Clock, QrCode } from 'lucide-react'
 import { classesService } from '@/services/contentService'
 import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
-import { dummyThumb } from '@/lib/utils'
+import { useToast } from '@/hooks/useToast'
 
 export default function ClassesPage() {
+  const { toast } = useToast()
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    classesService.getAll().then(setClasses).catch(() => {}).finally(() => setLoading(false))
+    classesService.getAll().then(setClasses)
+      .catch(err => toast.error(err.message || 'Gagal memuat kelas.'))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
@@ -31,10 +35,16 @@ export default function ClassesPage() {
         {/* Kartu kelas dengan cover ala Stitch */}
         <div className="space-y-3.5">
           {classes.map(cls => (
-            <Link key={cls.class_id} to={`/kelas/${cls.class_id}`}>
+            <Link key={cls.class_id} to={`/kelas/${cls.class_id}`} className="block">
               <Card glass className="overflow-hidden hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
                 <div className="relative h-28">
-                  <img src={cls.thumbnail_url || dummyThumb(cls.class_id)} alt={cls.name} className="w-full h-full object-cover" />
+                  {cls.thumbnail_url
+                    ? <img src={cls.thumbnail_url} alt={cls.name} className="w-full h-full object-cover" />
+                    : (
+                      <div className="w-full h-full gradient-main flex items-center justify-center">
+                        <BookOpen size={34} className="text-white/85" strokeWidth={1.5} />
+                      </div>
+                    )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
                   <div className="absolute top-2.5 right-2.5"><StatusBadge status={cls.status} /></div>
                 </div>

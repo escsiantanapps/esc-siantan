@@ -88,7 +88,7 @@ export default function RegistrationStatusPage() {
             <h2 className="text-sm font-semibold text-gray-700 mb-2">Event</h2>
             <div className="space-y-2.5">
               {events.map(item => (
-                <Link key={item.ticket_id} to={`/events/${item.event_id}`}>
+                <Link key={item.ticket_id} to={`/events/${item.event_id}`} className="block">
                   <Card className="p-3.5 flex items-start gap-3">
                     <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
                       <Calendar size={18} className="text-orange-500" />

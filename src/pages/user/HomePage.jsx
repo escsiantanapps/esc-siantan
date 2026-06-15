@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { newsService, eventsService, classesService } from '@/services/contentService'
 import { Card, Spinner, Badge } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
-import { formatDate, spColor, dummyThumb } from '@/lib/utils'
+import { formatDate, spColor } from '@/lib/utils'
 
 export default function HomePage() {
   const { profile } = useAuth()
@@ -76,7 +76,9 @@ export default function HomePage() {
         {featured && (
           <Link to={`/events/${featured.event_id}`} className="block mb-6 animate-fade-in-up" style={{ animationDelay: '90ms' }}>
             <div className="relative rounded-3xl overflow-hidden ambient-shadow active:scale-[0.99] transition-transform">
-              <img src={featured.thumbnail_url || dummyThumb(featured.event_id)} alt={featured.name} className="w-full h-44 object-cover" />
+              {featured.thumbnail_url
+                ? <img src={featured.thumbnail_url} alt={featured.name} className="w-full h-44 object-cover" />
+                : <div className="w-full h-44 gradient-main" />}
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
               <span className="absolute top-3 left-3 bg-surface/90 text-orange-600 text-[11px] font-semibold px-2.5 py-1 rounded-full">
                 EVENT TERDEKAT
@@ -126,7 +128,7 @@ export default function HomePage() {
             </div>
             <div className="space-y-2.5">
               {news.slice(0, 3).map(item => (
-                <Link key={item.news_id} to={`/informasi/${item.news_id}`}>
+                <Link key={item.news_id} to={`/informasi/${item.news_id}`} className="block">
                   <Card glass className="p-3.5 flex items-start gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
                     <div className="w-11 h-11 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
                       <Bell size={18} className="text-orange-500" />
@@ -154,7 +156,7 @@ export default function HomePage() {
             </div>
             <div className="space-y-2.5">
               {otherEvents.slice(0, 3).map(ev => (
-                <Link key={ev.event_id} to={`/events/${ev.event_id}`}>
+                <Link key={ev.event_id} to={`/events/${ev.event_id}`} className="block">
                   <Card glass className="p-3.5 flex items-start gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
                     <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
                       <Calendar size={18} className="text-red-500" />
@@ -185,7 +187,7 @@ export default function HomePage() {
             </div>
             <div className="space-y-2.5">
               {classes.slice(0, 3).map(cls => (
-                <Link key={cls.class_id} to={`/kelas/${cls.class_id}`}>
+                <Link key={cls.class_id} to={`/kelas/${cls.class_id}`} className="block">
                   <Card glass className="p-3.5 flex items-start gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
                     <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
                       <BookOpen size={18} className="text-blue-500" />

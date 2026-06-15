@@ -37,7 +37,30 @@ export default function PushToggle() {
     }
   }
 
-  if (!supported) return null
+  // iOS Safari hanya mendukung push bila app di-install ke Home Screen.
+  if (!supported) {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone
+    if (isIOS && !standalone) {
+      return (
+        <Card className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
+              <BellRing size={15} className="text-orange-500" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-800 font-medium">Notifikasi Push</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Di iPhone, tambahkan app ke <span className="font-medium">Layar Utama</span> dulu
+                (Bagikan → Tambah ke Layar Utama), lalu buka dari sana untuk mengaktifkan notifikasi.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )
+    }
+    return null
+  }
 
   return (
     <Card className="p-4">

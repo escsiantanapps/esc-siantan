@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { Card, Spinner, EmptyState, GradientHeader, Button, Input, Textarea, Select, Checkbox, Badge } from '@/components/ui'
-import { formatDate } from '@/lib/utils'
+import { formatDate, validateUpload } from '@/lib/utils'
 
 export default function TaskDetailPage() {
   const { id } = useParams()
@@ -64,6 +64,7 @@ export default function TaskDetailPage() {
     setUploadingKey(field.key)
     setError('')
     try {
+      validateUpload(file, { maxMB: 10 })
       const url = await tasksService.uploadResponseFile(profile.user_id, file)
       set(field.key, url)
       toast.success('File berhasil diunggah.')

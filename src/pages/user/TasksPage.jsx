@@ -4,10 +4,12 @@ import { ClipboardList, CheckCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { Card, GradientHeader, Spinner, EmptyState } from '@/components/ui'
+import { useToast } from '@/hooks/useToast'
 import { startOfWeek } from 'date-fns'
 
 export default function TasksPage() {
   const { profile } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
   const [templates, setTemplates] = useState([])
   const [progress, setProgress] = useState({}) // { formId: responseCount }
@@ -35,6 +37,8 @@ export default function TasksPage() {
         })
       )
       setProgress(progressMap)
+    } catch (err) {
+      toast.error(err.message || 'Gagal memuat tugas.')
     } finally {
       setLoading(false)
     }

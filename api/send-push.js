@@ -1,6 +1,10 @@
 // Paksa runtime Node (web-push butuh modul Node; bukan Edge).
 export const config = { runtime: 'nodejs' }
 
+// Rate-limit sederhana per-admin (best-effort, per instance fungsi).
+const lastSentByUser = new Map()
+const RATE_LIMIT_MS = 8000
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -43,6 +47,14 @@ export default async function handler(req, res) {
     if (!caller || !['Admin', 'Super Admin'].includes(caller.role)) {
       return res.status(403).json({ error: 'Forbidden' })
     }
+
+    // Cegah pengiriman beruntun (anti-spam sederhana).
+    const now = Date.now()
+    const last = lastSentByUser.get(userData.user.id) || 0
+    if (now - last < RATE_LIMIT_MS) {
+      return res.status(429).json({ error: 'Terlalu cepat. Coba lagi beberapa detik.' })
+    }
+    lastSentByUser.set(userData.user.id, now)
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const { title, body: message, url, userIds } = body

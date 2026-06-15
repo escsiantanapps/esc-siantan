@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
 import { Avatar, Button, Input, Select, Textarea, GradientHeader, Spinner } from '@/components/ui'
+import { validateUpload } from '@/lib/utils'
 
 export default function EditProfilePage() {
   const { profile, updateProfile } = useAuth()
@@ -35,6 +36,7 @@ export default function EditProfilePage() {
     setUploading(true)
     setError('')
     try {
+      validateUpload(file, { maxMB: 3, image: true })
       const url = await usersService.uploadAvatar(profile.user_id, file)
       set('photo_url', url)
       toast.success('Foto berhasil diunggah.')

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { registrationService } from '@/services/contentService'
+import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Select, Textarea, Input, Button, Spinner, StatusBadge, EmptyState } from '@/components/ui'
 import { formatDate, formatPhone, hitungUmur } from '@/lib/utils'
@@ -76,6 +77,16 @@ export default function AdminRegistrationDetailPage() {
       setReg(updated)
       setSuccess('Status pendaftaran berhasil diperbarui.')
       toast.success('Status pendaftaran berhasil diperbarui.')
+      // Beri tahu jemaat lewat push bila statusnya berubah
+      if (reg.user_id && form.status !== reg.status) {
+        const jenis = type === 'wedding' ? 'Pemberkatan Nikah' : 'Baptisan'
+        pushService.broadcast({
+          title: `Status ${jenis}: ${form.status}`,
+          body: form.admin_note || `Pendaftaran ${jenis} Anda kini berstatus "${form.status}".`,
+          url: '/status-pendaftaran',
+          userIds: [reg.user_id],
+        }).catch(() => {})
+      }
     } catch (err) {
       setError(err.message || 'Gagal memperbarui status.')
       toast.error(err.message || 'Gagal memperbarui status.')

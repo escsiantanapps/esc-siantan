@@ -178,8 +178,23 @@ ALTER TABLE form_responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE baptism_registrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wedding_registrations ENABLE ROW LEVEL SECURITY;
 
--- Users: bisa baca semua, edit diri sendiri
-CREATE POLICY "users_read_all"   ON users FOR SELECT USING (true);
+-- Users: baca dibatasi (lihat migration_v10) — diri sendiri / Admin / PKS-komsel.
+-- Helper SECURITY DEFINER mencegah rekursi RLS.
+CREATE OR REPLACE FUNCTION auth_user_role() RETURNS text
+  LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT role FROM users WHERE auth_id = auth.uid() $$;
+CREATE OR REPLACE FUNCTION auth_user_komsel() RETURNS text
+  LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT komsel_id FROM users WHERE auth_id = auth.uid() $$;
+CREATE OR REPLACE FUNCTION auth_user_is_pks() RETURNS boolean
+  LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT COALESCE(is_pks, false) = true OR role = 'PKS' FROM users WHERE auth_id = auth.uid() $$;
+
+CREATE POLICY "users_read_self"  ON users FOR SELECT USING (auth_id = auth.uid());
+CREATE POLICY "users_read_admin" ON users FOR SELECT USING (auth_user_role() IN ('Admin','Super Admin'));
+CREATE POLICY "users_read_pks"   ON users FOR SELECT USING (
+  auth_user_is_pks() AND komsel_id IS NOT NULL AND komsel_id = auth_user_komsel()
+);
 CREATE POLICY "users_edit_own"   ON users FOR UPDATE USING (auth.uid() = auth_id);
 CREATE POLICY "users_insert_own" ON users FOR INSERT WITH CHECK (auth.uid() = auth_id);
 
@@ -202,11 +217,14 @@ CREATE POLICY "templates_read_by_ministry" ON form_templates
     )
   );
 
--- Form responses: user bisa baca/tulis milik sendiri
+-- Form responses: user baca/tulis milik sendiri; admin baca semua
 CREATE POLICY "responses_own" ON form_responses
   FOR ALL USING (
     volunteer_id IN (SELECT user_id FROM users WHERE auth_id = auth.uid())
   );
+CREATE POLICY "responses_admin_read" ON form_responses FOR SELECT USING (
+  auth_user_role() IN ('Admin','Super Admin')
+);
 
 -- Baptism: user bisa akses milik sendiri
 CREATE POLICY "baptism_own" ON baptism_registrations

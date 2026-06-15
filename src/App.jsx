@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
@@ -25,32 +26,32 @@ import BaptismPage from '@/pages/user/BaptismPage'
 import WeddingPage from '@/pages/user/WeddingPage'
 import ClassesPage from '@/pages/user/ClassesPage'
 import ClassDetailPage from '@/pages/user/ClassDetailPage'
-import ClassAttendanceScanPage from '@/pages/user/ClassAttendanceScanPage'
 import RegistrationStatusPage from '@/pages/user/RegistrationStatusPage'
 import PKSDashboardPage from '@/pages/user/PKSDashboardPage'
 
-// Admin pages (real)
-import AdminMembersPage from '@/pages/admin/AdminMembersPage'
-import AdminMemberDetailPage from '@/pages/admin/AdminMemberDetailPage'
-import AdminTasksPage from '@/pages/admin/AdminTasksPage'
-import AdminTaskFormPage from '@/pages/admin/AdminTaskFormPage'
-import AdminTaskResponsesPage from '@/pages/admin/AdminTaskResponsesPage'
-import AdminBaptismPage from '@/pages/admin/AdminBaptismPage'
-import AdminWeddingPage from '@/pages/admin/AdminWeddingPage'
-import AdminRegistrationDetailPage from '@/pages/admin/AdminRegistrationDetailPage'
-import AdminSPPage from '@/pages/admin/AdminSPPage'
-import AdminEventsPage from '@/pages/admin/AdminEventsPage'
-import AdminEventFormPage from '@/pages/admin/AdminEventFormPage'
-import AdminNewsPage from '@/pages/admin/AdminNewsPage'
-import AdminNewsFormPage from '@/pages/admin/AdminNewsFormPage'
-import AdminClassesPage from '@/pages/admin/AdminClassesPage'
-import AdminMinistryPage from '@/pages/admin/AdminMinistryPage'
-import AdminKomselPage from '@/pages/admin/AdminKomselPage'
-import AdminEvaluationPage from '@/pages/admin/AdminEvaluationPage'
-import AdminPermissionsPage from '@/pages/admin/AdminPermissionsPage'
+// Halaman berat (QR scanner) — dimuat saat dibutuhkan
+const ClassAttendanceScanPage = lazy(() => import('@/pages/user/ClassAttendanceScanPage'))
 
-// Admin dashboard (real)
-import AdminDashboardPage from '@/pages/admin/AdminDashboardPage'
+// Admin pages — di-lazy load agar tidak ikut termuat untuk jemaat biasa
+const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'))
+const AdminMembersPage = lazy(() => import('@/pages/admin/AdminMembersPage'))
+const AdminMemberDetailPage = lazy(() => import('@/pages/admin/AdminMemberDetailPage'))
+const AdminTasksPage = lazy(() => import('@/pages/admin/AdminTasksPage'))
+const AdminTaskFormPage = lazy(() => import('@/pages/admin/AdminTaskFormPage'))
+const AdminTaskResponsesPage = lazy(() => import('@/pages/admin/AdminTaskResponsesPage'))
+const AdminBaptismPage = lazy(() => import('@/pages/admin/AdminBaptismPage'))
+const AdminWeddingPage = lazy(() => import('@/pages/admin/AdminWeddingPage'))
+const AdminRegistrationDetailPage = lazy(() => import('@/pages/admin/AdminRegistrationDetailPage'))
+const AdminSPPage = lazy(() => import('@/pages/admin/AdminSPPage'))
+const AdminEventsPage = lazy(() => import('@/pages/admin/AdminEventsPage'))
+const AdminEventFormPage = lazy(() => import('@/pages/admin/AdminEventFormPage'))
+const AdminNewsPage = lazy(() => import('@/pages/admin/AdminNewsPage'))
+const AdminNewsFormPage = lazy(() => import('@/pages/admin/AdminNewsFormPage'))
+const AdminClassesPage = lazy(() => import('@/pages/admin/AdminClassesPage'))
+const AdminMinistryPage = lazy(() => import('@/pages/admin/AdminMinistryPage'))
+const AdminKomselPage = lazy(() => import('@/pages/admin/AdminKomselPage'))
+const AdminEvaluationPage = lazy(() => import('@/pages/admin/AdminEvaluationPage'))
+const AdminPermissionsPage = lazy(() => import('@/pages/admin/AdminPermissionsPage'))
 
 // Layouts
 import UserLayout from '@/layouts/UserLayout'
@@ -109,6 +110,11 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-screen">
+            <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        }>
         <Routes>
           <Route path="/login"          element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register"       element={<PublicRoute><RegisterPage /></PublicRoute>} />
@@ -162,6 +168,7 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

@@ -4,6 +4,7 @@ import { ArrowLeft, ImagePlus } from 'lucide-react'
 import { eventsService } from '@/services/contentService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Input, Textarea, Select, Button, Spinner } from '@/components/ui'
+import { validateUpload } from '@/lib/utils'
 
 export default function AdminEventFormPage() {
   const { id } = useParams()
@@ -47,6 +48,7 @@ export default function AdminEventFormPage() {
     if (!file) return
     setUploading(true)
     try {
+      validateUpload(file, { maxMB: 5, image: true })
       const url = await eventsService.uploadThumbnail(file)
       set('thumbnail_url', url)
       toast.success('Gambar berhasil diunggah.')

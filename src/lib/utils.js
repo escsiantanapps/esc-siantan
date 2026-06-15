@@ -58,11 +58,15 @@ export function avatarColor(name) {
   return colors[idx]
 }
 
-// [DUMMY/PREVIEW] Gambar placeholder deterministik saat thumbnail asli kosong.
-// Tiap seed menghasilkan gambar yang tetap sama. Hapus pemakaiannya bila
-// thumbnail asli sudah tersedia di database.
-export function dummyThumb(seed, w = 600, h = 400) {
-  return `https://picsum.photos/seed/esc-${String(seed ?? 'x')}/${w}/${h}`
+// Validasi file upload (ukuran & tipe). Lempar Error bila tidak valid.
+export function validateUpload(file, { maxMB = 5, image = false } = {}) {
+  if (!file) return
+  if (file.size > maxMB * 1024 * 1024) {
+    throw new Error(`Ukuran file terlalu besar (maksimal ${maxMB} MB).`)
+  }
+  if (image && !file.type.startsWith('image/')) {
+    throw new Error('File harus berupa gambar (JPG/PNG).')
+  }
 }
 
 // Status SP badge color

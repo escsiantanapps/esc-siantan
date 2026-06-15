@@ -65,14 +65,14 @@ export const pushService = {
 
   // Kirim notifikasi ke semua pelanggan (dipanggil oleh admin). Memanggil
   // serverless function /api/send-push dengan access token admin.
-  async broadcast({ title, body, url }) {
+  async broadcast({ title, body, url, userIds }) {
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token
     if (!token) throw new Error('Sesi tidak ditemukan.')
     const res = await fetch('/api/send-push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title, body, url }),
+      body: JSON.stringify({ title, body, url, userIds }),
     })
     if (!res.ok) {
       const e = await res.json().catch(() => ({}))

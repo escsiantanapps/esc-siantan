@@ -13,6 +13,7 @@
 --   3) salah satu ministry milik user tumpang-tindih dengan allowed_ministry.
 
 DROP POLICY IF EXISTS "templates_read_all" ON form_templates;
+DROP POLICY IF EXISTS "templates_read_by_ministry" ON form_templates;
 
 CREATE POLICY "templates_read_by_ministry" ON form_templates
   FOR SELECT USING (

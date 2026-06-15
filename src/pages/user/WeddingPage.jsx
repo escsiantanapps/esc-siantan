@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
 import { Card, Button, Input, Textarea, Checkbox, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
-import { formatDate } from '@/lib/utils'
+import { formatDate, validateUpload } from '@/lib/utils'
 
 const STEPS = ['Mempelai Pria', 'Mempelai Wanita', 'Detail Acara', 'Dokumen']
 
@@ -55,6 +55,7 @@ export default function WeddingPage() {
     setUploadingKey(key)
     setError('')
     try {
+      validateUpload(file, { maxMB: 10 })
       const url = await registrationService.uploadDocument(`wedding/${profile.user_id}`, file)
       setDoc(key, url)
       toast.success('Dokumen berhasil diunggah.')

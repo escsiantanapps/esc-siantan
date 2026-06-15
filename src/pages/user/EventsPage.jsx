@@ -3,17 +3,22 @@ import { Link } from 'react-router-dom'
 import { Calendar, MapPin, Clock } from 'lucide-react'
 import { eventsService } from '@/services/contentService'
 import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
-import { formatDate, dummyThumb } from '@/lib/utils'
+import { useToast } from '@/hooks/useToast'
+import { formatDate } from '@/lib/utils'
 
 const TABS = ['Aktif', 'Selesai', 'Semua']
 
 export default function EventsPage() {
+  const { toast } = useToast()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Aktif')
 
   useEffect(() => {
-    eventsService.getAll().then(setEvents).catch(() => {}).finally(() => setLoading(false))
+    eventsService.getAll().then(setEvents)
+      .catch(err => toast.error(err.message || 'Gagal memuat events.'))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const filtered = useMemo(() => {
@@ -54,7 +59,9 @@ export default function EventsPage() {
         {featured && (
           <Link to={`/events/${featured.event_id}`} className="block mb-5">
             <div className="relative rounded-3xl overflow-hidden ambient-shadow h-56 active:scale-[0.99] transition-transform">
-              <img src={featured.thumbnail_url || dummyThumb(featured.event_id)} alt={featured.name} className="absolute inset-0 w-full h-full object-cover" />
+              {featured.thumbnail_url
+                ? <img src={featured.thumbnail_url} alt={featured.name} className="absolute inset-0 w-full h-full object-cover" />
+                : <div className="absolute inset-0 gradient-main" />}
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
               <div className="absolute top-3 right-3"><StatusBadge status={featured.status} /></div>
               <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
@@ -76,7 +83,7 @@ export default function EventsPage() {
         {/* Daftar event lain — kartu dengan tile tanggal */}
         <div className="space-y-2.5">
           {rest.map(ev => (
-            <Link key={ev.event_id} to={`/events/${ev.event_id}`}>
+            <Link key={ev.event_id} to={`/events/${ev.event_id}`} className="block">
               <Card glass className="p-3 flex items-stretch gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
                 <div className="w-16 shrink-0 rounded-xl gradient-main text-white flex flex-col items-center justify-center leading-none py-2">
                   <span className="text-[11px] font-semibold uppercase">{formatDate(ev.event_date, 'EEE')}</span>

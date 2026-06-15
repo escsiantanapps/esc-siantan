@@ -26,7 +26,7 @@ export default function InformationPage() {
 
         <div className="space-y-2.5">
           {news.map(item => (
-            <Link key={item.news_id} to={`/informasi/${item.news_id}`}>
+            <Link key={item.news_id} to={`/informasi/${item.news_id}`} className="block">
               <Card className="p-3.5 flex items-start gap-3">
                 {item.thumbnail_url ? (
                   <img src={item.thumbnail_url} alt={item.title} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
