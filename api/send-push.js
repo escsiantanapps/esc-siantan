@@ -1,22 +1,5 @@
-import webpush from 'web-push'
-import { createClient } from '@supabase/supabase-js'
-
-// Env yang harus diset di Vercel (Project → Settings → Environment Variables):
-//   SUPABASE_URL                 (atau pakai VITE_SUPABASE_URL yang sudah ada)
-//   SUPABASE_SERVICE_ROLE_KEY    (Project Settings → API → service_role secret)
-//   VAPID_PUBLIC_KEY
-//   VAPID_PRIVATE_KEY
-//   VAPID_SUBJECT                (opsional, mis. mailto:admin@escsiantan.app)
-const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
-const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
-const VAPID_PUBLIC = (process.env.VAPID_PUBLIC_KEY || '').trim()
-const VAPID_PRIVATE = (process.env.VAPID_PRIVATE_KEY || '').trim()
-
-// Normalisasi subject: web-push menolak nilai yang bukan mailto:/URL.
-let VAPID_SUBJECT = (process.env.VAPID_SUBJECT || 'mailto:admin@escsiantan.app').trim()
-if (!/^(mailto:|https?:\/\/)/i.test(VAPID_SUBJECT)) {
-  VAPID_SUBJECT = 'mailto:' + VAPID_SUBJECT
-}
+// Paksa runtime Node (web-push butuh modul Node; bukan Edge).
+export const config = { runtime: 'nodejs' }
 
 export default async function handler(req, res) {
   try {
@@ -24,7 +7,17 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' })
     }
 
-    // Validasi env — kembalikan info (boolean, bukan nilai) untuk memudahkan diagnosa.
+    // Import dinamis agar kegagalan load modul muncul sebagai JSON, bukan crash.
+    const webpush = (await import('web-push')).default
+    const { createClient } = await import('@supabase/supabase-js')
+
+    const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
+    const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+    const VAPID_PUBLIC = (process.env.VAPID_PUBLIC_KEY || '').trim()
+    const VAPID_PRIVATE = (process.env.VAPID_PRIVATE_KEY || '').trim()
+    let VAPID_SUBJECT = (process.env.VAPID_SUBJECT || 'mailto:admin@escsiantan.app').trim()
+    if (!/^(mailto:|https?:\/\/)/i.test(VAPID_SUBJECT)) VAPID_SUBJECT = 'mailto:' + VAPID_SUBJECT
+
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !VAPID_PUBLIC || !VAPID_PRIVATE) {
       return res.status(500).json({
         error: 'Environment variable belum lengkap.',
@@ -73,7 +66,6 @@ export default async function handler(req, res) {
           )
           sent++
         } catch (err) {
-          // Langganan kedaluwarsa / tidak valid → hapus.
           if (err.statusCode === 404 || err.statusCode === 410) {
             await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint)
             removed++
@@ -84,7 +76,10 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, total: (subs || []).length, sent, removed })
   } catch (err) {
-    // Tangkap semua error agar tidak jadi FUNCTION_INVOCATION_FAILED yang gelap.
-    return res.status(500).json({ error: err?.message || 'Server error' })
+    // Apa pun yang gagal → JSON yang terbaca (termasuk error load modul).
+    return res.status(500).json({
+      error: String(err?.message || err),
+      stack: String(err?.stack || '').split('\n').slice(0, 4),
+    })
   }
 }
