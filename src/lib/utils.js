@@ -69,6 +69,33 @@ export function validateUpload(file, { maxMB = 5, image = false } = {}) {
   }
 }
 
+// Kompres + perkecil gambar di sisi klien sebelum upload (hemat storage).
+// Non-gambar (mis. PDF) dikembalikan apa adanya. Aman: kalau gagal/lebih besar,
+// kembalikan file asli.
+export async function compressImage(file, { maxDim = 1280, quality = 0.8 } = {}) {
+  if (!file || !file.type?.startsWith('image/') || file.type === 'image/gif') return file
+  try {
+    const bitmap = await createImageBitmap(file)
+    let { width, height } = bitmap
+    const scale = Math.min(1, maxDim / Math.max(width, height))
+    width = Math.round(width * scale)
+    height = Math.round(height * scale)
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(bitmap, 0, 0, width, height)
+    bitmap.close?.()
+
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality))
+    if (!blob || blob.size >= file.size) return file // jangan perbesar
+    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' })
+  } catch {
+    return file // browser lama / gagal decode → pakai file asli
+  }
+}
+
 // Status SP badge color
 export function spColor(status) {
   const map = {

@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
 import { Avatar, Button, Input, Select, Textarea, GradientHeader, Spinner } from '@/components/ui'
-import { validateUpload } from '@/lib/utils'
+import { validateUpload, compressImage } from '@/lib/utils'
 
 export default function EditProfilePage() {
   const { profile, updateProfile } = useAuth()
@@ -31,11 +31,12 @@ export default function EditProfilePage() {
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
   async function handlePhotoChange(e) {
-    const file = e.target.files?.[0]
+    let file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
     setError('')
     try {
+      file = await compressImage(file, { maxDim: 512 })
       validateUpload(file, { maxMB: 3, image: true })
       const url = await usersService.uploadAvatar(profile.user_id, file)
       set('photo_url', url)

@@ -6,7 +6,7 @@ import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Input, Textarea, Select, Button, Spinner } from '@/components/ui'
 import Uploader from '@/components/Uploader'
-import { validateUpload } from '@/lib/utils'
+import { validateUpload, compressImage } from '@/lib/utils'
 
 export default function AdminEventFormPage() {
   const { id } = useParams()
@@ -49,6 +49,7 @@ export default function AdminEventFormPage() {
     if (!file) return
     setUploading(true)
     try {
+      file = await compressImage(file)
       validateUpload(file, { maxMB: 5, image: true })
       const url = await eventsService.uploadThumbnail(file)
       set('thumbnail_url', url)

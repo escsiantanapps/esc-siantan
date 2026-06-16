@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
 import { Card, Button, Input, Textarea, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
 import Uploader from '@/components/Uploader'
-import { formatDate, validateUpload } from '@/lib/utils'
+import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 
 const STEPS = ['Data Diri', 'Keluarga', 'Kerohanian', 'Dokumen']
 
@@ -53,7 +53,8 @@ export default function BaptismPage() {
     setUploadingKey(key)
     setError('')
     try {
-      validateUpload(file, { maxMB: 10 })
+      file = await compressImage(file, { maxDim: 1600 })
+      validateUpload(file, { maxMB: 8 })
       const url = await registrationService.uploadDocument(`baptism/${profile.user_id}`, file)
       setDoc(key, url)
       toast.success('Dokumen berhasil diunggah.')
