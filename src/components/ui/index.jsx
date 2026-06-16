@@ -175,6 +175,7 @@ export function StatusBadge({ status }) {
     'Hadir':          { color: 'green',  label: 'Hadir' },
     'Tidak Hadir':    { color: 'red',    label: 'Tidak Hadir' },
     'Izin':           { color: 'amber',  label: 'Izin' },
+    'Terverifikasi':  { color: 'green',  label: 'Terverifikasi' },
     'TERPENUHI':      { color: 'green',  label: 'Terpenuhi' },
     'PROSES':         { color: 'amber',  label: 'Proses' },
     'KOSONG':         { color: 'red',    label: 'Kosong' },

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, ChevronRight, Calendar, ClipboardList, BookOpen, Droplets, Heart, Clock, MapPin, Church } from 'lucide-react'
+import { Bell, ChevronRight, Calendar, ClipboardList, BookOpen, Droplets, Heart, Clock, MapPin, Church, HandCoins } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { newsService, eventsService, classesService } from '@/services/contentService'
 import { Card, Spinner } from '@/components/ui'
@@ -24,6 +24,7 @@ export default function HomePage() {
   }, [])
 
   const quickLinks = [
+    { to: '/persembahan',        icon: HandCoins,     label: 'Persembahan', color: 'bg-emerald-100 text-emerald-600' },
     { to: '/tugas',              icon: ClipboardList, label: 'Tugas',    color: 'bg-brand-100 text-brand-600' },
     { to: '/events',             icon: Calendar,      label: 'Events',   color: 'bg-red-100 text-red-600' },
     { to: '/kelas',              icon: BookOpen,      label: 'Kelas',    color: 'bg-blue-100 text-blue-600' },

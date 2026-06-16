@@ -1,7 +1,7 @@
 import {
   Users, Calendar, Newspaper, BookOpen,
   ClipboardList, Droplets, Heart, AlertTriangle, BarChart3,
-  Layers, Network,
+  Layers, Network, HandCoins,
 } from 'lucide-react'
 
 // Daftar halaman admin yang aksesnya bisa dibatasi untuk role "Admin"
@@ -15,6 +15,7 @@ export const ADMIN_PAGES = [
   { to: '/admin/kelas',    icon: BookOpen,      label: 'Kelas',              section: 'Konten' },
   { to: '/admin/tugas',    icon: ClipboardList, label: 'Tugas & Form',       section: 'Pelayanan' },
   { to: '/admin/evaluasi', icon: BarChart3,     label: 'Evaluasi & Laporan', section: 'Pelayanan' },
+  { to: '/admin/persembahan', icon: HandCoins,  label: 'Persembahan',        section: 'Organisasi' },
   { to: '/admin/baptisan', icon: Droplets,      label: 'Baptisan',           section: 'Pelayanan' },
   { to: '/admin/nikah',    icon: Heart,         label: 'Pemberkatan Nikah',  section: 'Pelayanan' },
   { to: '/admin/sp',       icon: AlertTriangle, label: 'Surat Peringatan',   section: 'Organisasi' },

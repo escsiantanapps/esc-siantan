@@ -96,6 +96,12 @@ export async function compressImage(file, { maxDim = 1280, quality = 0.8 } = {})
   }
 }
 
+// Format angka rupiah, mis. 50000 -> "Rp50.000"
+export function formatRupiah(value) {
+  const n = Number(value) || 0
+  return 'Rp' + n.toLocaleString('id-ID')
+}
+
 // Status SP badge color
 export function spColor(status) {
   const map = {
