@@ -11,6 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['church-icon.svg', 'apple-touch-icon.png'],
       manifest: {
+        id: '/',
+        scope: '/',
         name: 'ESC Siantan',
         short_name: 'ESC Siantan',
         description: 'Aplikasi Manajemen Jemaat ESC Siantan',
