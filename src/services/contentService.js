@@ -283,6 +283,65 @@ export const komselService = {
     return data
   },
 
+  // ── PKS (kepemimpinan komsel, many-to-many lewat komsel_leaders) ──
+
+  // Daftar PKS sebuah komsel.
+  async getLeaders(komselId) {
+    const { data, error } = await supabase
+      .from('komsel_leaders').select('user_id, users(*)').eq('komsel_id', komselId)
+    if (error) throw error
+    return (data || []).map(r => r.users).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name))
+  },
+
+  // Komsel-komsel yang dipimpin seorang user (untuk Dashboard PKS).
+  async getLedKomsels(userId) {
+    const { data, error } = await supabase
+      .from('komsel_leaders').select('komsel_id, komsel(*)').eq('user_id', userId)
+    if (error) throw error
+    return (data || []).map(r => r.komsel).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name))
+  },
+
+  // Tetapkan user sebagai PKS sebuah komsel + tandai is_pks (penanda cepat).
+  async addLeader(komselId, userId) {
+    const { error } = await supabase
+      .from('komsel_leaders').upsert({ komsel_id: komselId, user_id: userId }, { onConflict: 'komsel_id,user_id' })
+    if (error) throw error
+    await supabase.from('users').update({ is_pks: true }).eq('user_id', userId)
+  },
+
+  // Cabut PKS dari sebuah komsel; matikan is_pks bila tak memimpin komsel lain.
+  async removeLeader(komselId, userId) {
+    const { error } = await supabase
+      .from('komsel_leaders').delete().eq('komsel_id', komselId).eq('user_id', userId)
+    if (error) throw error
+    const { count } = await supabase
+      .from('komsel_leaders').select('*', { count: 'exact', head: true }).eq('user_id', userId)
+    if (!count) await supabase.from('users').update({ is_pks: false }).eq('user_id', userId)
+  },
+
+  // Peta { komsel_id: [nama PKS, ...] } untuk ditampilkan di daftar komsel.
+  async getLeaderNamesByKomsel() {
+    const { data, error } = await supabase.from('komsel_leaders').select('komsel_id, users(name)')
+    if (error) throw error
+    const map = {}
+    for (const r of data || []) {
+      if (!r.users) continue
+      ;(map[r.komsel_id] ||= []).push(r.users.name)
+    }
+    return map
+  },
+
+  // Cari jemaat aktif untuk dipilih sebagai PKS.
+  async searchUsers(query = '') {
+    let q = supabase.from('users')
+      .select('user_id, name, photo_url, role, komsel_id')
+      .eq('status', 'Aktif').order('name').limit(20)
+    if (query) q = q.ilike('name', `%${query}%`)
+    const { data, error } = await q
+    if (error) throw error
+    return data
+  },
+
   async submitAttendance(records) {
     const { data, error } = await supabase.from('komsel_attendance').insert(records).select()
     if (error) throw error

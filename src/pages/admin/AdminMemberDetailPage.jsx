@@ -24,7 +24,7 @@ export default function AdminMemberDetailPage() {
   const [success, setSuccess] = useState('')
 
   const [form, setForm] = useState({
-    role: '', status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [], is_pks: false,
+    role: '', status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
   })
 
   useEffect(() => { load() }, [id])
@@ -47,7 +47,6 @@ export default function AdminMemberDetailPage() {
         sp_notes: data.sp_notes || '',
         komsel_id: data.komsel_id || '',
         ministry_ids: data.ministry_ids || [],
-        is_pks: data.is_pks || false,
       })
     } catch (err) {
       setError(err.message || 'Gagal memuat data jemaat.')
@@ -232,15 +231,14 @@ export default function AdminMemberDetailPage() {
             <option value="Nonaktif">Nonaktif</option>
           </Select>
         </div>
-        <Select label="Komsel" value={form.komsel_id} onChange={e => set('komsel_id', e.target.value)}>
+        <Select label="Komsel (keanggotaan)" value={form.komsel_id} onChange={e => set('komsel_id', e.target.value)}>
           <option value="">Belum ada komsel</option>
           {komselList.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
         </Select>
-        <Checkbox
-          label="Jadikan PKS (Pemimpin Komsel)"
-          checked={form.is_pks}
-          onChange={e => set('is_pks', e.target.checked)}
-        />
+        <p className="text-xs text-gray-400">
+          Ini menentukan komsel tempat jemaat <span className="font-medium">tergabung</span>. Untuk menjadikannya
+          <span className="font-medium"> PKS</span>, atur lewat menu Kelola Komsel → tombol mahkota.
+        </p>
       </Card>
 
       {/* Ministry */}

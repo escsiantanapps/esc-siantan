@@ -27,7 +27,8 @@ export default function PKSDashboardPage() {
   const { toast, confirm } = useToast()
   const navigate = useNavigate()
   const [tab, setTab] = useState('anggota')
-  const [komsel, setKomsel] = useState(null)
+  const [ledKomsels, setLedKomsels] = useState([])
+  const [selectedId, setSelectedId] = useState('')
   const [members, setMembers] = useState([])
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
@@ -38,17 +39,29 @@ export default function PKSDashboardPage() {
   const [evalRows, setEvalRows] = useState([])
   const [evalLoading, setEvalLoading] = useState(true)
 
-  const komselId = profile?.komsel_id
+  const userId = profile?.user_id
 
+  // Komsel-komsel yang dipimpin user ini (bisa lebih dari satu).
   useEffect(() => {
-    if (!komselId) { setLoading(false); return }
+    if (!userId) { setLoading(false); return }
+    komselService.getLedKomsels(userId)
+      .then(list => {
+        setLedKomsels(list)
+        setSelectedId(prev => prev || list[0]?.komsel_id || '')
+        if (list.length === 0) setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [userId])
+
+  // Muat anggota & riwayat absensi untuk komsel terpilih.
+  useEffect(() => {
+    if (!selectedId) return
+    setLoading(true)
     Promise.all([
-      komselService.getAll(),
-      komselService.getMembers(komselId),
-      komselService.getAttendanceHistory(komselId),
+      komselService.getMembers(selectedId),
+      komselService.getAttendanceHistory(selectedId),
     ])
-      .then(([allKomsel, mem, hist]) => {
-        setKomsel(allKomsel.find(k => k.komsel_id === komselId) || null)
+      .then(([mem, hist]) => {
         setMembers(mem)
         setHistory(hist)
         const initStatus = {}
@@ -57,17 +70,21 @@ export default function PKSDashboardPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [komselId])
+  }, [selectedId])
 
+  // Evaluasi untuk komsel terpilih.
   useEffect(() => {
-    if (!komselId) { setEvalLoading(false); return }
+    if (!selectedId) { setEvalLoading(false); return }
     const startDate = startOfMonth(new Date()).toISOString()
     const endDate = new Date().toISOString()
-    evaluationService.getEvaluation({ startDate, endDate, komselId })
+    setEvalLoading(true)
+    evaluationService.getEvaluation({ startDate, endDate, komselId: selectedId })
       .then(setEvalRows)
       .catch(() => {})
       .finally(() => setEvalLoading(false))
-  }, [komselId])
+  }, [selectedId])
+
+  const komsel = useMemo(() => ledKomsels.find(k => k.komsel_id === selectedId) || null, [ledKomsels, selectedId])
 
   const evalByUser = useMemo(() => {
     const map = {}
@@ -103,7 +120,7 @@ export default function PKSDashboardPage() {
     try {
       const today = toDateStr(new Date())
       const records = members.map(m => ({
-        komsel_id: komselId,
+        komsel_id: selectedId,
         user_id: m.user_id,
         attendance_date: today,
         status: statuses[m.user_id] || 'Hadir',
@@ -111,7 +128,7 @@ export default function PKSDashboardPage() {
         recorded_by: profile.user_id,
       }))
       await komselService.submitAttendance(records)
-      const hist = await komselService.getAttendanceHistory(komselId)
+      const hist = await komselService.getAttendanceHistory(selectedId)
       setHistory(hist)
       toast.success('Absensi berhasil disimpan.')
     } catch (err) {
@@ -122,12 +139,12 @@ export default function PKSDashboardPage() {
     }
   }
 
-  if (!komselId) {
+  if (!loading && ledKomsels.length === 0) {
     return (
       <div className="pb-4">
         <GradientHeader title="Dashboard PKS" subtitle="Pemimpin Komsel" />
         <div className="px-4 pt-4">
-          <EmptyState icon={Users} title="Komsel belum ditetapkan" description="Hubungi admin untuk menetapkan komsel kamu sebagai PKS." />
+          <EmptyState icon={Users} title="Komsel belum ditetapkan" description="Hubungi admin untuk menetapkan kamu sebagai PKS sebuah komsel." />
         </div>
       </div>
     )
@@ -142,6 +159,14 @@ export default function PKSDashboardPage() {
 
         {!loading && (
           <>
+            {ledKomsels.length > 1 && (
+              <div className="mb-3">
+                <Select value={selectedId} onChange={e => setSelectedId(e.target.value)}>
+                  {ledKomsels.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
+                </Select>
+              </div>
+            )}
+
             <div className="flex gap-1.5 mb-4">
               <button
                 onClick={() => setTab('anggota')}
