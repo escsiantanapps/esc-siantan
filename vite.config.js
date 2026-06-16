@@ -18,7 +18,10 @@ export default defineConfig({
         description: 'Aplikasi Manajemen Jemaat ESC Siantan',
         start_url: '/',
         display: 'standalone',
-        background_color: '#ffffff',
+        lang: 'id',
+        dir: 'ltr',
+        categories: ['lifestyle', 'social', 'productivity'],
+        background_color: '#000000',
         theme_color: '#00BFFF',
         orientation: 'portrait',
         icons: [
