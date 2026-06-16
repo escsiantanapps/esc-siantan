@@ -11,6 +11,12 @@ export function canAccessTemplate(template, profile) {
   return allowed.map(String).some(m => mine.includes(m))
 }
 
+// Ratakan relasi template_ministries jadi array allowed_ministry pada template.
+function withAllowedMinistry(t) {
+  if (!t) return t
+  return { ...t, allowed_ministry: (t.template_ministries || []).map(r => r.ministry_id) }
+}
+
 export const tasksService = {
   // Form Templates.
   // Pembatasan ministry tidak lagi dilakukan lewat query yang rapuh — gunakan
@@ -18,29 +24,50 @@ export const tasksService = {
   // tugas terbuka (allowed_ministry kosong) tidak ikut tersaring keluar.
   async getTemplates() {
     const { data, error } = await supabase
-      .from('form_templates').select('*').order('created_at', { ascending: false })
+      .from('form_templates').select('*, template_ministries(ministry_id)').order('created_at', { ascending: false })
     if (error) throw error
-    return data
+    return (data || []).map(withAllowedMinistry)
   },
 
   async getTemplateById(id) {
-    const { data, error } = await supabase.from('form_templates').select('*').eq('form_id', id).single()
+    const { data, error } = await supabase
+      .from('form_templates').select('*, template_ministries(ministry_id)').eq('form_id', id).single()
     if (error) throw error
-    return data
+    return withAllowedMinistry(data)
   },
 
   async createTemplate(template) {
+    const { allowed_ministry, ...payload } = template
     const { data, error } = await supabase
-      .from('form_templates').insert(template).select().single()
+      .from('form_templates').insert(payload).select().single()
     if (error) throw error
-    return data
+    await this.setTemplateMinistries(data.form_id, allowed_ministry || [])
+    return { ...data, allowed_ministry: allowed_ministry || [] }
   },
 
   async updateTemplate(id, updates) {
+    const { allowed_ministry, template_ministries, ...payload } = updates
     const { data, error } = await supabase
-      .from('form_templates').update(updates).eq('form_id', id).select().single()
+      .from('form_templates').update(payload).eq('form_id', id).select().single()
     if (error) throw error
-    return data
+    if (allowed_ministry !== undefined) await this.setTemplateMinistries(id, allowed_ministry)
+    return { ...data, allowed_ministry: allowed_ministry ?? [] }
+  },
+
+  // Selaraskan ministry yang boleh mengakses sebuah template.
+  async setTemplateMinistries(formId, ids = []) {
+    const { data: existing } = await supabase
+      .from('template_ministries').select('ministry_id').eq('form_id', formId)
+    const have = new Set((existing || []).map(r => r.ministry_id))
+    const want = new Set(ids)
+    const toAdd = ids.filter(x => !have.has(x))
+    const toRemove = [...have].filter(x => !want.has(x))
+    if (toRemove.length) {
+      await supabase.from('template_ministries').delete().eq('form_id', formId).in('ministry_id', toRemove)
+    }
+    if (toAdd.length) {
+      await supabase.from('template_ministries').insert(toAdd.map(ministry_id => ({ form_id: formId, ministry_id })))
+    }
   },
 
   async deleteTemplate(id) {
@@ -69,7 +96,7 @@ export const tasksService = {
     const from = (page - 1) * limit
     let query = supabase
       .from('form_responses')
-      .select('*, users(name, role, ministry_ids)', { count: 'exact' })
+      .select('*, users(name, role)', { count: 'exact' })
       .eq('form_id', formId)
     if (startDate) query = query.gte('submitted_at', startDate)
     if (endDate) query = query.lte('submitted_at', endDate)

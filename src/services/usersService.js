@@ -1,32 +1,65 @@
 import { supabase } from '@/lib/supabase'
 
+// Ratakan relasi user_ministries jadi array ministry_ids di objek user
+// (agar UI yang sudah ada tetap membaca .ministry_ids tanpa perubahan).
+function withMinistryIds(u) {
+  if (!u) return u
+  return { ...u, ministry_ids: (u.user_ministries || []).map(r => r.ministry_id) }
+}
+
 export const usersService = {
   async getAll({ search = '', role = '', status = '', ministry = '', komsel = '', page = 1, limit = 20 } = {}) {
-    let query = supabase.from('users').select('*', { count: 'exact' })
+    let query = supabase.from('users').select('*, user_ministries(ministry_id)', { count: 'exact' })
     if (search) query = query.ilike('name', `%${search}%`)
     if (role) query = query.eq('role', role)
     if (status) query = query.eq('status', status)
-    if (ministry) query = query.contains('ministry_ids', [ministry])
     if (komsel) query = query.eq('komsel_id', komsel)
+    if (ministry) {
+      const { data: rows } = await supabase.from('user_ministries').select('user_id').eq('ministry_id', ministry)
+      const ids = (rows || []).map(r => r.user_id)
+      query = query.in('user_id', ids.length ? ids : ['__none__'])
+    }
     const from = (page - 1) * limit
     query = query.range(from, from + limit - 1).order('name')
     const { data, error, count } = await query
     if (error) throw error
-    return { data, count }
+    return { data: (data || []).map(withMinistryIds), count }
   },
 
   async getById(id) {
     const { data, error } = await supabase
-      .from('users').select('*').eq('user_id', id).single()
+      .from('users').select('*, user_ministries(ministry_id)').eq('user_id', id).single()
     if (error) throw error
-    return data
+    return withMinistryIds(data)
   },
 
   async update(id, updates) {
+    // ministry_ids bukan kolom lagi — kelola lewat tabel relasi.
+    const { ministry_ids, user_ministries, ...scalar } = updates
     const { data, error } = await supabase
-      .from('users').update(updates).eq('user_id', id).select().single()
+      .from('users').update(scalar).eq('user_id', id).select('*, user_ministries(ministry_id)').single()
     if (error) throw error
-    return data
+    if (ministry_ids !== undefined) await this.setUserMinistries(id, ministry_ids)
+    return {
+      ...data,
+      ministry_ids: ministry_ids !== undefined ? ministry_ids : (data.user_ministries || []).map(r => r.ministry_id),
+    }
+  },
+
+  // Selaraskan ministry seorang user dengan daftar id yang diinginkan.
+  async setUserMinistries(userId, ids = []) {
+    const { data: existing } = await supabase
+      .from('user_ministries').select('ministry_id').eq('user_id', userId)
+    const have = new Set((existing || []).map(r => r.ministry_id))
+    const want = new Set(ids)
+    const toAdd = ids.filter(x => !have.has(x))
+    const toRemove = [...have].filter(x => !want.has(x))
+    if (toRemove.length) {
+      await supabase.from('user_ministries').delete().eq('user_id', userId).in('ministry_id', toRemove)
+    }
+    if (toAdd.length) {
+      await supabase.from('user_ministries').insert(toAdd.map(ministry_id => ({ user_id: userId, ministry_id })))
+    }
   },
 
   // Hapus akun permanen (auth + profil) via serverless function dengan service

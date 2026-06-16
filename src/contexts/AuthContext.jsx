@@ -37,11 +37,12 @@ export function AuthProvider({ children }) {
     try {
       let { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select('*, user_ministries(ministry_id)')
         .eq('auth_id', authUser.id)
         .maybeSingle()
 
       if (error) throw error
+      if (data) data.ministry_ids = (data.user_ministries || []).map(r => r.ministry_id)
 
       // Akun auth ada tapi baris profil belum ada (mis. gagal saat registrasi) -> buat otomatis
       if (!data) {

@@ -15,19 +15,29 @@ export const evaluationService = {
 
   // baris evaluasi: user x form_template yang relevan untuknya
   async getEvaluation({ startDate, endDate, formId = '', ministryId = '', komselId = '', role = '' }) {
-    let tmplQuery = supabase.from('form_templates').select('*')
+    let tmplQuery = supabase.from('form_templates').select('*, template_ministries(ministry_id)')
     if (formId) tmplQuery = tmplQuery.eq('form_id', formId)
-    const { data: templates, error: tErr } = await tmplQuery
+    const { data: tmplRaw, error: tErr } = await tmplQuery
     if (tErr) throw tErr
+    const templates = (tmplRaw || []).map(t => ({
+      ...t, allowed_ministry: (t.template_ministries || []).map(r => r.ministry_id),
+    }))
 
     let userQuery = supabase.from('users')
-      .select('user_id, name, role, ministry_ids, komsel_id, photo_url, sp_level')
+      .select('user_id, name, role, komsel_id, photo_url, sp_level, user_ministries(ministry_id)')
       .eq('status', 'Aktif')
     userQuery = role ? userQuery.eq('role', role) : userQuery.in('role', ['Volunteer', 'Jemaat', 'PKS'])
-    if (ministryId) userQuery = userQuery.contains('ministry_ids', [ministryId])
     if (komselId) userQuery = userQuery.eq('komsel_id', komselId)
-    const { data: users, error: uErr } = await userQuery.order('name')
+    if (ministryId) {
+      const { data: rows } = await supabase.from('user_ministries').select('user_id').eq('ministry_id', ministryId)
+      const ids = (rows || []).map(r => r.user_id)
+      userQuery = userQuery.in('user_id', ids.length ? ids : ['__none__'])
+    }
+    const { data: usersRaw, error: uErr } = await userQuery.order('name')
     if (uErr) throw uErr
+    const users = (usersRaw || []).map(u => ({
+      ...u, ministry_ids: (u.user_ministries || []).map(r => r.ministry_id),
+    }))
 
     const formIds = templates.map(t => t.form_id)
     const userIds = users.map(u => u.user_id)
