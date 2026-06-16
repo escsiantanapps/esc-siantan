@@ -146,7 +146,7 @@ export function Avatar({ name, src, size = 'md' }) {
 // ─── Page Header ─────────────────────────────────────────
 export function PageHeader({ title, subtitle, action, className = '' }) {
   return (
-    <div className={`flex items-start justify-between gap-3 mb-5 ${className}`}>
+    <div className={`flex items-start justify-between gap-3 pt-2 mb-5 ${className}`}>
       <div>
         <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
         {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
@@ -204,7 +204,7 @@ export function Spinner({ size = 'md' }) {
 // ─── GradientHeader ──────────────────────────────────────
 export function GradientHeader({ title, subtitle, back, children, wave = true }) {
   return (
-    <div className={`gradient-main relative overflow-hidden px-4 pt-safe ${wave ? 'pb-9' : 'pb-4'}`}>
+    <div className={`gradient-main relative overflow-hidden px-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] ${wave ? 'pb-9' : 'pb-4'}`}>
       {/* Glow dekoratif ala Stitch */}
       <div className="pointer-events-none absolute -top-16 -right-12 w-52 h-52 rounded-full bg-white/15 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-black/10 blur-2xl" />

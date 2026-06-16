@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/useToast'
 import { Card, PageHeader, Button, Input, Textarea, Select, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
-const emptyForm = { name: '', description: '', schedule: '', location: '', teacher: '', status: 'Aktif' }
+const emptyForm = { name: '', description: '', schedule: '', location: '', teacher: '', status: 'Aktif', total_sessions: 1 }
 
 export default function AdminClassesPage() {
   const { toast, confirm } = useToast()
@@ -20,12 +20,32 @@ export default function AdminClassesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [qrModal, setQrModal] = useState(null)
+  const [qrSession, setQrSession] = useState(1)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [attModal, setAttModal] = useState(null)
+  const [attSession, setAttSession] = useState('')
   const [attendance, setAttendance] = useState([])
   const [attLoading, setAttLoading] = useState(false)
 
   useEffect(() => { load() }, [])
+
+  // Render QR sesuai kelas + sesi terpilih.
+  useEffect(() => {
+    if (!qrModal) { setQrDataUrl(''); return }
+    QRCode.toDataURL(`ESC-ABSEN:${qrModal.class_id}:${qrSession}`, { width: 320, margin: 1 })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(''))
+  }, [qrModal, qrSession])
+
+  // Muat daftar hadir kelas terpilih, filter sesi.
+  useEffect(() => {
+    if (!attModal) return
+    setAttLoading(true)
+    classAttendanceService.getByClass(attModal.class_id, { session: attSession })
+      .then(setAttendance)
+      .catch(() => setAttendance([]))
+      .finally(() => setAttLoading(false))
+  }, [attModal, attSession])
 
   function load() {
     setLoading(true)
@@ -50,6 +70,7 @@ export default function AdminClassesPage() {
       location: cls.location || '',
       teacher: cls.teacher || '',
       status: cls.status || 'Aktif',
+      total_sessions: cls.total_sessions || 1,
     })
     setError('')
     setShowModal(true)
@@ -60,11 +81,12 @@ export default function AdminClassesPage() {
     if (!form.name.trim()) { setError('Nama kelas wajib diisi.'); return }
     setSaving(true)
     try {
+      const payload = { ...form, total_sessions: Number(form.total_sessions) || 1 }
       let classId = editing?.class_id
       if (editing) {
-        await classesService.update(editing.class_id, form)
+        await classesService.update(editing.class_id, payload)
       } else {
-        const created = await classesService.create(form)
+        const created = await classesService.create(payload)
         classId = created?.class_id
       }
       // Notifikasi push ke semua jemaat (tidak menggagalkan simpan bila gagal)
@@ -101,23 +123,14 @@ export default function AdminClassesPage() {
     }
   }
 
-  async function openQr(cls) {
+  function openQr(cls) {
+    setQrSession(1)
     setQrModal(cls)
-    setQrDataUrl('')
-    const url = await QRCode.toDataURL(`ESC-ABSEN:${cls.class_id}`, { width: 320, margin: 1 })
-    setQrDataUrl(url)
   }
 
-  async function openAttendance(cls) {
+  function openAttendance(cls) {
+    setAttSession('')
     setAttModal(cls)
-    setAttLoading(true)
-    try {
-      setAttendance(await classAttendanceService.getByClass(cls.class_id))
-    } catch {
-      setAttendance([])
-    } finally {
-      setAttLoading(false)
-    }
   }
 
   return (
@@ -181,10 +194,14 @@ export default function AdminClassesPage() {
             <Input label="Jadwal" placeholder="cth: Setiap Sabtu, 16:00" value={form.schedule} onChange={e => set('schedule', e.target.value)} />
             <Input label="Lokasi" value={form.location} onChange={e => set('location', e.target.value)} />
             <Input label="Pengajar" value={form.teacher} onChange={e => set('teacher', e.target.value)} />
-            <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
-              <option value="Aktif">Aktif</option>
-              <option value="Nonaktif">Nonaktif</option>
-            </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Jumlah Sesi" type="number" min="1" value={form.total_sessions} onChange={e => set('total_sessions', e.target.value)} />
+              <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
+                <option value="Aktif">Aktif</option>
+                <option value="Nonaktif">Nonaktif</option>
+              </Select>
+            </div>
+            <p className="text-xs text-gray-400">Jumlah pertemuan/sesi kelas. Absensi dilakukan per sesi lewat QR.</p>
 
             <div className="flex gap-2 pt-1">
               <Button variant="ghost" className="flex-1" onClick={() => setShowModal(false)}>Batal</Button>
@@ -207,14 +224,23 @@ export default function AdminClassesPage() {
               </button>
             </div>
             <p className="text-sm text-gray-600">{qrModal.name}</p>
+
+            <div className="text-left">
+              <Select label="Sesi" value={qrSession} onChange={e => setQrSession(Number(e.target.value))}>
+                {Array.from({ length: qrModal.total_sessions || 1 }, (_, i) => i + 1).map(n => (
+                  <option key={n} value={n}>Sesi {n}</option>
+                ))}
+              </Select>
+            </div>
+
             {qrDataUrl ? (
               <img src={qrDataUrl} alt="QR Absensi" className="w-full rounded-xl border border-gray-100" />
             ) : (
               <div className="flex justify-center py-10"><Spinner /></div>
             )}
-            <p className="text-xs text-gray-400">Tunjukkan atau cetak kode ini agar jemaat dapat memindai untuk mencatat kehadiran di kelas ini.</p>
+            <p className="text-xs text-gray-400">Tunjukkan/cetak kode <span className="font-medium">Sesi {qrSession}</span> agar jemaat memindai untuk mencatat kehadiran sesi ini.</p>
             {qrDataUrl && (
-              <a href={qrDataUrl} download={`QR-Absensi-${qrModal.class_id}.png`}>
+              <a href={qrDataUrl} download={`QR-${qrModal.name}-Sesi${qrSession}.png`}>
                 <Button variant="outline" className="w-full"><Download size={15} /> Unduh QR</Button>
               </a>
             )}
@@ -234,6 +260,13 @@ export default function AdminClassesPage() {
             </div>
             <p className="text-xs text-gray-400">{attModal.name}</p>
 
+            <Select value={attSession} onChange={e => setAttSession(e.target.value)}>
+              <option value="">Semua sesi</option>
+              {Array.from({ length: attModal.total_sessions || 1 }, (_, i) => i + 1).map(n => (
+                <option key={n} value={n}>Sesi {n}</option>
+              ))}
+            </Select>
+
             {attLoading && <div className="flex justify-center py-8"><Spinner /></div>}
 
             {!attLoading && attendance.length === 0 && (
@@ -246,7 +279,9 @@ export default function AdminClassesPage() {
                   <div key={a.attendance_id} className="py-2.5 flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{a.users?.name || '-'}</p>
-                      <p className="text-xs text-gray-400">{formatDate(a.attendance_date)}</p>
+                      <p className="text-xs text-gray-400">
+                        {formatDate(a.attendance_date)}{a.session_no ? ` · Sesi ${a.session_no}` : ''}
+                      </p>
                     </div>
                     <Badge color="green">Hadir</Badge>
                   </div>

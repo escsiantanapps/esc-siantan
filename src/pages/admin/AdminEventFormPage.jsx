@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ImagePlus } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { eventsService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Input, Textarea, Select, Button, Spinner } from '@/components/ui'
+import Uploader from '@/components/Uploader'
 import { validateUpload } from '@/lib/utils'
 
 export default function AdminEventFormPage() {
@@ -44,8 +45,7 @@ export default function AdminEventFormPage() {
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
-  async function handleUpload(e) {
-    const file = e.target.files?.[0]
+  async function handleUpload(file) {
     if (!file) return
     setUploading(true)
     try {
@@ -128,24 +128,11 @@ export default function AdminEventFormPage() {
       <Card className="p-4 mb-4 space-y-4">
         <h2 className="text-sm font-semibold text-gray-900">Informasi Event</h2>
 
-        <div className="space-y-1">
-          <label className="text-sm text-gray-600 font-medium">Gambar Sampul</label>
-          <div className="flex items-center gap-3">
-            {form.thumbnail_url ? (
-              <img src={form.thumbnail_url} alt="" className="w-16 h-16 rounded-xl object-cover" />
-            ) : (
-              <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400">
-                <ImagePlus size={22} />
-              </div>
-            )}
-            <label className="cursor-pointer">
-              <span className="text-xs font-medium text-brand-500 hover:underline">
-                {uploading ? 'Mengunggah...' : 'Unggah Gambar'}
-              </span>
-              <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
-            </label>
-          </div>
-        </div>
+        <Uploader
+          kind="image" label="Gambar Sampul" hint="JPG/PNG, maks 5 MB"
+          value={form.thumbnail_url} uploading={uploading}
+          onFile={handleUpload} onClear={() => set('thumbnail_url', '')}
+        />
 
         <Input label="Nama Event" required value={form.name} onChange={e => set('name', e.target.value)} />
         <Textarea label="Deskripsi" rows={3} value={form.description} onChange={e => set('description', e.target.value)} />

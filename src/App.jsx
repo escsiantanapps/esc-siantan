@@ -32,7 +32,7 @@ import RegistrationStatusPage from '@/pages/user/RegistrationStatusPage'
 import PKSDashboardPage from '@/pages/user/PKSDashboardPage'
 
 // Halaman berat (QR scanner) — dimuat saat dibutuhkan
-const ClassAttendanceScanPage = lazy(() => import('@/pages/user/ClassAttendanceScanPage'))
+const AttendanceScanPage = lazy(() => import('@/pages/user/AttendanceScanPage'))
 
 // Admin pages — di-lazy load agar tidak ikut termuat untuk jemaat biasa
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'))
@@ -134,7 +134,8 @@ export default function App() {
             <Route path="events"               element={<EventsPage />} />
             <Route path="events/:id"           element={<EventDetailPage />} />
             <Route path="kelas"                element={<ClassesPage />} />
-            <Route path="kelas/absen"          element={<ClassAttendanceScanPage />} />
+            <Route path="scan"                 element={<AttendanceScanPage />} />
+            <Route path="kelas/absen"          element={<AttendanceScanPage />} />
             <Route path="kelas/:id"            element={<ClassDetailPage />} />
             <Route path="tugas"                element={<TasksPage />} />
             <Route path="tugas/:id"            element={<TaskDetailPage />} />

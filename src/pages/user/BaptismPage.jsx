@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Paperclip } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
 import { Card, Button, Input, Textarea, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
+import Uploader from '@/components/Uploader'
 import { formatDate, validateUpload } from '@/lib/utils'
 
 const STEPS = ['Data Diri', 'Keluarga', 'Kerohanian', 'Dokumen']
@@ -48,8 +48,7 @@ export default function BaptismPage() {
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
   function setDoc(key, val) { setForm(p => ({ ...p, documents: { ...p.documents, [key]: val } })) }
 
-  async function handleFile(key, e) {
-    const file = e.target.files?.[0]
+  async function handleFile(key, file) {
     if (!file) return
     setUploadingKey(key)
     setError('')
@@ -171,14 +170,11 @@ export default function BaptismPage() {
           {step === 3 && (
             <>
               {DOCS.map(doc => (
-                <div key={doc.key} className="space-y-1">
-                  <label className="text-sm text-gray-600 font-medium">{doc.label}</label>
-                  <label className="flex items-center gap-2 px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl cursor-pointer text-gray-500">
-                    {uploadingKey === doc.key ? <Spinner size="sm" /> : <Paperclip size={15} />}
-                    {form.documents[doc.key] ? 'File terunggah ✓' : 'Pilih file'}
-                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={e => handleFile(doc.key, e)} />
-                  </label>
-                </div>
+                <Uploader
+                  key={doc.key} kind="file" label={doc.label}
+                  value={form.documents[doc.key]} uploading={uploadingKey === doc.key}
+                  onFile={file => handleFile(doc.key, file)} onClear={() => setDoc(doc.key, '')}
+                />
               ))}
               <p className="text-xs text-gray-400">Dokumen bersifat opsional, dapat dilengkapi kemudian saat wawancara.</p>
             </>

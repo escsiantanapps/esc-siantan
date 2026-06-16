@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, XCircle, ScanLine, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { classesService } from '@/services/contentService'
-import { classAttendanceService } from '@/services/attendanceService'
+import { classesService, eventsService } from '@/services/contentService'
+import { classAttendanceService, eventAttendanceService } from '@/services/attendanceService'
 import { Card, Spinner, GradientHeader, Button } from '@/components/ui'
 
-const QR_PREFIX = 'ESC-ABSEN:'
+const CLASS_PREFIX = 'ESC-ABSEN:'
+const EVENT_PREFIX = 'ESC-EVENT:'
 
-export default function ClassAttendanceScanPage() {
+export default function AttendanceScanPage() {
   const { profile } = useAuth()
   const navigate = useNavigate()
   const [ready, setReady] = useState(false)
@@ -41,20 +42,49 @@ export default function ClassAttendanceScanPage() {
 
   async function handleScan(decodedText) {
     if (processingRef.current) return
-    if (!decodedText.startsWith(QR_PREFIX)) return
+    const text = (decodedText || '').trim()
+    if (!text.startsWith(CLASS_PREFIX) && !text.startsWith(EVENT_PREFIX)) return
     processingRef.current = true
 
-    const classId = decodedText.slice(QR_PREFIX.length)
+    if (text.startsWith(CLASS_PREFIX)) {
+      await handleClass(text.slice(CLASS_PREFIX.length))
+    } else {
+      await handleEvent(text.slice(EVENT_PREFIX.length))
+    }
+  }
+
+  async function handleClass(rest) {
+    const [classId, sessionStr] = rest.split(':')
+    const sessionNo = sessionStr ? Number(sessionStr) : null
     try {
       const cls = await classesService.getById(classId)
+      const label = `kelas "${cls.name}"${sessionNo ? ` — Sesi ${sessionNo}` : ''}`
       try {
-        await classAttendanceService.checkIn(classId, profile.user_id)
-        setResult({ type: 'success', message: `Absen berhasil untuk kelas "${cls.name}".` })
+        await classAttendanceService.checkIn(classId, profile.user_id, sessionNo)
+        setResult({ type: 'success', message: `Absen berhasil untuk ${label}.` })
       } catch (err) {
-        setResult({ type: 'duplicate', message: err.message || `Kamu sudah absen untuk kelas "${cls.name}" hari ini.` })
+        setResult({ type: 'duplicate', message: err.message || `Kamu sudah absen untuk ${label}.` })
       }
     } catch {
       setResult({ type: 'error', message: 'Kode QR tidak valid atau kelas tidak ditemukan.' })
+    }
+  }
+
+  async function handleEvent(eventId) {
+    try {
+      const ev = await eventsService.getById(eventId)
+      try {
+        await eventAttendanceService.checkIn(eventId, profile.user_id)
+        setResult({ type: 'success', message: `Absen berhasil untuk event "${ev.name}".` })
+      } catch (err) {
+        if (err.message === 'not_registered') {
+          setResult({ type: 'error', message: `Kamu belum mendaftar di event "${ev.name}", jadi belum bisa absen.` })
+        } else {
+          setResult({ type: 'duplicate', message: err.message || `Kamu sudah absen untuk event "${ev.name}".` })
+        }
+      }
+    } catch {
+      setResult({ type: 'error', message: 'Kode QR tidak valid atau event tidak ditemukan.' })
     }
   }
 
@@ -65,7 +95,7 @@ export default function ClassAttendanceScanPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Absen Kelas" subtitle="Pindai kode QR di lokasi kelas" back={() => navigate(-1)} />
+      <GradientHeader title="Absensi" subtitle="Pindai kode QR kelas atau event" back={() => navigate(-1)} />
 
       <div className="px-4 pt-4 space-y-4">
         <Card className={`p-3 overflow-hidden ${result ? 'hidden' : ''}`}>
@@ -80,7 +110,7 @@ export default function ClassAttendanceScanPage() {
 
         {!result && ready && (
           <p className="text-center text-sm text-gray-500 flex items-center justify-center gap-1.5">
-            <ScanLine size={15} /> Arahkan kamera ke kode QR kelas
+            <ScanLine size={15} /> Arahkan kamera ke kode QR
           </p>
         )}
 

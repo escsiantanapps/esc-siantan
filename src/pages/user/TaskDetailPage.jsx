@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { startOfWeek, startOfMonth } from 'date-fns'
-import { ClipboardList, CheckCircle2, Paperclip, Lock, Image as ImageIcon } from 'lucide-react'
+import { ClipboardList, CheckCircle2, Lock } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { Card, Spinner, EmptyState, GradientHeader, Button, Input, Textarea, Select, Checkbox, Badge } from '@/components/ui'
+import Uploader from '@/components/Uploader'
 import { formatDate, validateUpload } from '@/lib/utils'
 
 export default function TaskDetailPage() {
@@ -58,8 +59,7 @@ export default function TaskDetailPage() {
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
-  async function handleFileChange(field, e) {
-    const file = e.target.files?.[0]
+  async function handleFileChange(field, file) {
     if (!file) return
     setUploadingKey(field.key)
     setError('')
@@ -207,40 +207,18 @@ export default function TaskDetailPage() {
                 />
               )}
               {field.type === 'image' && (
-                <div className="space-y-1.5">
-                  <label className="text-sm text-gray-600 font-medium">
-                    {field.label}{field.required && <span className="text-red-500 ml-0.5">*</span>}
-                  </label>
-                  {form[field.key] && (
-                    <img src={form[field.key]} alt={field.label} className="w-full max-h-56 object-cover rounded-xl border border-gray-100" />
-                  )}
-                  <label className="flex items-center gap-2 px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl cursor-pointer text-gray-500">
-                    {uploadingKey === field.key
-                      ? <Spinner size="sm" />
-                      : <ImageIcon size={15} />
-                    }
-                    {form[field.key] ? 'Ganti foto' : 'Ambil / pilih foto'}
-                    <input type="file" accept="image/*" className="hidden" onChange={e => handleFileChange(field, e)} />
-                  </label>
-                </div>
+                <Uploader
+                  kind="image" label={field.label} required={field.required}
+                  value={form[field.key]} uploading={uploadingKey === field.key}
+                  onFile={file => handleFileChange(field, file)} onClear={() => set(field.key, '')}
+                />
               )}
               {field.type === 'file' && (
-                <div className="space-y-1">
-                  <label className="text-sm text-gray-600 font-medium">
-                    {field.label}{field.required && <span className="text-red-500 ml-0.5">*</span>}
-                  </label>
-                  <label className="flex items-center gap-2 px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl cursor-pointer text-gray-500">
-                    {uploadingKey === field.key
-                      ? <Spinner size="sm" />
-                      : <Paperclip size={15} />
-                    }
-                    {form[field.key] ? 'File terunggah' : 'Pilih file'}
-                    <input type="file" className="hidden" onChange={e => handleFileChange(field, e)} />
-                  </label>
-                  {form[field.key] && (
-                    <a href={form[field.key]} target="_blank" rel="noreferrer" className="text-xs text-brand-500 underline">Lihat file terunggah</a>
-                  )}
-                </div>
+                <Uploader
+                  kind="file" label={field.label} required={field.required}
+                  value={form[field.key]} uploading={uploadingKey === field.key}
+                  onFile={file => handleFileChange(field, file)} onClear={() => set(field.key, '')}
+                />
               )}
               {(!field.type || field.type === 'text') && (
                 <Input
