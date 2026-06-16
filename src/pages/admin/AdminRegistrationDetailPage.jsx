@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, FileText } from 'lucide-react'
+import { ArrowLeft, FileText, Printer } from 'lucide-react'
 import { registrationService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Select, Textarea, Input, Button, Spinner, StatusBadge, EmptyState } from '@/components/ui'
 import { formatDate, formatPhone, hitungUmur } from '@/lib/utils'
+import { printArchive } from '@/lib/printDoc'
 
 const STATUSES = ['Menunggu', 'Sedang Ditinjau', 'Disetujui', 'Terjadwal', 'Selesai', 'Ditolak']
 
@@ -95,6 +96,73 @@ export default function AdminRegistrationDetailPage() {
     }
   }
 
+  function archive() {
+    const submittedBy = `${reg.users?.name || '-'}${reg.users?.phone ? ' · ' + formatPhone(reg.users.phone) : ''}`
+    const meta = [
+      ['Status', reg.status || '-'],
+      ['Jadwal', reg.scheduled_at ? formatDate(reg.scheduled_at, 'd MMMM yyyy, HH:mm') : '-'],
+      ['Diajukan oleh', submittedBy],
+      ['Tanggal pengajuan', formatDate(reg.created_at)],
+    ]
+    if (reg.admin_note) meta.push(['Catatan Admin', reg.admin_note])
+
+    let heading, sections
+    if (type === 'baptism') {
+      heading = reg.full_name
+      sections = [{
+        title: 'Data Calon Baptis',
+        rows: [
+          ['Nama Lengkap', reg.full_name],
+          ['Tanggal Lahir', reg.birth_date ? `${formatDate(reg.birth_date)} (${hitungUmur(reg.birth_date)})` : '-'],
+          ['Tempat Lahir', reg.birth_place],
+          ['NIK', reg.nik],
+          ['Nama Ayah', reg.father_name],
+          ['Nama Ibu', reg.mother_name],
+          ['Pembimbing', reg.supervisor],
+          ['Kelas Diikuti', reg.class_done],
+          ['Alamat', reg.address],
+        ],
+        text: reg.testimony ? `Kesaksian / Alasan Ingin Dibaptis:\n${reg.testimony}` : '',
+      }]
+    } else {
+      heading = `${reg.groom_name} & ${reg.bride_name}`
+      sections = [
+        { title: 'Mempelai Pria', rows: [
+          ['Nama Lengkap', reg.groom_name],
+          ['Tanggal Lahir', reg.groom_birth_date ? formatDate(reg.groom_birth_date) : '-'],
+          ['No. HP', formatPhone(reg.groom_phone)],
+          ['Sudah Dibaptis', reg.groom_baptized ? 'Ya' : 'Belum'],
+          ['Nama Ayah', reg.groom_father],
+          ['Nama Ibu', reg.groom_mother],
+        ] },
+        { title: 'Mempelai Wanita', rows: [
+          ['Nama Lengkap', reg.bride_name],
+          ['Tanggal Lahir', reg.bride_birth_date ? formatDate(reg.bride_birth_date) : '-'],
+          ['No. HP', formatPhone(reg.bride_phone)],
+          ['Sudah Dibaptis', reg.bride_baptized ? 'Ya' : 'Belum'],
+          ['Nama Ayah', reg.bride_father],
+          ['Nama Ibu', reg.bride_mother],
+        ] },
+        { title: 'Detail Acara', rows: [
+          ['Rencana Tanggal', reg.planned_date ? formatDate(reg.planned_date) : '-'],
+          ['Estimasi Tamu', reg.estimated_guests || '-'],
+          ['Pendeta Diharapkan', reg.preferred_pastor],
+        ], text: reg.special_notes ? `Catatan Tambahan:\n${reg.special_notes}` : '' },
+      ]
+    }
+
+    const documents = docs
+      .filter(d => reg.documents?.[d.key])
+      .map(d => ({ label: d.label, url: reg.documents[d.key] }))
+
+    const jenis = type === 'wedding' ? 'Pemberkatan Nikah' : 'Baptisan'
+    printArchive({
+      title: `Arsip Pendaftaran ${jenis}`,
+      heading, meta, sections, documents,
+      footer: `Dicetak ${formatDate(new Date(), 'd MMMM yyyy, HH:mm')}`,
+    })
+  }
+
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
 
   if (!reg) {
@@ -128,6 +196,9 @@ export default function AdminRegistrationDetailPage() {
         <p className="text-sm text-gray-400">
           Diajukan oleh {reg.users?.name || '-'} · {formatPhone(reg.users?.phone)} · {formatDate(reg.created_at)}
         </p>
+        <Button size="sm" variant="outline" className="mt-3" onClick={archive}>
+          <Printer size={15} /> Arsip PDF
+        </Button>
       </Card>
 
       {type === 'baptism' ? (

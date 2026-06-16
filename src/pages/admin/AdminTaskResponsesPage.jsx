@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, X, Printer } from 'lucide-react'
 import { tasksService } from '@/services/tasksService'
-import { Card, Spinner, EmptyState, Input } from '@/components/ui'
+import { Card, Spinner, EmptyState, Input, Button } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
+import { printArchive } from '@/lib/printDoc'
 
 const LIMIT = 20
 
@@ -44,6 +45,51 @@ export default function AdminTaskResponsesPage() {
     setPage(1)
   }
 
+  const [archiving, setArchiving] = useState(false)
+  async function archive() {
+    setArchiving(true)
+    try {
+      const { data } = await tasksService.getAllResponses(id, {
+        page: 1, limit: 1000,
+        startDate: startDate || null,
+        endDate: endDate ? `${endDate}T23:59:59` : null,
+      })
+      const fields = template?.fields_json || []
+      const documents = []
+      const sections = (data || []).map(r => {
+        const name = r.users?.name || 'Tanpa nama'
+        const when = formatDate(r.submitted_at, 'd MMM yyyy, HH:mm')
+        const rows = []
+        for (const f of fields) {
+          const v = r.data_json?.[f.key]
+          if ((f.type === 'file' || f.type === 'image')) {
+            if (v) documents.push({ label: `${name} · ${f.label}`, url: v })
+          } else if (f.type === 'checkbox') {
+            rows.push([f.label, v ? 'Ya' : 'Tidak'])
+          } else {
+            rows.push([f.label, v || '-'])
+          }
+        }
+        return {
+          title: `${name} — ${when}`,
+          rows: rows.length ? rows : [['Status', 'Ditandai selesai (tanpa form)']],
+        }
+      })
+      const periode = (startDate || endDate)
+        ? `${startDate ? formatDate(startDate) : 'awal'} – ${endDate ? formatDate(endDate) : 'kini'}`
+        : 'Semua waktu'
+      printArchive({
+        title: `Arsip Jawaban Tugas — ${template?.title || ''}`,
+        meta: [['Periode', periode], ['Jumlah jawaban', String(data?.length || 0)]],
+        sections,
+        documents,
+        footer: `Dicetak ${formatDate(new Date(), 'd MMMM yyyy, HH:mm')}`,
+      })
+    } finally {
+      setArchiving(false)
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(count / LIMIT))
 
   if (loading && !template) return <div className="flex justify-center items-center h-60"><Spinner /></div>
@@ -56,10 +102,19 @@ export default function AdminTaskResponsesPage() {
         <ArrowLeft size={16} /> Kembali ke Form & Tugas
       </button>
 
-      <h1 className="text-lg font-semibold text-gray-900 mb-1">{template?.title}</h1>
-      <p className="text-sm text-gray-500 mb-4">
-        {count} jawaban{filterActive ? ' (terfilter)' : ' terkumpul'}
-      </p>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900 mb-1">{template?.title}</h1>
+          <p className="text-sm text-gray-500">
+            {count} jawaban{filterActive ? ' (terfilter)' : ' terkumpul'}
+          </p>
+        </div>
+        {count > 0 && (
+          <Button size="sm" variant="outline" loading={archiving} onClick={archive}>
+            <Printer size={15} /> Arsip PDF
+          </Button>
+        )}
+      </div>
 
       {/* Filter rentang tanggal */}
       <Card className="p-4 mb-4">
