@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vercel.esc_siantan.twa",
+      "sha256_cert_fingerprints": ["5B:2D:A8:FC:F1:B6:90:D4:7C:8E:71:F4:8D:EC:CC:A4:7C:30:C2:C4:7A:63:D6:FE:EA:3C:63:F3:34:33:A0:19"]
+    }
+  }
+]
