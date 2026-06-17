@@ -1,23 +1,25 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { Home, Newspaper, ClipboardList, User, ScanLine } from 'lucide-react'
+import { useLang } from '@/hooks/useLang'
 
 // Item kiri & kanan; tombol Scan disisipkan menonjol di tengah.
 const LEFT_ITEMS = [
-  { to: '/',          icon: Home,      label: 'Beranda', exact: true },
-  { to: '/informasi', icon: Newspaper, label: 'Info' },
+  { to: '/',          icon: Home,      labelKey: 'nav.home', exact: true },
+  { to: '/informasi', icon: Newspaper, labelKey: 'nav.info' },
 ]
 const RIGHT_ITEMS = [
-  { to: '/tugas',     icon: ClipboardList, label: 'Tugas' },
-  { to: '/profil',    icon: User,          label: 'Profil' },
+  { to: '/tugas',     icon: ClipboardList, labelKey: 'nav.tasks' },
+  { to: '/profil',    icon: User,          labelKey: 'nav.profile' },
 ]
 
-function NavItem({ to, icon: Icon, label, exact }) {
+function NavItem({ to, icon: Icon, labelKey, exact }) {
   const location = useLocation()
+  const { t } = useLang()
   const active = exact ? location.pathname === to : location.pathname.startsWith(to)
   return (
     <NavLink to={to} className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1">
       <Icon size={22} className={active ? 'text-brand-500' : 'text-gray-400'} strokeWidth={active ? 2 : 1.5} />
-      <span className={`text-[10px] font-medium ${active ? 'text-brand-500' : 'text-gray-400'}`}>{label}</span>
+      <span className={`text-[10px] font-medium ${active ? 'text-brand-500' : 'text-gray-400'}`}>{t(labelKey)}</span>
     </NavLink>
   )
 }

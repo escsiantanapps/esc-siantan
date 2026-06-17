@@ -1,19 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Pencil, LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Moon, Sun, ShieldCheck, ClipboardCheck, ChevronRight } from 'lucide-react'
+import { Pencil, LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { useTheme } from '@/hooks/useTheme'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { usersService } from '@/services/usersService'
-import { Card, Badge, StatusBadge, Spinner, Button, ThemeToggle } from '@/components/ui'
-import PushToggle from '@/components/PushToggle'
+import { Card, Badge, StatusBadge, Spinner, Button } from '@/components/ui'
 import SkyTime from '@/components/SkyTime'
 import { formatDate, hitungUmur, formatPhone } from '@/lib/utils'
 
 export default function ProfilePage() {
   const { profile, logout, isAdmin, isPKS } = useAuth()
-  const { theme } = useTheme()
   const { confirm } = useToast()
+  const { t } = useLang()
   const navigate = useNavigate()
   const [ministries, setMinistries] = useState([])
   const [komsel, setKomsel] = useState(null)
@@ -68,7 +67,7 @@ export default function ProfilePage() {
               : <div className="w-full h-full gradient-main flex items-center justify-center text-white text-2xl font-bold">{initials}</div>}
           </div>
           <Button variant="outline" size="sm" className="mb-1" onClick={() => navigate('/profil/edit')}>
-            <Pencil size={14} /> Edit Profil
+            <Pencil size={14} /> {t('profile.editProfile')}
           </Button>
         </div>
 
@@ -190,32 +189,26 @@ export default function ProfilePage() {
           </div>
         </Card>
 
-        {/* Tampilan */}
-        <Card className="p-4">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">Tampilan</h2>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
-                {theme === 'dark' ? <Moon size={15} className="text-purple-500" /> : <Sun size={15} className="text-purple-500" />}
-              </div>
-              <div>
-                <p className="text-sm text-gray-800 font-medium">Mode Gelap</p>
-                <p className="text-xs text-gray-400">{theme === 'dark' ? 'Aktif' : 'Nonaktif'}</p>
-              </div>
+        {/* Pengaturan */}
+        <Card className="p-2">
+          <Link to="/pengaturan" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
+            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0">
+              <Settings size={18} />
             </div>
-            <ThemeToggle />
-          </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900">{t('profile.settings')}</p>
+              <p className="text-xs text-gray-400">{t('profile.settingsDesc')}</p>
+            </div>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </Link>
         </Card>
-
-        {/* Notifikasi Push */}
-        <PushToggle />
 
         {/* Keluar ala Stitch */}
         <button
           onClick={handleLogout}
           className="w-full py-3.5 rounded-2xl border-2 border-dashed border-gray-200 text-red-500 font-semibold flex items-center justify-center gap-2 hover:bg-red-50 hover:border-transparent transition-all"
         >
-          <LogOut size={18} /> Keluar
+          <LogOut size={18} /> {t('profile.logout')}
         </button>
       </div>
     </div>

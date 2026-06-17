@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
+import { LanguageProvider } from '@/contexts/LanguageContext'
 import { ToastProvider } from '@/contexts/ToastContext'
 import { useAuth } from '@/hooks/useAuth'
 import ErrorBoundary from '@/components/ErrorBoundary'
@@ -31,6 +32,7 @@ import ClassDetailPage from '@/pages/user/ClassDetailPage'
 import RegistrationStatusPage from '@/pages/user/RegistrationStatusPage'
 import PKSDashboardPage from '@/pages/user/PKSDashboardPage'
 import PersembahanPage from '@/pages/user/PersembahanPage'
+import SettingsPage from '@/pages/user/SettingsPage'
 
 // Halaman berat (QR scanner) — dimuat saat dibutuhkan
 const AttendanceScanPage = lazy(() => import('@/pages/user/AttendanceScanPage'))
@@ -112,6 +114,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <ThemeProvider>
+    <LanguageProvider>
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
@@ -131,6 +134,7 @@ export default function App() {
             <Route index                        element={<HomePage />} />
             <Route path="profil"               element={<ProfilePage />} />
             <Route path="profil/edit"          element={<EditProfilePage />} />
+            <Route path="pengaturan"           element={<SettingsPage />} />
             <Route path="informasi"            element={<InformationPage />} />
             <Route path="informasi/:id"        element={<InformationDetailPage />} />
             <Route path="events"               element={<EventsPage />} />
@@ -181,6 +185,7 @@ export default function App() {
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
+    </LanguageProvider>
     </ThemeProvider>
     </ErrorBoundary>
   )

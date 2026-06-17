@@ -119,6 +119,14 @@ h1, h2, h3 {
 @keyframes floatX { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-10px); } }
 @keyframes floatY { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 @keyframes twinkle { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.15); } }
+/* Awan melayang menyeberangi banner */
+@keyframes drift { from { transform: translateX(-90px); } to { transform: translateX(520px); } }
+/* Cahaya matahari berdenyut */
+@keyframes sunGlow { 0%, 100% { opacity: 0.45; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.12); } }
+/* Bukit/rumput bergoyang halus */
+@keyframes sway { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(6px); } }
+/* Burung mengepak menyeberang (siang) */
+@keyframes flyAcross { from { transform: translate(-40px, 4px); } to { transform: translate(480px, -10px); } }
 
 .animate-toast-in {
   animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
