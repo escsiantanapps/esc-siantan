@@ -124,7 +124,7 @@ export default function App() {
         <Routes>
           <Route path="/login"          element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register"       element={<PublicRoute><RegisterPage /></PublicRoute>} />
-          <Route path="/lupa-password"  element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+          <Route path="/lupa-password"  element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           <Route path="/" element={<PrivateRoute><UserLayout /></PrivateRoute>}>

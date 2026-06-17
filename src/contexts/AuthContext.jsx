@@ -111,10 +111,15 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut()
   }
 
+  // Kirim email berisi kode OTP pemulihan (template email memuat {{ .Token }}).
   async function resetPassword(email) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
+    const { error } = await supabase.auth.resetPasswordForEmail(email)
+    if (error) throw error
+  }
+
+  // Verifikasi kode OTP pemulihan → membuat sesi sementara untuk ganti sandi.
+  async function verifyResetOtp(email, token) {
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'recovery' })
     if (error) throw error
   }
 
@@ -139,7 +144,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, profile, loading,
       login, register, logout, updateProfile,
-      resetPassword, updatePassword,
+      resetPassword, verifyResetOtp, updatePassword,
       isAdmin, isPKS,
     }}>
       {children}
