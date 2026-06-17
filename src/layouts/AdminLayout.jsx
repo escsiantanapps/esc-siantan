@@ -47,13 +47,13 @@ export default function AdminLayout() {
   const [permLoading, setPermLoading] = useState(!isSuperAdmin)
 
   useEffect(() => {
-    if (isSuperAdmin) { setPermLoading(false); return }
+    if (isSuperAdmin || !profile?.user_id) { setPermLoading(false); return }
     setPermLoading(true)
-    permissionsService.getAdminPermissions()
+    permissionsService.getMyPermissions(profile.user_id)
       .then(setAllowedPages)
       .catch(() => setAllowedPages(null))
       .finally(() => setPermLoading(false))
-  }, [isSuperAdmin])
+  }, [isSuperAdmin, profile?.user_id])
 
   async function handleLogout() {
     const ok = await confirm({
