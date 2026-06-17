@@ -60,7 +60,7 @@ export default function ProfilePage() {
       <div className="gradient-main h-32 rounded-b-[2rem] relative overflow-hidden">
         <SkyTime />
       </div>
-      <div className="px-4 -mt-14">
+      <div className="px-4 -mt-14 relative z-10">
         <div className="flex items-end justify-between gap-3">
           <div className="w-24 h-24 rounded-3xl ring-4 ring-surface shadow-lg overflow-hidden shrink-0">
             {profile.photo_url
