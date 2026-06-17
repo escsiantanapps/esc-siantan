@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Pencil, LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight } from 'lucide-react'
+import { LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { usersService } from '@/services/usersService'
-import { Card, Badge, StatusBadge, Spinner, Button } from '@/components/ui'
+import { Card, Badge, StatusBadge, Spinner } from '@/components/ui'
 import SkyTime from '@/components/SkyTime'
 import { formatDate, hitungUmur, formatPhone } from '@/lib/utils'
 
@@ -60,15 +60,10 @@ export default function ProfilePage() {
         <SkyTime />
       </div>
       <div className="px-4 -mt-14 relative z-10">
-        <div className="flex items-end justify-between gap-3">
-          <div className="w-24 h-24 rounded-3xl ring-4 ring-surface shadow-lg overflow-hidden shrink-0">
-            {profile.photo_url
-              ? <img src={profile.photo_url} alt={profile.name} className="w-full h-full object-cover" />
-              : <div className="w-full h-full gradient-main flex items-center justify-center text-white text-2xl font-bold">{initials}</div>}
-          </div>
-          <Button variant="outline" size="sm" className="mb-1" onClick={() => navigate('/profil/edit')}>
-            <Pencil size={14} /> {t('profile.editProfile')}
-          </Button>
+        <div className="w-24 h-24 rounded-3xl ring-4 ring-surface shadow-lg overflow-hidden shrink-0">
+          {profile.photo_url
+            ? <img src={profile.photo_url} alt={profile.name} className="w-full h-full object-cover" />
+            : <div className="w-full h-full gradient-main flex items-center justify-center text-white text-2xl font-bold">{initials}</div>}
         </div>
 
         <div className="mt-3">
