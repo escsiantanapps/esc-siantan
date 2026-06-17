@@ -43,14 +43,17 @@ export default function ProfilePage() {
 
   const initials = profile.name ? profile.name.trim().split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase() : '?'
 
+  const genderLabel = profile.gender === 'Laki-laki' ? t('gender.male')
+    : profile.gender === 'Perempuan' ? t('gender.female') : profile.gender
+
   const info = [
-    { icon: Mail, label: 'Email', value: profile.email },
-    { icon: Phone, label: 'No. HP', value: formatPhone(profile.phone) },
-    { icon: Cake, label: 'Tanggal Lahir', value: profile.birth_date ? `${formatDate(profile.birth_date)} (${hitungUmur(profile.birth_date)})` : '-' },
-    { icon: MapPin, label: 'Tempat Lahir', value: profile.birth_place || '-' },
-    { icon: MapPin, label: 'Alamat', value: profile.address || '-' },
-    { icon: Droplet, label: 'Golongan Darah', value: profile.blood_type || '-' },
-    { icon: Instagram, label: 'Sosial Media', value: profile.social_media || '-' },
+    { icon: Mail, label: t('profile.email'), value: profile.email },
+    { icon: Phone, label: t('profile.phone'), value: formatPhone(profile.phone) },
+    { icon: Cake, label: t('profile.birthDate'), value: profile.birth_date ? `${formatDate(profile.birth_date)} (${hitungUmur(profile.birth_date)})` : '-' },
+    { icon: MapPin, label: t('profile.birthPlace'), value: profile.birth_place || '-' },
+    { icon: MapPin, label: t('profile.address'), value: profile.address || '-' },
+    { icon: Droplet, label: t('profile.bloodType'), value: profile.blood_type || '-' },
+    { icon: Instagram, label: t('profile.socialMedia'), value: profile.social_media || '-' },
   ]
 
   return (
@@ -80,15 +83,15 @@ export default function ProfilePage() {
         {/* Ganti panel — bergaya seperti mengganti akun */}
         {(isAdmin || isPKS) && (
           <Card className="p-2">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2.5 pt-2 pb-1">Beralih Panel</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2.5 pt-2 pb-1">{t('profile.switchPanel')}</p>
             {isAdmin && (
               <Link to="/admin" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
                 <div className="w-10 h-10 rounded-full gradient-main flex items-center justify-center text-white shrink-0">
                   <ShieldCheck size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Panel Admin</p>
-                  <p className="text-xs text-gray-400">Kelola data &amp; konten gereja</p>
+                  <p className="text-sm font-medium text-gray-900">{t('profile.adminPanel')}</p>
+                  <p className="text-xs text-gray-400">{t('profile.adminPanelDesc')}</p>
                 </div>
                 <ChevronRight size={18} className="text-gray-300 shrink-0" />
               </Link>
@@ -99,8 +102,8 @@ export default function ProfilePage() {
                   <ClipboardCheck size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Panel PKS</p>
-                  <p className="text-xs text-gray-400">Dashboard Pemimpin Komsel</p>
+                  <p className="text-sm font-medium text-gray-900">{t('profile.pksPanel')}</p>
+                  <p className="text-xs text-gray-400">{t('profile.pksPanelDesc')}</p>
                 </div>
                 <ChevronRight size={18} className="text-gray-300 shrink-0" />
               </Link>
@@ -112,7 +115,7 @@ export default function ProfilePage() {
 
         {/* Informasi Pribadi */}
         <Card className="p-4">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">Informasi Pribadi</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-3">{t('profile.personalInfo')}</h2>
           <div className="space-y-3">
             {profile.gender && (
               <div className="flex items-center gap-3">
@@ -120,8 +123,8 @@ export default function ProfilePage() {
                   <Users size={15} className="text-brand-500" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Jenis Kelamin</p>
-                  <p className="text-sm text-gray-800 font-medium">{profile.gender}</p>
+                  <p className="text-xs text-gray-400">{t('profile.gender')}</p>
+                  <p className="text-sm text-gray-800 font-medium">{genderLabel}</p>
                 </div>
               </div>
             )}
@@ -142,14 +145,14 @@ export default function ProfilePage() {
         {/* Ministry & Komsel */}
         {!loading && (
           <Card className="p-4">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Pelayanan</h2>
+            <h2 className="text-sm font-semibold text-gray-900 mb-3">{t('profile.ministrySection')}</h2>
             <div className="space-y-3">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
                   <Heart size={15} className="text-red-500" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Ministry</p>
+                  <p className="text-xs text-gray-400">{t('profile.ministryLabel')}</p>
                   {ministries.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       {ministries.map(m => <Badge key={m.ministry_id} color="orange">{m.name}</Badge>)}
@@ -162,7 +165,7 @@ export default function ProfilePage() {
                   <Users size={15} className="text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Komsel</p>
+                  <p className="text-xs text-gray-400">{t('profile.komsel')}</p>
                   <p className="text-sm text-gray-800 font-medium">{komsel?.name || '-'}</p>
                 </div>
               </div>
@@ -177,8 +180,8 @@ export default function ProfilePage() {
               <ShieldAlert size={15} className="text-amber-500" />
             </div>
             <div className="flex-1">
-              <p className="text-xs text-gray-400">Status Surat Peringatan</p>
-              <p className="text-sm text-gray-800 font-medium">{profile.sp_notes || 'Tidak ada catatan'}</p>
+              <p className="text-xs text-gray-400">{t('profile.spStatus')}</p>
+              <p className="text-sm text-gray-800 font-medium">{profile.sp_notes || t('profile.spNone')}</p>
             </div>
             <StatusBadge status={profile.sp_level} />
           </div>

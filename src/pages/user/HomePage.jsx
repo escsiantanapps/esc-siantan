@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Clock, MapPin, Church, HandCoins } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useLang } from '@/hooks/useLang'
 import { newsService, eventsService, classesService } from '@/services/contentService'
 import { Card, Spinner } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
@@ -10,6 +11,7 @@ import { formatDate, spColor } from '@/lib/utils'
 
 export default function HomePage() {
   const { profile } = useAuth()
+  const { t } = useLang()
   const [news, setNews] = useState([])
   const [events, setEvents] = useState([])
   const [classes, setClasses] = useState([])
@@ -24,12 +26,12 @@ export default function HomePage() {
   }, [])
 
   const quickLinks = [
-    { to: '/persembahan',        icon: HandCoins,     label: 'Persembahan', color: 'bg-emerald-100 text-emerald-600' },
-    { to: '/events',             icon: Calendar,      label: 'Events',   color: 'bg-red-100 text-red-600' },
-    { to: '/kelas',              icon: BookOpen,      label: 'Kelas',    color: 'bg-blue-100 text-blue-600' },
-    { to: '/baptisan',           icon: Droplets,      label: 'Baptisan', color: 'bg-teal-100 text-teal-600' },
-    { to: '/pemberkatan-nikah',  icon: Heart,         label: 'Nikah',    color: 'bg-pink-100 text-pink-600' },
-    { to: '/status-pendaftaran', icon: Bell,          label: 'Status',   color: 'bg-purple-100 text-purple-600' },
+    { to: '/persembahan',        icon: HandCoins,     label: t('home.q.offering'), color: 'bg-emerald-100 text-emerald-600' },
+    { to: '/events',             icon: Calendar,      label: t('home.q.events'),   color: 'bg-red-100 text-red-600' },
+    { to: '/kelas',              icon: BookOpen,      label: t('home.q.classes'),  color: 'bg-blue-100 text-blue-600' },
+    { to: '/baptisan',           icon: Droplets,      label: t('home.q.baptism'),  color: 'bg-teal-100 text-teal-600' },
+    { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-100 text-pink-600' },
+    { to: '/status-pendaftaran', icon: Bell,          label: t('home.q.status'),   color: 'bg-purple-100 text-purple-600' },
   ]
 
   return (
@@ -54,7 +56,7 @@ export default function HomePage() {
             Shalom, <span className="text-brand-500">{profile?.name?.split(' ')[0] || 'Jemaat'}</span> 👋
           </h1>
           <p className="text-sm text-gray-500 mt-1 italic">
-            "Selamat datang. Kiranya damai sejahtera menyertaimu hari ini."
+            {t('home.welcomeQuote')}
           </p>
         </section>
 
@@ -64,7 +66,7 @@ export default function HomePage() {
             className={`rounded-2xl px-4 py-3 mb-5 text-sm font-medium animate-fade-in-up ${spColor(profile.sp_level)}`}
             style={{ animationDelay: '60ms' }}
           >
-            Status Surat Peringatan: {profile.sp_level}. Hubungi admin/PKS untuk informasi lebih lanjut.
+            {t('home.spStatus', { level: profile.sp_level })}
           </div>
         )}
 
@@ -74,9 +76,9 @@ export default function HomePage() {
         {events.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Event</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('home.event')}</h3>
               <Link to="/events" className="text-xs text-brand-500 flex items-center gap-0.5">
-                Semua <ChevronRight size={13} />
+                {t('common.all')} <ChevronRight size={13} />
               </Link>
             </div>
             <EventCarousel events={events.slice(0, 6)} />
@@ -85,7 +87,7 @@ export default function HomePage() {
 
         {/* Quick actions */}
         <section className="mb-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Menu Cepat</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('home.quickMenu')}</h3>
           <div className="grid grid-cols-3 gap-3">
             {quickLinks.map(({ to, icon: Icon, label, color }) => (
               <Link
@@ -106,9 +108,9 @@ export default function HomePage() {
         {news.length > 0 && (
           <section className="mb-6 animate-fade-in-up" style={{ animationDelay: '120ms' }}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Pengumuman</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('home.announcements')}</h3>
               <Link to="/informasi" className="text-xs text-brand-500 flex items-center gap-0.5">
-                Semua <ChevronRight size={13} />
+                {t('common.all')} <ChevronRight size={13} />
               </Link>
             </div>
             <div className="space-y-2.5">
@@ -134,9 +136,9 @@ export default function HomePage() {
         {classes.length > 0 && (
           <section className="animate-fade-in-up" style={{ animationDelay: '200ms' }}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Kelas Tersedia</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('home.availableClasses')}</h3>
               <Link to="/kelas" className="text-xs text-brand-500 flex items-center gap-0.5">
-                Semua <ChevronRight size={13} />
+                {t('common.all')} <ChevronRight size={13} />
               </Link>
             </div>
             <div className="space-y-2.5">
@@ -162,7 +164,7 @@ export default function HomePage() {
 
         {!loading && news.length === 0 && events.length === 0 && classes.length === 0 && (
           <div className="text-center py-10 animate-fade-in">
-            <p className="text-sm text-gray-400">Belum ada informasi, event, atau kelas saat ini.</p>
+            <p className="text-sm text-gray-400">{t('home.empty')}</p>
           </div>
         )}
       </div>

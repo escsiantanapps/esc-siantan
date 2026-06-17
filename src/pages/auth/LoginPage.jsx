@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { useLang } from '@/hooks/useLang'
 import { Button, Input } from '@/components/ui'
 import { Mail, Lock, Eye, EyeOff, LogIn, Church } from 'lucide-react'
 
 export default function LoginPage() {
   const { login } = useAuth()
+  const { t } = useLang()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -20,7 +22,7 @@ export default function LoginPage() {
       await login(form.email, form.password)
       navigate('/')
     } catch (err) {
-      setError('Email atau kata sandi salah. Silakan coba lagi.')
+      setError(t('auth.loginError'))
     } finally {
       setLoading(false)
     }
@@ -42,8 +44,8 @@ export default function LoginPage() {
 
         {/* Form card */}
         <div className="flex-1 bg-surface rounded-t-3xl -mt-6 px-6 pt-8 pb-6">
-          <h2 className="text-gray-900 text-lg font-semibold">Masuk ke akun</h2>
-          <p className="text-sm text-gray-500 mt-1 mb-6">Silakan masuk untuk melanjutkan</p>
+          <h2 className="text-gray-900 text-lg font-semibold">{t('auth.loginTitle')}</h2>
+          <p className="text-sm text-gray-500 mt-1 mb-6">{t('auth.loginSubtitle')}</p>
 
           {error && (
             <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-4 animate-fade-in">
@@ -53,7 +55,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Email"
+              label={t('auth.email')}
               type="email"
               icon={Mail}
               placeholder="nama@email.com"
@@ -62,7 +64,7 @@ export default function LoginPage() {
               onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
             />
             <Input
-              label="Kata Sandi"
+              label={t('auth.password')}
               type={showPassword ? 'text' : 'password'}
               icon={Lock}
               placeholder="••••••••"
@@ -74,7 +76,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword(s => !s)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-                  aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                  aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -83,19 +85,19 @@ export default function LoginPage() {
             />
 
             <div className="text-right">
-              <Link to="/lupa-password" className="text-sm text-brand-500 font-medium hover:text-brand-600 transition">Lupa kata sandi?</Link>
+              <Link to="/lupa-password" className="text-sm text-brand-500 font-medium hover:text-brand-600 transition">{t('auth.forgotPassword')}</Link>
             </div>
 
             <Button type="submit" loading={loading} className="w-full" size="lg">
               {!loading && <LogIn size={18} />}
-              Masuk
+              {t('auth.signIn')}
             </Button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
-              Belum punya akun?{' '}
-              <Link to="/register" className="text-brand-500 font-semibold hover:text-brand-600 transition">Daftar sekarang</Link>
+              {t('auth.noAccount')}{' '}
+              <Link to="/register" className="text-brand-500 font-semibold hover:text-brand-600 transition">{t('auth.registerNow')}</Link>
             </p>
           </div>
         </div>

@@ -46,7 +46,10 @@ export default function MemberStats() {
       else if (m.gender === 'Perempuan') female++
       else other++
     }
-    const avg = ages.length ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : null
+    // Umur rata-rata tidak dibulatkan — tampilkan 1 desimal (mis. 34.7)
+    const avg = ages.length
+      ? Math.round((ages.reduce((a, b) => a + b, 0) / ages.length) * 10) / 10
+      : null
     const maxCount = Math.max(1, ...buk.map(b => b.people.length))
     return { avg, withAgeCount: ages.length, buckets: buk, maxCount, gender: { male, female, other } }
   }, [members])

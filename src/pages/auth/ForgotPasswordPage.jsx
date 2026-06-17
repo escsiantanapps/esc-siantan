@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { useLang } from '@/hooks/useLang'
 import { Button, Input } from '@/components/ui'
 
 export default function ForgotPasswordPage() {
   const { resetPassword, verifyResetOtp, updatePassword } = useAuth()
+  const { t } = useLang()
   const navigate = useNavigate()
 
   const [step, setStep] = useState('email') // 'email' | 'otp'
@@ -22,9 +24,9 @@ export default function ForgotPasswordPage() {
     try {
       await resetPassword(email.trim())
       setStep('otp')
-      setInfo(`Kode 6 digit telah dikirim ke ${email.trim()}. Cek email (termasuk folder spam).`)
+      setInfo(t('auth.codeSent', { email: email.trim() }))
     } catch (err) {
-      setError(err.message || 'Gagal mengirim kode. Silakan coba lagi.')
+      setError(err.message || t('auth.sendCodeFailed'))
     } finally {
       setLoading(false)
     }
@@ -33,16 +35,16 @@ export default function ForgotPasswordPage() {
   async function handleReset(e) {
     e.preventDefault()
     setError('')
-    if (!/^\d{6}$/.test(otp.trim())) { setError('Kode OTP harus 6 angka.'); return }
-    if (password.length < 6) { setError('Kata sandi minimal 6 karakter.'); return }
-    if (password !== confirm) { setError('Konfirmasi kata sandi tidak cocok.'); return }
+    if (!/^\d{6}$/.test(otp.trim())) { setError(t('auth.otpInvalid')); return }
+    if (password.length < 6) { setError(t('auth.pwMin6')); return }
+    if (password !== confirm) { setError(t('auth.pwMismatch6')); return }
     setLoading(true)
     try {
       await verifyResetOtp(email.trim(), otp.trim())
       await updatePassword(password)
       navigate('/', { replace: true })
     } catch (err) {
-      setError(err.message || 'Kode salah atau sudah kedaluwarsa. Coba kirim ulang.')
+      setError(err.message || t('auth.otpWrong'))
     } finally {
       setLoading(false)
     }
@@ -55,9 +57,9 @@ export default function ForgotPasswordPage() {
           <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
             <span className="text-3xl">{step === 'email' ? '🔑' : '🔢'}</span>
           </div>
-          <h1 className="text-white text-2xl font-bold">Lupa Kata Sandi</h1>
+          <h1 className="text-white text-2xl font-bold">{t('auth.forgotTitle')}</h1>
           <p className="text-white/70 text-sm mt-1">
-            {step === 'email' ? 'Kami akan kirim kode ke email kamu' : 'Masukkan kode & kata sandi baru'}
+            {step === 'email' ? t('auth.forgotSubEmail') : t('auth.forgotSubOtp')}
           </p>
         </div>
 
@@ -71,31 +73,31 @@ export default function ForgotPasswordPage() {
 
           {step === 'email' ? (
             <>
-              <h2 className="text-gray-900 text-lg font-semibold mb-6">Masukkan email kamu</h2>
+              <h2 className="text-gray-900 text-lg font-semibold mb-6">{t('auth.enterEmail')}</h2>
               <form onSubmit={sendCode} className="space-y-4">
-                <Input label="Email" type="email" placeholder="nama@email.com" required value={email} onChange={e => setEmail(e.target.value)} />
-                <Button type="submit" loading={loading} className="w-full" size="lg">Kirim Kode</Button>
+                <Input label={t('auth.email')} type="email" placeholder="nama@email.com" required value={email} onChange={e => setEmail(e.target.value)} />
+                <Button type="submit" loading={loading} className="w-full" size="lg">{t('auth.sendCode')}</Button>
               </form>
               <div className="mt-6 text-center">
-                <Link to="/login" className="text-sm text-brand-500">← Kembali ke login</Link>
+                <Link to="/login" className="text-sm text-brand-500">{t('auth.backToLogin')}</Link>
               </div>
             </>
           ) : (
             <>
-              <h2 className="text-gray-900 text-lg font-semibold mb-6">Verifikasi & sandi baru</h2>
+              <h2 className="text-gray-900 text-lg font-semibold mb-6">{t('auth.verifyTitle')}</h2>
               <form onSubmit={handleReset} className="space-y-4">
                 <Input
-                  label="Kode OTP (6 angka)" inputMode="numeric" placeholder="123456" required
+                  label={t('auth.otpLabel')} inputMode="numeric" placeholder="123456" required
                   value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="tracking-[0.4em] text-center text-lg"
                 />
-                <Input label="Kata Sandi Baru" type="password" placeholder="••••••••" required value={password} onChange={e => setPassword(e.target.value)} />
-                <Input label="Konfirmasi Kata Sandi" type="password" placeholder="••••••••" required value={confirm} onChange={e => setConfirm(e.target.value)} />
-                <Button type="submit" loading={loading} className="w-full" size="lg">Simpan Kata Sandi Baru</Button>
+                <Input label={t('auth.newPassword')} type="password" placeholder="••••••••" required value={password} onChange={e => setPassword(e.target.value)} />
+                <Input label={t('auth.confirmPassword')} type="password" placeholder="••••••••" required value={confirm} onChange={e => setConfirm(e.target.value)} />
+                <Button type="submit" loading={loading} className="w-full" size="lg">{t('auth.saveNewPassword')}</Button>
               </form>
               <div className="mt-5 flex items-center justify-between text-sm">
-                <button onClick={() => { setStep('email'); setOtp(''); setError(''); setInfo('') }} className="text-gray-500">← Ganti email</button>
-                <button onClick={sendCode} disabled={loading} className="text-brand-500 disabled:opacity-50">Kirim ulang kode</button>
+                <button onClick={() => { setStep('email'); setOtp(''); setError(''); setInfo('') }} className="text-gray-500">{t('auth.changeEmail')}</button>
+                <button onClick={sendCode} disabled={loading} className="text-brand-500 disabled:opacity-50">{t('auth.resendCode')}</button>
               </div>
             </>
           )}

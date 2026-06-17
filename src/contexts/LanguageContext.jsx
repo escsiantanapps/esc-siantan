@@ -20,7 +20,11 @@ export function LanguageProvider({ children }) {
   }, [lang])
 
   const t = useCallback(
-    (key) => translations[lang]?.[key] ?? translations.id[key] ?? key,
+    (key, params) => {
+      let s = translations[lang]?.[key] ?? translations.id[key] ?? key
+      if (params) for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, v)
+      return s
+    },
     [lang],
   )
 
