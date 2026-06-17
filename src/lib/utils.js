@@ -14,6 +14,15 @@ export function hitungUmur(tanggalLahir) {
   return differenceInYears(new Date(), new Date(tanggalLahir)) + ' tahun'
 }
 
+// Umur dalam angka (atau null bila tanggal lahir kosong/invalid)
+export function umurTahun(tanggalLahir) {
+  if (!tanggalLahir) return null
+  const d = typeof tanggalLahir === 'string' ? parseISO(tanggalLahir) : tanggalLahir
+  if (isNaN(d?.getTime?.())) return null
+  const umur = differenceInYears(new Date(), d)
+  return umur >= 0 && umur < 130 ? umur : null
+}
+
 // Konversi serial Excel ke tanggal (dari database lama)
 export function excelSerialToDate(serial) {
   if (!serial || isNaN(serial)) return null

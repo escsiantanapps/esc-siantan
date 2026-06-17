@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { evaluationService } from '@/services/evaluationService'
 import { Card, PageHeader, Spinner, StatusBadge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
+import MemberStats from '@/components/MemberStats'
 
 export default function AdminDashboardPage() {
   const { profile } = useAuth()
@@ -100,6 +101,9 @@ export default function AdminDashboardPage() {
           )
         })}
       </div>
+
+      {/* Statistik umur & gender jemaat */}
+      <MemberStats />
 
       {/* Evaluasi Minggu Ini */}
       <Card className="p-4 mb-6">
