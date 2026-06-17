@@ -1,5 +1,6 @@
 import { Sun, Moon, ArrowLeft } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
+import { useLang } from '@/hooks/useLang'
 
 // ─── Button ──────────────────────────────────────────────
 export function Button({ children, variant = 'primary', size = 'md', loading, className = '', ...props }) {
@@ -158,30 +159,19 @@ export function PageHeader({ title, subtitle, action, className = '' }) {
 
 // ─── Status Badge ────────────────────────────────────────
 export function StatusBadge({ status }) {
-  const map = {
-    'Menunggu':       { color: 'orange', label: 'Menunggu' },
-    'Sedang Ditinjau':{ color: 'amber',  label: 'Ditinjau' },
-    'Disetujui':      { color: 'green',  label: 'Disetujui' },
-    'Terjadwal':      { color: 'blue',   label: 'Terjadwal' },
-    'Selesai':        { color: 'gray',   label: 'Selesai' },
-    'Ditolak':        { color: 'red',    label: 'Ditolak' },
-    'Aktif':          { color: 'green',  label: 'Aktif' },
-    'Nonaktif':       { color: 'red',    label: 'Nonaktif' },
-    'Menunggu Persetujuan': { color: 'orange', label: 'Menunggu Persetujuan' },
-    'Aman':           { color: 'green',  label: 'Aman' },
-    'SP 1':           { color: 'orange', label: 'SP 1' },
-    'SP 2':           { color: 'red',    label: 'SP 2' },
-    'SP 3':           { color: 'red',    label: 'SP 3' },
-    'Hadir':          { color: 'green',  label: 'Hadir' },
-    'Tidak Hadir':    { color: 'red',    label: 'Tidak Hadir' },
-    'Izin':           { color: 'amber',  label: 'Izin' },
-    'Terverifikasi':  { color: 'green',  label: 'Terverifikasi' },
-    'TERPENUHI':      { color: 'green',  label: 'Terpenuhi' },
-    'PROSES':         { color: 'amber',  label: 'Proses' },
-    'KOSONG':         { color: 'red',    label: 'Kosong' },
+  const { t } = useLang()
+  const colors = {
+    'Menunggu': 'orange', 'Sedang Ditinjau': 'amber', 'Disetujui': 'green',
+    'Terjadwal': 'blue', 'Selesai': 'gray', 'Ditolak': 'red', 'Aktif': 'green',
+    'Nonaktif': 'red', 'Menunggu Persetujuan': 'orange', 'Aman': 'green',
+    'SP 1': 'orange', 'SP 2': 'red', 'SP 3': 'red', 'Hadir': 'green',
+    'Tidak Hadir': 'red', 'Izin': 'amber', 'Terverifikasi': 'green',
+    'TERPENUHI': 'green', 'PROSES': 'amber', 'KOSONG': 'red',
   }
-  const { color, label } = map[status] || { color: 'gray', label: status }
-  return <Badge color={color}>{label}</Badge>
+  const color = colors[status] || 'gray'
+  const key = `status.${status}`
+  const translated = t(key)
+  return <Badge color={color}>{translated === key ? status : translated}</Badge>
 }
 
 // ─── Empty State ─────────────────────────────────────────

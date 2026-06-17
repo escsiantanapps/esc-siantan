@@ -4,19 +4,25 @@ import { Calendar, MapPin, Clock } from 'lucide-react'
 import { eventsService } from '@/services/contentService'
 import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
 
-const TABS = ['Aktif', 'Selesai', 'Semua']
+const TABS = [
+  { value: 'Aktif', key: 'events.tabActive' },
+  { value: 'Selesai', key: 'events.tabDone' },
+  { value: 'Semua', key: 'events.tabAll' },
+]
 
 export default function EventsPage() {
   const { toast } = useToast()
+  const { t } = useLang()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Aktif')
 
   useEffect(() => {
     eventsService.getAll().then(setEvents)
-      .catch(err => toast.error(err.message || 'Gagal memuat events.'))
+      .catch(err => toast.error(err.message || t('events.loadFailed')))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -31,20 +37,20 @@ export default function EventsPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Events & Kegiatan" subtitle="Acara dan kegiatan gereja" />
+      <GradientHeader title={t('events.title')} subtitle={t('events.subtitle')} />
 
       <div className="px-4 -mt-2 pt-4">
         {/* Tabs */}
         <div className="flex gap-2 mb-4">
-          {TABS.map(t => (
+          {TABS.map(({ value, key }) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={value}
+              onClick={() => setTab(value)}
               className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition ${
-                tab === t ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'
+                tab === value ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'
               }`}
             >
-              {t}
+              {t(key)}
             </button>
           ))}
         </div>
@@ -52,7 +58,7 @@ export default function EventsPage() {
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
 
         {!loading && filtered.length === 0 && (
-          <EmptyState icon={Calendar} title="Belum ada event" description="Belum ada kegiatan untuk kategori ini." />
+          <EmptyState icon={Calendar} title={t('events.empty')} description={t('events.emptyDesc')} />
         )}
 
         {/* Featured event ala Stitch */}
@@ -66,7 +72,7 @@ export default function EventsPage() {
               <div className="absolute top-3 right-3"><StatusBadge status={featured.status} /></div>
               <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
                 <span className="inline-block px-2.5 py-1 rounded-full bg-surface/90 text-brand-600 text-[11px] font-semibold mb-2">
-                  EVENT UTAMA
+                  {t('events.featured')}
                 </span>
                 <h3 className="text-xl font-bold text-white">{featured.name}</h3>
                 <div className="flex flex-wrap items-center gap-3 mt-1.5 text-white/90 text-xs">

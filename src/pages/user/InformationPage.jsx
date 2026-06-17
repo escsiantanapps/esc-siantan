@@ -4,9 +4,11 @@ import { Bell, BookOpen, ChevronRight, Clock, MapPin } from 'lucide-react'
 import { newsService, classesService } from '@/services/contentService'
 import { Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
 import Carousel from '@/components/Carousel'
+import { useLang } from '@/hooks/useLang'
 import { formatDate, truncate } from '@/lib/utils'
 
 export default function InformationPage() {
+  const { t } = useLang()
   const [news, setNews] = useState([])
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -20,7 +22,7 @@ export default function InformationPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Informasi" subtitle="Pengumuman & kelas pembinaan gereja" />
+      <GradientHeader title={t('info.title')} subtitle={t('info.subtitle')} />
 
       <div className="px-4 -mt-2 pt-4 space-y-7">
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
@@ -30,10 +32,10 @@ export default function InformationPage() {
             {/* Section: Pengumuman */}
             <section>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">Pengumuman</h3>
+                <h3 className="text-sm font-semibold text-gray-900">{t('info.announcements')}</h3>
               </div>
               {news.length === 0 ? (
-                <EmptyState icon={Bell} title="Belum ada pengumuman" description="Pengumuman terbaru akan muncul di sini." />
+                <EmptyState icon={Bell} title={t('info.noAnnouncements')} description={t('info.noAnnouncementsDesc')} />
               ) : (
                 <Carousel
                   items={news.slice(0, 8)}
@@ -51,7 +53,7 @@ export default function InformationPage() {
                             )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
                           <span className="absolute top-3 left-3 bg-surface/90 text-brand-600 text-[11px] font-semibold px-2.5 py-1 rounded-full">
-                            PENGUMUMAN
+                            {t('info.announcementTag')}
                           </span>
                         </div>
                         <div className="p-3.5">
@@ -69,13 +71,13 @@ export default function InformationPage() {
             {/* Section: Kelas */}
             <section>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">Kelas & Pembinaan</h3>
+                <h3 className="text-sm font-semibold text-gray-900">{t('info.classesSection')}</h3>
                 <Link to="/kelas" className="text-xs text-brand-500 flex items-center gap-0.5">
-                  Semua <ChevronRight size={13} />
+                  {t('common.all')} <ChevronRight size={13} />
                 </Link>
               </div>
               {classes.length === 0 ? (
-                <EmptyState icon={BookOpen} title="Belum ada kelas" description="Kelas pembinaan akan muncul di sini." />
+                <EmptyState icon={BookOpen} title={t('info.noClasses')} description={t('info.noClassesDesc')} />
               ) : (
                 <Carousel
                   items={classes.slice(0, 8)}

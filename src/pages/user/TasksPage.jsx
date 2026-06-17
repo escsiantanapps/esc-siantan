@@ -5,11 +5,13 @@ import { useAuth } from '@/hooks/useAuth'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { Card, GradientHeader, Spinner, EmptyState } from '@/components/ui'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { startOfWeek } from 'date-fns'
 
 export default function TasksPage() {
   const { profile } = useAuth()
   const { toast } = useToast()
+  const { t } = useLang()
   const navigate = useNavigate()
   const [templates, setTemplates] = useState([])
   const [progress, setProgress] = useState({}) // { formId: responseCount }
@@ -38,7 +40,7 @@ export default function TasksPage() {
       )
       setProgress(progressMap)
     } catch (err) {
-      toast.error(err.message || 'Gagal memuat tugas.')
+      toast.error(err.message || t('tasks.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -48,11 +50,11 @@ export default function TasksPage() {
 
   return (
     <div>
-      <GradientHeader title="Tugas Saya" subtitle={`${templates.length} form aktif minggu ini`} />
+      <GradientHeader title={t('tasks.title')} subtitle={t('tasks.subtitle', { count: templates.length })} />
 
       <div className="px-4 py-4 space-y-3">
         {templates.length === 0 && (
-          <EmptyState icon={ClipboardList} title="Belum ada tugas" description="Admin belum membuat tugas untuk kamu saat ini." />
+          <EmptyState icon={ClipboardList} title={t('tasks.empty')} description={t('tasks.emptyDesc')} />
         )}
 
         {templates.map(t => {
@@ -82,11 +84,11 @@ export default function TasksPage() {
                 <div className="flex items-center justify-between mb-1.5">
                   {complete ? (
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-700 text-[11px] font-semibold">
-                      <CheckCircle size={13} /> Selesai
+                      <CheckCircle size={13} /> {t('tasks.done')}
                     </span>
                   ) : (
                     <span className="px-3 py-1 rounded-full bg-brand-100 text-brand-700 text-[11px] font-semibold">
-                      {done} dari {target} target — Berjalan
+                      {t('tasks.progress', { done, target })}
                     </span>
                   )}
                   <span className="text-[11px] font-semibold text-gray-400">{Math.round(pct)}%</span>

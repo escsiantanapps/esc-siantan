@@ -4,24 +4,26 @@ import { BookOpen, MapPin, Clock, QrCode } from 'lucide-react'
 import { classesService } from '@/services/contentService'
 import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 
 export default function ClassesPage() {
   const { toast } = useToast()
+  const { t } = useLang()
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     classesService.getAll().then(setClasses)
-      .catch(err => toast.error(err.message || 'Gagal memuat kelas.'))
+      .catch(err => toast.error(err.message || t('classes.loadFailed')))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Kelas & Pembinaan" subtitle="Kelas pembinaan jemaat">
+      <GradientHeader title={t('classes.title')} subtitle={t('classes.subtitle')}>
         <Link to="/kelas/absen" className="mt-3 inline-flex items-center gap-2 bg-white/20 text-white text-sm font-medium px-4 py-2 rounded-xl hover:bg-white/30 transition-colors">
-          <QrCode size={16} /> Scan Absensi
+          <QrCode size={16} /> {t('classes.scanAttendance')}
         </Link>
       </GradientHeader>
 
@@ -29,7 +31,7 @@ export default function ClassesPage() {
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
 
         {!loading && classes.length === 0 && (
-          <EmptyState icon={BookOpen} title="Belum ada kelas" description="Kelas pembinaan akan muncul di sini." />
+          <EmptyState icon={BookOpen} title={t('classes.empty')} description={t('classes.emptyDesc')} />
         )}
 
         {/* Kartu kelas dengan cover ala Stitch */}
