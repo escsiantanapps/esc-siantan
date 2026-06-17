@@ -115,6 +115,11 @@ h1, h2, h3 {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Animasi langit di profil (matahari/bulan/bintang) */
+@keyframes floatX { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-10px); } }
+@keyframes floatY { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes twinkle { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.15); } }
+
 .animate-toast-in {
   animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

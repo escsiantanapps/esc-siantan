@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
 import { Card, Badge, StatusBadge, Spinner, Button, ThemeToggle } from '@/components/ui'
 import PushToggle from '@/components/PushToggle'
+import SkyTime from '@/components/SkyTime'
 import { formatDate, hitungUmur, formatPhone } from '@/lib/utils'
 
 export default function ProfilePage() {
@@ -55,8 +56,10 @@ export default function ProfilePage() {
 
   return (
     <div className="pb-6">
-      {/* Hero banner ala Stitch */}
-      <div className="gradient-main h-32 rounded-b-[2rem]" />
+      {/* Hero banner ala Stitch + animasi langit (jam, matahari/bulan) */}
+      <div className="gradient-main h-32 rounded-b-[2rem] relative overflow-hidden">
+        <SkyTime />
+      </div>
       <div className="px-4 -mt-14">
         <div className="flex items-end justify-between gap-3">
           <div className="w-24 h-24 rounded-3xl ring-4 ring-surface shadow-lg overflow-hidden shrink-0">
