@@ -243,6 +243,53 @@ export const translations = {
     'status.TERPENUHI': 'Terpenuhi',
     'status.PROSES': 'Proses',
     'status.KOSONG': 'Kosong',
+
+    // Bersama
+    'common.contactWa': 'Hubungi via WhatsApp',
+
+    // Detail Info
+    'infoDetail.title': 'Detail Informasi',
+    'infoDetail.notFound': 'Informasi tidak ditemukan',
+
+    // Detail Event
+    'eventDetail.title': 'Detail Event',
+    'eventDetail.notFound': 'Event tidak ditemukan',
+    'eventDetail.registered': 'Kamu sudah terdaftar',
+    'eventDetail.ticket': 'Tiket',
+    'eventDetail.register': 'Daftar Sekarang',
+    'eventDetail.closed': 'Pendaftaran untuk event ini sudah ditutup.',
+    'eventDetail.registerFailed': 'Gagal mendaftar event.',
+
+    // Detail Tugas
+    'taskDetail.deniedTitle': 'Akses Ditolak',
+    'taskDetail.deniedHead': 'Tugas khusus ministry tertentu',
+    'taskDetail.deniedDesc': 'Tugas ini hanya dapat diisi oleh anggota ministry yang ditentukan. Hubungi admin/PKS jika menurut Anda ini keliru.',
+    'taskDetail.fillTitle': 'Isi Tugas',
+    'taskDetail.notFound': 'Tugas tidak ditemukan',
+    'taskDetail.progressWeek': 'Progress minggu ini',
+    'taskDetail.progressMonth': 'Progress bulan ini',
+    'taskDetail.ofTarget': '{done} dari {target} target',
+    'taskDetail.statusDone': 'Selesai',
+    'taskDetail.statusRunning': 'Berjalan',
+    'taskDetail.fillAnswer': 'Isi Jawaban',
+    'taskDetail.noForm': 'Tugas ini tidak memiliki form, klik tombol di bawah untuk menandai selesai.',
+    'taskDetail.choose': 'Pilih...',
+    'taskDetail.submit': 'Kirim Jawaban',
+    'taskDetail.history': 'Riwayat Pengisian',
+    'taskDetail.required': '{label} wajib diisi.',
+    'taskDetail.loadFailed': 'Gagal memuat tugas.',
+    'taskDetail.photoUploaded': 'Foto berhasil diunggah.',
+    'taskDetail.fileUploaded': 'File berhasil diunggah.',
+    'taskDetail.uploadFailed': 'Gagal mengunggah file.',
+    'taskDetail.submitted': 'Jawaban berhasil dikirim.',
+    'taskDetail.submitFailed': 'Gagal mengirim jawaban.',
+
+    // Detail Kelas
+    'classDetail.title': 'Detail Kelas',
+    'classDetail.notFound': 'Kelas tidak ditemukan',
+    'classDetail.attendNow': 'Absen Sekarang',
+    'classDetail.myHistory': 'Riwayat Kehadiran Saya',
+    'classDetail.noHistory': 'Belum ada riwayat kehadiran untuk kelas ini.',
   },
   en: {
     'nav.home': 'Home',
@@ -476,5 +523,52 @@ export const translations = {
     'status.TERPENUHI': 'Fulfilled',
     'status.PROSES': 'In Progress',
     'status.KOSONG': 'Empty',
+
+    // Shared
+    'common.contactWa': 'Contact via WhatsApp',
+
+    // Info detail
+    'infoDetail.title': 'Information Detail',
+    'infoDetail.notFound': 'Information not found',
+
+    // Event detail
+    'eventDetail.title': 'Event Detail',
+    'eventDetail.notFound': 'Event not found',
+    'eventDetail.registered': 'You are registered',
+    'eventDetail.ticket': 'Ticket',
+    'eventDetail.register': 'Register Now',
+    'eventDetail.closed': 'Registration for this event is closed.',
+    'eventDetail.registerFailed': 'Failed to register for the event.',
+
+    // Task detail
+    'taskDetail.deniedTitle': 'Access Denied',
+    'taskDetail.deniedHead': 'Task restricted to a specific ministry',
+    'taskDetail.deniedDesc': 'This task can only be filled by members of the designated ministry. Contact an admin/PKS if you think this is a mistake.',
+    'taskDetail.fillTitle': 'Fill Task',
+    'taskDetail.notFound': 'Task not found',
+    'taskDetail.progressWeek': 'Progress this week',
+    'taskDetail.progressMonth': 'Progress this month',
+    'taskDetail.ofTarget': '{done} of {target} target',
+    'taskDetail.statusDone': 'Done',
+    'taskDetail.statusRunning': 'In progress',
+    'taskDetail.fillAnswer': 'Fill Answer',
+    'taskDetail.noForm': 'This task has no form, tap the button below to mark it complete.',
+    'taskDetail.choose': 'Select...',
+    'taskDetail.submit': 'Submit Answer',
+    'taskDetail.history': 'Submission History',
+    'taskDetail.required': '{label} is required.',
+    'taskDetail.loadFailed': 'Failed to load task.',
+    'taskDetail.photoUploaded': 'Photo uploaded successfully.',
+    'taskDetail.fileUploaded': 'File uploaded successfully.',
+    'taskDetail.uploadFailed': 'Failed to upload file.',
+    'taskDetail.submitted': 'Answer submitted successfully.',
+    'taskDetail.submitFailed': 'Failed to submit answer.',
+
+    // Class detail
+    'classDetail.title': 'Class Detail',
+    'classDetail.notFound': 'Class not found',
+    'classDetail.attendNow': 'Check In Now',
+    'classDetail.myHistory': 'My Attendance History',
+    'classDetail.noHistory': 'No attendance history for this class yet.',
   },
 }

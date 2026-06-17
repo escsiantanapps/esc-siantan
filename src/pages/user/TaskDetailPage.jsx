@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/useToast'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { Card, Spinner, EmptyState, GradientHeader, Button, Input, Textarea, Select, Checkbox, Badge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
+import { useLang } from '@/hooks/useLang'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 
 export default function TaskDetailPage() {
@@ -14,6 +15,7 @@ export default function TaskDetailPage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { toast } = useToast()
+  const { t } = useLang()
 
   const [template, setTemplate] = useState(null)
   const [responses, setResponses] = useState([])
@@ -43,7 +45,7 @@ export default function TaskDetailPage() {
       setResponses(all.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at)))
       setForm(initialForm(tmpl))
     } catch (err) {
-      setError(err.message || 'Gagal memuat tugas.')
+      setError(err.message || t('taskDetail.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -68,10 +70,10 @@ export default function TaskDetailPage() {
       validateUpload(file, { maxMB: 10, image: field.type === 'image' })
       const url = await tasksService.uploadResponseFile(profile.user_id, file)
       set(field.key, url)
-      toast.success(field.type === 'image' ? 'Foto berhasil diunggah.' : 'File berhasil diunggah.')
+      toast.success(field.type === 'image' ? t('taskDetail.photoUploaded') : t('taskDetail.fileUploaded'))
     } catch (err) {
-      setError(err.message || 'Gagal mengunggah file.')
-      toast.error(err.message || 'Gagal mengunggah file.')
+      setError(err.message || t('taskDetail.uploadFailed'))
+      toast.error(err.message || t('taskDetail.uploadFailed'))
     } finally {
       setUploadingKey(null)
     }
@@ -82,7 +84,7 @@ export default function TaskDetailPage() {
     const fields = template?.fields_json || []
     for (const field of fields) {
       if (field.required && !form[field.key]) {
-        setError(`${field.label} wajib diisi.`)
+        setError(t('taskDetail.required', { label: field.label }))
         return
       }
     }
@@ -97,10 +99,10 @@ export default function TaskDetailPage() {
       const all = await tasksService.getMyResponses(profile.user_id, id)
       setResponses(all.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at)))
       setForm(initialForm(template))
-      toast.success('Jawaban berhasil dikirim.')
+      toast.success(t('taskDetail.submitted'))
     } catch (err) {
-      setError(err.message || 'Gagal mengirim jawaban.')
-      toast.error(err.message || 'Gagal mengirim jawaban.')
+      setError(err.message || t('taskDetail.submitFailed'))
+      toast.error(err.message || t('taskDetail.submitFailed'))
     } finally {
       setSaving(false)
     }
@@ -111,11 +113,11 @@ export default function TaskDetailPage() {
   if (denied) {
     return (
       <div className="pb-4">
-        <GradientHeader title="Akses Ditolak" back={() => navigate('/tugas')} />
+        <GradientHeader title={t('taskDetail.deniedTitle')} back={() => navigate('/tugas')} />
         <EmptyState
           icon={Lock}
-          title="Tugas khusus ministry tertentu"
-          description="Tugas ini hanya dapat diisi oleh anggota ministry yang ditentukan. Hubungi admin/PKS jika menurut Anda ini keliru."
+          title={t('taskDetail.deniedHead')}
+          description={t('taskDetail.deniedDesc')}
         />
       </div>
     )
@@ -124,8 +126,8 @@ export default function TaskDetailPage() {
   if (!template) {
     return (
       <div className="pb-4">
-        <GradientHeader title="Isi Tugas" back={() => navigate('/tugas')} />
-        <EmptyState icon={ClipboardList} title="Tugas tidak ditemukan" />
+        <GradientHeader title={t('taskDetail.fillTitle')} back={() => navigate('/tugas')} />
+        <EmptyState icon={ClipboardList} title={t('taskDetail.notFound')} />
       </div>
     )
   }
@@ -145,11 +147,11 @@ export default function TaskDetailPage() {
         {/* Progress */}
         <Card className="p-4 flex items-center justify-between">
           <div>
-            <p className="text-xs text-gray-400">Progress {template.period === 'bulan' ? 'bulan ini' : 'minggu ini'}</p>
-            <p className="text-sm font-semibold text-gray-900 mt-0.5">{doneThisPeriod} dari {target} target</p>
+            <p className="text-xs text-gray-400">{template.period === 'bulan' ? t('taskDetail.progressMonth') : t('taskDetail.progressWeek')}</p>
+            <p className="text-sm font-semibold text-gray-900 mt-0.5">{t('taskDetail.ofTarget', { done: doneThisPeriod, target })}</p>
           </div>
           <Badge color={complete ? 'green' : doneThisPeriod > 0 ? 'orange' : 'gray'}>
-            {complete ? 'Selesai' : 'Berjalan'}
+            {complete ? t('taskDetail.statusDone') : t('taskDetail.statusRunning')}
           </Badge>
         </Card>
 
@@ -159,10 +161,10 @@ export default function TaskDetailPage() {
 
         {/* Form */}
         <Card className="p-4 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-900">Isi Jawaban</h2>
+          <h2 className="text-sm font-semibold text-gray-900">{t('taskDetail.fillAnswer')}</h2>
 
           {(template.fields_json || []).length === 0 && (
-            <p className="text-sm text-gray-400">Tugas ini tidak memiliki form, klik tombol di bawah untuk menandai selesai.</p>
+            <p className="text-sm text-gray-400">{t('taskDetail.noForm')}</p>
           )}
 
           {(template.fields_json || []).map(field => (
@@ -196,7 +198,7 @@ export default function TaskDetailPage() {
                   value={form[field.key] || ''}
                   onChange={e => set(field.key, e.target.value)}
                 >
-                  <option value="">Pilih...</option>
+                  <option value="">{t('taskDetail.choose')}</option>
                   {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </Select>
               )}
@@ -233,14 +235,14 @@ export default function TaskDetailPage() {
           ))}
 
           <Button className="w-full" loading={saving} onClick={handleSubmit}>
-            Kirim Jawaban
+            {t('taskDetail.submit')}
           </Button>
         </Card>
 
         {/* Riwayat */}
         {responses.length > 0 && (
           <Card className="p-4">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Riwayat Pengisian</h2>
+            <h2 className="text-sm font-semibold text-gray-900 mb-3">{t('taskDetail.history')}</h2>
             <div className="space-y-2">
               {responses.slice(0, 10).map(r => (
                 <div key={r.response_id} className="flex items-center gap-3">

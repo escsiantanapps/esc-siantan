@@ -3,11 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Bell, MessageCircle } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
 
 export default function InformationDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { t } = useLang()
   const [news, setNews] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -17,13 +19,13 @@ export default function InformationDetailPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Detail Informasi" back={() => navigate('/informasi')} />
+      <GradientHeader title={t('infoDetail.title')} back={() => navigate('/informasi')} />
 
       <div className="px-4 pt-4">
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
 
         {!loading && !news && (
-          <EmptyState icon={Bell} title="Informasi tidak ditemukan" />
+          <EmptyState icon={Bell} title={t('infoDetail.notFound')} />
         )}
 
         {!loading && news && (
@@ -45,7 +47,7 @@ export default function InformationDetailPage() {
                   target="_blank" rel="noopener noreferrer"
                 >
                   <Button variant="outline" className="w-full">
-                    <MessageCircle size={16} /> Hubungi via WhatsApp
+                    <MessageCircle size={16} /> {t('common.contactWa')}
                   </Button>
                 </a>
               )}

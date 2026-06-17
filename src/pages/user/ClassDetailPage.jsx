@@ -5,12 +5,14 @@ import { useAuth } from '@/hooks/useAuth'
 import { classesService } from '@/services/contentService'
 import { classAttendanceService } from '@/services/attendanceService'
 import { Card, Spinner, GradientHeader, EmptyState, StatusBadge, Button } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
 
 export default function ClassDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const { t } = useLang()
   const [cls, setCls] = useState(null)
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
@@ -26,13 +28,13 @@ export default function ClassDetailPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Detail Kelas" back={() => navigate('/kelas')} />
+      <GradientHeader title={t('classDetail.title')} back={() => navigate('/kelas')} />
 
       <div className="px-4 pt-4 space-y-4">
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
 
         {!loading && !cls && (
-          <EmptyState icon={BookOpen} title="Kelas tidak ditemukan" />
+          <EmptyState icon={BookOpen} title={t('classDetail.notFound')} />
         )}
 
         {!loading && cls && (
@@ -60,17 +62,17 @@ export default function ClassDetailPage() {
               </div>
 
               <Button className="w-full" onClick={() => navigate('/kelas/absen')}>
-                <QrCode size={16} /> Absen Sekarang
+                <QrCode size={16} /> {t('classDetail.attendNow')}
               </Button>
             </Card>
 
             {/* Riwayat Kehadiran Saya */}
             <Card className="p-4">
               <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <History size={15} className="text-gray-400" /> Riwayat Kehadiran Saya
+                <History size={15} className="text-gray-400" /> {t('classDetail.myHistory')}
               </h2>
               {history.length === 0 ? (
-                <p className="text-sm text-gray-400">Belum ada riwayat kehadiran untuk kelas ini.</p>
+                <p className="text-sm text-gray-400">{t('classDetail.noHistory')}</p>
               ) : (
                 <div className="space-y-2.5">
                   {history.map(h => (
