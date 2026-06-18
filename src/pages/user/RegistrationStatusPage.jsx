@@ -4,10 +4,12 @@ import { Droplets, Heart, Calendar, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { registrationService, eventsService } from '@/services/contentService'
 import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
 
 export default function RegistrationStatusPage() {
   const { profile } = useAuth()
+  const { t } = useLang()
   const [baptism, setBaptism] = useState([])
   const [wedding, setWedding] = useState([])
   const [events, setEvents] = useState([])
@@ -32,18 +34,18 @@ export default function RegistrationStatusPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Status Pendaftaran" subtitle="Riwayat pendaftaran kamu" />
+      <GradientHeader title={t('regStatus.title')} subtitle={t('regStatus.subtitle')} />
 
       <div className="px-4 -mt-2 pt-4 space-y-5">
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
 
         {isEmpty && (
-          <EmptyState icon={ClipboardList} title="Belum ada pendaftaran" description="Riwayat pendaftaran baptisan, pernikahan, dan event kamu akan muncul di sini." />
+          <EmptyState icon={ClipboardList} title={t('regStatus.empty')} description={t('regStatus.emptyDesc')} />
         )}
 
         {!loading && baptism.length > 0 && (
           <div>
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">Baptisan</h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('regStatus.baptism')}</h2>
             <div className="space-y-2.5">
               {baptism.map(item => (
                 <Card key={item.baptism_id} className="p-3.5 flex items-start gap-3">
@@ -52,8 +54,8 @@ export default function RegistrationStatusPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900">{item.full_name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Diajukan {formatDate(item.created_at)}</p>
-                    {item.admin_note && <p className="text-xs text-gray-500 mt-1">Catatan: {item.admin_note}</p>}
+                    <p className="text-xs text-gray-400 mt-0.5">{t('common.submitted')} {formatDate(item.created_at)}</p>
+                    {item.admin_note && <p className="text-xs text-gray-500 mt-1">{t('common.note')}: {item.admin_note}</p>}
                   </div>
                   <StatusBadge status={item.status} />
                 </Card>
@@ -64,7 +66,7 @@ export default function RegistrationStatusPage() {
 
         {!loading && wedding.length > 0 && (
           <div>
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">Pemberkatan Nikah</h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('regStatus.wedding')}</h2>
             <div className="space-y-2.5">
               {wedding.map(item => (
                 <Card key={item.wedding_id} className="p-3.5 flex items-start gap-3">
@@ -73,8 +75,8 @@ export default function RegistrationStatusPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900">{item.groom_name} & {item.bride_name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Diajukan {formatDate(item.created_at)}</p>
-                    {item.admin_note && <p className="text-xs text-gray-500 mt-1">Catatan: {item.admin_note}</p>}
+                    <p className="text-xs text-gray-400 mt-0.5">{t('common.submitted')} {formatDate(item.created_at)}</p>
+                    {item.admin_note && <p className="text-xs text-gray-500 mt-1">{t('common.note')}: {item.admin_note}</p>}
                   </div>
                   <StatusBadge status={item.status} />
                 </Card>
@@ -85,7 +87,7 @@ export default function RegistrationStatusPage() {
 
         {!loading && events.length > 0 && (
           <div>
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">Event</h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('regStatus.event')}</h2>
             <div className="space-y-2.5">
               {events.map(item => (
                 <Link key={item.ticket_id} to={`/events/${item.event_id}`} className="block">

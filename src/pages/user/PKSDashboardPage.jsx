@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/useToast'
 import { komselService } from '@/services/contentService'
 import { evaluationService } from '@/services/evaluationService'
 import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, Select, Input, Button } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
 
 function getMonday(date) {
@@ -25,6 +26,7 @@ function toDateStr(d) {
 export default function PKSDashboardPage() {
   const { profile, logout } = useAuth()
   const { toast, confirm } = useToast()
+  const { t } = useLang()
   const navigate = useNavigate()
   const [tab, setTab] = useState('anggota')
   const [ledKomsels, setLedKomsels] = useState([])
@@ -97,9 +99,9 @@ export default function PKSDashboardPage() {
 
   async function handleLogout() {
     const ok = await confirm({
-      title: 'Keluar dari akun?',
-      message: 'Anda akan keluar dari aplikasi dan perlu masuk kembali.',
-      confirmText: 'Keluar',
+      title: t('settings.logoutTitle'),
+      message: t('settings.logoutMessage'),
+      confirmText: t('common.logout'),
       danger: true,
     })
     if (!ok) return
@@ -130,10 +132,10 @@ export default function PKSDashboardPage() {
       await komselService.submitAttendance(records)
       const hist = await komselService.getAttendanceHistory(selectedId)
       setHistory(hist)
-      toast.success('Absensi berhasil disimpan.')
+      toast.success(t('pks.saveSuccess'))
     } catch (err) {
-      setError(err.message || 'Gagal menyimpan absensi.')
-      toast.error(err.message || 'Gagal menyimpan absensi.')
+      setError(err.message || t('pks.saveFailed'))
+      toast.error(err.message || t('pks.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -142,9 +144,9 @@ export default function PKSDashboardPage() {
   if (!loading && ledKomsels.length === 0) {
     return (
       <div className="pb-4">
-        <GradientHeader title="Dashboard PKS" subtitle="Pemimpin Komsel" />
+        <GradientHeader title={t('pks.title')} subtitle={t('pks.subtitleLeader')} />
         <div className="px-4 pt-4">
-          <EmptyState icon={Users} title="Komsel belum ditetapkan" description="Hubungi admin untuk menetapkan kamu sebagai PKS sebuah komsel." />
+          <EmptyState icon={Users} title={t('pks.noKomsel')} description={t('pks.noKomselDesc')} />
         </div>
       </div>
     )
@@ -152,7 +154,7 @@ export default function PKSDashboardPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Dashboard PKS" subtitle={komsel?.name || 'Komsel'} />
+      <GradientHeader title={t('pks.title')} subtitle={komsel?.name || t('profile.komsel')} />
 
       <div className="px-4 -mt-2 pt-4">
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
@@ -172,32 +174,32 @@ export default function PKSDashboardPage() {
                 onClick={() => setTab('anggota')}
                 className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'anggota' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
-                <Users size={15} /> Anggota
+                <Users size={15} /> {t('pks.tabMembers')}
               </button>
               <button
                 onClick={() => setTab('absensi')}
                 className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'absensi' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
-                <ClipboardCheck size={15} /> Absensi
+                <ClipboardCheck size={15} /> {t('pks.tabAttendance')}
               </button>
               <button
                 onClick={() => setTab('evaluasi')}
                 className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'evaluasi' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
-                <BarChart3 size={15} /> Evaluasi
+                <BarChart3 size={15} /> {t('pks.tabEval')}
               </button>
               <button
                 onClick={() => setTab('profil')}
                 className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'profil' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
-                <UserCircle size={15} /> Profil
+                <UserCircle size={15} /> {t('pks.tabProfile')}
               </button>
             </div>
 
             {tab === 'anggota' && (
               <>
                 {members.length === 0 ? (
-                  <EmptyState icon={Users} title="Belum ada anggota" description="Anggota komsel akan muncul di sini." />
+                  <EmptyState icon={Users} title={t('pks.noMembers')} description={t('pks.noMembersDesc')} />
                 ) : (
                   <Card className="divide-y divide-gray-100">
                     {members.map(m => (
@@ -220,13 +222,13 @@ export default function PKSDashboardPage() {
 
                 {alreadySubmitted ? (
                   <div className="bg-green-50 border border-green-100 text-green-700 text-sm rounded-xl px-4 py-3 mb-4">
-                    Absensi minggu ini sudah diisi. Absensi berikutnya dapat diisi minggu depan.
+                    {t('pks.alreadySubmitted')}
                   </div>
                 ) : members.length === 0 ? (
-                  <EmptyState icon={ClipboardCheck} title="Belum ada anggota" description="Tambahkan anggota komsel terlebih dahulu." />
+                  <EmptyState icon={ClipboardCheck} title={t('pks.noMembers')} description={t('pks.addMembersFirst')} />
                 ) : (
                   <>
-                    <p className="text-xs text-gray-400 mb-2">Absensi untuk {formatDate(new Date())}</p>
+                    <p className="text-xs text-gray-400 mb-2">{t('pks.attendanceFor', { date: formatDate(new Date()) })}</p>
                     <div className="space-y-2.5 mb-4">
                       {members.map(m => (
                         <Card key={m.user_id} className="p-3 space-y-2">
@@ -238,14 +240,14 @@ export default function PKSDashboardPage() {
                                 value={statuses[m.user_id] || 'Hadir'}
                                 onChange={e => setStatuses(p => ({ ...p, [m.user_id]: e.target.value }))}
                               >
-                                <option value="Hadir">Hadir</option>
-                                <option value="Tidak Hadir">Tidak Hadir</option>
-                                <option value="Izin">Izin</option>
+                                <option value="Hadir">{t('status.Hadir')}</option>
+                                <option value="Tidak Hadir">{t('status.Tidak Hadir')}</option>
+                                <option value="Izin">{t('status.Izin')}</option>
                               </Select>
                             </div>
                           </div>
                           <Input
-                            placeholder="Catatan doa (opsional)"
+                            placeholder={t('pks.prayerNote')}
                             value={notes[m.user_id] || ''}
                             onChange={e => setNotes(p => ({ ...p, [m.user_id]: e.target.value }))}
                           />
@@ -253,14 +255,14 @@ export default function PKSDashboardPage() {
                       ))}
                     </div>
                     <Button className="w-full" loading={saving} onClick={handleSubmit}>
-                      <Save size={15} /> Simpan Absensi
+                      <Save size={15} /> {t('pks.saveAttendance')}
                     </Button>
                   </>
                 )}
 
                 {history.length > 0 && (
                   <div className="mt-6">
-                    <h2 className="text-sm font-semibold text-gray-700 mb-2">Riwayat Absensi</h2>
+                    <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('pks.attendanceHistory')}</h2>
                     <Card className="divide-y divide-gray-100">
                       {history.map(h => (
                         <div key={h.attendance_id} className="flex items-center gap-3 p-3">
@@ -283,10 +285,10 @@ export default function PKSDashboardPage() {
                 {evalLoading ? (
                   <div className="flex justify-center py-8"><Spinner /></div>
                 ) : members.length === 0 ? (
-                  <EmptyState icon={BarChart3} title="Belum ada anggota" description="Anggota komsel akan muncul di sini." />
+                  <EmptyState icon={BarChart3} title={t('pks.noMembers')} description={t('pks.noMembersDesc')} />
                 ) : (
                   <>
-                    <p className="text-xs text-gray-400 mb-2">Evaluasi tugas bulan ini ({formatDate(startOfMonth(new Date()))} – {formatDate(new Date())})</p>
+                    <p className="text-xs text-gray-400 mb-2">{t('pks.evalThisMonth', { start: formatDate(startOfMonth(new Date())), end: formatDate(new Date()) })}</p>
                     <Card className="divide-y divide-gray-100">
                       {members.map(m => {
                         const rows = evalByUser[m.user_id] || []
@@ -302,7 +304,7 @@ export default function PKSDashboardPage() {
                             <Avatar name={m.name} src={m.photo_url} size="sm" />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                              <p className="text-xs text-gray-400">{total > 0 ? `${done}/${total} form terpenuhi` : 'Tidak ada form aktif'}</p>
+                              <p className="text-xs text-gray-400">{total > 0 ? t('pks.formsFulfilled', { done, total }) : t('pks.noActiveForm')}</p>
                             </div>
                             <StatusBadge status={overall} />
                           </div>
@@ -318,10 +320,10 @@ export default function PKSDashboardPage() {
               <Card className="p-6 flex flex-col items-center text-center">
                 <Avatar name={profile?.name} src={profile?.photo_url} size="xl" />
                 <p className="text-base font-semibold text-gray-900 mt-3">{profile?.name}</p>
-                <Badge color="orange" className="mt-1.5">Koordinator Komsel</Badge>
+                <Badge color="orange" className="mt-1.5">{t('pks.coordinator')}</Badge>
                 <p className="text-sm text-gray-400 mt-1">{komsel?.name}</p>
                 <Button variant="outline" className="w-full mt-6" onClick={handleLogout}>
-                  <LogOut size={15} /> Keluar
+                  <LogOut size={15} /> {t('common.logout')}
                 </Button>
               </Card>
             )}
