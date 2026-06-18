@@ -5,19 +5,21 @@ import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
 import { Card, Button, Input, Textarea, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
 import Uploader from '@/components/Uploader'
+import { useLang } from '@/hooks/useLang'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 
-const STEPS = ['Data Diri', 'Keluarga', 'Kerohanian', 'Dokumen']
+const STEP_KEYS = ['baptism.step0', 'baptism.step1', 'baptism.step2', 'baptism.step3']
 
 const DOCS = [
-  { key: 'ktp', label: 'Foto KTP / Kartu Keluarga' },
-  { key: 'foto', label: 'Pas Foto Terbaru' },
+  { key: 'ktp', labelKey: 'baptism.docKtp' },
+  { key: 'foto', labelKey: 'baptism.docFoto' },
 ]
 
 export default function BaptismPage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { toast } = useToast()
+  const { t } = useLang()
 
   const [loading, setLoading] = useState(true)
   const [existing, setExisting] = useState(null)
@@ -57,10 +59,10 @@ export default function BaptismPage() {
       validateUpload(file, { maxMB: 8 })
       const url = await registrationService.uploadDocument(`baptism/${profile.user_id}`, file)
       setDoc(key, url)
-      toast.success('Dokumen berhasil diunggah.')
+      toast.success(t('common.docUploaded'))
     } catch (err) {
-      setError(err.message || 'Gagal mengunggah dokumen.')
-      toast.error(err.message || 'Gagal mengunggah dokumen.')
+      setError(err.message || t('common.docUploadFailed'))
+      toast.error(err.message || t('common.docUploadFailed'))
     } finally {
       setUploadingKey(null)
     }
@@ -68,8 +70,8 @@ export default function BaptismPage() {
 
   function validateStep() {
     if (step === 0) {
-      if (!form.full_name.trim()) return 'Nama lengkap wajib diisi.'
-      if (!form.birth_date) return 'Tanggal lahir wajib diisi.'
+      if (!form.full_name.trim()) return t('baptism.nameRequired')
+      if (!form.birth_date) return t('baptism.birthRequired')
     }
     return ''
   }
@@ -78,7 +80,7 @@ export default function BaptismPage() {
     const err = validateStep()
     if (err) { setError(err); return }
     setError('')
-    setStep(s => Math.min(s + 1, STEPS.length - 1))
+    setStep(s => Math.min(s + 1, STEP_KEYS.length - 1))
   }
 
   function back() {
@@ -92,10 +94,10 @@ export default function BaptismPage() {
     try {
       const result = await registrationService.submitBaptism({ ...form, user_id: profile.user_id })
       setExisting(result)
-      toast.success('Pendaftaran baptisan berhasil dikirim.')
+      toast.success(t('baptism.submitted'))
     } catch (err) {
-      setError(err.message || 'Gagal mengirim pendaftaran.')
-      toast.error(err.message || 'Gagal mengirim pendaftaran.')
+      setError(err.message || t('common.submitRegFailed'))
+      toast.error(err.message || t('common.submitRegFailed'))
     } finally {
       setSaving(false)
     }
@@ -106,22 +108,22 @@ export default function BaptismPage() {
   if (existing) {
     return (
       <div className="pb-4">
-        <GradientHeader title="Pendaftaran Baptisan" subtitle="Status pendaftaran kamu" back={() => navigate('/')} />
+        <GradientHeader title={t('baptism.title')} subtitle={t('common.regStatusSub')} back={() => navigate('/')} />
         <div className="px-4 py-4 space-y-3">
           <Card className="p-4 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-gray-900">{existing.full_name}</p>
               <StatusBadge status={existing.status} />
             </div>
-            <p className="text-xs text-gray-400">Diajukan {formatDate(existing.created_at)}</p>
+            <p className="text-xs text-gray-400">{t('common.submitted')} {formatDate(existing.created_at)}</p>
             {existing.scheduled_at && (
-              <p className="text-sm text-gray-600">Dijadwalkan: {formatDate(existing.scheduled_at, 'd MMMM yyyy, HH:mm')}</p>
+              <p className="text-sm text-gray-600">{t('common.scheduled')}: {formatDate(existing.scheduled_at, 'd MMMM yyyy, HH:mm')}</p>
             )}
             {existing.admin_note && (
               <div className="bg-brand-50 border border-brand-100 rounded-xl px-3 py-2 text-sm text-brand-700">{existing.admin_note}</div>
             )}
           </Card>
-          <p className="text-xs text-gray-400 text-center">Pendaftaran sedang diproses. Kamu akan dihubungi melalui WhatsApp untuk informasi lebih lanjut.</p>
+          <p className="text-xs text-gray-400 text-center">{t('baptism.processing')}</p>
         </div>
       </div>
     )
@@ -129,9 +131,9 @@ export default function BaptismPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Pendaftaran Baptisan" subtitle={`Langkah ${step + 1} dari ${STEPS.length}: ${STEPS[step]}`} back={() => navigate('/')}>
+      <GradientHeader title={t('baptism.title')} subtitle={t('common.stepOf', { n: step + 1, total: STEP_KEYS.length, name: t(STEP_KEYS[step]) })} back={() => navigate('/')}>
         <div className="flex gap-1.5 mt-3">
-          {STEPS.map((_, i) => (
+          {STEP_KEYS.map((_, i) => (
             <div key={i} className={`h-1.5 flex-1 rounded-full ${i <= step ? 'bg-white' : 'bg-white/25'}`} />
           ))}
         </div>
@@ -145,26 +147,26 @@ export default function BaptismPage() {
         <Card className="p-4 space-y-4">
           {step === 0 && (
             <>
-              <Input label="Nama Lengkap" required value={form.full_name} onChange={e => set('full_name', e.target.value)} />
-              <Input label="Tanggal Lahir" type="date" required value={form.birth_date} onChange={e => set('birth_date', e.target.value)} />
-              <Input label="Tempat Lahir" placeholder="Kota kelahiran" value={form.birth_place} onChange={e => set('birth_place', e.target.value)} />
-              <Input label="NIK" placeholder="Nomor Induk Kependudukan" value={form.nik} onChange={e => set('nik', e.target.value)} />
-              <Textarea label="Alamat Lengkap" value={form.address} onChange={e => set('address', e.target.value)} />
+              <Input label={t('common.fullName')} required value={form.full_name} onChange={e => set('full_name', e.target.value)} />
+              <Input label={t('common.birthDate')} type="date" required value={form.birth_date} onChange={e => set('birth_date', e.target.value)} />
+              <Input label={t('common.birthPlace')} placeholder={t('common.birthPlacePh')} value={form.birth_place} onChange={e => set('birth_place', e.target.value)} />
+              <Input label={t('baptism.nik')} placeholder={t('baptism.nikPh')} value={form.nik} onChange={e => set('nik', e.target.value)} />
+              <Textarea label={t('common.fullAddress')} value={form.address} onChange={e => set('address', e.target.value)} />
             </>
           )}
 
           {step === 1 && (
             <>
-              <Input label="Nama Ayah" value={form.father_name} onChange={e => set('father_name', e.target.value)} />
-              <Input label="Nama Ibu" value={form.mother_name} onChange={e => set('mother_name', e.target.value)} />
+              <Input label={t('common.fatherName')} value={form.father_name} onChange={e => set('father_name', e.target.value)} />
+              <Input label={t('common.motherName')} value={form.mother_name} onChange={e => set('mother_name', e.target.value)} />
             </>
           )}
 
           {step === 2 && (
             <>
-              <Input label="Pembimbing / Penanggung Jawab" placeholder="Nama pembimbing rohani" value={form.supervisor} onChange={e => set('supervisor', e.target.value)} />
-              <Input label="Kelas Persiapan yang Sudah Diikuti" placeholder="cth. Kelas Baptisan Tahap 1" value={form.class_done} onChange={e => set('class_done', e.target.value)} />
-              <Textarea label="Kesaksian / Alasan Ingin Dibaptis" rows={5} value={form.testimony} onChange={e => set('testimony', e.target.value)} />
+              <Input label={t('baptism.supervisor')} placeholder={t('baptism.supervisorPh')} value={form.supervisor} onChange={e => set('supervisor', e.target.value)} />
+              <Input label={t('baptism.classDone')} placeholder={t('baptism.classDonePh')} value={form.class_done} onChange={e => set('class_done', e.target.value)} />
+              <Textarea label={t('baptism.testimony')} rows={5} value={form.testimony} onChange={e => set('testimony', e.target.value)} />
             </>
           )}
 
@@ -172,20 +174,20 @@ export default function BaptismPage() {
             <>
               {DOCS.map(doc => (
                 <Uploader
-                  key={doc.key} kind="file" label={doc.label}
+                  key={doc.key} kind="file" label={t(doc.labelKey)}
                   value={form.documents[doc.key]} uploading={uploadingKey === doc.key}
                   onFile={file => handleFile(doc.key, file)} onClear={() => setDoc(doc.key, '')}
                 />
               ))}
-              <p className="text-xs text-gray-400">Dokumen bersifat opsional, dapat dilengkapi kemudian saat wawancara.</p>
+              <p className="text-xs text-gray-400">{t('baptism.docsOptional')}</p>
             </>
           )}
         </Card>
 
         <div className="flex gap-2">
-          {step > 0 && <Button variant="outline" className="flex-1" onClick={back}>Kembali</Button>}
-          {step < STEPS.length - 1 && <Button className="flex-1" onClick={next}>Lanjut</Button>}
-          {step === STEPS.length - 1 && <Button className="flex-1" loading={saving} onClick={handleSubmit}>Kirim Pendaftaran</Button>}
+          {step > 0 && <Button variant="outline" className="flex-1" onClick={back}>{t('common.back')}</Button>}
+          {step < STEP_KEYS.length - 1 && <Button className="flex-1" onClick={next}>{t('common.next')}</Button>}
+          {step === STEP_KEYS.length - 1 && <Button className="flex-1" loading={saving} onClick={handleSubmit}>{t('common.submitRegistration')}</Button>}
         </div>
       </div>
     </div>

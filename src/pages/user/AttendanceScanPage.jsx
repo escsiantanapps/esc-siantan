@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { classesService, eventsService } from '@/services/contentService'
 import { classAttendanceService, eventAttendanceService } from '@/services/attendanceService'
 import { Card, Spinner, GradientHeader, Button } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 
 const CLASS_PREFIX = 'ESC-ABSEN:'
 const EVENT_PREFIX = 'ESC-EVENT:'
@@ -12,6 +13,7 @@ const EVENT_PREFIX = 'ESC-EVENT:'
 export default function AttendanceScanPage() {
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const { t } = useLang()
   const [ready, setReady] = useState(false)
   const [result, setResult] = useState(null)
   const scannerRef = useRef(null)
@@ -30,7 +32,7 @@ export default function AttendanceScanPage() {
         handleScan,
         () => {}
       ).then(() => !cancelled && setReady(true))
-        .catch(() => setResult({ type: 'error', message: 'Tidak dapat mengakses kamera. Pastikan izin kamera diaktifkan.' }))
+        .catch(() => setResult({ type: 'error', message: t('scan.cameraError') }))
     })
 
     return () => {
@@ -58,15 +60,15 @@ export default function AttendanceScanPage() {
     const sessionNo = sessionStr ? Number(sessionStr) : null
     try {
       const cls = await classesService.getById(classId)
-      const label = `kelas "${cls.name}"${sessionNo ? ` — Sesi ${sessionNo}` : ''}`
+      const label = t('scan.classLabel', { name: cls.name }) + (sessionNo ? t('scan.sessionSuffix', { no: sessionNo }) : '')
       try {
         await classAttendanceService.checkIn(classId, profile.user_id, sessionNo)
-        setResult({ type: 'success', message: `Absen berhasil untuk ${label}.` })
+        setResult({ type: 'success', message: t('scan.classSuccess', { label }) })
       } catch (err) {
-        setResult({ type: 'duplicate', message: err.message || `Kamu sudah absen untuk ${label}.` })
+        setResult({ type: 'duplicate', message: err.message || t('scan.classDuplicate', { label }) })
       }
     } catch {
-      setResult({ type: 'error', message: 'Kode QR tidak valid atau kelas tidak ditemukan.' })
+      setResult({ type: 'error', message: t('scan.classInvalid') })
     }
   }
 
@@ -75,16 +77,16 @@ export default function AttendanceScanPage() {
       const ev = await eventsService.getById(eventId)
       try {
         await eventAttendanceService.checkIn(eventId, profile.user_id)
-        setResult({ type: 'success', message: `Absen berhasil untuk event "${ev.name}".` })
+        setResult({ type: 'success', message: t('scan.eventSuccess', { name: ev.name }) })
       } catch (err) {
         if (err.message === 'not_registered') {
-          setResult({ type: 'error', message: `Kamu belum mendaftar di event "${ev.name}", jadi belum bisa absen.` })
+          setResult({ type: 'error', message: t('scan.eventNotRegistered', { name: ev.name }) })
         } else {
-          setResult({ type: 'duplicate', message: err.message || `Kamu sudah absen untuk event "${ev.name}".` })
+          setResult({ type: 'duplicate', message: err.message || t('scan.eventDuplicate', { name: ev.name }) })
         }
       }
     } catch {
-      setResult({ type: 'error', message: 'Kode QR tidak valid atau event tidak ditemukan.' })
+      setResult({ type: 'error', message: t('scan.eventInvalid') })
     }
   }
 
@@ -95,7 +97,7 @@ export default function AttendanceScanPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Absensi" subtitle="Pindai kode QR kelas atau event" back={() => navigate(-1)} />
+      <GradientHeader title={t('scan.title')} subtitle={t('scan.subtitle')} back={() => navigate(-1)} />
 
       <div className="px-4 pt-4 space-y-4">
         <Card className={`p-3 overflow-hidden ${result ? 'hidden' : ''}`}>
@@ -103,14 +105,14 @@ export default function AttendanceScanPage() {
           {!ready && (
             <div className="flex flex-col items-center justify-center py-10 gap-2">
               <Spinner />
-              <p className="text-xs text-gray-400">Menyiapkan kamera...</p>
+              <p className="text-xs text-gray-400">{t('scan.preparingCamera')}</p>
             </div>
           )}
         </Card>
 
         {!result && ready && (
           <p className="text-center text-sm text-gray-500 flex items-center justify-center gap-1.5">
-            <ScanLine size={15} /> Arahkan kamera ke kode QR
+            <ScanLine size={15} /> {t('scan.aim')}
           </p>
         )}
 
@@ -120,7 +122,7 @@ export default function AttendanceScanPage() {
             {result.type === 'duplicate' && <CheckCircle2 size={40} className="text-amber-500" />}
             {result.type === 'error' && <XCircle size={40} className="text-red-500" />}
             <p className="text-sm text-gray-700">{result.message}</p>
-            <Button onClick={scanAgain}><RotateCcw size={15} /> Scan Lagi</Button>
+            <Button onClick={scanAgain}><RotateCcw size={15} /> {t('scan.scanAgain')}</Button>
           </Card>
         )}
       </div>

@@ -5,21 +5,23 @@ import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
 import { Card, Button, Input, Textarea, Checkbox, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
 import Uploader from '@/components/Uploader'
+import { useLang } from '@/hooks/useLang'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 
-const STEPS = ['Mempelai Pria', 'Mempelai Wanita', 'Detail Acara', 'Dokumen']
+const STEP_KEYS = ['wedding.step0', 'wedding.step1', 'wedding.step2', 'wedding.step3']
 
 const DOCS = [
-  { key: 'ktp_pria', label: 'KTP Mempelai Pria' },
-  { key: 'ktp_wanita', label: 'KTP Mempelai Wanita' },
-  { key: 'kartu_keluarga', label: 'Kartu Keluarga' },
-  { key: 'surat_baptis', label: 'Surat Baptis (jika ada)' },
+  { key: 'ktp_pria', labelKey: 'wedding.docKtpGroom' },
+  { key: 'ktp_wanita', labelKey: 'wedding.docKtpBride' },
+  { key: 'kartu_keluarga', labelKey: 'wedding.docKK' },
+  { key: 'surat_baptis', labelKey: 'wedding.docBaptism' },
 ]
 
 export default function WeddingPage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { toast } = useToast()
+  const { t } = useLang()
 
   const [loading, setLoading] = useState(true)
   const [existing, setExisting] = useState(null)
@@ -58,18 +60,18 @@ export default function WeddingPage() {
       validateUpload(file, { maxMB: 8 })
       const url = await registrationService.uploadDocument(`wedding/${profile.user_id}`, file)
       setDoc(key, url)
-      toast.success('Dokumen berhasil diunggah.')
+      toast.success(t('common.docUploaded'))
     } catch (err) {
-      setError(err.message || 'Gagal mengunggah dokumen.')
-      toast.error(err.message || 'Gagal mengunggah dokumen.')
+      setError(err.message || t('common.docUploadFailed'))
+      toast.error(err.message || t('common.docUploadFailed'))
     } finally {
       setUploadingKey(null)
     }
   }
 
   function validateStep() {
-    if (step === 0 && !form.groom_name.trim()) return 'Nama mempelai pria wajib diisi.'
-    if (step === 1 && !form.bride_name.trim()) return 'Nama mempelai wanita wajib diisi.'
+    if (step === 0 && !form.groom_name.trim()) return t('wedding.groomNameRequired')
+    if (step === 1 && !form.bride_name.trim()) return t('wedding.brideNameRequired')
     return ''
   }
 
@@ -77,7 +79,7 @@ export default function WeddingPage() {
     const err = validateStep()
     if (err) { setError(err); return }
     setError('')
-    setStep(s => Math.min(s + 1, STEPS.length - 1))
+    setStep(s => Math.min(s + 1, STEP_KEYS.length - 1))
   }
 
   function back() {
@@ -96,10 +98,10 @@ export default function WeddingPage() {
         user_id: profile.user_id,
       })
       setExisting(result)
-      toast.success('Pendaftaran pemberkatan nikah berhasil dikirim.')
+      toast.success(t('wedding.submitted'))
     } catch (err) {
-      setError(err.message || 'Gagal mengirim pendaftaran.')
-      toast.error(err.message || 'Gagal mengirim pendaftaran.')
+      setError(err.message || t('common.submitRegFailed'))
+      toast.error(err.message || t('common.submitRegFailed'))
     } finally {
       setSaving(false)
     }
@@ -110,25 +112,25 @@ export default function WeddingPage() {
   if (existing) {
     return (
       <div className="pb-4">
-        <GradientHeader title="Pemberkatan Nikah" subtitle="Status pendaftaran kamu" back={() => navigate('/')} />
+        <GradientHeader title={t('wedding.title')} subtitle={t('common.regStatusSub')} back={() => navigate('/')} />
         <div className="px-4 py-4 space-y-3">
           <Card className="p-4 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-gray-900">{existing.groom_name} & {existing.bride_name}</p>
               <StatusBadge status={existing.status} />
             </div>
-            <p className="text-xs text-gray-400">Diajukan {formatDate(existing.created_at)}</p>
+            <p className="text-xs text-gray-400">{t('common.submitted')} {formatDate(existing.created_at)}</p>
             {existing.planned_date && (
-              <p className="text-sm text-gray-600">Rencana tanggal: {formatDate(existing.planned_date)}</p>
+              <p className="text-sm text-gray-600">{t('wedding.plannedDateLabel')}: {formatDate(existing.planned_date)}</p>
             )}
             {existing.scheduled_at && (
-              <p className="text-sm text-gray-600">Dijadwalkan: {formatDate(existing.scheduled_at, 'd MMMM yyyy, HH:mm')}</p>
+              <p className="text-sm text-gray-600">{t('common.scheduled')}: {formatDate(existing.scheduled_at, 'd MMMM yyyy, HH:mm')}</p>
             )}
             {existing.admin_note && (
               <div className="bg-brand-50 border border-brand-100 rounded-xl px-3 py-2 text-sm text-brand-700">{existing.admin_note}</div>
             )}
           </Card>
-          <p className="text-xs text-gray-400 text-center">Pendaftaran sedang diproses. Tim gereja akan menghubungi melalui WhatsApp untuk konfirmasi jadwal.</p>
+          <p className="text-xs text-gray-400 text-center">{t('wedding.processing')}</p>
         </div>
       </div>
     )
@@ -136,9 +138,9 @@ export default function WeddingPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Pemberkatan Nikah" subtitle={`Langkah ${step + 1} dari ${STEPS.length}: ${STEPS[step]}`} back={() => navigate('/')}>
+      <GradientHeader title={t('wedding.title')} subtitle={t('common.stepOf', { n: step + 1, total: STEP_KEYS.length, name: t(STEP_KEYS[step]) })} back={() => navigate('/')}>
         <div className="flex gap-1.5 mt-3">
-          {STEPS.map((_, i) => (
+          {STEP_KEYS.map((_, i) => (
             <div key={i} className={`h-1.5 flex-1 rounded-full ${i <= step ? 'bg-white' : 'bg-white/25'}`} />
           ))}
         </div>
@@ -152,32 +154,32 @@ export default function WeddingPage() {
         <Card className="p-4 space-y-4">
           {step === 0 && (
             <>
-              <Input label="Nama Lengkap Mempelai Pria" required value={form.groom_name} onChange={e => set('groom_name', e.target.value)} />
-              <Input label="Tanggal Lahir" type="date" value={form.groom_birth_date} onChange={e => set('groom_birth_date', e.target.value)} />
-              <Input label="No. HP / WhatsApp" type="tel" value={form.groom_phone} onChange={e => set('groom_phone', e.target.value)} />
-              <Input label="Nama Ayah" value={form.groom_father} onChange={e => set('groom_father', e.target.value)} />
-              <Input label="Nama Ibu" value={form.groom_mother} onChange={e => set('groom_mother', e.target.value)} />
-              <Checkbox label="Sudah dibaptis" checked={form.groom_baptized} onChange={e => set('groom_baptized', e.target.checked)} />
+              <Input label={t('wedding.groomName')} required value={form.groom_name} onChange={e => set('groom_name', e.target.value)} />
+              <Input label={t('common.birthDate')} type="date" value={form.groom_birth_date} onChange={e => set('groom_birth_date', e.target.value)} />
+              <Input label={t('common.phoneWa')} type="tel" value={form.groom_phone} onChange={e => set('groom_phone', e.target.value)} />
+              <Input label={t('common.fatherName')} value={form.groom_father} onChange={e => set('groom_father', e.target.value)} />
+              <Input label={t('common.motherName')} value={form.groom_mother} onChange={e => set('groom_mother', e.target.value)} />
+              <Checkbox label={t('wedding.baptized')} checked={form.groom_baptized} onChange={e => set('groom_baptized', e.target.checked)} />
             </>
           )}
 
           {step === 1 && (
             <>
-              <Input label="Nama Lengkap Mempelai Wanita" required value={form.bride_name} onChange={e => set('bride_name', e.target.value)} />
-              <Input label="Tanggal Lahir" type="date" value={form.bride_birth_date} onChange={e => set('bride_birth_date', e.target.value)} />
-              <Input label="No. HP / WhatsApp" type="tel" value={form.bride_phone} onChange={e => set('bride_phone', e.target.value)} />
-              <Input label="Nama Ayah" value={form.bride_father} onChange={e => set('bride_father', e.target.value)} />
-              <Input label="Nama Ibu" value={form.bride_mother} onChange={e => set('bride_mother', e.target.value)} />
-              <Checkbox label="Sudah dibaptis" checked={form.bride_baptized} onChange={e => set('bride_baptized', e.target.checked)} />
+              <Input label={t('wedding.brideName')} required value={form.bride_name} onChange={e => set('bride_name', e.target.value)} />
+              <Input label={t('common.birthDate')} type="date" value={form.bride_birth_date} onChange={e => set('bride_birth_date', e.target.value)} />
+              <Input label={t('common.phoneWa')} type="tel" value={form.bride_phone} onChange={e => set('bride_phone', e.target.value)} />
+              <Input label={t('common.fatherName')} value={form.bride_father} onChange={e => set('bride_father', e.target.value)} />
+              <Input label={t('common.motherName')} value={form.bride_mother} onChange={e => set('bride_mother', e.target.value)} />
+              <Checkbox label={t('wedding.baptized')} checked={form.bride_baptized} onChange={e => set('bride_baptized', e.target.checked)} />
             </>
           )}
 
           {step === 2 && (
             <>
-              <Input label="Rencana Tanggal Pemberkatan" type="date" value={form.planned_date} onChange={e => set('planned_date', e.target.value)} />
-              <Input label="Estimasi Jumlah Tamu" type="number" placeholder="cth. 100" value={form.estimated_guests} onChange={e => set('estimated_guests', e.target.value)} />
-              <Input label="Pendeta yang Diharapkan" placeholder="Opsional" value={form.preferred_pastor} onChange={e => set('preferred_pastor', e.target.value)} />
-              <Textarea label="Catatan Tambahan" rows={4} placeholder="Permintaan khusus, dll." value={form.special_notes} onChange={e => set('special_notes', e.target.value)} />
+              <Input label={t('wedding.plannedDate')} type="date" value={form.planned_date} onChange={e => set('planned_date', e.target.value)} />
+              <Input label={t('wedding.estGuests')} type="number" placeholder={t('wedding.estGuestsPh')} value={form.estimated_guests} onChange={e => set('estimated_guests', e.target.value)} />
+              <Input label={t('wedding.pastor')} placeholder={t('wedding.pastorPh')} value={form.preferred_pastor} onChange={e => set('preferred_pastor', e.target.value)} />
+              <Textarea label={t('wedding.notes')} rows={4} placeholder={t('wedding.notesPh')} value={form.special_notes} onChange={e => set('special_notes', e.target.value)} />
             </>
           )}
 
@@ -185,20 +187,20 @@ export default function WeddingPage() {
             <>
               {DOCS.map(doc => (
                 <Uploader
-                  key={doc.key} kind="file" label={doc.label}
+                  key={doc.key} kind="file" label={t(doc.labelKey)}
                   value={form.documents[doc.key]} uploading={uploadingKey === doc.key}
                   onFile={file => handleFile(doc.key, file)} onClear={() => setDoc(doc.key, '')}
                 />
               ))}
-              <p className="text-xs text-gray-400">Dokumen bersifat opsional, dapat dilengkapi kemudian saat konsultasi.</p>
+              <p className="text-xs text-gray-400">{t('wedding.docsOptional')}</p>
             </>
           )}
         </Card>
 
         <div className="flex gap-2">
-          {step > 0 && <Button variant="outline" className="flex-1" onClick={back}>Kembali</Button>}
-          {step < STEPS.length - 1 && <Button className="flex-1" onClick={next}>Lanjut</Button>}
-          {step === STEPS.length - 1 && <Button className="flex-1" loading={saving} onClick={handleSubmit}>Kirim Pendaftaran</Button>}
+          {step > 0 && <Button variant="outline" className="flex-1" onClick={back}>{t('common.back')}</Button>}
+          {step < STEP_KEYS.length - 1 && <Button className="flex-1" onClick={next}>{t('common.next')}</Button>}
+          {step === STEP_KEYS.length - 1 && <Button className="flex-1" loading={saving} onClick={handleSubmit}>{t('common.submitRegistration')}</Button>}
         </div>
       </div>
     </div>

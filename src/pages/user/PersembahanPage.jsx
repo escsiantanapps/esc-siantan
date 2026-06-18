@@ -5,11 +5,13 @@ import { useToast } from '@/hooks/useToast'
 import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsService'
 import { Card, Spinner, GradientHeader, Button, Input, Select, Textarea, StatusBadge, EmptyState } from '@/components/ui'
 import Uploader from '@/components/Uploader'
+import { useLang } from '@/hooks/useLang'
 import { formatDate, formatRupiah, validateUpload, compressImage } from '@/lib/utils'
 
 export default function PersembahanPage() {
   const { profile } = useAuth()
   const { toast } = useToast()
+  const { t } = useLang()
   const [accounts, setAccounts] = useState([])
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
@@ -58,10 +60,10 @@ export default function PersembahanPage() {
       validateUpload(file, { maxMB: 8 })
       const url = await offeringsService.uploadProof(profile.user_id, file)
       set('proof_url', url)
-      toast.success('Bukti berhasil diunggah.')
+      toast.success(t('offering.proofUploaded'))
     } catch (err) {
-      setError(err.message || 'Gagal mengunggah bukti.')
-      toast.error(err.message || 'Gagal mengunggah bukti.')
+      setError(err.message || t('offering.proofFailed'))
+      toast.error(err.message || t('offering.proofFailed'))
     } finally {
       setUploading(false)
     }
@@ -70,7 +72,7 @@ export default function PersembahanPage() {
   async function handleSubmit() {
     setError('')
     const amount = Number(String(form.amount).replace(/\D/g, ''))
-    if (!amount || amount <= 0) { setError('Nominal persembahan wajib diisi.'); return }
+    if (!amount || amount <= 0) { setError(t('offering.amountRequired')); return }
     setSaving(true)
     try {
       await offeringsService.create({
@@ -81,11 +83,11 @@ export default function PersembahanPage() {
         proof_url: form.proof_url,
       })
       setForm({ category: 'Perpuluhan', amount: '', note: '', proof_url: '' })
-      toast.success('Terima kasih! Persembahan Anda telah dicatat.')
+      toast.success(t('offering.created'))
       load()
     } catch (err) {
-      setError(err.message || 'Gagal mencatat persembahan.')
-      toast.error(err.message || 'Gagal mencatat persembahan.')
+      setError(err.message || t('offering.createFailed'))
+      toast.error(err.message || t('offering.createFailed'))
     } finally {
       setSaving(false)
     }
@@ -96,7 +98,7 @@ export default function PersembahanPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title="Persembahan" subtitle="Beri persembahan & catat untuk bendahara" />
+      <GradientHeader title={t('offering.title')} subtitle={t('offering.subtitle')} />
 
       <div className="px-4 -mt-2 pt-4 space-y-5">
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
@@ -106,11 +108,11 @@ export default function PersembahanPage() {
             {/* Cara memberi */}
             {accounts.length === 0 ? (
               <Card className="p-4">
-                <p className="text-sm text-gray-400">Informasi rekening/QRIS belum tersedia. Hubungi admin gereja.</p>
+                <p className="text-sm text-gray-400">{t('offering.noAccounts')}</p>
               </Card>
             ) : (
               <section className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-900">Cara Memberi</h3>
+                <h3 className="text-sm font-semibold text-gray-900">{t('offering.howToGive')}</h3>
 
                 {qris.map(a => (
                   <Card key={a.id} className="p-4 text-center">
@@ -119,7 +121,7 @@ export default function PersembahanPage() {
                     </p>
                     {a.image_url
                       ? <img src={a.image_url} alt="QRIS" className="w-full max-w-xs mx-auto rounded-xl border border-gray-100" />
-                      : <p className="text-xs text-gray-400">Gambar QRIS belum diunggah.</p>}
+                      : <p className="text-xs text-gray-400">{t('offering.qrisNotUploaded')}</p>}
                     {a.account_name && <p className="text-xs text-gray-400 mt-2">a.n. {a.account_name}</p>}
                   </Card>
                 ))}
@@ -146,37 +148,37 @@ export default function PersembahanPage() {
 
             {/* Catat persembahan */}
             <section>
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Catat Persembahan</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('offering.record')}</h3>
               <Card className="p-4 space-y-4">
                 {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
-                <Select label="Kategori" value={form.category} onChange={e => set('category', e.target.value)}>
+                <Select label={t('offering.category')} value={form.category} onChange={e => set('category', e.target.value)}>
                   {OFFERING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </Select>
                 <Input
-                  label="Nominal (Rp)" inputMode="numeric" placeholder="cth: 50.000"
+                  label={t('offering.amount')} inputMode="numeric" placeholder={t('offering.amountPh')}
                   value={form.amount ? Number(String(form.amount).replace(/\D/g, '')).toLocaleString('id-ID') : ''}
                   onChange={e => set('amount', e.target.value.replace(/\D/g, ''))}
                 />
-                <Textarea label="Catatan (opsional)" rows={2} value={form.note} onChange={e => set('note', e.target.value)} />
+                <Textarea label={t('offering.noteOptional')} rows={2} value={form.note} onChange={e => set('note', e.target.value)} />
                 <Uploader
-                  kind="image" label="Bukti Transfer (opsional)" hint="Foto bukti, maks 8 MB"
+                  kind="image" label={t('offering.proof')} hint={t('offering.proofHint')}
                   value={form.proof_url} uploading={uploading}
                   onFile={handleProof} onClear={() => set('proof_url', '')}
                 />
                 <Button className="w-full" loading={saving} onClick={handleSubmit}>
-                  <HandCoins size={16} /> Catat Persembahan
+                  <HandCoins size={16} /> {t('offering.record')}
                 </Button>
                 <p className="text-xs text-gray-400 text-center">
-                  Pencatatan ini membantu bendahara. Pastikan Anda sudah transfer/scan QRIS terlebih dahulu.
+                  {t('offering.recordHint')}
                 </p>
               </Card>
             </section>
 
             {/* Riwayat */}
             <section>
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Riwayat Saya</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('offering.myHistory')}</h3>
               {history.length === 0 ? (
-                <EmptyState icon={HandCoins} title="Belum ada catatan" description="Persembahan yang Anda catat akan muncul di sini." />
+                <EmptyState icon={HandCoins} title={t('offering.noHistory')} description={t('offering.noHistoryDesc')} />
               ) : (
                 <Card className="divide-y divide-gray-100">
                   {history.map(o => (
