@@ -484,6 +484,9 @@ export const translations = {
     'adash.regQueue': 'Antrian Pendaftaran',
     'adash.view': 'Lihat',
     'adash.noQueue': 'Tidak ada antrian',
+    'adash.birthdays': 'Ulang Tahun',
+    'adash.birthdaysN': '{n} jemaat',
+    'adash.noBirthdays': 'Tidak ada yang berulang tahun bulan ini',
 
     // Statistik Jemaat (MemberStats)
     'stats.title': 'Statistik Jemaat',
@@ -1285,6 +1288,9 @@ export const translations = {
     'adash.regQueue': 'Registration Queue',
     'adash.view': 'View',
     'adash.noQueue': 'No queue',
+    'adash.birthdays': 'Birthdays',
+    'adash.birthdaysN': '{n} member(s)',
+    'adash.noBirthdays': 'No birthdays this month',
 
     // Member statistics
     'stats.title': 'Member Statistics',

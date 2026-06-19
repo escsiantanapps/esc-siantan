@@ -67,7 +67,9 @@ export default function NotificationBell() {
         id: 'tasks', icon: ClipboardList,
         title: `${incomplete} tugas belum selesai`,
         subtitle: 'Minggu ini — ketuk untuk mengisi',
-        time: new Date().toISOString(),
+        // Waktu = awal minggu (stabil), bukan "sekarang", agar badge tidak
+        // muncul lagi setiap halaman dibuka padahal notifikasi sudah dilihat.
+        time: weekStart,
         to: '/tugas',
       })
     } catch { /* abaikan */ }

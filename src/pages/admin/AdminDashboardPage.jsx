@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus } from 'lucide-react'
+import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake } from 'lucide-react'
 import { startOfWeek } from 'date-fns'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -16,6 +16,8 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState({ members: 0, events: 0, tasks: 0, sp: 0, baptism: 0, wedding: 0, pendingUsers: 0 })
   const [recentMembers, setRecentMembers] = useState([])
   const [pendingRegs, setPendingRegs] = useState([])
+  const [birthdays, setBirthdays] = useState([])
+  const [bdayMonth, setBdayMonth] = useState(new Date().getMonth()) // 0-11, default bulan ini
   const [evalSummary, setEvalSummary] = useState({ TERPENUHI: 0, PROSES: 0, KOSONG: 0 })
   const [evalLoading, setEvalLoading] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -24,7 +26,7 @@ export default function AdminDashboardPage() {
 
   async function loadDashboard() {
     try {
-      const [members, events, tasks, spUsers, baptism, wedding, pendingUsers, newMembers, pending] = await Promise.all([
+      const [members, events, tasks, spUsers, baptism, wedding, pendingUsers, newMembers, pending, bdays] = await Promise.all([
         supabase.from('users').select('*', { count: 'exact', head: true }),
         supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'Aktif'),
         supabase.from('form_templates').select('*', { count: 'exact', head: true }),
@@ -34,6 +36,7 @@ export default function AdminDashboardPage() {
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('status', 'Menunggu Persetujuan'),
         supabase.from('users').select('name, role, status, created_at').order('created_at', { ascending: false }).limit(5),
         supabase.from('baptism_registrations').select('baptism_id, full_name, status, created_at').eq('status', 'Menunggu').limit(3),
+        supabase.from('users').select('user_id, name, photo_url, birth_date').not('birth_date', 'is', null),
       ])
       setStats({
         members: members.count || 0,
@@ -46,6 +49,7 @@ export default function AdminDashboardPage() {
       })
       setRecentMembers(newMembers.data || [])
       setPendingRegs(pending.data || [])
+      setBirthdays(bdays.data || [])
     } finally {
       setLoading(false)
     }
@@ -77,6 +81,13 @@ export default function AdminDashboardPage() {
     { label: t('adash.weddingQueue'),  value: stats.wedding,     icon: Heart,         color: 'text-pink-500',   bg: 'bg-pink-50',   to: '/admin/nikah' },
   ]
 
+  // Ulang tahun pada bulan terpilih. Parse string 'YYYY-MM-DD' langsung agar
+  // bebas dari pergeseran zona waktu.
+  const monthBirthdays = birthdays
+    .filter(m => m.birth_date && Number(m.birth_date.slice(5, 7)) - 1 === bdayMonth)
+    .sort((a, b) => Number(a.birth_date.slice(8, 10)) - Number(b.birth_date.slice(8, 10)))
+  const monthNames = Array.from({ length: 12 }, (_, i) => formatDate(new Date(2000, i, 1), 'MMMM'))
+
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner size="lg" /></div>
 
   return (
@@ -106,6 +117,47 @@ export default function AdminDashboardPage() {
 
       {/* Statistik umur & gender jemaat */}
       <MemberStats />
+
+      {/* Ulang Tahun pada bulan terpilih */}
+      <Card className="p-4 mb-6">
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-pink-50 flex items-center justify-center shrink-0">
+              <Cake size={18} className="text-pink-500" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-gray-900">{t('adash.birthdays')}</h3>
+              <p className="text-xs text-gray-400">{t('adash.birthdaysN', { n: monthBirthdays.length })}</p>
+            </div>
+          </div>
+          <select
+            value={bdayMonth}
+            onChange={e => setBdayMonth(Number(e.target.value))}
+            className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-surface text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          >
+            {monthNames.map((name, i) => <option key={i} value={i}>{name}</option>)}
+          </select>
+        </div>
+        {monthBirthdays.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">{t('adash.noBirthdays')}</p>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-3">
+            {monthBirthdays.map(m => (
+              <Link key={m.user_id} to={`/admin/jemaat/${m.user_id}`} className="flex items-center gap-3 group">
+                <div className="w-9 h-9 rounded-full overflow-hidden bg-pink-100 flex items-center justify-center text-pink-600 text-xs font-bold shrink-0">
+                  {m.photo_url
+                    ? <img src={m.photo_url} alt={m.name} className="w-full h-full object-cover" />
+                    : (m.name?.slice(0, 2).toUpperCase())}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate group-hover:text-brand-600 transition-colors">{m.name}</p>
+                  <p className="text-xs text-gray-400">{formatDate(m.birth_date, 'd MMMM')}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Evaluasi Minggu Ini */}
       <Card className="p-4 mb-6">
