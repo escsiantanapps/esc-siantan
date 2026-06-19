@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Camera } from 'lucide-react'
+import { Camera, X } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
@@ -28,6 +28,20 @@ export default function EditProfilePage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Volunteer dapat memilih sendiri ministry tempat ia melayani.
+  const canServe = profile?.role === 'Volunteer'
+  const [ministries, setMinistries] = useState([])
+  const [ministryIds, setMinistryIds] = useState(profile?.ministry_ids || [])
+
+  useEffect(() => {
+    if (canServe) usersService.getAllMinistries().then(setMinistries).catch(() => {})
+  }, [canServe])
+
+  const availableMinistries = ministries.filter(m => !ministryIds.includes(m.ministry_id))
+  const ministryName = id => ministries.find(m => m.ministry_id === id)?.name || id
+  function addMinistry(id) { if (id && !ministryIds.includes(id)) setMinistryIds(p => [...p, id]) }
+  function removeMinistry(id) { setMinistryIds(p => p.filter(x => x !== id)) }
+
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
   async function handlePhotoChange(e) {
@@ -53,11 +67,13 @@ export default function EditProfilePage() {
     if (!form.name.trim()) { setError('Nama tidak boleh kosong.'); return }
     setError(''); setSaving(true)
     try {
+      if (canServe) await usersService.setUserMinistries(profile.user_id, ministryIds)
       await updateProfile({
         ...form,
         gender: form.gender || null,
         blood_type: form.blood_type || null,
         birth_date: form.birth_date || null,
+        ...(canServe ? { ministry_ids: ministryIds } : {}),
       })
       toast.success('Profil berhasil disimpan.')
       navigate('/profil')
@@ -109,6 +125,27 @@ export default function EditProfilePage() {
           {['A', 'B', 'AB', 'O'].map(b => <option key={b}>{b}</option>)}
         </Select>
         <Input label="Instagram / Sosial Media" placeholder="@username" value={form.social_media} onChange={e => set('social_media', e.target.value)} />
+
+        {/* Pelayanan (khusus Volunteer) */}
+        {canServe && (
+          <div>
+            <Select label="Saya melayani di (Ministry)" value="" onChange={e => { addMinistry(e.target.value); e.target.value = '' }}>
+              <option value="">+ Tambah ministry...</option>
+              {availableMinistries.map(m => <option key={m.ministry_id} value={m.ministry_id}>{m.name}</option>)}
+            </Select>
+            {ministryIds.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {ministryIds.map(id => (
+                  <span key={id} className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 text-xs font-medium px-2.5 py-1 rounded-full">
+                    {ministryName(id)}
+                    <button type="button" onClick={() => removeMinistry(id)} className="hover:text-brand-900" aria-label="Hapus"><X size={12} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {ministries.length === 0 && <p className="text-xs text-gray-400 mt-1">Belum ada data ministry.</p>}
+          </div>
+        )}
 
         <div className="flex gap-2 pt-2">
           <Button variant="outline" className="flex-1" onClick={() => navigate('/profil')}>Batal</Button>

@@ -66,7 +66,11 @@ export function Textarea({ label, error, required, rows = 3, className = '', ...
 }
 
 // ─── Select ──────────────────────────────────────────────
-export function Select({ label, error, required, children, className = '', ...props }) {
+// Ikon chevron kustom menggantikan panah bawaan browser yang tidak konsisten.
+const SELECT_CHEVRON =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")"
+
+export function Select({ label, error, required, children, className = '', style, ...props }) {
   return (
     <div className="space-y-1">
       {label && (
@@ -75,8 +79,9 @@ export function Select({ label, error, required, children, className = '', ...pr
         </label>
       )}
       <select
-        className={`w-full px-3 py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition
+        className={`appearance-none w-full pl-3 pr-10 py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition cursor-pointer
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
+        style={{ backgroundImage: SELECT_CHEVRON, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.7rem center', backgroundSize: '1.1em', ...style }}
         {...props}
       >
         {children}

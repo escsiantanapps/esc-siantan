@@ -129,9 +129,12 @@ export function AuthProvider({ children }) {
   }
 
   async function updateProfile(updates) {
+    // ministry_ids bukan kolom tabel (dinormalisasi ke user_ministries) — jangan
+    // dikirim ke update users, tapi tetap pakai untuk menyegarkan state lokal.
+    const { ministry_ids, user_ministries, ...scalar } = updates
     const { error } = await supabase
       .from('users')
-      .update(updates)
+      .update(scalar)
       .eq('auth_id', user.id)
     if (error) throw error
     setProfile(prev => ({ ...prev, ...updates }))

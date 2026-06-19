@@ -432,6 +432,10 @@ CREATE POLICY "um_select" ON user_ministries FOR SELECT USING (
 CREATE POLICY "um_admin_write" ON user_ministries FOR ALL
   USING (auth_user_role() IN ('Admin', 'Super Admin'))
   WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+-- User (mis. Volunteer) boleh mengelola ministry-nya SENDIRI (pilih tempat melayani).
+CREATE POLICY "um_self_write" ON user_ministries FOR ALL
+  USING (user_id = auth_user_id())
+  WITH CHECK (user_id = auth_user_id());
 
 -- ── template_ministries ──
 CREATE POLICY "tm_select" ON template_ministries FOR SELECT USING (true);
