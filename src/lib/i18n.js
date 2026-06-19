@@ -660,6 +660,14 @@ export const translations = {
     'akom.assignFailed': 'Gagal menetapkan PKS.',
     'akom.removed': '{name} dicabut dari PKS.',
     'akom.removeFailed': 'Gagal mencabut PKS.',
+
+    // Admin — Baptis & Nikah (daftar)
+    'areg.count': '{count} pendaftaran',
+    'areg.emptyDesc': 'Pendaftaran dari jemaat akan muncul di sini.',
+    'abap.title': 'Pendaftaran Baptisan',
+    'abap.empty': 'Belum ada pendaftaran baptisan',
+    'awed.title': 'Pemberkatan Nikah',
+    'awed.empty': 'Belum ada pendaftaran pemberkatan nikah',
   },
   en: {
     'nav.home': 'Home',
@@ -1310,5 +1318,13 @@ export const translations = {
     'akom.assignFailed': 'Failed to assign PKS.',
     'akom.removed': '{name} removed from PKS.',
     'akom.removeFailed': 'Failed to remove PKS.',
+
+    // Admin — Baptism & Wedding (lists)
+    'areg.count': '{count} registrations',
+    'areg.emptyDesc': 'Registrations from members will appear here.',
+    'abap.title': 'Baptism Registrations',
+    'abap.empty': 'No baptism registrations yet',
+    'awed.title': 'Wedding Blessings',
+    'awed.empty': 'No wedding blessing registrations yet',
   },
 }

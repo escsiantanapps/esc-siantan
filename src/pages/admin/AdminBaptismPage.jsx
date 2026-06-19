@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom'
 import { Droplets, ChevronRight } from 'lucide-react'
 import { registrationService } from '@/services/contentService'
 import { Card, Select, PageHeader, Spinner, EmptyState, StatusBadge } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 import { formatDate, formatPhone } from '@/lib/utils'
 
 const STATUSES = ['Menunggu', 'Sedang Ditinjau', 'Disetujui', 'Terjadwal', 'Selesai', 'Ditolak']
 
 export default function AdminBaptismPage() {
+  const { t } = useLang()
   const [registrations, setRegistrations] = useState([])
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
@@ -22,19 +24,19 @@ export default function AdminBaptismPage() {
 
   return (
     <div>
-      <PageHeader title="Pendaftaran Baptisan" subtitle={`${registrations.length} pendaftaran`} />
+      <PageHeader title={t('abap.title')} subtitle={t('areg.count', { count: registrations.length })} />
 
       <div className="mb-4 max-w-xs">
         <Select value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="">Semua Status</option>
-          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          <option value="">{t('amem.allStatus')}</option>
+          {STATUSES.map(s => <option key={s} value={s}>{t(`status.${s}`)}</option>)}
         </Select>
       </div>
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
       {!loading && registrations.length === 0 && (
-        <EmptyState icon={Droplets} title="Belum ada pendaftaran baptisan" description="Pendaftaran dari jemaat akan muncul di sini." />
+        <EmptyState icon={Droplets} title={t('abap.empty')} description={t('areg.emptyDesc')} />
       )}
 
       {!loading && registrations.length > 0 && (
