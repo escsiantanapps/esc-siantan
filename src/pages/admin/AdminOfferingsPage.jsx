@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { HandCoins, Plus, Pencil, Trash2, X, Printer, Check, Building2, QrCode } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsService'
 import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, StatusBadge, Avatar, Badge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
@@ -13,6 +14,7 @@ const emptyAcc = { kind: 'bank', label: '', account_no: '', account_name: '', im
 export default function AdminOfferingsPage() {
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
+  const { t } = useLang()
   const [tab, setTab] = useState('rekap')
 
   const [items, setItems] = useState([])
@@ -55,49 +57,49 @@ export default function AdminOfferingsPage() {
   async function verify(o, st) {
     try {
       await offeringsService.setStatus(o.offering_id, st, profile.user_id)
-      toast.success(st === 'Terverifikasi' ? 'Persembahan diverifikasi.' : 'Persembahan ditolak.')
+      toast.success(st === 'Terverifikasi' ? t('aoff.verifiedToast') : t('aoff.rejectedToast'))
       loadRekap()
     } catch (err) {
-      toast.error(err.message || 'Gagal memperbarui status.')
+      toast.error(err.message || t('aoff.statusFailed'))
     }
   }
 
   async function removeOffering(o) {
-    const ok = await confirm({ title: 'Hapus catatan?', message: `Catatan ${formatRupiah(o.amount)} akan dihapus.`, confirmText: 'Hapus', danger: true })
+    const ok = await confirm({ title: t('aoff.deleteRecTitle'), message: t('aoff.deleteRecMsg', { amount: formatRupiah(o.amount) }), confirmText: t('a.delete'), danger: true })
     if (!ok) return
     try {
       await offeringsService.delete(o.offering_id)
-      toast.success('Catatan dihapus.')
+      toast.success(t('aoff.recDeleted'))
       loadRekap()
     } catch (err) {
-      toast.error(err.message || 'Gagal menghapus.')
+      toast.error(err.message || t('aoff.deleteFailed'))
     }
   }
 
   function archive() {
     const periode = (startDate || endDate)
-      ? `${startDate ? formatDate(startDate) : 'awal'} – ${endDate ? formatDate(endDate) : 'kini'}`
-      : 'Semua waktu'
+      ? `${startDate ? formatDate(startDate) : t('aoff.arcStart')} – ${endDate ? formatDate(endDate) : t('aoff.arcNow')}`
+      : t('aoff.arcAllTime')
     const documents = items.filter(o => o.proof_url).map(o => ({
       label: `${o.users?.name || '-'} · ${formatRupiah(o.amount)}`, url: o.proof_url,
     }))
     printArchive({
-      title: 'Arsip Persembahan',
+      title: t('aoff.arcTitle'),
       meta: [
-        ['Periode', periode],
-        ['Kategori', category || 'Semua'],
-        ['Status', status || 'Semua'],
-        ['Total terverifikasi', `${formatRupiah(totals.verifiedSum)} (${totals.verifiedCount} catatan)`],
+        [t('aoff.arcPeriod'), periode],
+        [t('aoff.category'), category || t('aoff.all')],
+        [t('aoff.statusLabel'), status || t('aoff.all')],
+        [t('aoff.arcTotalVerified'), `${formatRupiah(totals.verifiedSum)} (${t('aoff.recordsN', { n: totals.verifiedCount })})`],
       ],
       sections: [{
-        title: 'Daftar Persembahan',
+        title: t('aoff.arcList'),
         rows: items.map(o => [
           `${formatDate(o.created_at)} · ${o.users?.name || '-'}`,
           `${o.category} — ${formatRupiah(o.amount)} (${o.status})`,
         ]),
       }],
       documents,
-      footer: `Dicetak ${formatDate(new Date(), 'd MMMM yyyy, HH:mm')}`,
+      footer: t('aoff.arcPrinted', { date: formatDate(new Date(), 'd MMMM yyyy, HH:mm') }),
     })
   }
 
@@ -111,15 +113,15 @@ export default function AdminOfferingsPage() {
       validateUpload(file, { maxMB: 5, image: true })
       const url = await offeringsService.uploadQris(file)
       setA('image_url', url)
-      toast.success('QRIS diunggah.')
+      toast.success(t('aoff.qrisUploaded'))
     } catch (err) {
-      toast.error(err.message || 'Gagal mengunggah QRIS.')
+      toast.error(err.message || t('aoff.qrisFailed'))
     } finally {
       setAccUploading(false)
     }
   }
   async function saveAcc() {
-    if (!accForm.label.trim()) { toast.error('Label wajib diisi.'); return }
+    if (!accForm.label.trim()) { toast.error(t('aoff.labelRequired')); return }
     setAccSaving(true)
     try {
       await offeringsService.savePaymentAccount({
@@ -129,35 +131,35 @@ export default function AdminOfferingsPage() {
         image_url: accForm.kind === 'qris' ? accForm.image_url : null,
       })
       setAccModal(null)
-      toast.success('Rekening/QRIS disimpan.')
+      toast.success(t('aoff.accSaved'))
       loadAccounts()
     } catch (err) {
-      toast.error(err.message || 'Gagal menyimpan.')
+      toast.error(err.message || t('aoff.accSaveFailed'))
     } finally {
       setAccSaving(false)
     }
   }
   async function deleteAcc(a) {
-    const ok = await confirm({ title: 'Hapus?', message: `"${a.label}" akan dihapus.`, confirmText: 'Hapus', danger: true })
+    const ok = await confirm({ title: t('aoff.deleteAccTitle'), message: t('aoff.deleteAccMsg', { label: a.label }), confirmText: t('a.delete'), danger: true })
     if (!ok) return
-    try { await offeringsService.deletePaymentAccount(a.id); toast.success('Dihapus.'); loadAccounts() }
-    catch (err) { toast.error(err.message || 'Gagal menghapus.') }
+    try { await offeringsService.deletePaymentAccount(a.id); toast.success(t('aoff.accDeleted')); loadAccounts() }
+    catch (err) { toast.error(err.message || t('aoff.deleteFailed')) }
   }
 
   return (
     <div>
       <PageHeader
-        title="Persembahan"
-        subtitle="Rekap & verifikasi persembahan jemaat"
+        title={t('aoff.title')}
+        subtitle={t('aoff.subtitle')}
         action={tab === 'rekap' && items.length > 0
-          ? <Button size="sm" variant="outline" onClick={archive}><Printer size={15} /> Arsip PDF</Button>
+          ? <Button size="sm" variant="outline" onClick={archive}><Printer size={15} /> {t('aoff.archivePdf')}</Button>
           : tab === 'rekening'
-            ? <Button size="sm" onClick={() => openAcc(null)}><Plus size={15} /> Tambah</Button>
+            ? <Button size="sm" onClick={() => openAcc(null)}><Plus size={15} /> {t('a.add')}</Button>
             : null}
       />
 
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
-        {[['rekap', 'Rekap'], ['rekening', 'Kelola Rekening']].map(([k, label]) => (
+        {[['rekap', t('aoff.tabRekap')], ['rekening', t('aoff.tabAccounts')]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === k ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}>
             {label}
@@ -169,36 +171,36 @@ export default function AdminOfferingsPage() {
         <>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <Card className="p-4">
-              <p className="text-xs text-gray-400">Terverifikasi</p>
+              <p className="text-xs text-gray-400">{t('aoff.verified')}</p>
               <p className="text-lg font-bold text-green-600">{formatRupiah(totals.verifiedSum)}</p>
-              <p className="text-[11px] text-gray-400">{totals.verifiedCount} catatan</p>
+              <p className="text-[11px] text-gray-400">{t('aoff.recordsN', { n: totals.verifiedCount })}</p>
             </Card>
             <Card className="p-4">
-              <p className="text-xs text-gray-400">Menunggu verifikasi</p>
+              <p className="text-xs text-gray-400">{t('aoff.pendingVerify')}</p>
               <p className="text-lg font-bold text-amber-600">{totals.pending}</p>
-              <p className="text-[11px] text-gray-400">catatan</p>
+              <p className="text-[11px] text-gray-400">{t('aoff.recordsWord')}</p>
             </Card>
           </div>
 
           <Card className="p-4 mb-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Dari" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-              <Input label="Sampai" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+              <Input label={t('aoff.from')} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              <Input label={t('aoff.to')} type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Select label="Kategori" value={category} onChange={e => setCategory(e.target.value)}>
-                <option value="">Semua</option>
+              <Select label={t('aoff.category')} value={category} onChange={e => setCategory(e.target.value)}>
+                <option value="">{t('aoff.all')}</option>
                 {OFFERING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </Select>
-              <Select label="Status" value={status} onChange={e => setStatus(e.target.value)}>
-                <option value="">Semua</option>
-                {['Menunggu', 'Terverifikasi', 'Ditolak'].map(s => <option key={s} value={s}>{s}</option>)}
+              <Select label={t('aoff.statusLabel')} value={status} onChange={e => setStatus(e.target.value)}>
+                <option value="">{t('aoff.all')}</option>
+                {['Menunggu', 'Terverifikasi', 'Ditolak'].map(s => <option key={s} value={s}>{t(`status.${s}`)}</option>)}
               </Select>
             </div>
           </Card>
 
           {loading && <div className="flex justify-center py-10"><Spinner /></div>}
-          {!loading && items.length === 0 && <EmptyState icon={HandCoins} title="Belum ada persembahan" />}
+          {!loading && items.length === 0 && <EmptyState icon={HandCoins} title={t('aoff.emptyRekap')} />}
           {!loading && items.length > 0 && (
             <Card className="divide-y divide-gray-100">
               {items.map(o => (
@@ -214,16 +216,16 @@ export default function AdminOfferingsPage() {
                   {o.note && <p className="text-xs text-gray-500 mt-1.5">{o.note}</p>}
                   <div className="flex items-center gap-2 mt-2">
                     {o.proof_url && (
-                      <a href={o.proof_url} target="_blank" rel="noreferrer" className="text-xs text-brand-500 underline">Lihat bukti</a>
+                      <a href={o.proof_url} target="_blank" rel="noreferrer" className="text-xs text-brand-500 underline">{t('aoff.viewProof')}</a>
                     )}
                     <div className="flex-1" />
                     {o.status !== 'Terverifikasi' && (
                       <button onClick={() => verify(o, 'Terverifikasi')} className="text-xs text-green-600 hover:underline flex items-center gap-1">
-                        <Check size={13} /> Verifikasi
+                        <Check size={13} /> {t('aoff.verify')}
                       </button>
                     )}
                     {o.status !== 'Ditolak' && (
-                      <button onClick={() => verify(o, 'Ditolak')} className="text-xs text-red-500 hover:underline">Tolak</button>
+                      <button onClick={() => verify(o, 'Ditolak')} className="text-xs text-red-500 hover:underline">{t('aoff.reject')}</button>
                     )}
                     <button onClick={() => removeOffering(o)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
                   </div>
@@ -237,7 +239,7 @@ export default function AdminOfferingsPage() {
       {tab === 'rekening' && (
         <>
           {accounts.length === 0 ? (
-            <EmptyState icon={Building2} title="Belum ada rekening/QRIS" description="Tambahkan rekening bank atau QRIS gereja agar muncul di halaman Persembahan jemaat." />
+            <EmptyState icon={Building2} title={t('aoff.noAccounts')} description={t('aoff.noAccountsDesc')} />
           ) : (
             <Card className="divide-y divide-gray-100">
               {accounts.map(a => (
@@ -248,7 +250,7 @@ export default function AdminOfferingsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900">{a.label} <Badge color="gray" className="ml-1 text-[10px]! py-0!">{a.kind.toUpperCase()}</Badge></p>
                     {a.account_no && <p className="text-xs text-gray-400">{a.account_no}</p>}
-                    {a.account_name && <p className="text-xs text-gray-400">a.n. {a.account_name}</p>}
+                    {a.account_name && <p className="text-xs text-gray-400">a.n. {a.account_name}</p>}{/* a.n. = atas nama */}
                   </div>
                   <button onClick={() => openAcc(a)} className="p-2 text-gray-400 hover:text-brand-500"><Pencil size={16} /></button>
                   <button onClick={() => deleteAcc(a)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
@@ -264,25 +266,25 @@ export default function AdminOfferingsPage() {
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md p-4 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">{accForm.id ? 'Edit' : 'Tambah'} Rekening/QRIS</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{accForm.id ? t('aoff.editAccount') : t('aoff.addAccount')}</h2>
               <button onClick={() => setAccModal(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
-            <Select label="Jenis" value={accForm.kind} onChange={e => setA('kind', e.target.value)}>
-              <option value="bank">Rekening Bank</option>
+            <Select label={t('aoff.kind')} value={accForm.kind} onChange={e => setA('kind', e.target.value)}>
+              <option value="bank">{t('aoff.bankAccount')}</option>
               <option value="qris">QRIS</option>
             </Select>
-            <Input label="Label" placeholder={accForm.kind === 'qris' ? 'cth: QRIS Gereja' : 'cth: BCA'} value={accForm.label} onChange={e => setA('label', e.target.value)} />
+            <Input label={t('aoff.label')} placeholder={accForm.kind === 'qris' ? t('aoff.labelPhQris') : t('aoff.labelPhBank')} value={accForm.label} onChange={e => setA('label', e.target.value)} />
             {accForm.kind === 'bank' && (
-              <Input label="Nomor Rekening" value={accForm.account_no || ''} onChange={e => setA('account_no', e.target.value)} />
+              <Input label={t('aoff.accountNo')} value={accForm.account_no || ''} onChange={e => setA('account_no', e.target.value)} />
             )}
-            <Input label="Atas Nama" value={accForm.account_name || ''} onChange={e => setA('account_name', e.target.value)} />
+            <Input label={t('aoff.accountName')} value={accForm.account_name || ''} onChange={e => setA('account_name', e.target.value)} />
             {accForm.kind === 'qris' && (
-              <Uploader kind="image" label="Gambar QRIS" hint="Foto/screenshot QRIS" value={accForm.image_url} uploading={accUploading} onFile={handleQris} onClear={() => setA('image_url', '')} />
+              <Uploader kind="image" label={t('aoff.qrisImage')} hint={t('aoff.qrisHint')} value={accForm.image_url} uploading={accUploading} onFile={handleQris} onClear={() => setA('image_url', '')} />
             )}
-            <Input label="Urutan" type="number" value={accForm.sort} onChange={e => setA('sort', e.target.value)} />
+            <Input label={t('aoff.sort')} type="number" value={accForm.sort} onChange={e => setA('sort', e.target.value)} />
             <div className="flex gap-2 pt-1">
-              <Button variant="ghost" className="flex-1" onClick={() => setAccModal(null)}>Batal</Button>
-              <Button className="flex-1" loading={accSaving} onClick={saveAcc}>Simpan</Button>
+              <Button variant="ghost" className="flex-1" onClick={() => setAccModal(null)}>{t('a.cancel')}</Button>
+              <Button className="flex-1" loading={accSaving} onClick={saveAcc}>{t('a.save')}</Button>
             </div>
           </Card>
         </div>
