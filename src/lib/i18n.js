@@ -585,6 +585,24 @@ export const translations = {
     'acls.qrHint': 'Tunjukkan/cetak kode Sesi {n} agar jemaat memindai untuk mencatat kehadiran sesi ini.',
     'acls.pushNew': 'Kelas Baru',
     'acls.pushUpdated': 'Kelas Diperbarui',
+
+    // Admin — Tugas
+    'atask.title': 'Form & Tugas',
+    'atask.subtitle': '{count} template tugas',
+    'atask.create': 'Buat Template',
+    'atask.empty': 'Belum ada template tugas',
+    'atask.emptyDesc': 'Buat template untuk mulai mengumpulkan data dari jemaat/volunteer.',
+    'atask.targetLine': 'Target {goal}x / {period} · {fields} field',
+    'atask.perWeek': 'minggu',
+    'atask.perMonth': 'bulan',
+    'atask.answers': 'Jawaban',
+
+    // Admin — Surat Peringatan
+    'asp.title': 'Surat Peringatan (SP)',
+    'asp.subtitle': '{count} jemaat dengan status SP',
+    'asp.all': 'Semua',
+    'asp.none': 'Tidak ada jemaat dengan SP',
+    'asp.noneDesc': 'Semua jemaat dalam status aman.',
   },
   en: {
     'nav.home': 'Home',
@@ -1160,5 +1178,23 @@ export const translations = {
     'acls.qrHint': 'Show/print the Session {n} code for members to scan and record attendance for this session.',
     'acls.pushNew': 'New Class',
     'acls.pushUpdated': 'Class Updated',
+
+    // Admin — Tasks
+    'atask.title': 'Forms & Tasks',
+    'atask.subtitle': '{count} task templates',
+    'atask.create': 'Create Template',
+    'atask.empty': 'No task templates yet',
+    'atask.emptyDesc': 'Create a template to start collecting data from members/volunteers.',
+    'atask.targetLine': 'Target {goal}x / {period} · {fields} fields',
+    'atask.perWeek': 'week',
+    'atask.perMonth': 'month',
+    'atask.answers': 'Responses',
+
+    // Admin — Warning Letters
+    'asp.title': 'Warning Letters',
+    'asp.subtitle': '{count} members with a warning status',
+    'asp.all': 'All',
+    'asp.none': 'No members with a warning',
+    'asp.noneDesc': 'All members are in safe status.',
   },
 }

@@ -3,16 +3,13 @@ import { Link } from 'react-router-dom'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { usersService } from '@/services/usersService'
 import { Card, PageHeader, Spinner, EmptyState, StatusBadge, Avatar } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 import { truncate } from '@/lib/utils'
 
-const TABS = [
-  { value: '', label: 'Semua' },
-  { value: 'SP 1', label: 'SP 1' },
-  { value: 'SP 2', label: 'SP 2' },
-  { value: 'SP 3', label: 'SP 3' },
-]
+const TAB_VALUES = ['', 'SP 1', 'SP 2', 'SP 3']
 
 export default function AdminSPPage() {
+  const { t } = useLang()
   const [members, setMembers] = useState([])
   const [tab, setTab] = useState('')
   const [loading, setLoading] = useState(true)
@@ -33,17 +30,17 @@ export default function AdminSPPage() {
 
   return (
     <div>
-      <PageHeader title="Surat Peringatan (SP)" subtitle={`${members.length} jemaat dengan status SP`} />
+      <PageHeader title={t('asp.title')} subtitle={t('asp.subtitle', { count: members.length })} />
 
       <div className="flex gap-2 mb-4">
-        {TABS.map(t => (
+        {TAB_VALUES.map(v => (
           <button
-            key={t.value}
-            onClick={() => setTab(t.value)}
+            key={v}
+            onClick={() => setTab(v)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-              ${tab === t.value ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+              ${tab === v ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
           >
-            {t.label}
+            {v === '' ? t('asp.all') : t(`status.${v}`)}
           </button>
         ))}
       </div>
@@ -53,7 +50,7 @@ export default function AdminSPPage() {
           {Object.entries(counts).map(([level, count]) => (
             <Card key={level} className="p-4 text-center">
               <p className="text-2xl font-bold text-gray-900">{count}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{level}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t(`status.${level}`)}</p>
             </Card>
           ))}
         </div>
@@ -62,7 +59,7 @@ export default function AdminSPPage() {
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
       {!loading && members.length === 0 && (
-        <EmptyState icon={AlertTriangle} title="Tidak ada jemaat dengan SP" description="Semua jemaat dalam status aman." />
+        <EmptyState icon={AlertTriangle} title={t('asp.none')} description={t('asp.noneDesc')} />
       )}
 
       {!loading && members.length > 0 && (
@@ -72,7 +69,7 @@ export default function AdminSPPage() {
               <Avatar name={m.name} src={m.photo_url} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                <p className="text-xs text-gray-400 truncate">{m.sp_notes ? truncate(m.sp_notes, 60) : m.role}</p>
+                <p className="text-xs text-gray-400 truncate">{m.sp_notes ? truncate(m.sp_notes, 60) : t(`role.${m.role}`)}</p>
               </div>
               <StatusBadge status={m.sp_level} />
               <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
