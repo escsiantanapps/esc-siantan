@@ -130,14 +130,15 @@ h1, h2, h3 {
 /* Domba merumput (menunduk-naik halus) & gembala bergoyang lembut */
 @keyframes graze { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-1.5px) rotate(-4deg); } }
 @keyframes bobSoft { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
-/* Merpati: terbang masuk saat pindah halaman, lalu bertengger (bob halus) */
+/* Merpati: menukik terbang masuk dari kanan-atas saat pindah halaman,
+   sedikit melewati lalu mendarat (bertengger). */
 @keyframes doveFlyIn {
-  0%   { transform: translate(46px, -34px) rotate(10deg); opacity: 0; }
-  55%  { opacity: 1; }
-  100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  0%   { transform: translate(120px, -90px) scale(0.6) rotate(16deg); opacity: 0; }
+  35%  { opacity: 1; }
+  70%  { transform: translate(-8px, 8px) scale(1.06) rotate(-5deg); opacity: 1; }
+  100% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; }
 }
 @keyframes dovePerch { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
-@keyframes doveWing { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-16deg); } }
 
 .animate-toast-in {
   animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
