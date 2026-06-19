@@ -22,18 +22,34 @@ export default function AttendanceScanPage() {
   useEffect(() => {
     let cancelled = false
 
-    import('html5-qrcode').then(({ Html5Qrcode }) => {
+    ;(async () => {
+      const { Html5Qrcode } = await import('html5-qrcode')
       if (cancelled) return
       const scanner = new Html5Qrcode('qr-reader')
       scannerRef.current = scanner
+
+      // Pilih kamera belakang UTAMA (1x). Tanpa ini, di HP multi-lensa browser
+      // sering memilih lensa ultra-wide (0.5x). Hindari label ultra/tele/macro.
+      let camera = { facingMode: 'environment' }
+      try {
+        const cams = await Html5Qrcode.getCameras()
+        if (!cancelled && cams?.length) {
+          const back = cams.filter(c => /back|rear|environment|belakang/i.test(c.label))
+          const pool = back.length ? back : cams
+          const main = pool.find(c => !/(ultra|0\.5|tele|macro|depth|monochrome|fisheye)/i.test(c.label)) || pool[0]
+          if (main?.id) camera = { deviceId: { exact: main.id } }
+        }
+      } catch { /* fallback ke facingMode environment */ }
+      if (cancelled) return
+
       scanner.start(
-        { facingMode: 'environment' },
+        camera,
         { fps: 10, qrbox: 230 },
         handleScan,
         () => {}
       ).then(() => !cancelled && setReady(true))
         .catch(() => setResult({ type: 'error', message: t('scan.cameraError') }))
-    })
+    })()
 
     return () => {
       cancelled = true
