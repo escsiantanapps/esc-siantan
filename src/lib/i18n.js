@@ -101,6 +101,7 @@ export const translations = {
     // Auth — Login
     'auth.loginTitle': 'Masuk ke akun',
     'auth.loginSubtitle': 'Silakan masuk untuk melanjutkan',
+    'auth.welcome': 'Selamat Datang',
     'auth.email': 'Email',
     'auth.password': 'Kata Sandi',
     'auth.loginError': 'Email atau kata sandi salah. Silakan coba lagi.',
@@ -925,6 +926,7 @@ export const translations = {
     // Auth — Login
     'auth.loginTitle': 'Sign in to your account',
     'auth.loginSubtitle': 'Please sign in to continue',
+    'auth.welcome': 'Welcome',
     'auth.email': 'Email',
     'auth.password': 'Password',
     'auth.loginError': 'Wrong email or password. Please try again.',

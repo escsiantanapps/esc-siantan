@@ -47,7 +47,8 @@ export default function LoginPage() {
 
       {/* Kartu kaca */}
       <div className="relative w-full max-w-sm rounded-[1.75rem] border border-white/40 bg-white/15 backdrop-blur-xl shadow-2xl shadow-black/20 px-7 py-8 text-white">
-        <h1 className="font-display text-3xl font-bold tracking-tight">{t('auth.loginTitle')}</h1>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/80">ESC Siantan</p>
+        <h1 className="font-display text-3xl font-bold tracking-tight mt-1">{t('auth.welcome')} 👋</h1>
         <p className="text-sm text-white/85 mt-1.5 mb-7">{t('auth.loginSubtitle')}</p>
 
         {error && (
