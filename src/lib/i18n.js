@@ -9,6 +9,7 @@ export const translations = {
   id: {
     // Navigasi bawah
     'nav.home': 'Beranda',
+    'app.exitConfirm': 'Tekan sekali lagi untuk keluar',
     'nav.info': 'Info',
     'nav.tasks': 'Tugas',
     'nav.profile': 'Profil',
@@ -822,6 +823,7 @@ export const translations = {
   },
   en: {
     'nav.home': 'Home',
+    'app.exitConfirm': 'Press back again to exit',
     'nav.info': 'Info',
     'nav.tasks': 'Tasks',
     'nav.profile': 'Profile',

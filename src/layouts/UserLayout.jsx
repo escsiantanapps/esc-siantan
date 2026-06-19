@@ -1,6 +1,8 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { Home, Newspaper, ClipboardList, User, ScanLine } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
+import { useToast } from '@/hooks/useToast'
+import { useExitConfirm } from '@/hooks/useExitConfirm'
 
 // Item kiri & kanan; tombol Scan disisipkan menonjol di tengah.
 const LEFT_ITEMS = [
@@ -27,6 +29,13 @@ function NavItem({ to, icon: Icon, labelKey, exact }) {
 }
 
 export default function UserLayout() {
+  const location = useLocation()
+  const { toast } = useToast()
+  const { t } = useLang()
+  // Konfirmasi keluar hanya di Beranda (root). Tab lain pakai replace, jadi
+  // back dari tab kembali ke Beranda dulu, baru dari Beranda minta konfirmasi.
+  useExitConfirm(location.pathname === '/', () => toast.info(t('app.exitConfirm')))
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto relative">
       {/* Main content */}

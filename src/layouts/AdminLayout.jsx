@@ -9,6 +9,7 @@ import { useLang } from '@/hooks/useLang'
 import { ThemeToggle, Spinner } from '@/components/ui'
 import { permissionsService } from '@/services/permissionsService'
 import { useBackClose } from '@/hooks/useBackClose'
+import { useExitConfirm } from '@/hooks/useExitConfirm'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 
 function buildMenu(isSuperAdmin, allowedPages) {
@@ -39,10 +40,12 @@ export default function AdminLayout() {
   const [open, setOpen] = useState(false)
   useBackClose(open, () => setOpen(false)) // back menutup sidebar mobile dulu
   const { profile, logout } = useAuth()
-  const { confirm } = useToast()
+  const { toast, confirm } = useToast()
   const { t } = useLang()
   const navigate = useNavigate()
   const location = useLocation()
+  // Konfirmasi keluar saat back di dashboard admin (root panel).
+  useExitConfirm(location.pathname === '/admin', () => toast.info(t('app.exitConfirm')))
 
   const isSuperAdmin = profile?.role === 'Super Admin'
   const isAdminOnly = profile?.role === 'Admin'
