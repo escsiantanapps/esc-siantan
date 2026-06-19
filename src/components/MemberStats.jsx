@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Cake, ChevronRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Card, Spinner } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 import { umurTahun } from '@/lib/utils'
 
 // Kelompok umur (rentang inklusif)
@@ -20,6 +21,7 @@ function initials(name) {
 }
 
 export default function MemberStats() {
+  const { t } = useLang()
   const [members, setMembers] = useState(null)
   const [selected, setSelected] = useState(null) // key bucket terpilih
 
@@ -66,9 +68,9 @@ export default function MemberStats() {
   return (
     <Card className="p-4 mb-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Statistik Jemaat</h3>
+        <h3 className="text-sm font-semibold text-gray-900">{t('stats.title')}</h3>
         <Link to="/admin/jemaat" className="text-xs text-brand-500 flex items-center gap-0.5">
-          Semua <ChevronRight size={13} />
+          {t('adash.all')} <ChevronRight size={13} />
         </Link>
       </div>
 
@@ -79,15 +81,15 @@ export default function MemberStats() {
             <Cake size={18} className="text-brand-500" />
           </div>
           <p className="text-2xl font-bold text-brand-600 leading-none">{avg ?? '-'}</p>
-          <p className="text-[11px] text-gray-500 mt-1">Umur rata-rata</p>
+          <p className="text-[11px] text-gray-500 mt-1">{t('stats.avgAge')}</p>
         </div>
         <div className="rounded-2xl bg-blue-50 p-3 text-center">
           <p className="text-2xl font-bold text-blue-600 leading-none mt-2">{gender.male}</p>
-          <p className="text-[11px] text-gray-500 mt-1">♂ Laki-laki</p>
+          <p className="text-[11px] text-gray-500 mt-1">{t('stats.male')}</p>
         </div>
         <div className="rounded-2xl bg-pink-50 p-3 text-center">
           <p className="text-2xl font-bold text-pink-600 leading-none mt-2">{gender.female}</p>
-          <p className="text-[11px] text-gray-500 mt-1">♀ Perempuan</p>
+          <p className="text-[11px] text-gray-500 mt-1">{t('stats.female')}</p>
         </div>
       </div>
 
@@ -98,14 +100,14 @@ export default function MemberStats() {
           <div className="bg-pink-400" style={{ width: `${femalePct}%` }} />
         </div>
         <div className="flex justify-between text-[11px] text-gray-400 mt-1">
-          <span>Laki-laki {malePct}%</span>
-          {gender.other > 0 && <span>Belum diisi: {gender.other}</span>}
-          <span>Perempuan {femalePct}%</span>
+          <span>{t('stats.maleShort')} {malePct}%</span>
+          {gender.other > 0 && <span>{t('stats.unfilled')}: {gender.other}</span>}
+          <span>{t('stats.femaleShort')} {femalePct}%</span>
         </div>
       </div>
 
       {/* Grafik kelompok umur — klik untuk lihat siapa saja */}
-      <p className="text-xs font-semibold text-gray-500 mb-2">Kelompok Umur <span className="font-normal text-gray-400">(klik untuk lihat anggota)</span></p>
+      <p className="text-xs font-semibold text-gray-500 mb-2">{t('stats.ageGroups')} <span className="font-normal text-gray-400">{t('stats.clickToView')}</span></p>
       <div className="space-y-2">
         {buckets.map(b => {
           const count = b.people.length
@@ -130,17 +132,17 @@ export default function MemberStats() {
       </div>
 
       {withAgeCount === 0 && (
-        <p className="text-xs text-gray-400 text-center mt-3">Belum ada data tanggal lahir jemaat.</p>
+        <p className="text-xs text-gray-400 text-center mt-3">{t('stats.noBirthData')}</p>
       )}
 
       {/* Daftar anggota pada kelompok terpilih */}
       {selectedBucket && (
         <div className="mt-4 border-t border-gray-100 pt-3">
           <p className="text-xs font-semibold text-gray-700 mb-2">
-            Umur {selectedBucket.label} — {selectedBucket.people.length} orang
+            {t('stats.ageRangeCount', { label: selectedBucket.label, count: selectedBucket.people.length })}
           </p>
           {selectedBucket.people.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-2">Tidak ada anggota di kelompok ini.</p>
+            <p className="text-xs text-gray-400 text-center py-2">{t('stats.noneInGroup')}</p>
           ) : (
             <div className="space-y-1.5 max-h-64 overflow-y-auto no-scrollbar">
               {selectedBucket.people
@@ -156,9 +158,9 @@ export default function MemberStats() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
-                      <p className="text-[11px] text-gray-400">{p.gender || 'Gender belum diisi'}</p>
+                      <p className="text-[11px] text-gray-400">{p.gender || t('stats.genderUnfilled')}</p>
                     </div>
-                    <span className="text-xs font-semibold text-brand-600 shrink-0">{p.age} th</span>
+                    <span className="text-xs font-semibold text-brand-600 shrink-0">{p.age} {t('stats.yo')}</span>
                   </Link>
                 ))}
             </div>

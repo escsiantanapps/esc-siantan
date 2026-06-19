@@ -5,29 +5,30 @@ import {
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { ThemeToggle, Spinner } from '@/components/ui'
 import { permissionsService } from '@/services/permissionsService'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 
 function buildMenu(isSuperAdmin, allowedPages) {
   const items = [
-    { section: 'Utama' },
-    { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', exact: true },
+    { section: 'Utama', sectionKey: 'admin.sec.Utama' },
+    { to: '/admin', icon: LayoutDashboard, labelKey: 'admin.nav.dashboard', exact: true },
   ]
 
   let lastSection = 'Utama'
   for (const page of ADMIN_PAGES) {
     if (!isSuperAdmin && allowedPages && !allowedPages.includes(page.to)) continue
     if (page.section !== lastSection) {
-      items.push({ section: page.section })
+      items.push({ section: page.section, sectionKey: page.sectionKey })
       lastSection = page.section
     }
     items.push(page)
   }
 
   if (isSuperAdmin) {
-    items.push({ section: 'Sistem' })
-    items.push({ to: '/admin/hak-akses', icon: KeyRound, label: 'Hak Akses' })
+    items.push({ section: 'Sistem', sectionKey: 'admin.sec.Sistem' })
+    items.push({ to: '/admin/hak-akses', icon: KeyRound, labelKey: 'admin.nav.hakAkses' })
   }
 
   return items
@@ -37,6 +38,7 @@ export default function AdminLayout() {
   const [open, setOpen] = useState(false)
   const { profile, logout } = useAuth()
   const { confirm } = useToast()
+  const { t } = useLang()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -57,9 +59,9 @@ export default function AdminLayout() {
 
   async function handleLogout() {
     const ok = await confirm({
-      title: 'Keluar dari akun?',
-      message: 'Anda akan keluar dari panel admin dan perlu masuk kembali.',
-      confirmText: 'Keluar',
+      title: t('admin.logoutTitle'),
+      message: t('admin.logoutMsg'),
+      confirmText: t('admin.logout'),
       danger: true,
     })
     if (!ok) return
@@ -105,7 +107,7 @@ export default function AdminLayout() {
             </div>
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-900">ESC Siantan</p>
-              <p className="text-xs text-gray-500">Admin Panel</p>
+              <p className="text-xs text-gray-500">{t('admin.panel')}</p>
             </div>
             <ThemeToggle />
           </div>
@@ -120,11 +122,11 @@ export default function AdminLayout() {
                 className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
               >
                 <Smartphone size={14} strokeWidth={1.5} />
-                {isAdminOnly ? 'Panel PKS' : 'Aplikasi'}
+                {isAdminOnly ? t('admin.switchPks') : t('admin.switchApp')}
               </NavLink>
               <span className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold bg-surface text-brand-600 shadow-sm">
                 <ShieldCheck size={14} strokeWidth={2} />
-                Admin
+                {t('admin.adminTab')}
               </span>
             </div>
           </div>
@@ -135,10 +137,10 @@ export default function AdminLayout() {
           {MENU.map((item, i) => {
             if (!item.to) return (
               <p key={i} className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 pt-4 pb-1">
-                {item.section}
+                {item.sectionKey ? t(item.sectionKey) : item.section}
               </p>
             )
-            const { to, icon: Icon, label, exact } = item
+            const { to, icon: Icon, labelKey, label, exact } = item
             return (
               <NavLink key={to} to={to} end={exact}
                 onClick={() => setOpen(false)}
@@ -153,7 +155,7 @@ export default function AdminLayout() {
                 {({ isActive }) => (
                   <>
                     <Icon size={17} strokeWidth={isActive ? 2 : 1.5} />
-                    <span className="flex-1">{label}</span>
+                    <span className="flex-1">{labelKey ? t(labelKey) : label}</span>
                     {isActive && <ChevronRight size={14} />}
                   </>
                 )}
@@ -178,7 +180,7 @@ export default function AdminLayout() {
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors"
           >
             <LogOut size={16} />
-            Keluar
+            {t('admin.logout')}
           </button>
         </div>
       </aside>
@@ -198,7 +200,7 @@ export default function AdminLayout() {
           <button onClick={() => setOpen(true)} className="p-1 text-gray-500">
             <Menu size={22} />
           </button>
-          <span className="font-semibold text-gray-900 text-sm flex-1">ESC Admin</span>
+          <span className="font-semibold text-gray-900 text-sm flex-1">{t('admin.appShort')}</span>
           <ThemeToggle />
         </header>
 
