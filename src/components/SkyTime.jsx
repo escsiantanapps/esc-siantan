@@ -84,13 +84,34 @@ export default function SkyTime() {
 
       {/* Pemandangan gembala & domba di sisi kanan (di atas bukit).
           Ditempatkan di kanan agar tidak tertutup foto profil di kiri. */}
-      {/* Rumah */}
-      <svg className="absolute bottom-3 right-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" width="34" height="30" viewBox="0 0 34 30" fill="none">
+      {/* Rumah — viewBox diperluas ke atas (y negatif) untuk ruang asap.
+          Malam: jendela menyala tetap + asap mengepul dari cerobong. */}
+      <svg className="absolute bottom-3 right-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" width="34" height="44" viewBox="0 -14 34 44" fill="none">
+        {/* Asap cerobong — hanya malam */}
+        {!isDay && (
+          <g fill="#cbd5e1">
+            {[0, 1, 2].map(i => (
+              <circle key={i} cx="24" cy="0" r="1.3" opacity="0">
+                <animate attributeName="cy" values="0;-13" dur="3s" begin={`${i}s`} repeatCount="indefinite" />
+                <animate attributeName="cx" values="24;26.5" dur="3s" begin={`${i}s`} repeatCount="indefinite" />
+                <animate attributeName="r" values="1.1;2.6" dur="3s" begin={`${i}s`} repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0;0.5;0" dur="3s" begin={`${i}s`} repeatCount="indefinite" />
+              </circle>
+            ))}
+          </g>
+        )}
+        {/* Cerobong (digambar sebelum atap agar pangkalnya tertutup atap) */}
+        <rect x="22.5" y="-1" width="3.2" height="9" rx="0.4" fill={isDay ? '#b45309' : '#4c1d95'} />
+        {/* Badan rumah */}
         <rect x="6" y="13" width="22" height="15" rx="1.5" fill={isDay ? '#fef3c7' : '#a5b4fc'} stroke={isDay ? '#d97706' : '#6366f1'} strokeWidth="1" />
+        {/* Atap */}
         <path d="M3 14 L17 3 L31 14 Z" fill={isDay ? '#dc2626' : '#7c3aed'} stroke={isDay ? '#991b1b' : '#5b21b6'} strokeWidth="1" strokeLinejoin="round" />
+        {/* Pintu */}
         <rect x="12.5" y="19" width="7" height="9" rx="0.8" fill={isDay ? '#92400e' : '#4c1d95'} />
-        {/* Jendela — menyala hangat saat malam */}
-        <rect x="20.5" y="16.5" width="5" height="5" rx="0.6" fill={isDay ? '#fffbeb' : '#fde68a'} className={isDay ? '' : 'animate-[twinkle_3.5s_ease-in-out_infinite]'} />
+        {/* Halo cahaya jendela (malam) */}
+        {!isDay && <circle cx="23" cy="19" r="5" fill="#fde68a" opacity="0.5" className="blur-[2px]" />}
+        {/* Jendela — siang redup, malam menyala terang */}
+        <rect x="20.5" y="16.5" width="5" height="5" rx="0.6" fill={isDay ? '#fffbeb' : '#fde047'} />
       </svg>
 
       {/* Domba 1 */}
@@ -106,19 +127,21 @@ export default function SkyTime() {
         <circle cx="4" cy="8.6" r="0.5" fill="#fff" />
       </svg>
 
-      {/* Gembala dengan tongkat */}
-      <svg className="absolute bottom-2 right-[7rem] origin-bottom animate-[bobSoft_6s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" width="20" height="33" viewBox="0 0 20 33" fill="none">
-        {/* Tongkat gembala (crook) */}
-        <path d="M16 6 q2.7 0 2.7 2.7 q0 2.3 -2.5 2.5 M16 6 L15 31" stroke={isDay ? '#a16207' : '#ddd6fe'} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        {/* Jubah */}
-        <path d="M9.5 14 L4 31 L15 31 Z" fill={isDay ? '#2563eb' : '#818cf8'} stroke={isDay ? '#1d4ed8' : '#4f46e5'} strokeWidth="0.6" />
-        {/* Lengan memegang tongkat */}
-        <path d="M9.8 17 L15.5 9.5" stroke={isDay ? '#2563eb' : '#818cf8'} strokeWidth="2.4" strokeLinecap="round" />
-        {/* Kepala */}
-        <circle cx="9.2" cy="9" r="3.5" fill="#f1c27d" />
-        {/* Tudung kepala */}
-        <path d="M5.7 9 a3.5 3.5 0 0 1 7 0 Z" fill={isDay ? '#1e3a8a' : '#3730a3'} />
-      </svg>
+      {/* Gembala dengan tongkat — hanya siang (malam sudah pulang ke rumah) */}
+      {isDay && (
+        <svg className="absolute bottom-2 right-[7rem] origin-bottom animate-[bobSoft_6s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" width="20" height="33" viewBox="0 0 20 33" fill="none">
+          {/* Tongkat gembala (crook) */}
+          <path d="M16 6 q2.7 0 2.7 2.7 q0 2.3 -2.5 2.5 M16 6 L15 31" stroke="#a16207" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          {/* Jubah */}
+          <path d="M9.5 14 L4 31 L15 31 Z" fill="#2563eb" stroke="#1d4ed8" strokeWidth="0.6" />
+          {/* Lengan memegang tongkat */}
+          <path d="M9.8 17 L15.5 9.5" stroke="#2563eb" strokeWidth="2.4" strokeLinecap="round" />
+          {/* Kepala */}
+          <circle cx="9.2" cy="9" r="3.5" fill="#f1c27d" />
+          {/* Tudung kepala */}
+          <path d="M5.7 9 a3.5 3.5 0 0 1 7 0 Z" fill="#1e3a8a" />
+        </svg>
+      )}
 
       {/* Domba 2 (lebih kecil) */}
       <svg className="absolute bottom-1.5 right-[9.5rem] origin-bottom animate-[graze_4.6s_ease-in-out_infinite] [animation-delay:-1.5s] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" width="19" height="14" viewBox="0 0 24 17" fill="none">

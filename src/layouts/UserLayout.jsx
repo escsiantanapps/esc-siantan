@@ -17,7 +17,9 @@ function NavItem({ to, icon: Icon, labelKey, exact }) {
   const { t } = useLang()
   const active = exact ? location.pathname === to : location.pathname.startsWith(to)
   return (
-    <NavLink to={to} className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1">
+    // replace: pindah antar tab utama tidak menumpuk riwayat, sehingga tombol
+    // back tidak membawa ke tab yang dibuka sebelumnya (rasa native).
+    <NavLink to={to} replace className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1">
       <Icon size={22} className={active ? 'text-brand-500' : 'text-gray-400'} strokeWidth={active ? 2 : 1.5} />
       <span className={`text-[10px] font-medium ${active ? 'text-brand-500' : 'text-gray-400'}`}>{t(labelKey)}</span>
     </NavLink>
@@ -41,6 +43,7 @@ export default function UserLayout() {
           <div className="flex-1 flex justify-center">
             <NavLink
               to="/scan"
+              replace
               aria-label="Scan QR Absensi"
               className="-mt-6 w-14 h-14 rounded-full gradient-main text-white flex items-center justify-center shadow-lg ambient-shadow active:scale-95 transition-transform border-4 border-surface"
             >
