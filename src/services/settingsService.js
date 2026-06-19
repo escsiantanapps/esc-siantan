@@ -9,12 +9,17 @@ export const settingsService = {
     const { data, error } = await supabase
       .from('app_settings').select('value').eq('key', LOGIN_BG_KEY).maybeSingle()
     if (error) throw error
-    return data?.value ?? null
+    let v = data?.value ?? null
+    // Kolom value bisa bertipe text (objek tersimpan sebagai JSON string) atau
+    // jsonb — tangani keduanya.
+    if (typeof v === 'string') { try { v = JSON.parse(v) } catch { v = null } }
+    return v
   },
 
   async setLoginBackground(value) {
+    // Selalu simpan sebagai JSON string agar konsisten di kolom text maupun jsonb.
     const { error } = await supabase.from('app_settings').upsert(
-      { key: LOGIN_BG_KEY, value, updated_at: new Date().toISOString() },
+      { key: LOGIN_BG_KEY, value: JSON.stringify(value), updated_at: new Date().toISOString() },
       { onConflict: 'key' },
     )
     if (error) throw error
