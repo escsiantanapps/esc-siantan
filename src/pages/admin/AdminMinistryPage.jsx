@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { Church, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { ministriesService } from '@/services/contentService'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { Card, PageHeader, Button, Input, Textarea, Spinner, EmptyState } from '@/components/ui'
 
 const emptyForm = { name: '', description: '' }
 
 export default function AdminMinistryPage() {
   const { toast, confirm } = useToast()
+  const { t } = useLang()
   const [ministries, setMinistries] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -41,7 +43,7 @@ export default function AdminMinistryPage() {
 
   async function handleSubmit() {
     setError('')
-    if (!form.name.trim()) { setError('Nama ministry wajib diisi.'); return }
+    if (!form.name.trim()) { setError(t('amin.nameRequired')); return }
     setSaving(true)
     try {
       if (editing) {
@@ -50,11 +52,11 @@ export default function AdminMinistryPage() {
         await ministriesService.create(form)
       }
       setShowModal(false)
-      toast.success(editing ? 'Ministry berhasil diperbarui.' : 'Ministry berhasil ditambahkan.')
+      toast.success(editing ? t('amin.updated') : t('amin.created'))
       load()
     } catch (err) {
-      setError(err.message || 'Gagal menyimpan ministry.')
-      toast.error(err.message || 'Gagal menyimpan ministry.')
+      setError(err.message || t('amin.saveFailed'))
+      toast.error(err.message || t('amin.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -62,33 +64,33 @@ export default function AdminMinistryPage() {
 
   async function handleDelete(item) {
     const ok = await confirm({
-      title: 'Hapus ministry?',
-      message: `Ministry "${item.name}" akan dihapus permanen.`,
-      confirmText: 'Hapus',
+      title: t('amin.deleteTitle'),
+      message: t('amin.deleteMsg', { name: item.name }),
+      confirmText: t('a.delete'),
       danger: true,
     })
     if (!ok) return
     try {
       await ministriesService.delete(item.ministry_id)
-      toast.success('Ministry berhasil dihapus.')
+      toast.success(t('amin.deleted'))
       load()
     } catch (err) {
-      toast.error(err.message || 'Gagal menghapus ministry.')
+      toast.error(err.message || t('amin.deleteFailed'))
     }
   }
 
   return (
     <div>
       <PageHeader
-        title="Kelola Ministry"
-        subtitle={`${ministries.length} ministry`}
-        action={<Button size="sm" onClick={openCreate}><Plus size={15} /> Tambah Ministry</Button>}
+        title={t('amin.title')}
+        subtitle={t('amin.subtitle', { count: ministries.length })}
+        action={<Button size="sm" onClick={openCreate}><Plus size={15} /> {t('amin.add')}</Button>}
       />
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
       {!loading && ministries.length === 0 && (
-        <EmptyState icon={Church} title="Belum ada ministry" description="Tambahkan pelayanan/ministry pertama." />
+        <EmptyState icon={Church} title={t('amin.empty')} description={t('amin.emptyDesc')} />
       )}
 
       {!loading && ministries.length > 0 && (
@@ -117,7 +119,7 @@ export default function AdminMinistryPage() {
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md p-4 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">{editing ? 'Edit Ministry' : 'Tambah Ministry'}</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{editing ? t('amin.editTitle') : t('amin.addTitle')}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={18} />
               </button>
@@ -125,13 +127,13 @@ export default function AdminMinistryPage() {
 
             {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
 
-            <Input label="Nama Ministry" required value={form.name} onChange={e => set('name', e.target.value)} />
-            <Textarea label="Deskripsi" rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
+            <Input label={t('amin.nameLabel')} required value={form.name} onChange={e => set('name', e.target.value)} />
+            <Textarea label={t('acls.description')} rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
 
             <div className="flex gap-2 pt-1">
-              <Button variant="ghost" className="flex-1" onClick={() => setShowModal(false)}>Batal</Button>
+              <Button variant="ghost" className="flex-1" onClick={() => setShowModal(false)}>{t('a.cancel')}</Button>
               <Button className="flex-1" loading={saving} onClick={handleSubmit}>
-                {editing ? 'Simpan' : 'Tambah'}
+                {editing ? t('a.save') : t('a.add')}
               </Button>
             </div>
           </Card>

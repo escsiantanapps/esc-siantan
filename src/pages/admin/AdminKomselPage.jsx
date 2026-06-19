@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { Users, Plus, Pencil, Trash2, X, Eye, Crown, Search, UserPlus } from 'lucide-react'
 import { komselService } from '@/services/contentService'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { Card, PageHeader, Button, Input, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
 
 const emptyForm = { name: '', max_capacity: '' }
 
 export default function AdminKomselPage() {
   const { toast, confirm } = useToast()
+  const { t } = useLang()
   const [komsel, setKomsel] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -71,9 +73,9 @@ export default function AdminKomselPage() {
       await komselService.addLeader(pksView.komsel_id, user.user_id)
       setLeaders(await komselService.getLeaders(pksView.komsel_id))
       setLeaderMap(await komselService.getLeaderNamesByKomsel())
-      toast.success(`${user.name} ditetapkan sebagai PKS.`)
+      toast.success(t('akom.assigned', { name: user.name }))
     } catch (err) {
-      toast.error(err.message || 'Gagal menetapkan PKS.')
+      toast.error(err.message || t('akom.assignFailed'))
     } finally {
       setPksBusy(false)
     }
@@ -85,9 +87,9 @@ export default function AdminKomselPage() {
       await komselService.removeLeader(pksView.komsel_id, user.user_id)
       setLeaders(await komselService.getLeaders(pksView.komsel_id))
       setLeaderMap(await komselService.getLeaderNamesByKomsel())
-      toast.success(`${user.name} dicabut dari PKS.`)
+      toast.success(t('akom.removed', { name: user.name }))
     } catch (err) {
-      toast.error(err.message || 'Gagal mencabut PKS.')
+      toast.error(err.message || t('akom.removeFailed'))
     } finally {
       setPksBusy(false)
     }
@@ -114,7 +116,7 @@ export default function AdminKomselPage() {
 
   async function handleSubmit() {
     setError('')
-    if (!form.name.trim()) { setError('Nama komsel wajib diisi.'); return }
+    if (!form.name.trim()) { setError(t('akom.nameRequired')); return }
     setSaving(true)
     try {
       const payload = { ...form, max_capacity: form.max_capacity === '' ? null : Number(form.max_capacity) }
@@ -124,11 +126,11 @@ export default function AdminKomselPage() {
         await komselService.create(payload)
       }
       setShowModal(false)
-      toast.success(editing ? 'Komsel berhasil diperbarui.' : 'Komsel berhasil ditambahkan.')
+      toast.success(editing ? t('akom.updated') : t('akom.created'))
       load()
     } catch (err) {
-      setError(err.message || 'Gagal menyimpan komsel.')
-      toast.error(err.message || 'Gagal menyimpan komsel.')
+      setError(err.message || t('akom.saveFailed'))
+      toast.error(err.message || t('akom.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -136,18 +138,18 @@ export default function AdminKomselPage() {
 
   async function handleDelete(item) {
     const ok = await confirm({
-      title: 'Hapus komsel?',
-      message: `Komsel "${item.name}" akan dihapus permanen.`,
-      confirmText: 'Hapus',
+      title: t('akom.deleteTitle'),
+      message: t('akom.deleteMsg', { name: item.name }),
+      confirmText: t('a.delete'),
       danger: true,
     })
     if (!ok) return
     try {
       await komselService.delete(item.komsel_id)
-      toast.success('Komsel berhasil dihapus.')
+      toast.success(t('akom.deleted'))
       load()
     } catch (err) {
-      toast.error(err.message || 'Gagal menghapus komsel.')
+      toast.error(err.message || t('akom.deleteFailed'))
     }
   }
 
@@ -167,15 +169,15 @@ export default function AdminKomselPage() {
   return (
     <div>
       <PageHeader
-        title="Kelola Komsel"
-        subtitle={`${komsel.length} komsel`}
-        action={<Button size="sm" onClick={openCreate}><Plus size={15} /> Tambah Komsel</Button>}
+        title={t('akom.title')}
+        subtitle={t('akom.subtitle', { count: komsel.length })}
+        action={<Button size="sm" onClick={openCreate}><Plus size={15} /> {t('akom.add')}</Button>}
       />
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
       {!loading && komsel.length === 0 && (
-        <EmptyState icon={Users} title="Belum ada komsel" description="Tambahkan kelompok komsel pertama." />
+        <EmptyState icon={Users} title={t('akom.empty')} description={t('akom.emptyDesc')} />
       )}
 
       {!loading && komsel.length > 0 && (
@@ -188,14 +190,14 @@ export default function AdminKomselPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
                 <p className="text-xs text-gray-400 mt-0.5 truncate">
-                  PKS: {leaderMap[item.komsel_id]?.length ? leaderMap[item.komsel_id].join(', ') : 'Belum ada'}
+                  {t('akom.pksLabel', { names: leaderMap[item.komsel_id]?.length ? leaderMap[item.komsel_id].join(', ') : t('akom.pksNone') })}
                 </p>
-                {item.max_capacity && <p className="text-xs text-gray-400 mt-0.5">Kapasitas: {item.max_capacity}</p>}
+                {item.max_capacity && <p className="text-xs text-gray-400 mt-0.5">{t('akom.capacity', { n: item.max_capacity })}</p>}
               </div>
-              <button onClick={() => openPks(item)} title="Kelola PKS" className="p-2 text-gray-400 hover:text-amber-500 shrink-0">
+              <button onClick={() => openPks(item)} title={t('akom.managePks')} className="p-2 text-gray-400 hover:text-amber-500 shrink-0">
                 <Crown size={16} />
               </button>
-              <button onClick={() => viewMembers(item)} title="Anggota" className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
+              <button onClick={() => viewMembers(item)} title={t('akom.membersBtn')} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
                 <Eye size={16} />
               </button>
               <button onClick={() => openEdit(item)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
@@ -213,7 +215,7 @@ export default function AdminKomselPage() {
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md p-4 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">{editing ? 'Edit Komsel' : 'Tambah Komsel'}</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{editing ? t('akom.editTitle') : t('akom.addTitle')}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={18} />
               </button>
@@ -221,14 +223,14 @@ export default function AdminKomselPage() {
 
             {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
 
-            <Input label="Nama Komsel" required value={form.name} onChange={e => set('name', e.target.value)} />
-            <Input label="Kapasitas Maksimal" type="number" min="0" value={form.max_capacity} onChange={e => set('max_capacity', e.target.value)} />
-            <p className="text-xs text-gray-400">PKS komsel ditetapkan lewat tombol mahkota pada daftar komsel.</p>
+            <Input label={t('akom.nameLabel')} required value={form.name} onChange={e => set('name', e.target.value)} />
+            <Input label={t('akom.maxCapacity')} type="number" min="0" value={form.max_capacity} onChange={e => set('max_capacity', e.target.value)} />
+            <p className="text-xs text-gray-400">{t('akom.crownHint')}</p>
 
             <div className="flex gap-2 pt-1">
-              <Button variant="ghost" className="flex-1" onClick={() => setShowModal(false)}>Batal</Button>
+              <Button variant="ghost" className="flex-1" onClick={() => setShowModal(false)}>{t('a.cancel')}</Button>
               <Button className="flex-1" loading={saving} onClick={handleSubmit}>
-                {editing ? 'Simpan' : 'Tambah'}
+                {editing ? t('a.save') : t('a.add')}
               </Button>
             </div>
           </Card>
@@ -239,7 +241,7 @@ export default function AdminKomselPage() {
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md p-4 space-y-3 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">Anggota {membersView.name}</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{t('akom.membersOf', { name: membersView.name })}</h2>
               <button onClick={() => setMembersView(null)} className="text-gray-400 hover:text-gray-600">
                 <X size={18} />
               </button>
@@ -248,7 +250,7 @@ export default function AdminKomselPage() {
             {membersLoading && <div className="flex justify-center py-8"><Spinner /></div>}
 
             {!membersLoading && members.length === 0 && (
-              <EmptyState icon={Users} title="Belum ada anggota" description="Anggota komsel ini belum terdaftar." />
+              <EmptyState icon={Users} title={t('akom.noMembers')} description={t('akom.noMembersDesc')} />
             )}
 
             {!membersLoading && members.length > 0 && (
@@ -258,7 +260,7 @@ export default function AdminKomselPage() {
                     <Avatar name={m.name} src={m.photo_url} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                      <p className="text-xs text-gray-400">{m.role}</p>
+                      <p className="text-xs text-gray-400">{t(`role.${m.role}`)}</p>
                     </div>
                   </div>
                 ))}
@@ -274,7 +276,7 @@ export default function AdminKomselPage() {
           <Card className="w-full max-w-md p-4 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
-                <Crown size={16} className="text-amber-500" /> PKS — {pksView.name}
+                <Crown size={16} className="text-amber-500" /> {t('akom.pksOf', { name: pksView.name })}
               </h2>
               <button onClick={() => setPksView(null)} className="text-gray-400 hover:text-gray-600">
                 <X size={18} />
@@ -283,11 +285,11 @@ export default function AdminKomselPage() {
 
             {/* PKS saat ini */}
             <div>
-              <p className="text-xs font-semibold text-gray-400 mb-2">PKS saat ini</p>
+              <p className="text-xs font-semibold text-gray-400 mb-2">{t('akom.currentPks')}</p>
               {leadersLoading ? (
                 <div className="flex justify-center py-4"><Spinner size="sm" /></div>
               ) : leaders.length === 0 ? (
-                <p className="text-sm text-gray-400">Belum ada PKS untuk komsel ini.</p>
+                <p className="text-sm text-gray-400">{t('akom.noPks')}</p>
               ) : (
                 <div className="space-y-2">
                   {leaders.map(l => (
@@ -295,13 +297,13 @@ export default function AdminKomselPage() {
                       <Avatar name={l.name} src={l.photo_url} size="sm" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">{l.name}</p>
-                        <p className="text-xs text-gray-400">{l.role}</p>
+                        <p className="text-xs text-gray-400">{t(`role.${l.role}`)}</p>
                       </div>
                       <button
                         onClick={() => removePks(l)} disabled={pksBusy}
                         className="text-xs text-red-500 hover:text-red-600 disabled:opacity-50 px-2 py-1"
                       >
-                        Cabut
+                        {t('akom.revoke')}
                       </button>
                     </div>
                   ))}
@@ -311,16 +313,16 @@ export default function AdminKomselPage() {
 
             {/* Tambah PKS */}
             <div className="border-t border-gray-100 pt-3">
-              <p className="text-xs font-semibold text-gray-400 mb-2">Tambah PKS</p>
+              <p className="text-xs font-semibold text-gray-400 mb-2">{t('akom.addPks')}</p>
               <Input
                 icon={Search}
-                placeholder="Cari nama jemaat..."
+                placeholder={t('akom.searchMember')}
                 value={pksQuery}
                 onChange={e => setPksQuery(e.target.value)}
               />
               <div className="mt-2 space-y-1 max-h-52 overflow-y-auto">
                 {pksResults.length === 0 ? (
-                  <p className="text-xs text-gray-400 px-1 py-2">Ketik untuk mencari jemaat.</p>
+                  <p className="text-xs text-gray-400 px-1 py-2">{t('akom.typeToSearch')}</p>
                 ) : pksResults.map(u => {
                   const already = leaders.some(l => l.user_id === u.user_id)
                   return (
@@ -333,7 +335,7 @@ export default function AdminKomselPage() {
                       <Avatar name={u.name} src={u.photo_url} size="sm" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                        <p className="text-xs text-gray-400">{u.role}</p>
+                        <p className="text-xs text-gray-400">{t(`role.${u.role}`)}</p>
                       </div>
                       {already
                         ? <Badge color="green">PKS</Badge>
