@@ -33,9 +33,9 @@ export default function TasksPage() {
       const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString()
       const progressMap = {}
       await Promise.all(
-        tmpls.map(async (t) => {
-          const responses = await tasksService.getMyResponses(profile.user_id, t.form_id, weekStart)
-          progressMap[t.form_id] = responses.length
+        tmpls.map(async (tpl) => {
+          const responses = await tasksService.getMyResponses(profile.user_id, tpl.form_id, weekStart)
+          progressMap[tpl.form_id] = responses.length
         })
       )
       setProgress(progressMap)
@@ -57,19 +57,19 @@ export default function TasksPage() {
           <EmptyState icon={ClipboardList} title={t('tasks.empty')} description={t('tasks.emptyDesc')} />
         )}
 
-        {templates.map(t => {
-          const done = progress[t.form_id] || 0
-          const target = t.weekly_goal || 1
+        {templates.map(tpl => {
+          const done = progress[tpl.form_id] || 0
+          const target = tpl.weekly_goal || 1
           const pct = Math.min((done / target) * 100, 100)
           const complete = done >= target
 
           return (
-            <Card key={t.form_id} glass className="p-4 cursor-pointer active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300"
-              onClick={() => navigate(`/tugas/${t.form_id}`)}>
+            <Card key={tpl.form_id} glass className="p-4 cursor-pointer active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300"
+              onClick={() => navigate(`/tugas/${tpl.form_id}`)}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="text-base font-semibold text-gray-900">{t.title}</h2>
-                  {t.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{t.description}</p>}
+                  <h2 className="text-base font-semibold text-gray-900">{tpl.title}</h2>
+                  {tpl.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{tpl.description}</p>}
                 </div>
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${complete ? 'bg-green-100' : 'bg-brand-100'}`}>
                   {complete

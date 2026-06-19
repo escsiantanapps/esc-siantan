@@ -481,9 +481,31 @@ CREATE POLICY "aup_super_write" ON admin_user_permissions FOR ALL
 -- ============================================================
 -- 4. STORAGE BUCKETS
 -- ============================================================
--- Bucket 'profile-photos' (public)  & 'documents' (private): buat manual di
--- Supabase → Storage → New Bucket.
+-- Bucket 'documents' (private): buat manual di Supabase → Storage → New Bucket.
 --
+-- Bucket 'profile-photos' (public) — dipakai untuk avatar, thumbnail berita/event,
+-- QRIS (qris/...), dan bukti persembahan (offerings/...). Pastikan ada policy
+-- upload, kalau tidak SEMUA upload ke bucket ini gagal ("row violates RLS").
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('profile-photos', 'profile-photos', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "profile_photos_insert" ON storage.objects;
+CREATE POLICY "profile_photos_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'profile-photos');
+
+DROP POLICY IF EXISTS "profile_photos_update" ON storage.objects;
+CREATE POLICY "profile_photos_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (bucket_id = 'profile-photos')
+  WITH CHECK (bucket_id = 'profile-photos');
+
+DROP POLICY IF EXISTS "profile_photos_read" ON storage.objects;
+CREATE POLICY "profile_photos_read" ON storage.objects
+  FOR SELECT
+  USING (bucket_id = 'profile-photos');
+
 -- Bucket 'task-files' (foto/bukti tugas) — dibuat + policy via SQL (lihat v12):
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('task-files', 'task-files', true)
