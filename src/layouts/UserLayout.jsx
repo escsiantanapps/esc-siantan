@@ -3,6 +3,7 @@ import { Home, Newspaper, ClipboardList, User, ScanLine } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
+import DovePet from '@/components/DovePet'
 
 // Item kiri & kanan; tombol Scan disisipkan menonjol di tengah.
 const LEFT_ITEMS = [
@@ -42,6 +43,9 @@ export default function UserLayout() {
       <main className="flex-1 overflow-y-auto pb-20">
         <Outlet />
       </main>
+
+      {/* Merpati peliharaan yang mengikuti antar halaman */}
+      <DovePet />
 
       {/* Bottom navigation */}
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-surface border-t border-gray-100 z-50">
