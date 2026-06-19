@@ -2,9 +2,27 @@ import { useEffect, useState } from 'react'
 import { Sun, Moon, Star } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
 
+// Seekor domba (tampak samping, menghadap kiri).
+function Sheep({ className, tone = '#f8fafc' }) {
+  return (
+    <svg className={className} width="24" height="17" viewBox="0 0 24 17" fill="none">
+      <rect x="7" y="11.5" width="1.7" height="4.5" rx="0.6" fill="#334155" />
+      <rect x="14" y="11.5" width="1.7" height="4.5" rx="0.6" fill="#334155" />
+      <ellipse cx="12" cy="9" rx="7.5" ry="5" fill={tone} />
+      <circle cx="7" cy="7" r="3" fill={tone} />
+      <circle cx="12" cy="5" r="3.3" fill={tone} />
+      <circle cx="16.5" cy="7" r="3" fill={tone} />
+      <ellipse cx="4.6" cy="9.2" rx="2.3" ry="2.7" fill="#374151" />
+      <ellipse cx="6.2" cy="7.4" rx="1.1" ry="0.7" fill="#374151" />
+      <circle cx="4" cy="8.6" r="0.5" fill="#fff" />
+    </svg>
+  )
+}
+
 // Banner pemandangan alam beranimasi untuk hero profil:
-// langit siang/malam, matahari/bulan, awan melayang, burung, bintang berkelip,
-// serta bukit & rumput bergoyang. Salam + jam berjalan di kiri atas.
+// langit siang/malam, gunung tinggi, matahari/bulan, awan, burung, bintang,
+// bukit, rumah, pagar, gembala & domba. Salam + jam berjalan di kiri atas.
+// Domba: siang merumput di luar pagar; malam masuk ke dalam pagar (gembala pulang).
 export default function SkyTime() {
   const { lang, t } = useLang()
   const [now, setNow] = useState(new Date())
@@ -33,6 +51,14 @@ export default function SkyTime() {
             : 'linear-gradient(180deg,#0f172a 0%,#312e81 55%,#4338ca 100%)',
         }}
       />
+
+      {/* Gunung tinggi bersalju di kejauhan (di belakang awan & bukit) */}
+      <svg className="absolute bottom-0 left-1/2 -translate-x-1/2" width="176" height="96" viewBox="0 0 176 96" fill="none">
+        <path d="M50 40 L96 96 L8 96 Z" fill={isDay ? '#9ca3af' : '#3b3680'} opacity="0.5" />
+        <path d="M88 8 L150 96 L26 96 Z" fill={isDay ? '#6b7280' : '#312e6b'} opacity="0.7" />
+        {/* Salju puncak */}
+        <path d="M73 30 L88 8 L104 31 L96 36 L88 27 L80 36 Z" fill={isDay ? '#f8fafc' : '#c7d2fe'} opacity="0.92" />
+      </svg>
 
       {isDay ? (
         <>
@@ -82,12 +108,10 @@ export default function SkyTime() {
         <path d="M0 40 Q120 12 250 35 T500 38 V60 H0 Z" fill={isDay ? '#15803d' : '#072a20'} />
       </svg>
 
-      {/* Pemandangan gembala & domba di sisi kanan (di atas bukit).
-          Ditempatkan di kanan agar tidak tertutup foto profil di kiri. */}
+      {/* Pemandangan di sisi kanan (di atas bukit), agar tidak tertutup foto profil di kiri. */}
       {/* Rumah — viewBox diperluas ke atas (y negatif) untuk ruang asap.
           Malam: jendela menyala tetap + asap mengepul dari cerobong. */}
       <svg className="absolute bottom-3 right-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" width="34" height="44" viewBox="0 -14 34 44" fill="none">
-        {/* Asap cerobong — hanya malam */}
         {!isDay && (
           <g fill="#cbd5e1">
             {[0, 1, 2].map(i => (
@@ -100,61 +124,48 @@ export default function SkyTime() {
             ))}
           </g>
         )}
-        {/* Cerobong (digambar sebelum atap agar pangkalnya tertutup atap) */}
         <rect x="22.5" y="-1" width="3.2" height="9" rx="0.4" fill={isDay ? '#b45309' : '#4c1d95'} />
-        {/* Badan rumah */}
         <rect x="6" y="13" width="22" height="15" rx="1.5" fill={isDay ? '#fef3c7' : '#a5b4fc'} stroke={isDay ? '#d97706' : '#6366f1'} strokeWidth="1" />
-        {/* Atap */}
         <path d="M3 14 L17 3 L31 14 Z" fill={isDay ? '#dc2626' : '#7c3aed'} stroke={isDay ? '#991b1b' : '#5b21b6'} strokeWidth="1" strokeLinejoin="round" />
-        {/* Pintu */}
         <rect x="12.5" y="19" width="7" height="9" rx="0.8" fill={isDay ? '#92400e' : '#4c1d95'} />
-        {/* Halo cahaya jendela (malam) */}
         {!isDay && <circle cx="23" cy="19" r="5" fill="#fde68a" opacity="0.5" className="blur-[2px]" />}
-        {/* Jendela — siang redup, malam menyala terang */}
         <rect x="20.5" y="16.5" width="5" height="5" rx="0.6" fill={isDay ? '#fffbeb' : '#fde047'} />
       </svg>
 
-      {/* Domba 1 */}
-      <svg className="absolute bottom-2 right-[4.5rem] origin-bottom animate-[graze_4s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" width="24" height="17" viewBox="0 0 24 17" fill="none">
-        <rect x="7" y="11.5" width="1.7" height="4.5" rx="0.6" fill="#334155" />
-        <rect x="14" y="11.5" width="1.7" height="4.5" rx="0.6" fill="#334155" />
-        <ellipse cx="12" cy="9" rx="7.5" ry="5" fill="#f8fafc" />
-        <circle cx="7" cy="7" r="3" fill="#f8fafc" />
-        <circle cx="12" cy="5" r="3.3" fill="#f8fafc" />
-        <circle cx="16.5" cy="7" r="3" fill="#f8fafc" />
-        <ellipse cx="4.6" cy="9.2" rx="2.3" ry="2.7" fill="#374151" />
-        <ellipse cx="6.2" cy="7.4" rx="1.1" ry="0.7" fill="#374151" />
-        <circle cx="4" cy="8.6" r="0.5" fill="#fff" />
-      </svg>
-
-      {/* Gembala dengan tongkat — hanya siang (malam sudah pulang ke rumah) */}
-      {isDay && (
-        <svg className="absolute bottom-2 right-[7rem] origin-bottom animate-[bobSoft_6s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" width="20" height="33" viewBox="0 0 20 33" fill="none">
-          {/* Tongkat gembala (crook) */}
-          <path d="M16 6 q2.7 0 2.7 2.7 q0 2.3 -2.5 2.5 M16 6 L15 31" stroke="#a16207" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          {/* Jubah */}
-          <path d="M9.5 14 L4 31 L15 31 Z" fill="#2563eb" stroke="#1d4ed8" strokeWidth="0.6" />
-          {/* Lengan memegang tongkat */}
-          <path d="M9.8 17 L15.5 9.5" stroke="#2563eb" strokeWidth="2.4" strokeLinecap="round" />
-          {/* Kepala */}
-          <circle cx="9.2" cy="9" r="3.5" fill="#f1c27d" />
-          {/* Tudung kepala */}
-          <path d="M5.7 9 a3.5 3.5 0 0 1 7 0 Z" fill="#1e3a8a" />
-        </svg>
+      {/* Domba dalam pagar (malam) — digambar SEBELUM pagar agar tampak di dalam. */}
+      {!isDay && (
+        <>
+          <Sheep className="absolute bottom-2 right-[4rem] origin-bottom animate-[graze_5s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
+          <Sheep className="absolute bottom-1.5 right-[5.6rem] origin-bottom animate-[graze_5.6s_ease-in-out_infinite] [animation-delay:-2s] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" tone="#e2e8f0" />
+        </>
       )}
 
-      {/* Domba 2 (lebih kecil) */}
-      <svg className="absolute bottom-1.5 right-[9.5rem] origin-bottom animate-[graze_4.6s_ease-in-out_infinite] [animation-delay:-1.5s] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" width="19" height="14" viewBox="0 0 24 17" fill="none">
-        <rect x="7" y="11.5" width="1.7" height="4.5" rx="0.6" fill="#334155" />
-        <rect x="14" y="11.5" width="1.7" height="4.5" rx="0.6" fill="#334155" />
-        <ellipse cx="12" cy="9" rx="7.5" ry="5" fill="#f1f5f9" />
-        <circle cx="7" cy="7" r="3" fill="#f1f5f9" />
-        <circle cx="12" cy="5" r="3.3" fill="#f1f5f9" />
-        <circle cx="16.5" cy="7" r="3" fill="#f1f5f9" />
-        <ellipse cx="4.6" cy="9.2" rx="2.3" ry="2.7" fill="#374151" />
-        <ellipse cx="6.2" cy="7.4" rx="1.1" ry="0.7" fill="#374151" />
-        <circle cx="4" cy="8.6" r="0.5" fill="#fff" />
+      {/* Pagar / kandang (selalu tampak) */}
+      <svg className="absolute bottom-2 right-[3.4rem]" width="56" height="18" viewBox="0 0 56 18" fill="none"
+        stroke={isDay ? '#92400e' : '#4c1d95'} strokeWidth="1.6" strokeLinecap="round">
+        <line x1="2" y1="7" x2="54" y2="7" />
+        <line x1="2" y1="13" x2="54" y2="13" />
+        <line x1="3" y1="3" x2="3" y2="17" />
+        <line x1="16" y1="3" x2="16" y2="17" />
+        <line x1="29" y1="3" x2="29" y2="17" />
+        <line x1="42" y1="3" x2="42" y2="17" />
+        <line x1="54" y1="3" x2="54" y2="17" />
       </svg>
+
+      {/* Siang: domba merumput di luar pagar + gembala menjaga */}
+      {isDay && (
+        <>
+          <Sheep className="absolute bottom-2 right-[8rem] origin-bottom animate-[graze_4s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
+          <Sheep className="absolute bottom-1.5 right-[11rem] origin-bottom animate-[graze_4.6s_ease-in-out_infinite] [animation-delay:-1.5s] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" tone="#f1f5f9" />
+          <svg className="absolute bottom-2 right-[9.5rem] origin-bottom animate-[bobSoft_6s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" width="20" height="33" viewBox="0 0 20 33" fill="none">
+            <path d="M16 6 q2.7 0 2.7 2.7 q0 2.3 -2.5 2.5 M16 6 L15 31" stroke="#a16207" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M9.5 14 L4 31 L15 31 Z" fill="#2563eb" stroke="#1d4ed8" strokeWidth="0.6" />
+            <path d="M9.8 17 L15.5 9.5" stroke="#2563eb" strokeWidth="2.4" strokeLinecap="round" />
+            <circle cx="9.2" cy="9" r="3.5" fill="#f1c27d" />
+            <path d="M5.7 9 a3.5 3.5 0 0 1 7 0 Z" fill="#1e3a8a" />
+          </svg>
+        </>
+      )}
 
       {/* Salam + jam */}
       <div className="absolute top-4 left-4 text-white [text-shadow:_0_1px_4px_rgb(0_0_0_/_35%)]">
