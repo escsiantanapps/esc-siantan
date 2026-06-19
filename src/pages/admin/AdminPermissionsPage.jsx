@@ -3,12 +3,14 @@ import { ShieldAlert, ShieldCheck, Search, UserPlus, X, Trash2 } from 'lucide-re
 import { permissionsService } from '@/services/permissionsService'
 import { ADMIN_PAGES, ALL_ADMIN_PAGE_PATHS } from '@/config/adminPages'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { Card, PageHeader, Spinner, Checkbox, Button, Input, Avatar, Badge, EmptyState } from '@/components/ui'
 
 const SECTIONS = [...new Set(ADMIN_PAGES.map(p => p.section))]
 
 export default function AdminPermissionsPage() {
   const { toast, confirm } = useToast()
+  const { t } = useLang()
   const [admins, setAdmins] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -40,11 +42,11 @@ export default function AdminPermissionsPage() {
     setGranting(true)
     try {
       await permissionsService.grantAdmin(user.user_id)
-      toast.success(`${user.name} kini menjadi Admin.`)
+      toast.success(t('aperm.grantedToast', { name: user.name }))
       setQuery(''); setCandidates([])
       load()
     } catch (err) {
-      toast.error(err.message || 'Gagal menjadikan admin.')
+      toast.error(err.message || t('aperm.grantFailed'))
     } finally {
       setGranting(false)
     }
@@ -64,11 +66,11 @@ export default function AdminPermissionsPage() {
     setSaving(true)
     try {
       await permissionsService.setUserPermissions(editing.user_id, editPages)
-      toast.success('Hak akses disimpan.')
+      toast.success(t('aperm.savedToast'))
       setEditing(null)
       load()
     } catch (err) {
-      toast.error(err.message || 'Gagal menyimpan hak akses.')
+      toast.error(err.message || t('aperm.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -76,19 +78,19 @@ export default function AdminPermissionsPage() {
 
   async function revoke(admin) {
     const ok = await confirm({
-      title: 'Cabut akses admin?',
-      message: `${admin.name} akan dikembalikan menjadi Jemaat biasa dan kehilangan akses panel admin.`,
-      confirmText: 'Cabut',
+      title: t('aperm.revokeTitle'),
+      message: t('aperm.revokeMsg', { name: admin.name }),
+      confirmText: t('aperm.revoke'),
       danger: true,
     })
     if (!ok) return
     try {
       await permissionsService.revokeAdmin(admin.user_id)
-      toast.success('Akses admin dicabut.')
+      toast.success(t('aperm.revokedToast'))
       setEditing(null)
       load()
     } catch (err) {
-      toast.error(err.message || 'Gagal mencabut akses.')
+      toast.error(err.message || t('aperm.revokeFailed'))
     }
   }
 
@@ -96,17 +98,17 @@ export default function AdminPermissionsPage() {
 
   return (
     <div className="max-w-2xl">
-      <PageHeader title="Hak Akses Admin" subtitle="Kelola siapa yang menjadi admin & atur hak aksesnya satu per satu" />
+      <PageHeader title={t('aperm.title')} subtitle={t('aperm.subtitle')} />
 
       <div className="bg-blue-50 border border-blue-100 text-blue-700 text-sm rounded-xl px-4 py-3 mb-4 flex items-start gap-2">
         <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-        <p>Hak akses diatur <b>per orang</b>. Super Admin selalu punya akses penuh dan tidak muncul di daftar ini. Dashboard selalu bisa diakses semua admin.</p>
+        <p>{t('aperm.infoBox')}</p>
       </div>
 
       {/* Tambah admin */}
       <Card className="p-4 mb-4 space-y-2">
-        <h2 className="text-sm font-semibold text-gray-900">Jadikan Admin</h2>
-        <Input icon={Search} placeholder="Cari nama jemaat..." value={query} onChange={e => setQuery(e.target.value)} />
+        <h2 className="text-sm font-semibold text-gray-900">{t('aperm.grantTitle')}</h2>
+        <Input icon={Search} placeholder={t('akom.searchMember')} value={query} onChange={e => setQuery(e.target.value)} />
         {candidates.length > 0 && (
           <div className="space-y-1 max-h-56 overflow-y-auto">
             {candidates.map(u => (
@@ -115,7 +117,7 @@ export default function AdminPermissionsPage() {
                 <Avatar name={u.name} src={u.photo_url} size="sm" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                  <p className="text-xs text-gray-400">{u.role}</p>
+                  <p className="text-xs text-gray-400">{t(`role.${u.role}`)}</p>
                 </div>
                 <UserPlus size={16} className="text-brand-500 shrink-0" />
               </button>
@@ -125,9 +127,9 @@ export default function AdminPermissionsPage() {
       </Card>
 
       {/* Daftar admin */}
-      <h2 className="text-sm font-semibold text-gray-900 mb-2">Daftar Admin</h2>
+      <h2 className="text-sm font-semibold text-gray-900 mb-2">{t('aperm.adminList')}</h2>
       {admins.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title="Belum ada admin" description="Tambahkan admin lewat pencarian di atas." />
+        <EmptyState icon={ShieldCheck} title={t('aperm.noAdmins')} description={t('aperm.noAdminsDesc')} />
       ) : (
         <Card className="divide-y divide-gray-100">
           {admins.map(a => {
@@ -140,10 +142,10 @@ export default function AdminPermissionsPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{a.name}</p>
                   <p className="text-xs text-gray-400">
-                    {full ? 'Akses penuh' : `${count}/${ALL_ADMIN_PAGE_PATHS.length} halaman`}
+                    {full ? t('aperm.fullAccess') : t('aperm.pagesCount', { count, total: ALL_ADMIN_PAGE_PATHS.length })}
                   </p>
                 </div>
-                <Badge color={full ? 'green' : 'blue'}>{full ? 'Penuh' : 'Terbatas'}</Badge>
+                <Badge color={full ? 'green' : 'blue'}>{full ? t('aperm.full') : t('aperm.limited')}</Badge>
               </button>
             )
           })}
@@ -159,23 +161,23 @@ export default function AdminPermissionsPage() {
                 <Avatar name={editing.name} src={editing.photo_url} size="sm" />
                 <div className="min-w-0">
                   <h2 className="text-sm font-semibold text-gray-900 truncate">{editing.name}</h2>
-                  <p className="text-xs text-gray-400">Atur halaman yang boleh diakses</p>
+                  <p className="text-xs text-gray-400">{t('aperm.configPages')}</p>
                 </div>
               </div>
               <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600 shrink-0"><X size={18} /></button>
             </div>
 
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setEditPages([...ALL_ADMIN_PAGE_PATHS])}>Pilih semua</Button>
-              <Button size="sm" variant="ghost" onClick={() => setEditPages([])}>Kosongkan</Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditPages([...ALL_ADMIN_PAGE_PATHS])}>{t('aperm.selectAll')}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditPages([])}>{t('aperm.clear')}</Button>
             </div>
 
             {SECTIONS.map(section => (
               <div key={section} className="space-y-2">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{section}</h3>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t(`admin.sec.${section}`)}</h3>
                 <div className="grid grid-cols-2 gap-2">
                   {ADMIN_PAGES.filter(p => p.section === section).map(page => (
-                    <Checkbox key={page.to} label={page.label}
+                    <Checkbox key={page.to} label={t(page.labelKey)}
                       checked={editPages.includes(page.to)} onChange={() => toggle(page.to)} />
                   ))}
                 </div>
@@ -183,8 +185,8 @@ export default function AdminPermissionsPage() {
             ))}
 
             <div className="flex gap-2 pt-1">
-              <Button variant="danger" onClick={() => revoke(editing)}><Trash2 size={15} /> Cabut</Button>
-              <Button className="flex-1" loading={saving} onClick={saveEditor}>Simpan</Button>
+              <Button variant="danger" onClick={() => revoke(editing)}><Trash2 size={15} /> {t('aperm.revoke')}</Button>
+              <Button className="flex-1" loading={saving} onClick={saveEditor}>{t('a.save')}</Button>
             </div>
           </Card>
         </div>
