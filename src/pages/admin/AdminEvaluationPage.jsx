@@ -3,6 +3,7 @@ import { BarChart3, CheckCircle2, Clock, XCircle, Printer } from 'lucide-react'
 import { tasksService } from '@/services/tasksService'
 import { usersService } from '@/services/usersService'
 import { evaluationService } from '@/services/evaluationService'
+import { useLang } from '@/hooks/useLang'
 import { Card, PageHeader, Button, Spinner, EmptyState, Input, Select, StatusBadge, Avatar, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
@@ -20,6 +21,7 @@ function startOfMonthISO() {
 }
 
 export default function AdminEvaluationPage() {
+  const { t, lang } = useLang()
   const [templates, setTemplates] = useState([])
   const [ministries, setMinistries] = useState([])
   const [komselList, setKomselList] = useState([])
@@ -74,14 +76,15 @@ export default function AdminEvaluationPage() {
   // Cetak laporan: buka jendela print-friendly berisi ringkasan + tabel sesuai
   // filter aktif. Memakai window.print() bawaan (tanpa dependensi PDF).
   function printReport() {
-    const tmplTitle = templates.find(t => t.form_id === formId)?.title || '-'
+    const tmplTitle = templates.find(tm => tm.form_id === formId)?.title || '-'
     const periode = `${formatDate(startDate)} – ${formatDate(endDate)}`
+    const statusLabel = { TERPENUHI: t('aev.fulfilled'), PROSES: t('aev.inProgress'), KOSONG: t('aev.empty') }
     const meta = [
-      ['Tugas / Form', tmplTitle],
-      ['Periode', periode],
-      ['Role', role || 'Semua'],
-      ['Ministry', ministryId ? (ministryMap[ministryId] || '-') : 'Semua'],
-      ['Komsel', komselId ? (komselMap[komselId] || '-') : 'Semua'],
+      [t('aev.repTask'), tmplTitle],
+      [t('aev.repPeriod'), periode],
+      [t('aev.role'), role || t('aev.repAll')],
+      [t('aev.ministry'), ministryId ? (ministryMap[ministryId] || '-') : t('aev.repAll')],
+      [t('aev.komsel'), komselId ? (komselMap[komselId] || '-') : t('aev.repAll')],
     ]
 
     const rowsHtml = filteredRows.map((r, i) => {
@@ -95,12 +98,12 @@ export default function AdminEvaluationPage() {
         <td>${esc(tags || '-')}</td>
         <td class="c">${esc(r.filled)}/${esc(r.target)}</td>
         <td class="c">${esc(r.minLulus)}</td>
-        <td class="c status-${esc(r.status)}">${esc(r.status)}</td>
+        <td class="c status-${esc(r.status)}">${esc(statusLabel[r.status] || r.status)}</td>
       </tr>`
     }).join('')
 
-    const html = `<!doctype html><html lang="id"><head><meta charset="utf-8">
-<title>Laporan Evaluasi — ${esc(tmplTitle)}</title>
+    const html = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
+<title>${esc(t('aev.repTitle'))} — ${esc(tmplTitle)}</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1d22; margin: 32px; }
@@ -122,19 +125,19 @@ export default function AdminEvaluationPage() {
   .foot { margin-top: 20px; font-size: 11px; color: #9ca3af; }
   @media print { body { margin: 12mm; } }
 </style></head><body>
-  <h1>Laporan Evaluasi Tugas</h1>
+  <h1>${esc(t('aev.repTitle'))}</h1>
   <div class="sub">ESC Siantan</div>
   <table class="meta">${meta.map(([k, v]) => `<tr><td>${esc(k)}</td><td>: ${esc(v)}</td></tr>`).join('')}</table>
   <div class="summary">
-    <div style="color:#059669"><b>${summary.TERPENUHI}</b>Terpenuhi</div>
-    <div style="color:#d97706"><b>${summary.PROSES}</b>Proses</div>
-    <div style="color:#dc2626"><b>${summary.KOSONG}</b>Kosong</div>
+    <div style="color:#059669"><b>${summary.TERPENUHI}</b>${esc(t('aev.fulfilled'))}</div>
+    <div style="color:#d97706"><b>${summary.PROSES}</b>${esc(t('aev.inProgress'))}</div>
+    <div style="color:#dc2626"><b>${summary.KOSONG}</b>${esc(t('aev.empty'))}</div>
   </div>
   <table class="data">
-    <thead><tr><th>#</th><th>Nama</th><th>Ministry / Komsel</th><th>Terisi/Target</th><th>Min.</th><th>Status</th></tr></thead>
-    <tbody>${rowsHtml || '<tr><td colspan="6" class="c">Tidak ada data</td></tr>'}</tbody>
+    <thead><tr><th>#</th><th>${esc(t('aev.repName'))}</th><th>${esc(t('aev.repMinKom'))}</th><th>${esc(t('aev.repFilledTarget'))}</th><th>${esc(t('aev.repMin'))}</th><th>${esc(t('aev.repStatus'))}</th></tr></thead>
+    <tbody>${rowsHtml || `<tr><td colspan="6" class="c">${esc(t('aev.repNoData'))}</td></tr>`}</tbody>
   </table>
-  <div class="foot">Dicetak ${esc(formatDate(new Date(), 'd MMMM yyyy, HH:mm'))} • Total ${filteredRows.length} jemaat</div>
+  <div class="foot">${esc(t('aev.repPrinted', { date: formatDate(new Date(), 'd MMMM yyyy, HH:mm'), n: filteredRows.length }))}</div>
 </body></html>`
 
     const w = window.open('', '_blank')
@@ -151,11 +154,11 @@ export default function AdminEvaluationPage() {
   return (
     <div>
       <PageHeader
-        title="Evaluasi & Laporan"
-        subtitle="Pantau pemenuhan target tugas pelayanan"
+        title={t('aev.title')}
+        subtitle={t('aev.subtitle')}
         action={
           <Button size="sm" variant="outline" disabled={!canPrint} onClick={printReport}>
-            <Printer size={15} /> Cetak Laporan
+            <Printer size={15} /> {t('aev.print')}
           </Button>
         }
       />
@@ -163,36 +166,36 @@ export default function AdminEvaluationPage() {
       {/* Filter section */}
       <Card className="p-4 mb-4 space-y-3">
         <div className="grid sm:grid-cols-2 gap-3">
-          <Input type="date" label="Tanggal Mulai" value={startDate} onChange={e => setStartDate(e.target.value)} />
-          <Input type="date" label="Tanggal Akhir" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <Input type="date" label={t('aev.startDate')} value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <Input type="date" label={t('aev.endDate')} value={endDate} onChange={e => setEndDate(e.target.value)} />
         </div>
         <div className="grid sm:grid-cols-2 gap-3">
-          <Select label="Form" value={formId} onChange={e => setFormId(e.target.value)}>
-            {templates.length === 0 && <option value="">Belum ada form</option>}
-            {templates.map(t => <option key={t.form_id} value={t.form_id}>{t.title}</option>)}
+          <Select label={t('aev.form')} value={formId} onChange={e => setFormId(e.target.value)}>
+            {templates.length === 0 && <option value="">{t('aev.noForm')}</option>}
+            {templates.map(tm => <option key={tm.form_id} value={tm.form_id}>{tm.title}</option>)}
           </Select>
-          <Select label="Role" value={role} onChange={e => setRole(e.target.value)}>
-            <option value="">Semua Role</option>
+          <Select label={t('aev.role')} value={role} onChange={e => setRole(e.target.value)}>
+            <option value="">{t('aev.allRoles')}</option>
             {['Volunteer', 'Jemaat', 'PKS'].map(r => <option key={r} value={r}>{r}</option>)}
           </Select>
         </div>
         <div className="grid sm:grid-cols-3 gap-3">
-          <Select label="Ministry" value={ministryId} onChange={e => setMinistryId(e.target.value)}>
-            <option value="">Semua Ministry</option>
+          <Select label={t('aev.ministry')} value={ministryId} onChange={e => setMinistryId(e.target.value)}>
+            <option value="">{t('aev.allMinistry')}</option>
             {ministries.map(m => <option key={m.ministry_id} value={m.ministry_id}>{m.name}</option>)}
           </Select>
-          <Select label="Komsel" value={komselId} onChange={e => setKomselId(e.target.value)}>
-            <option value="">Semua Komsel</option>
+          <Select label={t('aev.komsel')} value={komselId} onChange={e => setKomselId(e.target.value)}>
+            <option value="">{t('aev.allKomsel')}</option>
             {komselList.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
           </Select>
-          <Input label="Cari Nama" placeholder="Cari nama..." value={search} onChange={e => setSearch(e.target.value)} />
+          <Input label={t('aev.searchName')} placeholder={t('aev.searchPh')} value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </Card>
 
       {(loading || loadingMeta) && <div className="flex justify-center py-12"><Spinner /></div>}
 
       {!loading && !loadingMeta && templates.length === 0 && (
-        <EmptyState icon={BarChart3} title="Belum ada form tugas" description="Buat form tugas terlebih dahulu di menu Tugas & Form." />
+        <EmptyState icon={BarChart3} title={t('aev.noFormTitle')} description={t('aev.noFormDesc')} />
       )}
 
       {!loading && !loadingMeta && templates.length > 0 && (
@@ -204,27 +207,27 @@ export default function AdminEvaluationPage() {
                 <CheckCircle2 size={18} className="text-green-500" />
               </div>
               <p className="text-2xl font-bold text-green-600">{summary.TERPENUHI}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Terpenuhi</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t('aev.fulfilled')}</p>
             </Card>
             <Card className="p-4 text-center">
               <div className="w-9 h-9 mx-auto rounded-xl bg-amber-50 flex items-center justify-center mb-2">
                 <Clock size={18} className="text-amber-500" />
               </div>
               <p className="text-2xl font-bold text-amber-600">{summary.PROSES}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Proses</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t('aev.inProgress')}</p>
             </Card>
             <Card className="p-4 text-center">
               <div className="w-9 h-9 mx-auto rounded-xl bg-red-50 flex items-center justify-center mb-2">
                 <XCircle size={18} className="text-red-500" />
               </div>
               <p className="text-2xl font-bold text-red-600">{summary.KOSONG}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Kosong</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t('aev.empty')}</p>
             </Card>
           </div>
 
           {/* Table */}
           {filteredRows.length === 0 ? (
-            <EmptyState icon={BarChart3} title="Tidak ada data" description="Tidak ada jemaat/volunteer yang sesuai filter ini." />
+            <EmptyState icon={BarChart3} title={t('aev.noData')} description={t('aev.noDataDesc')} />
           ) : (
             <Card className="divide-y divide-gray-100">
               {filteredRows.map(r => (
@@ -243,7 +246,7 @@ export default function AdminEvaluationPage() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-semibold text-gray-900">{r.filled}/{r.target}</p>
-                    <p className="text-[10px] text-gray-400">min. {r.minLulus}</p>
+                    <p className="text-[10px] text-gray-400">{t('aev.min')} {r.minLulus}</p>
                   </div>
                   <StatusBadge status={r.status} />
                 </div>

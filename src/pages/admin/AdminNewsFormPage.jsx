@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { Card, Input, Textarea, Button, Spinner } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { validateUpload, compressImage } from '@/lib/utils'
@@ -12,6 +13,7 @@ export default function AdminNewsFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { toast, confirm } = useToast()
+  const { t } = useLang()
   const isEdit = !!id
 
   const [loading, setLoading] = useState(isEdit)
@@ -33,7 +35,7 @@ export default function AdminNewsFormPage() {
         contact_wa: item.contact_wa || '',
         thumbnail_url: item.thumbnail_url || '',
       }))
-      .catch(err => setError(err.message || 'Gagal memuat berita.'))
+      .catch(err => setError(err.message || t('anf.loadFailed')))
       .finally(() => setLoading(false))
   }, [id])
 
@@ -47,10 +49,10 @@ export default function AdminNewsFormPage() {
       validateUpload(file, { maxMB: 5, image: true })
       const url = await newsService.uploadThumbnail(file)
       set('thumbnail_url', url)
-      toast.success('Gambar berhasil diunggah.')
+      toast.success(t('anf.imgUploaded'))
     } catch (err) {
-      setError(err.message || 'Gagal mengunggah gambar.')
-      toast.error(err.message || 'Gagal mengunggah gambar.')
+      setError(err.message || t('anf.imgFailed'))
+      toast.error(err.message || t('anf.imgFailed'))
     } finally {
       setUploading(false)
     }
@@ -58,13 +60,13 @@ export default function AdminNewsFormPage() {
 
   async function handleSubmit() {
     setError('')
-    if (!form.title.trim()) { setError('Judul berita wajib diisi.'); return }
+    if (!form.title.trim()) { setError(t('anf.titleRequired')); return }
     setSaving(true)
     try {
       if (isEdit) {
         await newsService.update(id, form)
         pushService.broadcast({
-          title: 'Pengumuman Diperbarui',
+          title: t('anf.pushUpdated'),
           body: form.title,
           url: `/informasi/${id}`,
         }).catch(() => {})
@@ -72,18 +74,18 @@ export default function AdminNewsFormPage() {
         const created = await newsService.create(form)
         // Kirim notifikasi push ke semua jemaat (tidak menggagalkan simpan bila gagal)
         pushService.broadcast({
-          title: 'Pengumuman Baru',
+          title: t('anf.pushNew'),
           body: form.title,
           url: created?.news_id ? `/informasi/${created.news_id}` : '/informasi',
         }).then(r => {
-          if (r?.sent != null) toast.success(`Notifikasi terkirim ke ${r.sent} perangkat.`)
+          if (r?.sent != null) toast.success(t('anf.notifSent', { n: r.sent }))
         }).catch(() => {})
       }
-      toast.success(isEdit ? 'Berita berhasil diperbarui.' : 'Berita berhasil ditambahkan.')
+      toast.success(isEdit ? t('anf.updated') : t('anf.created'))
       navigate('/admin/berita')
     } catch (err) {
-      setError(err.message || 'Gagal menyimpan berita.')
-      toast.error(err.message || 'Gagal menyimpan berita.')
+      setError(err.message || t('anf.saveFailed'))
+      toast.error(err.message || t('anf.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -91,20 +93,20 @@ export default function AdminNewsFormPage() {
 
   async function handleDelete() {
     const ok = await confirm({
-      title: 'Hapus berita?',
-      message: 'Berita ini akan dihapus permanen.',
-      confirmText: 'Hapus',
+      title: t('anf.deleteTitle'),
+      message: t('anf.deleteMsg'),
+      confirmText: t('a.delete'),
       danger: true,
     })
     if (!ok) return
     setDeleting(true)
     try {
       await newsService.delete(id)
-      toast.success('Berita berhasil dihapus.')
+      toast.success(t('anf.deleted'))
       navigate('/admin/berita')
     } catch (err) {
-      setError(err.message || 'Gagal menghapus berita.')
-      toast.error(err.message || 'Gagal menghapus berita.')
+      setError(err.message || t('anf.deleteFailed'))
+      toast.error(err.message || t('anf.deleteFailed'))
       setDeleting(false)
     }
   }
@@ -114,31 +116,31 @@ export default function AdminNewsFormPage() {
   return (
     <div className="max-w-2xl">
       <button onClick={() => navigate('/admin/berita')} className="flex items-center gap-1 text-sm text-gray-500 mb-4">
-        <ArrowLeft size={16} /> Kembali ke Kelola Berita
+        <ArrowLeft size={16} /> {t('anf.back')}
       </button>
 
       {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>}
 
       <Card className="p-4 mb-4 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-900">Informasi Berita</h2>
+        <h2 className="text-sm font-semibold text-gray-900">{t('anf.section')}</h2>
 
         <Uploader
-          kind="image" label="Gambar Sampul" hint="JPG/PNG, maks 5 MB"
+          kind="image" label={t('anf.cover')} hint={t('anf.coverHint')}
           value={form.thumbnail_url} uploading={uploading}
           onFile={handleUpload} onClear={() => set('thumbnail_url', '')}
         />
 
-        <Input label="Judul" required value={form.title} onChange={e => set('title', e.target.value)} />
-        <Textarea label="Isi Berita" rows={6} value={form.content} onChange={e => set('content', e.target.value)} />
-        <Input label="Kontak WhatsApp" placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
+        <Input label={t('anf.titleLabel')} required value={form.title} onChange={e => set('title', e.target.value)} />
+        <Textarea label={t('anf.content')} rows={6} value={form.content} onChange={e => set('content', e.target.value)} />
+        <Input label={t('anf.contactWa')} placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
       </Card>
 
       <div className="flex gap-2">
         {isEdit && (
-          <Button variant="danger" loading={deleting} onClick={handleDelete}>Hapus</Button>
+          <Button variant="danger" loading={deleting} onClick={handleDelete}>{t('a.delete')}</Button>
         )}
         <Button className="flex-1" loading={saving} onClick={handleSubmit}>
-          {isEdit ? 'Simpan Perubahan' : 'Tambah Berita'}
+          {isEdit ? t('anf.saveChanges') : t('anf.addNews')}
         </Button>
       </div>
     </div>
