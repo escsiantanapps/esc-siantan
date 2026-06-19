@@ -127,6 +127,9 @@ h1, h2, h3 {
 @keyframes sway { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(6px); } }
 /* Burung mengepak menyeberang (siang) */
 @keyframes flyAcross { from { transform: translate(-40px, 4px); } to { transform: translate(480px, -10px); } }
+/* Domba merumput (menunduk-naik halus) & gembala bergoyang lembut */
+@keyframes graze { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-1.5px) rotate(-4deg); } }
+@keyframes bobSoft { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 
 .animate-toast-in {
   animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
