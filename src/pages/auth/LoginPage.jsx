@@ -7,6 +7,11 @@ import { resolveLoginBg, DEFAULT_LOGIN_BG } from '@/config/loginBackgrounds'
 import { Mail, Lock, Eye, EyeOff, Check } from 'lucide-react'
 
 const REMEMBER_KEY = 'esc-remember-email'
+const BG_CACHE_KEY = 'esc-login-bg'
+
+function cachedBg() {
+  try { return JSON.parse(localStorage.getItem(BG_CACHE_KEY)) || DEFAULT_LOGIN_BG } catch { return DEFAULT_LOGIN_BG }
+}
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -17,11 +22,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [bg, setBg] = useState(DEFAULT_LOGIN_BG)
+  // Mulai dari background yang di-cache (hasil kunjungan terakhir) agar tidak
+  // berkedip ke default saat refresh; lalu segarkan dari server.
+  const [bg, setBg] = useState(cachedBg)
 
-  // Ambil background yang diatur Super Admin (dibaca anonim). Fallback default.
   useEffect(() => {
-    settingsService.getLoginBackground().then(v => v && setBg(v)).catch(() => {})
+    settingsService.getLoginBackground().then(v => {
+      if (v) { setBg(v); localStorage.setItem(BG_CACHE_KEY, JSON.stringify(v)) }
+    }).catch(() => {})
   }, [])
 
   async function handleSubmit(e) {
@@ -92,8 +100,8 @@ export default function LoginPage() {
             className="flex items-center gap-2.5 text-sm text-white/90"
           >
             <span className={`w-5 h-5 rounded-md flex items-center justify-center border transition
-              ${remember ? 'bg-green-500 border-green-400' : 'bg-white/10 border-white/50'}`}>
-              {remember && <Check size={13} className="text-white" strokeWidth={3} />}
+              ${remember ? 'bg-white border-white' : 'bg-white/10 border-white/50'}`}>
+              {remember && <Check size={13} className="text-gray-800" strokeWidth={3} />}
             </span>
             {t('auth.rememberMe')}
           </button>
@@ -101,8 +109,7 @@ export default function LoginPage() {
           {/* Tombol Login (gradien hijau) */}
           <button
             type="submit" disabled={loading}
-            className="w-full mt-1 py-3.5 rounded-2xl font-display text-lg font-bold text-white shadow-lg shadow-black/20 transition active:scale-[0.99] disabled:opacity-70"
-            style={{ background: 'linear-gradient(90deg,#a3e635 0%,#22c55e 60%,#16a34a 100%)' }}
+            className="w-full mt-1 py-3.5 rounded-2xl font-display text-lg font-bold text-gray-900 bg-white shadow-lg shadow-black/20 transition active:scale-[0.99] hover:bg-white/90 disabled:opacity-70"
           >
             {loading ? '…' : t('auth.signIn')}
           </button>

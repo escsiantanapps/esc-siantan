@@ -18,6 +18,9 @@ export default defineConfig({
         description: 'Aplikasi Manajemen Jemaat ESC Siantan',
         start_url: '/',
         display: 'standalone',
+        // Utamakan fullscreen agar konten penuh hingga ke atas layar (tanpa bar
+        // status OS yang memisah), seperti aplikasi native. Fallback ke standalone.
+        display_override: ['fullscreen', 'standalone'],
         lang: 'id',
         dir: 'ltr',
         categories: ['lifestyle', 'social', 'productivity'],
