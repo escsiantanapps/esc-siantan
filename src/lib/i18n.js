@@ -487,6 +487,11 @@ export const translations = {
     'adash.birthdays': 'Ulang Tahun',
     'adash.birthdaysN': '{n} jemaat',
     'adash.noBirthdays': 'Tidak ada yang berulang tahun bulan ini',
+    'adash.storage': 'Penyimpanan Supabase',
+    'adash.storageUsed': '{used} dari {total} terpakai',
+    'adash.storageOk': 'Penyimpanan masih aman.',
+    'adash.storageWarn': 'Penyimpanan hampir penuh — pertimbangkan hapus file lama.',
+    'adash.storageFull': 'Penyimpanan hampir habis! Unggahan baru bisa gagal.',
 
     // Statistik Jemaat (MemberStats)
     'stats.title': 'Statistik Jemaat',
@@ -1291,6 +1296,11 @@ export const translations = {
     'adash.birthdays': 'Birthdays',
     'adash.birthdaysN': '{n} member(s)',
     'adash.noBirthdays': 'No birthdays this month',
+    'adash.storage': 'Supabase Storage',
+    'adash.storageUsed': '{used} of {total} used',
+    'adash.storageOk': 'Storage is healthy.',
+    'adash.storageWarn': 'Storage almost full — consider deleting old files.',
+    'adash.storageFull': 'Storage nearly full! New uploads may fail.',
 
     // Member statistics
     'stats.title': 'Member Statistics',

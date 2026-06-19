@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake } from 'lucide-react'
+import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake, Database } from 'lucide-react'
 import { startOfWeek } from 'date-fns'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { evaluationService } from '@/services/evaluationService'
+import { storageService } from '@/services/storageService'
 import { Card, PageHeader, Spinner, StatusBadge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import MemberStats from '@/components/MemberStats'
@@ -20,9 +21,17 @@ export default function AdminDashboardPage() {
   const [bdayMonth, setBdayMonth] = useState(new Date().getMonth()) // 0-11, default bulan ini
   const [evalSummary, setEvalSummary] = useState({ TERPENUHI: 0, PROSES: 0, KOSONG: 0 })
   const [evalLoading, setEvalLoading] = useState(true)
+  const [storage, setStorage] = useState(null) // { total } byte terpakai (Super Admin)
   const [loading, setLoading] = useState(true)
 
+  const isSuperAdmin = profile?.role === 'Super Admin'
+
   useEffect(() => { loadDashboard(); loadEvaluation() }, [])
+
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    storageService.getUsage().then(setStorage).catch(() => {})
+  }, [isSuperAdmin])
 
   async function loadDashboard() {
     try {
@@ -88,6 +97,21 @@ export default function AdminDashboardPage() {
     .sort((a, b) => Number(a.birth_date.slice(8, 10)) - Number(b.birth_date.slice(8, 10)))
   const monthNames = Array.from({ length: 12 }, (_, i) => formatDate(new Date(2000, i, 1), 'MMMM'))
 
+  // Pemakaian storage (Super Admin). Kuota free tier Supabase = 1 GB.
+  const STORAGE_LIMIT = 1024 ** 3
+  const fmtBytes = (b) =>
+    b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(2) + ' GB'
+    : b >= 1024 ** 2 ? (b / 1024 ** 2).toFixed(1) + ' MB'
+    : b >= 1024 ? (b / 1024).toFixed(0) + ' KB'
+    : (b || 0) + ' B'
+  const storagePct = storage ? Math.min((storage.total / STORAGE_LIMIT) * 100, 100) : 0
+  const storageColor = storagePct >= 90 ? 'red' : storagePct >= 70 ? 'amber' : 'green'
+  const SC = {
+    green: { bar: 'bg-green-500', text: 'text-green-600', bg: 'bg-green-50', icon: 'text-green-500', msg: t('adash.storageOk') },
+    amber: { bar: 'bg-amber-500', text: 'text-amber-600', bg: 'bg-amber-50', icon: 'text-amber-500', msg: t('adash.storageWarn') },
+    red:   { bar: 'bg-red-500',   text: 'text-red-600',   bg: 'bg-red-50',   icon: 'text-red-500',   msg: t('adash.storageFull') },
+  }[storageColor]
+
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner size="lg" /></div>
 
   return (
@@ -114,6 +138,28 @@ export default function AdminDashboardPage() {
           )
         })}
       </div>
+
+      {/* Indikator penyimpanan Supabase — khusus Super Admin */}
+      {isSuperAdmin && (
+        <Card className="p-4 mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${SC.bg}`}>
+              <Database size={18} className={SC.icon} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-gray-900">{t('adash.storage')}</h3>
+              <p className="text-xs text-gray-400">
+                {storage ? t('adash.storageUsed', { used: fmtBytes(storage.total), total: '1 GB' }) : '…'}
+              </p>
+            </div>
+            {storage && <span className={`text-sm font-bold ${SC.text}`}>{Math.round(storagePct)}%</span>}
+          </div>
+          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${SC.bar}`} style={{ width: `${storagePct}%` }} />
+          </div>
+          {storage && <p className={`text-xs mt-2 ${SC.text}`}>{SC.msg}</p>}
+        </Card>
+      )}
 
       {/* Statistik umur & gender jemaat */}
       <MemberStats />
