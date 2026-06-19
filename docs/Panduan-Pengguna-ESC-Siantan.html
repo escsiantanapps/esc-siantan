@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Panduan Pengguna — ESC Siantan</title>
+<style>
+  :root{
+    --brand:#0077B6; --brand2:#00BFFF; --ink:#1f2937; --muted:#6b7280;
+    --line:#e5e7eb; --soft:#f1f9ff; --tip:#ecfdf5; --tipline:#10b981;
+    --warn:#fff7ed; --warnline:#f59e0b;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  body{
+    font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+    color:var(--ink); margin:0; line-height:1.6; font-size:11pt;
+  }
+  @page{ size:A4; margin:18mm 16mm; }
+
+  /* COVER */
+  .cover{
+    height:259mm; display:flex; flex-direction:column; justify-content:center;
+    align-items:center; text-align:center; color:#fff; border-radius:0;
+    background:linear-gradient(150deg,var(--brand) 0%,var(--brand2) 100%);
+    page-break-after:always; padding:20mm; position:relative;
+  }
+  .cover .logo{
+    width:120px;height:120px;border-radius:32px;background:rgba(255,255,255,.15);
+    display:flex;align-items:center;justify-content:center;font-size:60px;margin-bottom:26px;
+    border:2px solid rgba(255,255,255,.35);
+  }
+  .cover h1{font-size:40pt;margin:.1em 0;letter-spacing:.5px;}
+  .cover .sub{font-size:15pt;opacity:.92;font-weight:600;letter-spacing:3px;text-transform:uppercase;}
+  .cover .tag{margin-top:26px;font-size:13pt;opacity:.95;}
+  .cover .foot{position:absolute;bottom:18mm;font-size:10pt;opacity:.85;}
+
+  h2{
+    color:var(--brand); font-size:18pt; margin:0 0 4px; padding-top:6px;
+    border-bottom:3px solid var(--brand2); padding-bottom:8px; page-break-after:avoid;
+  }
+  h2 .em{margin-right:10px;}
+  h3{color:var(--brand); font-size:13pt; margin:18px 0 4px; page-break-after:avoid;}
+  section{page-break-inside:avoid; margin-bottom:18px;}
+  p{margin:6px 0;}
+  ul,ol{margin:6px 0 6px 0; padding-left:22px;}
+  li{margin:4px 0;}
+  .lead{color:var(--muted);}
+
+  .toc{background:var(--soft); border:1px solid var(--line); border-radius:12px; padding:16px 22px;}
+  .toc h2{border:none; color:var(--ink); font-size:16pt; padding:0; margin-bottom:8px;}
+  .toc ol{columns:2; column-gap:30px; padding-left:18px;}
+  .toc li{margin:5px 0;}
+
+  .tip,.warn{border-radius:10px; padding:10px 14px; margin:10px 0; font-size:10.5pt;}
+  .tip{background:var(--tip); border-left:4px solid var(--tipline);}
+  .warn{background:var(--warn); border-left:4px solid var(--warnline);}
+  .tip b,.warn b{display:block;margin-bottom:2px;}
+
+  .card{border:1px solid var(--line); border-radius:12px; padding:8px 16px; margin:10px 0; background:#fafcff;}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:10.5pt;}
+  th,td{border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top;}
+  th{background:var(--soft); color:var(--brand);}
+  .step{counter-reset:s; list-style:none; padding-left:0;}
+  .step>li{position:relative; padding-left:34px; margin:8px 0;}
+  .step>li::before{
+    counter-increment:s; content:counter(s);
+    position:absolute; left:0; top:0; width:24px;height:24px;border-radius:50%;
+    background:var(--brand2); color:#fff; font-weight:700; font-size:10pt;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .pagebreak{page-break-before:always;}
+  .pill{display:inline-block;background:var(--soft);color:var(--brand);border:1px solid var(--brand2);
+    border-radius:999px;padding:1px 10px;font-size:9.5pt;font-weight:600;}
+  footer{margin-top:30px;border-top:1px solid var(--line);padding-top:10px;color:var(--muted);font-size:9.5pt;text-align:center;}
+</style>
+</head>
+<body>
+
+<!-- ====================== COVER ====================== -->
+<div class="cover">
+  <div class="logo">⛪</div>
+  <h1>ESC Siantan</h1>
+  <div class="sub">Community &amp; Grace</div>
+  <div class="tag">Panduan Pengguna Aplikasi<br>Untuk Jemaat &amp; Pelayan</div>
+  <div class="foot">Aplikasi gereja digital • esc-siantan.vercel.app</div>
+</div>
+
+<!-- ====================== TOC ====================== -->
+<div class="toc">
+  <h2>Daftar Isi</h2>
+  <ol>
+    <li>Mengenal Aplikasi</li>
+    <li>Memasang Aplikasi (HP &amp; Komputer)</li>
+    <li>Membuat Akun (Daftar)</li>
+    <li>Masuk (Login)</li>
+    <li>Lupa Kata Sandi</li>
+    <li>Halaman Beranda</li>
+    <li>Informasi &amp; Pengumuman</li>
+    <li>Events / Kegiatan</li>
+    <li>Kelas Pembinaan</li>
+    <li>Scan Absensi (QR)</li>
+    <li>Tugas Pelayanan</li>
+    <li>Pendaftaran Baptisan</li>
+    <li>Pendaftaran Pemberkatan Nikah</li>
+    <li>Persembahan</li>
+    <li>Status Pendaftaran</li>
+    <li>Profil &amp; Pengaturan</li>
+    <li>Ganti Bahasa &amp; Mode Gelap</li>
+    <li>Untuk Pemimpin Komsel (PKS)</li>
+    <li>Untuk Admin</li>
+    <li>Untuk Super Admin</li>
+    <li>Pertanyaan Umum (FAQ)</li>
+    <li>Bantuan</li>
+  </ol>
+</div>
+
+<div class="pagebreak"></div>
+
+<!-- 1 -->
+<section>
+  <h2><span class="em">📖</span>1. Mengenal Aplikasi</h2>
+  <p>ESC Siantan adalah aplikasi gereja digital untuk mempermudah jemaat dalam mengikuti
+  kegiatan gereja: melihat pengumuman &amp; jadwal, mendaftar event, mengikuti kelas
+  pembinaan, mengisi tugas pelayanan, mendaftar baptisan/pernikahan, mencatat persembahan,
+  hingga melakukan absensi lewat kode QR.</p>
+  <p class="lead">Aplikasi dapat dibuka dari HP maupun komputer melalui browser, dan dapat
+  dipasang seperti aplikasi biasa (ikon di layar utama) tanpa lewat Play Store.</p>
+  <div class="tip"><b>💡 Tidak perlu instal yang rumit</b>
+  Cukup buka alamat web, lalu "tambahkan ke layar utama". Penjelasan ada di bagian 2.</div>
+</section>
+
+<!-- 2 -->
+<section>
+  <h2><span class="em">📲</span>2. Memasang Aplikasi</h2>
+  <h3>Di HP Android (Chrome)</h3>
+  <ol class="step">
+    <li>Buka <span class="pill">esc-siantan.vercel.app</span> di browser Chrome.</li>
+    <li>Ketuk menu titik tiga (⋮) di kanan atas.</li>
+    <li>Pilih <b>"Tambahkan ke Layar Utama"</b> / "Install app".</li>
+    <li>Ikon ESC Siantan akan muncul di layar HP. Buka dari ikon itu seperti aplikasi biasa.</li>
+  </ol>
+  <h3>Di iPhone (Safari)</h3>
+  <ol class="step">
+    <li>Buka alamat di atas memakai browser <b>Safari</b>.</li>
+    <li>Ketuk tombol <b>Bagikan</b> (kotak dengan panah ke atas).</li>
+    <li>Pilih <b>"Tambah ke Layar Utama"</b>, lalu <b>Tambah</b>.</li>
+  </ol>
+  <h3>Di Komputer (Chrome / Edge)</h3>
+  <p>Buka alamat, lalu klik ikon <b>install</b> (⊕) di ujung kanan kolom alamat,
+  atau menu ⋮ → "Install ESC Siantan".</p>
+
+  <h3>Lewat File APK (Android)</h3>
+  <p>Khusus Android, aplikasi juga tersedia sebagai <b>file pemasangan APK</b> sehingga dapat
+  dipasang langsung tanpa lewat Play Store atau browser.</p>
+  <ol class="step">
+    <li>Minta file <span class="pill">ESC-Siantan.apk</span> kepada <b>admin gereja</b>, atau
+      unduh dari <b>tautan resmi</b> yang dibagikan gereja (mis. lewat WhatsApp).</li>
+    <li>Buka file APK tersebut di HP. Bila muncul peringatan "sumber tidak dikenal",
+      izinkan pemasangan dari sumber ini melalui Pengaturan HP.</li>
+    <li>Ketuk <b>Pasang / Install</b>. Setelah selesai, buka dari ikon <b>ESC Siantan</b>.</li>
+  </ol>
+  <div class="tip"><b>💡 Kapan pakai APK?</b>
+  APK cocok bila ingin membagikan aplikasi secara langsung (lewat WhatsApp/flashdisk/Bluetooth)
+  tanpa harus membuka browser. Fitur &amp; tampilannya sama dengan versi web.</div>
+
+  <div class="tip"><b>💡 Kenapa dipasang?</b>
+  Setelah dipasang, aplikasi membuka lebih cepat, tampil layar penuh, dan bisa menerima
+  notifikasi (khusus Android &amp; komputer; di iPhone notifikasi hanya aktif bila app sudah
+  ditambahkan ke Layar Utama).</div>
+</section>
+
+<!-- 3 -->
+<section>
+  <h2><span class="em">📝</span>3. Membuat Akun (Daftar)</h2>
+  <ol class="step">
+    <li>Di halaman awal, ketuk <b>"Daftar sekarang"</b>.</li>
+    <li><b>Langkah 1 – Akun:</b> isi Nama Lengkap, Email, No. HP/WhatsApp, dan Kata Sandi
+      (minimal 8 karakter). Ketuk <b>Lanjut</b>.</li>
+    <li><b>Langkah 2 – Data Diri:</b> isi jenis kelamin, tanggal &amp; tempat lahir, alamat,
+      golongan darah, dan sosial media (boleh dilewati sebagian). Ketuk <b>Lanjut</b>.</li>
+    <li><b>Langkah 3 – Selesai:</b> periksa nama &amp; email, lalu ketuk <b>Daftar Sekarang</b>.</li>
+  </ol>
+  <div class="warn"><b>⏳ Menunggu persetujuan</b>
+  Setelah daftar, akun berstatus <b>"Menunggu Persetujuan"</b>. Admin gereja akan menyetujui
+  akun Anda terlebih dahulu. Setelah disetujui, Anda bisa masuk dan memakai semua fitur.</div>
+</section>
+
+<!-- 4 -->
+<section>
+  <h2><span class="em">🔑</span>4. Masuk (Login)</h2>
+  <ol class="step">
+    <li>Masukkan <b>Email</b> dan <b>Kata Sandi</b>.</li>
+    <li>Ketuk ikon mata untuk menampilkan/menyembunyikan kata sandi bila perlu.</li>
+    <li>Ketuk <b>Masuk</b>.</li>
+  </ol>
+  <p>Jika email atau kata sandi salah, akan muncul peringatan. Pastikan email diketik benar
+  (tanpa spasi) dan kata sandi sesuai.</p>
+</section>
+
+<!-- 5 -->
+<section>
+  <h2><span class="em">🔢</span>5. Lupa Kata Sandi</h2>
+  <p>Bila lupa kata sandi, Anda dapat mengaturnya ulang memakai <b>kode OTP</b> yang dikirim
+  ke email.</p>
+  <ol class="step">
+    <li>Di halaman Masuk, ketuk <b>"Lupa kata sandi?"</b>.</li>
+    <li>Masukkan email Anda, ketuk <b>Kirim Kode</b>.</li>
+    <li>Buka email (cek juga folder <b>Spam</b>), salin <b>kode 6 angka</b>.</li>
+    <li>Masukkan kode tersebut, lalu ketik <b>kata sandi baru</b> dan konfirmasinya.</li>
+    <li>Ketuk <b>Simpan Kata Sandi Baru</b>. Selesai — Anda langsung masuk.</li>
+  </ol>
+  <div class="tip"><b>💡 Tidak menerima kode?</b>
+  Tunggu 1 menit, cek folder Spam, lalu ketuk <b>"Kirim ulang kode"</b>. Pastikan email yang
+  dimasukkan sama dengan email akun Anda.</div>
+</section>
+
+<div class="pagebreak"></div>
+
+<!-- 6 -->
+<section>
+  <h2><span class="em">🏠</span>6. Halaman Beranda</h2>
+  <p>Beranda menampilkan sekilas semua hal penting:</p>
+  <ul>
+    <li><b>Salam &amp; nama Anda</b> di bagian atas.</li>
+    <li><b>Event</b> terdekat dalam bentuk geser (carousel).</li>
+    <li><b>Menu Cepat:</b> Persembahan, Events, Kelas, Baptisan, Nikah, Status.</li>
+    <li><b>Pengumuman</b> dan <b>Kelas Tersedia</b> terbaru.</li>
+    <li>Ikon <b>lonceng 🔔</b> di kanan atas untuk notifikasi.</li>
+  </ul>
+  <p>Menu utama ada di <b>navigasi bawah</b>: Beranda, Info, tombol <b>Scan</b> (tengah),
+  Tugas, dan Profil.</p>
+</section>
+
+<!-- 7 -->
+<section>
+  <h2><span class="em">📣</span>7. Informasi &amp; Pengumuman</h2>
+  <p>Ketuk menu <b>Info</b> di navigasi bawah. Berisi:</p>
+  <ul>
+    <li><b>Pengumuman</b> — kabar &amp; warta gereja. Ketuk untuk membaca selengkapnya.</li>
+    <li><b>Kelas &amp; Pembinaan</b> — daftar kelas yang tersedia.</li>
+  </ul>
+  <p>Pada halaman detail pengumuman, bila tersedia, ada tombol <b>Hubungi via WhatsApp</b>.</p>
+</section>
+
+<!-- 8 -->
+<section>
+  <h2><span class="em">📅</span>8. Events / Kegiatan</h2>
+  <ol class="step">
+    <li>Buka <b>Events</b> (dari Menu Cepat atau Beranda).</li>
+    <li>Gunakan tab <b>Aktif / Selesai / Semua</b> untuk menyaring.</li>
+    <li>Ketuk sebuah event untuk melihat detail (tanggal, jam, lokasi, keterangan).</li>
+    <li>Bila pendaftaran dibuka, ketuk <b>Daftar Sekarang</b>. Anda akan mendapat <b>tiket</b>.</li>
+  </ol>
+  <div class="tip"><b>💡 Absensi event</b>
+  Hanya yang sudah <b>terdaftar</b> yang bisa melakukan absensi event. Saat hari-H, scan kode
+  QR event memakai tombol Scan (lihat bagian 10).</div>
+</section>
+
+<!-- 9 -->
+<section>
+  <h2><span class="em">📚</span>9. Kelas Pembinaan</h2>
+  <ol class="step">
+    <li>Buka <b>Kelas</b>. Ketuk salah satu kelas untuk melihat jadwal, lokasi, &amp; pengajar.</li>
+    <li>Untuk mencatat kehadiran, ketuk <b>Absen Sekarang</b> lalu scan QR kelas.</li>
+    <li>Riwayat kehadiran Anda tampil di halaman detail kelas.</li>
+  </ol>
+</section>
+
+<!-- 10 -->
+<section>
+  <h2><span class="em">📷</span>10. Scan Absensi (QR)</h2>
+  <p>Tombol <b>Scan</b> berada di tengah navigasi bawah.</p>
+  <ol class="step">
+    <li>Ketuk tombol <b>Scan</b>. Izinkan akses <b>kamera</b> bila diminta.</li>
+    <li>Arahkan kamera ke <b>kode QR</b> kelas atau event.</li>
+    <li>Bila berhasil, muncul tanda centang hijau. Bila sudah pernah absen, muncul keterangan.</li>
+  </ol>
+  <div class="warn"><b>⚠️ Tidak bisa absen event?</b>
+  Pastikan Anda sudah <b>mendaftar</b> event tersebut. Bila belum, daftar dulu di halaman event.</div>
+</section>
+
+<!-- 11 -->
+<section>
+  <h2><span class="em">✅</span>11. Tugas Pelayanan</h2>
+  <p>Menu <b>Tugas</b> berisi form pelayanan yang ditujukan untuk Anda (sesuai ministry/bidang).</p>
+  <ol class="step">
+    <li>Buka <b>Tugas</b>. Setiap kartu menampilkan progres minggu/bulan ini.</li>
+    <li>Ketuk sebuah tugas, isi form (teks, angka, pilihan, foto, dll.).</li>
+    <li>Ketuk <b>Kirim Jawaban</b>. Riwayat pengisian tampil di bawah.</li>
+  </ol>
+  <div class="tip"><b>💡 Unggah foto</b>
+  Beberapa tugas meminta foto sebagai bukti. Foto otomatis diperkecil agar hemat kuota.</div>
+</section>
+
+<!-- 12 -->
+<section>
+  <h2><span class="em">💧</span>12. Pendaftaran Baptisan</h2>
+  <ol class="step">
+    <li>Dari Menu Cepat, ketuk <b>Baptisan</b>.</li>
+    <li>Isi bertahap: <b>Data Diri → Keluarga → Kerohanian → Dokumen</b>.</li>
+    <li>Unggah dokumen (KTP/KK, pas foto) — bersifat opsional, bisa dilengkapi saat wawancara.</li>
+    <li>Ketuk <b>Kirim Pendaftaran</b>. Status pendaftaran dapat dipantau (lihat bagian 15).</li>
+  </ol>
+</section>
+
+<!-- 13 -->
+<section>
+  <h2><span class="em">💍</span>13. Pendaftaran Pemberkatan Nikah</h2>
+  <ol class="step">
+    <li>Dari Menu Cepat, ketuk <b>Nikah</b>.</li>
+    <li>Isi bertahap: <b>Mempelai Pria → Mempelai Wanita → Detail Acara → Dokumen</b>.</li>
+    <li>Lengkapi rencana tanggal, estimasi tamu, &amp; catatan bila ada.</li>
+    <li>Ketuk <b>Kirim Pendaftaran</b>. Tim gereja akan menghubungi via WhatsApp untuk jadwal.</li>
+  </ol>
+</section>
+
+<!-- 14 -->
+<section>
+  <h2><span class="em">🙏</span>14. Persembahan</h2>
+  <ol class="step">
+    <li>Buka <b>Persembahan</b> dari Menu Cepat.</li>
+    <li>Lihat <b>Cara Memberi</b>: scan QRIS atau salin nomor rekening bank yang tertera.</li>
+    <li>Setelah transfer, <b>catat persembahan</b>: pilih kategori, isi nominal, catatan,
+      dan unggah bukti (opsional).</li>
+    <li>Ketuk <b>Catat Persembahan</b>. Riwayat Anda tampil di bagian bawah.</li>
+  </ol>
+  <div class="tip"><b>💡 Untuk apa dicatat?</b>
+  Pencatatan membantu bendahara merekap persembahan. Pastikan Anda benar-benar sudah
+  transfer/scan QRIS sebelum mencatat.</div>
+</section>
+
+<!-- 15 -->
+<section>
+  <h2><span class="em">📋</span>15. Status Pendaftaran</h2>
+  <p>Menu <b>Status</b> (Menu Cepat) menampilkan riwayat &amp; status semua pendaftaran Anda:
+  baptisan, pernikahan, dan event — lengkap dengan catatan dari admin bila ada.</p>
+</section>
+
+<!-- 16 -->
+<section>
+  <h2><span class="em">👤</span>16. Profil &amp; Pengaturan</h2>
+  <p>Buka menu <b>Profil</b>. Di atas tampil banner beranimasi (jam, matahari/bulan) dan foto Anda.</p>
+  <ul>
+    <li><b>Informasi Pribadi &amp; Pelayanan</b> (ministry, komsel) ditampilkan di sini.</li>
+    <li>Ketuk kartu <b>Pengaturan</b> (dekat tombol Keluar) untuk membuka semua pengaturan.</li>
+  </ul>
+  <h3>Di halaman Pengaturan</h3>
+  <ul>
+    <li><b>Edit Profil</b> — ubah data diri, foto, kontak.</li>
+    <li><b>Ubah Kata Sandi</b> — masukkan sandi lama lalu sandi baru.</li>
+    <li><b>Bahasa</b>, <b>Mode Gelap</b>, <b>Notifikasi</b> (lihat bagian 17).</li>
+    <li><b>Keluar</b> dari akun.</li>
+  </ul>
+</section>
+
+<!-- 17 -->
+<section>
+  <h2><span class="em">🌐</span>17. Ganti Bahasa &amp; Mode Gelap</h2>
+  <p>Semua di halaman <b>Pengaturan</b>:</p>
+  <ul>
+    <li><b>Bahasa:</b> pilih <b>Bahasa Indonesia</b> atau <b>English</b>. Tampilan langsung berubah.</li>
+    <li><b>Mode Gelap:</b> aktifkan untuk tampilan gelap yang nyaman di malam hari.</li>
+    <li><b>Notifikasi:</b> aktifkan untuk menerima pemberitahuan (Android &amp; komputer; iPhone
+      perlu app ditambahkan ke Layar Utama terlebih dahulu).</li>
+  </ul>
+</section>
+
+<!-- 18 -->
+<section>
+  <h2><span class="em">👥</span>18. Untuk Pemimpin Komsel (PKS)</h2>
+  <p>Bila Anda ditetapkan sebagai PKS, akan muncul <b>Panel PKS</b> (lewat menu "Beralih Panel"
+  di Profil). Fitur:</p>
+  <ul>
+    <li><b>Anggota</b> — daftar anggota komsel Anda.</li>
+    <li><b>Absensi</b> — catat kehadiran anggota tiap minggu (Hadir/Tidak Hadir/Izin + catatan doa).</li>
+    <li><b>Evaluasi</b> — pantau pemenuhan tugas anggota bulan ini.</li>
+    <li><b>Profil</b> — info Anda sebagai koordinator komsel.</li>
+  </ul>
+  <p class="lead">Bila Anda memimpin lebih dari satu komsel, pilih komsel dari menu di atas.</p>
+</section>
+
+<div class="pagebreak"></div>
+
+<!-- 19 -->
+<section>
+  <h2><span class="em">🛠️</span>19. Untuk Admin</h2>
+  <p>Admin mengelola data &amp; konten gereja melalui <b>Panel Admin</b>
+  (Profil → "Beralih Panel" → <b>Panel Admin</b>).</p>
+  <div class="tip"><b>💡 Akses tiap admin bisa berbeda</b>
+  Super Admin mengatur hak akses tiap admin secara <b>khusus per orang</b>. Jadi menu yang
+  muncul pada satu admin bisa berbeda dengan admin lain — sesuai izin yang diberikan.</div>
+
+  <h3>Hal yang dapat dikelola Admin (sesuai izin)</h3>
+  <table>
+    <tr><th>Menu</th><th>Fungsi</th></tr>
+    <tr><td>Dashboard</td><td>Ringkasan jumlah jemaat, event aktif, antrian baptis/nikah,
+      statistik umur &amp; gender, serta evaluasi minggu ini.</td></tr>
+    <tr><td>Kelola Jemaat</td><td>Menyetujui akun baru (Menunggu Persetujuan → Aktif),
+      mengubah data jemaat, menetapkan ministry &amp; komsel, mengatur status, dan menghapus akun.</td></tr>
+    <tr><td>Events</td><td>Membuat/mengubah event, melihat rekap pendaftar, dan menyiapkan
+      kode QR untuk absensi.</td></tr>
+    <tr><td>Berita / Pengumuman</td><td>Membuat &amp; mengubah pengumuman gereja.</td></tr>
+    <tr><td>Kelas</td><td>Membuat kelas, mengatur jumlah sesi, dan kode QR absensi per sesi.</td></tr>
+    <tr><td>Tugas</td><td>Membuat form tugas pelayanan, membatasi ke ministry tertentu,
+      dan melihat jawaban yang masuk.</td></tr>
+    <tr><td>Baptisan &amp; Nikah</td><td>Meninjau pendaftaran, menyetujui/menjadwalkan,
+      memberi catatan, dan mengarsipkan data sebagai PDF.</td></tr>
+    <tr><td>Surat Peringatan (SP)</td><td>Mencatat &amp; mengubah status SP jemaat.</td></tr>
+    <tr><td>Ministry &amp; Komsel</td><td>Mengelola bidang pelayanan dan komsel, serta
+      menetapkan PKS (pemimpin) komsel.</td></tr>
+    <tr><td>Evaluasi</td><td>Memantau pemenuhan tugas jemaat dan mencetak laporan (PDF).</td></tr>
+    <tr><td>Persembahan</td><td>Mengatur rekening/QRIS gereja dan merekap persembahan untuk bendahara.</td></tr>
+  </table>
+
+  <h3>Alur penting: menyetujui akun baru</h3>
+  <ol class="step">
+    <li>Buka <b>Kelola Jemaat</b> (atau "Akun Baru" di Dashboard).</li>
+    <li>Pilih jemaat berstatus <b>Menunggu Persetujuan</b>.</li>
+    <li>Ubah status menjadi <b>Aktif</b> agar yang bersangkutan dapat memakai aplikasi.</li>
+  </ol>
+  <div class="warn"><b>⚠️ Batasan Admin</b>
+  Setelah seorang jemaat dijadikan Admin, ia <b>tidak dapat</b> menjadi Super Admin. Pengaturan
+  siapa yang menjadi admin &amp; hak aksesnya hanya dapat diubah oleh <b>Super Admin</b>.</div>
+</section>
+
+<!-- 20 -->
+<section>
+  <h2><span class="em">🛡️</span>20. Untuk Super Admin</h2>
+  <p>Super Admin memiliki <b>seluruh akses Admin</b>, ditambah wewenang khusus untuk mengatur
+  <b>siapa yang menjadi Admin</b> dan <b>apa saja yang boleh diaksesnya</b>, melalui menu
+  <b>Hak Akses</b>.</p>
+
+  <h3>Mengelola Hak Akses</h3>
+  <ol class="step">
+    <li>Buka menu <b>Hak Akses</b> di Panel Admin.</li>
+    <li><b>Jadikan Admin:</b> cari &amp; pilih jemaat yang ingin diberi akses admin.</li>
+    <li><b>Atur izin per-admin:</b> centang halaman mana saja yang boleh diakses admin tersebut.
+      Izin bersifat <b>eksklusif per orang</b> — tiap admin dapat memiliki kombinasi berbeda.</li>
+    <li><b>Cabut akses:</b> kembalikan seorang admin menjadi jemaat biasa kapan saja.</li>
+  </ol>
+
+  <div class="tip"><b>💡 Tanggung jawab Super Admin</b>
+  Jaga kerahasiaan akun Super Admin (jangan dibagikan). Tinjau secara berkala daftar admin
+  beserta izinnya, dan berikan akses seperlunya sesuai tugas masing-masing pelayan.</div>
+
+  <div class="warn"><b>⚠️ Hanya Super Admin</b>
+  Menu <b>Hak Akses</b> hanya tampil dan dapat digunakan oleh Super Admin. Admin biasa tidak
+  dapat memberi/mencabut akses admin maupun mengubah izin.</div>
+</section>
+
+<div class="pagebreak"></div>
+
+<!-- 21 -->
+<section>
+  <h2><span class="em">❓</span>21. Pertanyaan Umum (FAQ)</h2>
+  <table>
+    <tr><th>Pertanyaan</th><th>Jawaban</th></tr>
+    <tr><td>Akun saya belum bisa dipakai?</td>
+      <td>Akun baru harus disetujui admin dulu (status "Menunggu Persetujuan"). Hubungi admin gereja.</td></tr>
+    <tr><td>Tidak menerima email kode OTP?</td>
+      <td>Cek folder Spam, tunggu 1 menit, lalu "Kirim ulang kode". Pastikan email benar.</td></tr>
+    <tr><td>Kamera tidak jalan saat Scan?</td>
+      <td>Izinkan akses kamera di browser. Buka aplikasi dari ikon yang sudah dipasang.</td></tr>
+    <tr><td>Tidak bisa absen event?</td>
+      <td>Anda harus mendaftar event tersebut terlebih dahulu.</td></tr>
+    <tr><td>Foto gagal terunggah?</td>
+      <td>Pastikan ukuran wajar (maks 8 MB) dan koneksi internet stabil. Coba ulangi.</td></tr>
+    <tr><td>Bagaimana ganti ke Bahasa Inggris?</td>
+      <td>Profil → Pengaturan → Bahasa → English.</td></tr>
+    <tr><td>Aplikasi tidak update?</td>
+      <td>Tutup lalu buka ulang aplikasi. Aplikasi memperbarui dirinya otomatis.</td></tr>
+  </table>
+</section>
+
+<!-- 20 -->
+<section>
+  <h2><span class="em">📞</span>22. Bantuan</h2>
+  <p>Bila mengalami kendala yang tidak ada di panduan ini, silakan hubungi <b>Admin / Pengurus
+  gereja</b> melalui kontak resmi gereja. Sertakan keterangan: bagian mana yang bermasalah,
+  apa yang muncul di layar, dan jenis HP/browser yang Anda pakai — agar lebih cepat dibantu.</p>
+  <div class="tip"><b>🙏 Selamat menggunakan ESC Siantan</b>
+  Kiranya aplikasi ini memudahkan Anda bertumbuh dan melayani bersama. Tuhan memberkati.</div>
+</section>
+
+<footer>
+  Panduan Pengguna ESC Siantan • Dokumen ini untuk dibagikan kepada jemaat •
+  Aplikasi: esc-siantan.vercel.app
+</footer>
+
+</body>
+</html>
