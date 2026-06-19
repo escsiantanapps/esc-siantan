@@ -58,6 +58,7 @@ const AdminKomselPage = lazy(() => import('@/pages/admin/AdminKomselPage'))
 const AdminEvaluationPage = lazy(() => import('@/pages/admin/AdminEvaluationPage'))
 const AdminOfferingsPage = lazy(() => import('@/pages/admin/AdminOfferingsPage'))
 const AdminPermissionsPage = lazy(() => import('@/pages/admin/AdminPermissionsPage'))
+const AdminAppearancePage = lazy(() => import('@/pages/admin/AdminAppearancePage'))
 
 // Layouts
 import UserLayout from '@/layouts/UserLayout'
@@ -177,6 +178,7 @@ export default function App() {
             <Route path="evaluasi"             element={<AdminEvaluationPage />} />
             <Route path="persembahan"          element={<AdminOfferingsPage />} />
             <Route path="hak-akses"            element={<AdminPermissionsPage />} />
+            <Route path="tampilan"             element={<AdminAppearancePage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

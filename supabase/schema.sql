@@ -162,6 +162,8 @@ CREATE TABLE form_templates (
   active_days     TEXT[] DEFAULT '{}',
   open_time       TEXT DEFAULT '00:00',
   close_time      TEXT DEFAULT '23:59',
+  bg_type         TEXT DEFAULT 'none' CHECK (bg_type IN ('none','preset','image')),
+  bg_value        TEXT,
   created_by      TEXT,
   created_at      TIMESTAMPTZ DEFAULT now()
 );
@@ -279,6 +281,14 @@ CREATE TABLE admin_user_permissions (
   updated_at    TIMESTAMPTZ DEFAULT now()
 );
 
+-- 1.21 PENGATURAN APLIKASI (key/value) — mis. background halaman Login.
+-- Dibaca anonim (Login pra-auth); ditulis hanya Super Admin.
+CREATE TABLE app_settings (
+  key        TEXT PRIMARY KEY,
+  value      JSONB,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ============================================================
 -- 2. HELPER (SECURITY DEFINER) — baca peran/komsel user TANPA memicu RLS
 --    (mencegah rekursi pada policy tabel users). Lihat migrasi v10 & v13.
@@ -335,6 +345,7 @@ ALTER TABLE push_subscriptions     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_accounts       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE offerings              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_user_permissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_settings           ENABLE ROW LEVEL SECURITY;
 -- Catatan: class_attendance dibiarkan tanpa RLS (akses lewat anon/auth key
 -- sesuai perilaku aplikasi). Aktifkan + tambah policy bila ingin diperketat.
 
@@ -475,6 +486,12 @@ CREATE POLICY "aup_select" ON admin_user_permissions FOR SELECT USING (
   user_id = auth_user_id() OR auth_user_role() = 'Super Admin'
 );
 CREATE POLICY "aup_super_write" ON admin_user_permissions FOR ALL
+  USING (auth_user_role() = 'Super Admin')
+  WITH CHECK (auth_user_role() = 'Super Admin');
+
+-- ── app_settings: dibaca siapa saja (Login pra-auth); ditulis Super Admin ──
+CREATE POLICY "app_settings_read" ON app_settings FOR SELECT USING (true);
+CREATE POLICY "app_settings_write" ON app_settings FOR ALL
   USING (auth_user_role() = 'Super Admin')
   WITH CHECK (auth_user_role() = 'Super Admin');
 

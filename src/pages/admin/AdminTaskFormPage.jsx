@@ -5,6 +5,10 @@ import { tasksService } from '@/services/tasksService'
 import { usersService } from '@/services/usersService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Input, Textarea, Select, Checkbox, Button, Spinner } from '@/components/ui'
+import Uploader from '@/components/Uploader'
+import { validateUpload, compressImage } from '@/lib/utils'
+import { FORM_BG_PRESETS, resolveFormBg } from '@/config/formBackgrounds'
+import { Check } from 'lucide-react'
 
 const FIELD_TYPES = [
   { value: 'text', label: 'Teks Singkat' },
@@ -48,6 +52,7 @@ export default function AdminTaskFormPage() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [bgUploading, setBgUploading] = useState(false)
   const [error, setError] = useState('')
   const [ministries, setMinistries] = useState([])
 
@@ -55,6 +60,7 @@ export default function AdminTaskFormPage() {
     title: '', description: '', weekly_goal: 1, period: 'minggu',
     active_days: [], open_time: '00:00', close_time: '23:59',
     allowed_ministry: [], fields_json: [],
+    bg_type: 'none', bg_value: '',
   })
 
   useEffect(() => {
@@ -72,6 +78,8 @@ export default function AdminTaskFormPage() {
             close_time: t.close_time || '23:59',
             allowed_ministry: t.allowed_ministry || [],
             fields_json: t.fields_json || [],
+            bg_type: t.bg_type || 'none',
+            bg_value: t.bg_value || '',
           })
         })
         .catch(err => setError(err.message || 'Gagal memuat template.'))
@@ -93,6 +101,20 @@ export default function AdminTaskFormPage() {
       ...p,
       allowed_ministry: p.allowed_ministry.includes(mid) ? p.allowed_ministry.filter(m => m !== mid) : [...p.allowed_ministry, mid],
     }))
+  }
+
+  async function handleBgUpload(file) {
+    setBgUploading(true)
+    try {
+      file = await compressImage(file, { maxDim: 1600 })
+      validateUpload(file, { maxMB: 5, image: true })
+      const url = await tasksService.uploadFormBackground(file)
+      setForm(p => ({ ...p, bg_type: 'image', bg_value: url }))
+    } catch (err) {
+      toast.error(err.message || 'Gagal mengunggah gambar.')
+    } finally {
+      setBgUploading(false)
+    }
   }
 
   function addField() {
@@ -220,6 +242,45 @@ export default function AdminTaskFormPage() {
           </div>
         )}
         <p className="text-xs text-gray-400">Kosongkan semua agar berlaku untuk seluruh jemaat/volunteer.</p>
+      </Card>
+
+      <Card className="p-4 mb-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-900">Background Form</h2>
+        {/* Pratinjau */}
+        <div className="h-20 rounded-xl border border-gray-100 flex items-center justify-center text-xs text-gray-400"
+          style={resolveFormBg(form.bg_type, form.bg_value) || undefined}>
+          {form.bg_type === 'none' && 'Tanpa background'}
+        </div>
+        {/* Mode */}
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+          {[['none', 'Tidak ada'], ['preset', 'Pilihan'], ['image', 'Gambar']].map(([val, label]) => (
+            <button key={val} type="button"
+              onClick={() => { set('bg_type', val); if (val === 'none') set('bg_value', '') }}
+              className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${form.bg_type === val ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {form.bg_type === 'preset' && (
+          <div className="grid grid-cols-3 gap-3">
+            {FORM_BG_PRESETS.map(p => {
+              const active = form.bg_value === p.id
+              return (
+                <button key={p.id} type="button" onClick={() => set('bg_value', p.id)}
+                  className={`relative h-14 rounded-xl border-2 transition ${active ? 'border-brand-500' : 'border-gray-100'}`}
+                  style={{ background: p.css }}>
+                  {active && <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 flex items-center justify-center"><Check size={13} className="text-brand-600" strokeWidth={3} /></span>}
+                  <span className="absolute bottom-1 left-1.5 text-[10px] font-medium text-white drop-shadow">{p.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {form.bg_type === 'image' && (
+          <Uploader kind="image" label="Gambar Background" hint="JPG/PNG, maks 5 MB"
+            value={form.bg_value} uploading={bgUploading}
+            onFile={handleBgUpload} onClear={() => set('bg_value', '')} />
+        )}
       </Card>
 
       <Card className="p-4 mb-4 space-y-4">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { startOfWeek, startOfMonth } from 'date-fns'
-import { ClipboardList, CheckCircle2, Lock } from 'lucide-react'
+import { ClipboardList, CheckCircle2, Lock, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
@@ -9,6 +9,7 @@ import { Card, Spinner, EmptyState, GradientHeader, Button, Input, Textarea, Sel
 import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
+import { resolveFormBg } from '@/config/formBackgrounds'
 
 export default function TaskDetailPage() {
   const { id } = useParams()
@@ -138,10 +139,26 @@ export default function TaskDetailPage() {
     : startOfWeek(new Date(), { weekStartsOn: 1 })
   const doneThisPeriod = responses.filter(r => new Date(r.submitted_at) >= periodStart).length
   const complete = doneThisPeriod >= target
+  const formBg = resolveFormBg(template.bg_type, template.bg_value)
 
   return (
     <div className="pb-4">
-      <GradientHeader title={template.title} subtitle={template.description} back={() => navigate('/tugas')} />
+      {formBg ? (
+        // Header dengan background kustom form (gambar/preset) + scrim agar teks terbaca.
+        <div className="relative h-32 flex items-end overflow-hidden" style={formBg}>
+          <div className="absolute inset-0 bg-black/35" />
+          <button onClick={() => navigate('/tugas')}
+            className="absolute top-4 left-4 w-9 h-9 rounded-full bg-black/25 backdrop-blur flex items-center justify-center text-white">
+            <ArrowLeft size={18} />
+          </button>
+          <div className="relative px-4 pb-4 text-white [text-shadow:_0_1px_4px_rgb(0_0_0_/_40%)]">
+            <h1 className="text-xl font-bold">{template.title}</h1>
+            {template.description && <p className="text-sm text-white/90 mt-0.5 line-clamp-2">{template.description}</p>}
+          </div>
+        </div>
+      ) : (
+        <GradientHeader title={template.title} subtitle={template.description} back={() => navigate('/tugas')} />
+      )}
 
       <div className="px-4 py-4 space-y-4">
         {/* Progress */}

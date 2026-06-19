@@ -114,4 +114,12 @@ export const tasksService = {
     const { data } = supabase.storage.from('task-files').getPublicUrl(path)
     return data.publicUrl
   },
+
+  async uploadFormBackground(file) {
+    const ext = file.name.split('.').pop()
+    const path = `form-bg/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('task-files').upload(path, file, { upsert: true })
+    if (error) throw error
+    return supabase.storage.from('task-files').getPublicUrl(path).data.publicUrl
+  },
 }
