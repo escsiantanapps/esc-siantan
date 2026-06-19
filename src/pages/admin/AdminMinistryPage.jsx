@@ -3,6 +3,7 @@ import { Church, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { ministriesService } from '@/services/contentService'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
+import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Textarea, Spinner, EmptyState } from '@/components/ui'
 
 const emptyForm = { name: '', description: '' }
@@ -17,6 +18,7 @@ export default function AdminMinistryPage() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  useBackClose(showModal, () => setShowModal(false))
 
   useEffect(() => { load() }, [])
 

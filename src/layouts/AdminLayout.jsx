@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { ThemeToggle, Spinner } from '@/components/ui'
 import { permissionsService } from '@/services/permissionsService'
+import { useBackClose } from '@/hooks/useBackClose'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 
 function buildMenu(isSuperAdmin, allowedPages) {
@@ -36,6 +37,7 @@ function buildMenu(isSuperAdmin, allowedPages) {
 
 export default function AdminLayout() {
   const [open, setOpen] = useState(false)
+  useBackClose(open, () => setOpen(false)) // back menutup sidebar mobile dulu
   const { profile, logout } = useAuth()
   const { confirm } = useToast()
   const { t } = useLang()

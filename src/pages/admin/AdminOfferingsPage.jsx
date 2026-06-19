@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsService'
+import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, StatusBadge, Avatar, Badge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { formatDate, formatRupiah, validateUpload, compressImage } from '@/lib/utils'
@@ -29,6 +30,7 @@ export default function AdminOfferingsPage() {
   const [accForm, setAccForm] = useState(emptyAcc)
   const [accSaving, setAccSaving] = useState(false)
   const [accUploading, setAccUploading] = useState(false)
+  useBackClose(!!accModal, () => setAccModal(null))
 
   useEffect(() => { loadRekap() }, [startDate, endDate, category, status])
   useEffect(() => { loadAccounts() }, [])

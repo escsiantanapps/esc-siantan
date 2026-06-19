@@ -4,6 +4,7 @@ import { permissionsService } from '@/services/permissionsService'
 import { ADMIN_PAGES, ALL_ADMIN_PAGE_PATHS } from '@/config/adminPages'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
+import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Spinner, Checkbox, Button, Input, Avatar, Badge, EmptyState } from '@/components/ui'
 
 const SECTIONS = [...new Set(ADMIN_PAGES.map(p => p.section))]
@@ -21,6 +22,7 @@ export default function AdminPermissionsPage() {
   const [editing, setEditing] = useState(null) // admin yang sedang diatur
   const [editPages, setEditPages] = useState([])
   const [saving, setSaving] = useState(false)
+  useBackClose(!!editing, () => setEditing(null))
 
   useEffect(() => { load() }, [])
 

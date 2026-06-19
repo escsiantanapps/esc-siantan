@@ -6,6 +6,7 @@ import { eventsService } from '@/services/contentService'
 import { eventAttendanceService } from '@/services/attendanceService'
 import { Card, PageHeader, Button, Spinner, EmptyState, StatusBadge, Badge, Avatar } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
+import { useBackClose } from '@/hooks/useBackClose'
 import { formatDate } from '@/lib/utils'
 
 export default function AdminEventsPage() {
@@ -19,6 +20,7 @@ export default function AdminEventsPage() {
   const [rekapModal, setRekapModal] = useState(null)
   const [rekap, setRekap] = useState([])
   const [rekapLoading, setRekapLoading] = useState(false)
+  useBackClose(!!qrModal || !!rekapModal, () => { setQrModal(null); setRekapModal(null) })
 
   useEffect(() => {
     eventsService.getAll().then(setEvents).catch(() => {}).finally(() => setLoading(false))

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useRef, useState } from 'react'
 import { CheckCircle2, XCircle, Info, AlertTriangle, X } from 'lucide-react'
+import { useBackClose } from '@/hooks/useBackClose'
 
 export const ToastContext = createContext(null)
 
@@ -54,6 +55,9 @@ export function ToastProvider({ children }) {
       confirmResolve.current = null
     }
   }
+
+  // Tombol back menutup dialog konfirmasi (dianggap "Batal").
+  useBackClose(!!confirmState, () => closeConfirm(false))
 
   return (
     <ToastContext.Provider value={{ toast, confirm }}>

@@ -6,6 +6,7 @@ import { classAttendanceService } from '@/services/attendanceService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
+import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Textarea, Select, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
@@ -25,6 +26,9 @@ export default function AdminClassesPage() {
   const [qrSession, setQrSession] = useState(1)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [attModal, setAttModal] = useState(null)
+  useBackClose(showModal || !!qrModal || !!attModal, () => {
+    setShowModal(false); setQrModal(null); setAttModal(null)
+  })
   const [attSession, setAttSession] = useState('')
   const [attendance, setAttendance] = useState([])
   const [attLoading, setAttLoading] = useState(false)

@@ -3,6 +3,7 @@ import { Users, Plus, Pencil, Trash2, X, Eye, Crown, Search, UserPlus } from 'lu
 import { komselService } from '@/services/contentService'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
+import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
 
 const emptyForm = { name: '', max_capacity: '' }
@@ -24,6 +25,9 @@ export default function AdminKomselPage() {
 
   const [leaderMap, setLeaderMap] = useState({})
   const [pksView, setPksView] = useState(null)
+  useBackClose(showModal || !!membersView || !!pksView, () => {
+    setShowModal(false); setMembersView(null); setPksView(null)
+  })
   const [leaders, setLeaders] = useState([])
   const [leadersLoading, setLeadersLoading] = useState(false)
   const [pksQuery, setPksQuery] = useState('')

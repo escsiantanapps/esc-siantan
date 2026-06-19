@@ -5,6 +5,7 @@ import { startOfWeek } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
 import { newsService, registrationService } from '@/services/contentService'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
+import { useBackClose } from '@/hooks/useBackClose'
 import { formatDate } from '@/lib/utils'
 
 export default function NotificationBell() {
@@ -13,6 +14,7 @@ export default function NotificationBell() {
   const [items, setItems] = useState([])
   const [seen, setSeen] = useState(0)
   const ref = useRef(null)
+  useBackClose(open, () => setOpen(false)) // back menutup dropdown notifikasi dulu
 
   const seenKey = profile ? `esc-notif-seen-${profile.user_id}` : null
 
