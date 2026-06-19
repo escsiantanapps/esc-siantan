@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { Bell, Plus, ChevronRight } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, PageHeader, Button, Spinner, EmptyState } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 import { formatDate, truncate } from '@/lib/utils'
 
 export default function AdminNewsPage() {
+  const { t } = useLang()
   const [news, setNews] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -16,15 +18,15 @@ export default function AdminNewsPage() {
   return (
     <div>
       <PageHeader
-        title="Kelola Berita"
-        subtitle={`${news.length} berita/pengumuman`}
-        action={<Link to="/admin/berita/baru"><Button size="sm"><Plus size={15} /> Tambah Berita</Button></Link>}
+        title={t('anews.title')}
+        subtitle={t('anews.subtitle', { count: news.length })}
+        action={<Link to="/admin/berita/baru"><Button size="sm"><Plus size={15} /> {t('anews.add')}</Button></Link>}
       />
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
       {!loading && news.length === 0 && (
-        <EmptyState icon={Bell} title="Belum ada berita" description="Tambahkan berita atau pengumuman pertama." />
+        <EmptyState icon={Bell} title={t('anews.empty')} description={t('anews.emptyDesc')} />
       )}
 
       {!loading && news.length > 0 && (

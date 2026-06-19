@@ -3,11 +3,13 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Users, ChevronRight as Arrow } from 'lucide-react'
 import { usersService } from '@/services/usersService'
 import { Card, Input, Select, PageHeader, Spinner, EmptyState, Badge, StatusBadge, Avatar } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 import { spColor } from '@/lib/utils'
 
 const LIMIT = 20
 
 export default function AdminMembersPage() {
+  const { t } = useLang()
   const [searchParams] = useSearchParams()
   const [members, setMembers] = useState([])
   const [count, setCount] = useState(0)
@@ -45,36 +47,36 @@ export default function AdminMembersPage() {
 
   return (
     <div>
-      <PageHeader title="Manajemen Jemaat" subtitle={`${count} jemaat & volunteer terdaftar`} />
+      <PageHeader title={t('amem.title')} subtitle={t('amem.subtitle', { count })} />
 
       <div className="grid sm:grid-cols-3 gap-3 mb-4">
         <div className="sm:col-span-1">
           <Input
-            placeholder="Cari nama..."
+            placeholder={t('amem.searchName')}
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1) }}
           />
         </div>
         <Select value={role} onChange={e => { setRole(e.target.value); setPage(1) }}>
-          <option value="">Semua Role</option>
-          {['Jemaat', 'Volunteer', 'PKS', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
+          <option value="">{t('amem.allRoles')}</option>
+          {['Jemaat', 'Volunteer', 'PKS', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{t(`role.${r}`)}</option>)}
         </Select>
         <Select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}>
-          <option value="">Semua Status</option>
-          <option value="Menunggu Persetujuan">Menunggu Persetujuan</option>
-          <option value="Aktif">Aktif</option>
-          <option value="Nonaktif">Nonaktif</option>
+          <option value="">{t('amem.allStatus')}</option>
+          <option value="Menunggu Persetujuan">{t('status.Menunggu Persetujuan')}</option>
+          <option value="Aktif">{t('status.Aktif')}</option>
+          <option value="Nonaktif">{t('status.Nonaktif')}</option>
         </Select>
       </div>
 
       {/* Filter organisasi */}
       <div className="grid sm:grid-cols-3 gap-3 mb-4">
         <Select value={ministry} onChange={e => { setMinistry(e.target.value); setPage(1) }}>
-          <option value="">Semua Ministry</option>
+          <option value="">{t('amem.allMinistry')}</option>
           {ministries.map(m => <option key={m.ministry_id} value={m.ministry_id}>{m.name}</option>)}
         </Select>
         <Select value={komsel} onChange={e => { setKomsel(e.target.value); setPage(1) }}>
-          <option value="">Semua Komsel</option>
+          <option value="">{t('amem.allKomsel')}</option>
           {komselList.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
         </Select>
       </div>
@@ -82,7 +84,7 @@ export default function AdminMembersPage() {
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
       {!loading && members.length === 0 && (
-        <EmptyState icon={Users} title="Tidak ada jemaat ditemukan" description="Coba ubah kata kunci atau filter pencarian." />
+        <EmptyState icon={Users} title={t('amem.none')} description={t('amem.noneDesc')} />
       )}
 
       {!loading && members.length > 0 && (
@@ -92,7 +94,7 @@ export default function AdminMembersPage() {
               <Avatar name={m.name} src={m.photo_url} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                <p className="text-xs text-gray-400">{m.role}{m.phone ? ` · ${m.phone}` : ''}</p>
+                <p className="text-xs text-gray-400">{t(`role.${m.role}`)}{m.phone ? ` · ${m.phone}` : ''}</p>
                 {((m.ministry_ids?.length > 0) || m.komsel_id || m.is_pks || m.role === 'PKS') && (
                   <div className="flex items-center gap-1 mt-1 flex-wrap">
                     {(m.ministry_ids || []).slice(0, 2).map(id => (
@@ -127,15 +129,15 @@ export default function AdminMembersPage() {
             disabled={page === 1}
             className="flex items-center gap-1 text-sm text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <ChevronLeft size={16} /> Sebelumnya
+            <ChevronLeft size={16} /> {t('a.prev')}
           </button>
-          <span className="text-xs text-gray-400">Halaman {page} dari {totalPages}</span>
+          <span className="text-xs text-gray-400">{t('a.pageOf', { page, total: totalPages })}</span>
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
             className="flex items-center gap-1 text-sm text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Berikutnya <ChevronRight size={16} />
+            {t('a.next')} <ChevronRight size={16} />
           </button>
         </div>
       )}
