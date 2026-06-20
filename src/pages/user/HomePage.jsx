@@ -6,6 +6,7 @@ import { useLang } from '@/hooks/useLang'
 import { newsService, eventsService, classesService } from '@/services/contentService'
 import { Card, Spinner } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
+import OnboardingPrompt from '@/components/OnboardingPrompt'
 import EventCarousel from '@/components/EventCarousel'
 import { formatDate, spColor } from '@/lib/utils'
 
@@ -59,6 +60,9 @@ export default function HomePage() {
             {t('home.welcomeQuote')}
           </p>
         </section>
+
+        {/* Panduan akun baru: lengkapi data & aktifkan notifikasi */}
+        <OnboardingPrompt />
 
         {/* Status SP */}
         {profile?.sp_level && profile.sp_level !== 'Aman' && (

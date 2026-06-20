@@ -64,6 +64,14 @@ export const translations = {
 
     // Beranda
     'home.welcomeQuote': '"Selamat datang. Kiranya damai sejahtera menyertaimu hari ini."',
+    'onb.title': 'Lengkapi pengaturan akun Anda',
+    'onb.completeData': 'Lengkapi data diri',
+    'onb.completeDataSub': 'Isi profil agar data jemaat lengkap',
+    'onb.enablePush': 'Aktifkan notifikasi',
+    'onb.enablePushSub': 'Agar tidak melewatkan tugas & pengumuman',
+    'onb.activate': 'Aktifkan',
+    'onb.pushOk': 'Notifikasi diaktifkan.',
+    'onb.pushFail': 'Gagal mengaktifkan notifikasi.',
     'home.spStatus': 'Status Surat Peringatan: {level}. Hubungi admin/PKS untuk informasi lebih lanjut.',
     'home.event': 'Event',
     'home.quickMenu': 'Menu Cepat',
@@ -902,6 +910,14 @@ export const translations = {
 
     // Home
     'home.welcomeQuote': '"Welcome. May peace be with you today."',
+    'onb.title': 'Finish setting up your account',
+    'onb.completeData': 'Complete your profile',
+    'onb.completeDataSub': 'Fill in your details',
+    'onb.enablePush': 'Enable notifications',
+    'onb.enablePushSub': "So you don't miss tasks & announcements",
+    'onb.activate': 'Enable',
+    'onb.pushOk': 'Notifications enabled.',
+    'onb.pushFail': 'Failed to enable notifications.',
     'home.spStatus': 'Warning Letter Status: {level}. Contact an admin/PKS for more information.',
     'home.event': 'Events',
     'home.quickMenu': 'Quick Menu',
