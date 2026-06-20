@@ -625,6 +625,14 @@ export const translations = {
     'atask.perWeek': 'minggu',
     'atask.perMonth': 'bulan',
     'atask.answers': 'Jawaban',
+    'atask.remind': 'Ingatkan',
+    'atask.remindTitle': 'Kirim pengingat tugas?',
+    'atask.remindMsg': 'Notifikasi akan dikirim ke jemaat yang belum menyelesaikan "{title}" periode ini.',
+    'atask.allDone': 'Semua sudah menyelesaikan tugas ini.',
+    'atask.reminderSent': 'Pengingat terkirim ke {n} perangkat.',
+    'atask.reminderFailed': 'Gagal mengirim pengingat.',
+    'atask.pushTitle': 'Pengingat Tugas',
+    'atask.pushBody': 'Jangan lupa kerjakan: {title}',
 
     // Admin — Surat Peringatan
     'asp.title': 'Surat Peringatan (SP)',
@@ -1455,6 +1463,14 @@ export const translations = {
     'atask.perWeek': 'week',
     'atask.perMonth': 'month',
     'atask.answers': 'Responses',
+    'atask.remind': 'Remind',
+    'atask.remindTitle': 'Send task reminder?',
+    'atask.remindMsg': 'A notification will be sent to members who have not completed "{title}" this period.',
+    'atask.allDone': 'Everyone has completed this task.',
+    'atask.reminderSent': 'Reminder sent to {n} devices.',
+    'atask.reminderFailed': 'Failed to send reminder.',
+    'atask.pushTitle': 'Task Reminder',
+    'atask.pushBody': "Don't forget to do: {title}",
 
     // Admin — Warning Letters
     'asp.title': 'Warning Letters',
