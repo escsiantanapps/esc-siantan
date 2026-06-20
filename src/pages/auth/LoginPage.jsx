@@ -69,7 +69,8 @@ export default function LoginPage() {
           {/* Email */}
           <div className="relative">
             <input
-              type="email" required placeholder={t('auth.email')}
+              type="text" required placeholder={t('auth.emailOrPhone')}
+              autoCapitalize="none" autoCorrect="off"
               value={form.email}
               onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
               className="w-full bg-white/10 border border-white/40 rounded-2xl pl-5 pr-12 py-3.5 text-white placeholder-white/70 outline-none focus:border-white/80 focus:bg-white/15 transition"

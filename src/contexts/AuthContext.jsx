@@ -72,8 +72,24 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function login(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  // Login dengan email ATAU nomor telepon. Bila bukan email, nomor diresolusi
+  // ke akun lewat serverless (service role) lalu sesi di-set di klien.
+  async function login(identifier, password) {
+    const id = String(identifier || '').trim()
+    if (id.includes('@')) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: id, password })
+      if (error) throw error
+      return data
+    }
+    const res = await fetch('/api/login-phone', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: id, password }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Gagal masuk.')
+    const { error } = await supabase.auth.setSession({
+      access_token: data.access_token, refresh_token: data.refresh_token,
+    })
     if (error) throw error
     return data
   }
