@@ -27,7 +27,8 @@ export default function RegisterPage() {
       await register(form)
       navigate('/')
     } catch (err) {
-      setError(err.message || t('auth.registerFailed'))
+      setError(err.message === 'PHONE_TAKEN' ? t('auth.phoneTaken') : (err.message || t('auth.registerFailed')))
+      setStep(1) // kembali ke langkah data agar bisa perbaiki nomor
     } finally {
       setLoading(false)
     }
@@ -70,7 +71,11 @@ export default function RegisterPage() {
               <Input label={t('auth.phone')} type="tel" required placeholder="+62 8xx xxxx xxxx" value={form.phone} onChange={e => set('phone', e.target.value)} />
               <Input label={t('auth.password')} type="password" required placeholder={t('auth.passwordMin8')} value={form.password} onChange={e => set('password', e.target.value)} />
               <Input label={t('auth.repeatPassword')} type="password" required placeholder={t('auth.repeatPasswordPh')} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} />
-              <Button className="w-full mt-2" size="lg" onClick={() => { if (!form.name || !form.email || !form.password) { setError(t('auth.completeAll')); return } setError(''); setStep(2) }}>
+              <Button className="w-full mt-2" size="lg" onClick={() => {
+                if (!form.name || !form.email || !form.phone || !form.password) { setError(t('auth.completeAll')); return }
+                if (form.phone.replace(/\D/g, '').length < 9) { setError(t('auth.phoneInvalid')); return }
+                setError(''); setStep(2)
+              }}>
                 {t('auth.next')}
               </Button>
             </div>

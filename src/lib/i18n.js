@@ -146,6 +146,8 @@ export const translations = {
     'auth.pwMin8': 'Kata sandi minimal 8 karakter.',
     'auth.registerFailed': 'Pendaftaran gagal. Coba lagi.',
     'auth.completeAll': 'Lengkapi semua field.',
+    'auth.phoneInvalid': 'Nomor HP tidak valid.',
+    'auth.phoneTaken': 'Nomor HP sudah terdaftar. Gunakan nomor lain atau masuk.',
 
     // Auth — Lupa kata sandi
     'auth.forgotTitle': 'Lupa Kata Sandi',
@@ -974,6 +976,8 @@ export const translations = {
     'auth.pwMin8': 'Password must be at least 8 characters.',
     'auth.registerFailed': 'Registration failed. Try again.',
     'auth.completeAll': 'Please complete all fields.',
+    'auth.phoneInvalid': 'Invalid phone number.',
+    'auth.phoneTaken': 'This phone number is already registered. Use another or sign in.',
 
     // Auth — Forgot password
     'auth.forgotTitle': 'Forgot Password',

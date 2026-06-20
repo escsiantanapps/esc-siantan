@@ -95,6 +95,19 @@ export function AuthProvider({ children }) {
   }
 
   async function register(formData) {
+    // Cek duplikat nomor HP (gagal-aman: lanjut bila endpoint bermasalah).
+    try {
+      const r = await fetch('/api/check-phone', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formData.phone }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok && j.available === false) throw new Error('PHONE_TAKEN')
+    } catch (e) {
+      if (e.message === 'PHONE_TAKEN') throw e
+      // error jaringan endpoint → abaikan, lanjutkan registrasi
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email: formData.email,
       password: formData.password,
