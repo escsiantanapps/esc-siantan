@@ -24,7 +24,7 @@ export default function AdminMemberDetailPage() {
   const [success, setSuccess] = useState('')
 
   const [form, setForm] = useState({
-    role: '', status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
+    role: '', is_pks: false, status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
   })
 
   useEffect(() => { load() }, [id])
@@ -41,7 +41,9 @@ export default function AdminMemberDetailPage() {
       setMinistries(allMinistries)
       setKomselList(allKomsel)
       setForm({
-        role: data.role || 'Jemaat',
+        // 'PKS' lama kini direpresentasikan sebagai base role + flag is_pks.
+        role: data.role === 'PKS' ? 'Volunteer' : (data.role || 'Jemaat'),
+        is_pks: data.is_pks === true || data.role === 'PKS',
         status: data.status || 'Aktif',
         sp_level: data.sp_level || 'Aman',
         sp_notes: data.sp_notes || '',
@@ -69,8 +71,10 @@ export default function AdminMemberDetailPage() {
   async function handleSave() {
     setError(''); setSuccess(''); setSaving(true)
     try {
+      const isAdminRole = ['Admin', 'Super Admin'].includes(form.role)
       const updated = await usersService.update(id, {
         ...form,
+        is_pks: isAdminRole ? false : form.is_pks, // Admin/Super Admin tidak boleh PKS
         komsel_id: form.komsel_id || null,
       })
       setMember(updated)
@@ -213,14 +217,17 @@ export default function AdminMemberDetailPage() {
         <h2 className="text-sm font-semibold text-gray-900">Pengaturan Akun</h2>
         <div className="grid grid-cols-2 gap-3">
           {canEditRole ? (
-            <Select label="Role" value={form.role} onChange={e => set('role', e.target.value)}>
-              {['Jemaat', 'Volunteer', 'PKS', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
+            <Select label="Role Utama" value={form.role} onChange={e => {
+              const v = e.target.value
+              setForm(p => ({ ...p, role: v, is_pks: ['Admin', 'Super Admin'].includes(v) ? false : p.is_pks }))
+            }}>
+              {['Jemaat', 'Volunteer', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
             </Select>
           ) : (
             <div className="space-y-1">
               <label className="text-sm text-gray-600 font-medium">Role</label>
               <div className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
-                <span className="text-sm text-gray-700">{form.role}</span>
+                <span className="text-sm text-gray-700">{form.role}{form.is_pks ? ' + PKS' : ''}</span>
               </div>
               <p className="text-xs text-gray-400">Hanya Super Admin yang dapat mengubah role.</p>
             </div>
@@ -231,6 +238,22 @@ export default function AdminMemberDetailPage() {
             <option value="Nonaktif">Nonaktif</option>
           </Select>
         </div>
+
+        {/* Peran tambahan: PKS (kecuali Admin & Super Admin) */}
+        {canEditRole && (
+          <div>
+            <Checkbox
+              label="Juga sebagai PKS (Pemimpin Komsel)"
+              checked={form.is_pks}
+              disabled={['Admin', 'Super Admin'].includes(form.role)}
+              onChange={e => set('is_pks', e.target.checked)}
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Seseorang bisa memiliki 2 peran, mis. Volunteer + PKS. Admin & Super Admin tidak dapat merangkap PKS.
+              Untuk menetapkan komsel yang dipimpin, gunakan menu Kelola Komsel.
+            </p>
+          </div>
+        )}
         <Select label="Komsel (keanggotaan)" value={form.komsel_id} onChange={e => set('komsel_id', e.target.value)}>
           <option value="">Belum ada komsel</option>
           {komselList.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}

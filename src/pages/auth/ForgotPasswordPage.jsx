@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
@@ -17,14 +17,23 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
+  const [cooldown, setCooldown] = useState(0) // detik sebelum boleh kirim ulang
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const id = setInterval(() => setCooldown(s => (s <= 1 ? 0 : s - 1)), 1000)
+    return () => clearInterval(id)
+  }, [cooldown])
 
   async function sendCode(e) {
     e?.preventDefault()
+    if (cooldown > 0) return
     setError(''); setInfo(''); setLoading(true)
     try {
       await resetPassword(email.trim())
       setStep('otp')
       setInfo(t('auth.codeSent', { email: email.trim() }))
+      setCooldown(60)
     } catch (err) {
       setError(err.message || t('auth.sendCodeFailed'))
     } finally {
@@ -97,7 +106,9 @@ export default function ForgotPasswordPage() {
               </form>
               <div className="mt-5 flex items-center justify-between text-sm">
                 <button onClick={() => { setStep('email'); setOtp(''); setError(''); setInfo('') }} className="text-gray-500">{t('auth.changeEmail')}</button>
-                <button onClick={sendCode} disabled={loading} className="text-brand-500 disabled:opacity-50">{t('auth.resendCode')}</button>
+                <button onClick={sendCode} disabled={loading || cooldown > 0} className="text-brand-500 disabled:opacity-50">
+                  {cooldown > 0 ? t('auth.resendIn', { s: cooldown }) : t('auth.resendCode')}
+                </button>
               </div>
             </>
           )}
