@@ -289,6 +289,16 @@ CREATE TABLE app_settings (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 1.22 OTP RESET PASSWORD via WhatsApp. Hanya diakses serverless (service role);
+-- RLS aktif tanpa policy → klien tidak bisa membaca/menulis.
+CREATE TABLE password_reset_otp (
+  email      TEXT PRIMARY KEY,
+  code_hash  TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts   INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ============================================================
 -- 2. HELPER (SECURITY DEFINER) — baca peran/komsel user TANPA memicu RLS
 --    (mencegah rekursi pada policy tabel users). Lihat migrasi v10 & v13.
@@ -346,6 +356,7 @@ ALTER TABLE payment_accounts       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE offerings              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_user_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_settings           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE password_reset_otp     ENABLE ROW LEVEL SECURITY;
 -- Catatan: class_attendance dibiarkan tanpa RLS (akses lewat anon/auth key
 -- sesuai perilaku aplikasi). Aktifkan + tambah policy bila ingin diperketat.
 

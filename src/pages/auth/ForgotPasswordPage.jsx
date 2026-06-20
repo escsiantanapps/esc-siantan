@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { Button, Input } from '@/components/ui'
 
+async function postJson(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Terjadi kesalahan.')
+  return data
+}
+
 export default function ForgotPasswordPage() {
-  const { resetPassword, verifyResetOtp, updatePassword } = useAuth()
   const { t } = useLang()
   const navigate = useNavigate()
 
@@ -30,9 +37,9 @@ export default function ForgotPasswordPage() {
     if (cooldown > 0) return
     setError(''); setInfo(''); setLoading(true)
     try {
-      await resetPassword(email.trim())
+      const r = await postJson('/api/wa-reset-request', { email: email.trim() })
       setStep('otp')
-      setInfo(t('auth.codeSent', { email: email.trim() }))
+      setInfo(t('auth.waCodeSent', { wa: r.masked || '' }))
       setCooldown(60)
     } catch (err) {
       setError(err.message || t('auth.sendCodeFailed'))
@@ -49,9 +56,8 @@ export default function ForgotPasswordPage() {
     if (password !== confirm) { setError(t('auth.pwMismatch6')); return }
     setLoading(true)
     try {
-      await verifyResetOtp(email.trim(), otp.trim())
-      await updatePassword(password)
-      navigate('/', { replace: true })
+      await postJson('/api/wa-reset-verify', { email: email.trim(), code: otp.trim(), newPassword: password })
+      navigate('/login', { replace: true, state: { reset: true } })
     } catch (err) {
       setError(err.message || t('auth.otpWrong'))
     } finally {

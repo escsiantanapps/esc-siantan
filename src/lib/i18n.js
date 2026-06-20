@@ -148,7 +148,8 @@ export const translations = {
 
     // Auth — Lupa kata sandi
     'auth.forgotTitle': 'Lupa Kata Sandi',
-    'auth.forgotSubEmail': 'Kami akan kirim kode ke email kamu',
+    'auth.forgotSubEmail': 'Kami akan kirim kode OTP ke WhatsApp kamu',
+    'auth.waCodeSent': 'Kode OTP dikirim ke WhatsApp {wa}. Cek pesan WhatsApp kamu.',
     'auth.forgotSubOtp': 'Masukkan kode & kata sandi baru',
     'auth.enterEmail': 'Masukkan email kamu',
     'auth.sendCode': 'Kirim Kode',
@@ -974,7 +975,8 @@ export const translations = {
 
     // Auth — Forgot password
     'auth.forgotTitle': 'Forgot Password',
-    'auth.forgotSubEmail': "We'll send a code to your email",
+    'auth.forgotSubEmail': "We'll send an OTP to your WhatsApp",
+    'auth.waCodeSent': 'OTP sent to WhatsApp {wa}. Check your WhatsApp.',
     'auth.forgotSubOtp': 'Enter the code & your new password',
     'auth.enterEmail': 'Enter your email',
     'auth.sendCode': 'Send Code',
