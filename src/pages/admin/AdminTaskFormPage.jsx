@@ -61,6 +61,7 @@ export default function AdminTaskFormPage() {
     active_days: [], open_time: '00:00', close_time: '23:59',
     allowed_ministry: [], fields_json: [],
     bg_type: 'none', bg_value: '',
+    reminder_enabled: false, reminder_days: [],
   })
 
   useEffect(() => {
@@ -80,6 +81,8 @@ export default function AdminTaskFormPage() {
             fields_json: t.fields_json || [],
             bg_type: t.bg_type || 'none',
             bg_value: t.bg_value || '',
+            reminder_enabled: t.reminder_enabled || false,
+            reminder_days: t.reminder_days || [],
           })
         })
         .catch(err => setError(err.message || 'Gagal memuat template.'))
@@ -93,6 +96,13 @@ export default function AdminTaskFormPage() {
     setForm(p => ({
       ...p,
       active_days: p.active_days.includes(day) ? p.active_days.filter(d => d !== day) : [...p.active_days, day],
+    }))
+  }
+
+  function toggleReminderDay(day) {
+    setForm(p => ({
+      ...p,
+      reminder_days: p.reminder_days.includes(day) ? p.reminder_days.filter(d => d !== day) : [...p.reminder_days, day],
     }))
   }
 
@@ -228,6 +238,40 @@ export default function AdminTaskFormPage() {
           <Input label="Jam Buka" type="time" value={form.open_time} onChange={e => set('open_time', e.target.value)} />
           <Input label="Jam Tutup" type="time" value={form.close_time} onChange={e => set('close_time', e.target.value)} />
         </div>
+      </Card>
+
+      {/* Pengingat otomatis (notifikasi push terjadwal) */}
+      <Card className="p-4 mb-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Pengingat Otomatis</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Kirim notifikasi ke jemaat yang belum menyelesaikan tugas ini.</p>
+          </div>
+          <button
+            type="button" role="switch" aria-checked={form.reminder_enabled}
+            onClick={() => set('reminder_enabled', !form.reminder_enabled)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${form.reminder_enabled ? 'bg-brand-500' : 'bg-gray-200'}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.reminder_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+        {form.reminder_enabled && (
+          <>
+            <p className="text-xs text-gray-500">Pilih hari pengiriman pengingat:</p>
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+              {DAYS.map(day => (
+                <button
+                  key={day} type="button" onClick={() => toggleReminderDay(day)}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors
+                    ${form.reminder_days.includes(day) ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+                >
+                  {day.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400">Pengingat dikirim otomatis sekitar pukul 08:00 WIB pada hari terpilih.</p>
+          </>
+        )}
       </Card>
 
       <Card className="p-4 mb-4 space-y-3">

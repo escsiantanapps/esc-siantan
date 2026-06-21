@@ -164,6 +164,8 @@ CREATE TABLE form_templates (
   close_time      TEXT DEFAULT '23:59',
   bg_type         TEXT DEFAULT 'none' CHECK (bg_type IN ('none','preset','image')),
   bg_value        TEXT,
+  reminder_enabled BOOLEAN DEFAULT false,
+  reminder_days    TEXT[] DEFAULT '{}',   -- nama hari (Senin..Minggu) untuk pengingat otomatis
   created_by      TEXT,
   created_at      TIMESTAMPTZ DEFAULT now()
 );
