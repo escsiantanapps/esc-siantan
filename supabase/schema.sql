@@ -299,6 +299,15 @@ CREATE TABLE password_reset_otp (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 1.23 OTP AKTIVASI akun jemaat lama (data impor) via WhatsApp. Hanya serverless.
+CREATE TABLE activation_otp (
+  phone      TEXT PRIMARY KEY,   -- nomor "inti" (tanpa 0/62 depan)
+  code_hash  TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts   INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ============================================================
 -- 2. HELPER (SECURITY DEFINER) — baca peran/komsel user TANPA memicu RLS
 --    (mencegah rekursi pada policy tabel users). Lihat migrasi v10 & v13.
@@ -357,6 +366,7 @@ ALTER TABLE offerings              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_user_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_settings           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE password_reset_otp     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activation_otp         ENABLE ROW LEVEL SECURITY;
 -- Catatan: class_attendance dibiarkan tanpa RLS (akses lewat anon/auth key
 -- sesuai perilaku aplikasi). Aktifkan + tambah policy bila ingin diperketat.
 

@@ -120,8 +120,10 @@ export default function LoginPage() {
           {t('auth.noAccount')}{' '}
           <Link to="/register" className="font-bold hover:underline">{t('auth.registerNow')}</Link>
         </div>
-        <div className="mt-3 text-center">
+        <div className="mt-3 text-center space-x-3">
           <Link to="/lupa-password" className="text-xs text-white/75 hover:text-white transition">{t('auth.forgotPassword')}</Link>
+          <span className="text-white/30">•</span>
+          <Link to="/aktivasi" className="text-xs text-white/75 hover:text-white transition">{t('act.link')}</Link>
         </div>
       </div>
     </div>

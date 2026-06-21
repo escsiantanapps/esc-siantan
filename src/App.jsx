@@ -12,6 +12,7 @@ import OfflineBanner from '@/components/OfflineBanner'
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
+import ActivatePage from '@/pages/auth/ActivatePage'
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import AccountStatusPage from '@/pages/auth/AccountStatusPage'
 
@@ -129,6 +130,7 @@ export default function App() {
           <Route path="/login"          element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register"       element={<PublicRoute><RegisterPage /></PublicRoute>} />
           <Route path="/lupa-password"  element={<ForgotPasswordPage />} />
+          <Route path="/aktivasi"       element={<ActivatePage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           <Route path="/" element={<PrivateRoute><UserLayout /></PrivateRoute>}>
