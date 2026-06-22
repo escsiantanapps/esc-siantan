@@ -14,11 +14,25 @@ export function AuthProvider({ children }) {
     let fetchedFor = null
 
     // Cek session awal
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) { fetchedFor = session.user.id; fetchProfile(session.user) }
-      else setLoading(false)
-    })
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          // Guard: onAuthStateChange mungkin sudah memulai fetchProfile lebih dulu
+          if (fetchedFor !== session.user.id) {
+            fetchedFor = session.user.id
+            fetchProfile(session.user)
+          }
+          // jika fetchedFor sudah sama → fetchProfile sedang berjalan, tidak perlu ulang
+        } else {
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        // getSession gagal (localStorage corrupt, jaringan, dsb.)
+        // Jangan biarkan app terjebak di loading selamanya → munculkan login
+        setLoading(false)
+      })
 
     // Listen perubahan auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
