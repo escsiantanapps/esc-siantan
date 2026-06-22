@@ -77,6 +77,18 @@ export const tasksService = {
 
   // Form Responses
   async submitResponse(response) {
+    const { data: tmpl } = await supabase
+      .from('form_templates').select('once_per_day').eq('form_id', response.form_id).single()
+    if (tmpl?.once_per_day) {
+      const startToday = new Date(); startToday.setHours(0, 0, 0, 0)
+      const { data: existing } = await supabase
+        .from('form_responses').select('response_id')
+        .eq('form_id', response.form_id).eq('volunteer_id', response.volunteer_id)
+        .gte('submitted_at', startToday.toISOString()).limit(1)
+      if (existing && existing.length > 0) {
+        throw new Error('Tugas ini hanya dapat diisi 1x per hari. Coba lagi besok.')
+      }
+    }
     const { data, error } = await supabase
       .from('form_responses').insert(response).select().single()
     if (error) throw error

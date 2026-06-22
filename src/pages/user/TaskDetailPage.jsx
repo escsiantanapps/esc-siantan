@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { startOfWeek, startOfMonth } from 'date-fns'
+import { startOfWeek, startOfMonth, isSameDay } from 'date-fns'
 import { ClipboardList, CheckCircle2, Lock, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
@@ -82,6 +82,10 @@ export default function TaskDetailPage() {
 
   async function handleSubmit() {
     setError('')
+    if (template?.once_per_day && submittedToday) {
+      setError(t('taskDetail.alreadyToday'))
+      return
+    }
     const fields = template?.fields_json || []
     for (const field of fields) {
       if (field.required && !form[field.key]) {
@@ -140,6 +144,8 @@ export default function TaskDetailPage() {
   const doneThisPeriod = responses.filter(r => new Date(r.submitted_at) >= periodStart).length
   const complete = doneThisPeriod >= target
   const formBg = resolveFormBg(template.bg_type, template.bg_value)
+  const submittedToday = responses.some(r => isSameDay(new Date(r.submitted_at), new Date()))
+  const locked = !!template.once_per_day && submittedToday
 
   return (
     <div className="pb-4">
@@ -180,11 +186,18 @@ export default function TaskDetailPage() {
         <Card className="p-4 space-y-4">
           <h2 className="text-sm font-semibold text-gray-900">{t('taskDetail.fillAnswer')}</h2>
 
-          {(template.fields_json || []).length === 0 && (
+          {locked && (
+            <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
+              <CheckCircle2 size={18} className="text-green-500 flex-shrink-0" />
+              <p className="text-sm text-green-700">{t('taskDetail.alreadyToday')}</p>
+            </div>
+          )}
+
+          {!locked && (template.fields_json || []).length === 0 && (
             <p className="text-sm text-gray-400">{t('taskDetail.noForm')}</p>
           )}
 
-          {(template.fields_json || []).map(field => (
+          {!locked && (template.fields_json || []).map(field => (
             <div key={field.key}>
               {field.type === 'textarea' && (
                 <Textarea
@@ -251,9 +264,11 @@ export default function TaskDetailPage() {
             </div>
           ))}
 
-          <Button className="w-full" loading={saving} onClick={handleSubmit}>
-            {t('taskDetail.submit')}
-          </Button>
+          {!locked && (
+            <Button className="w-full" loading={saving} onClick={handleSubmit}>
+              {t('taskDetail.submit')}
+            </Button>
+          )}
         </Card>
 
         {/* Riwayat */}

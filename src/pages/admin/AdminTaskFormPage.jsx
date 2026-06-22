@@ -62,6 +62,7 @@ export default function AdminTaskFormPage() {
     allowed_ministry: [], fields_json: [],
     bg_type: 'none', bg_value: '',
     reminder_enabled: false, reminder_days: [],
+    once_per_day: false,
   })
 
   useEffect(() => {
@@ -83,6 +84,7 @@ export default function AdminTaskFormPage() {
             bg_value: t.bg_value || '',
             reminder_enabled: t.reminder_enabled || false,
             reminder_days: t.reminder_days || [],
+            once_per_day: t.once_per_day || false,
           })
         })
         .catch(err => setError(err.message || 'Gagal memuat template.'))
@@ -237,6 +239,19 @@ export default function AdminTaskFormPage() {
         <div className="grid grid-cols-2 gap-3">
           <Input label="Jam Buka" type="time" value={form.open_time} onChange={e => set('open_time', e.target.value)} />
           <Input label="Jam Tutup" type="time" value={form.close_time} onChange={e => set('close_time', e.target.value)} />
+        </div>
+        <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+          <div className="pr-3">
+            <p className="text-sm font-medium text-gray-900">Batasi 1x per Hari</p>
+            <p className="text-xs text-gray-400 mt-0.5">Jika aktif, setiap jemaat hanya bisa mengisi tugas ini satu kali dalam sehari.</p>
+          </div>
+          <button
+            type="button" role="switch" aria-checked={form.once_per_day}
+            onClick={() => set('once_per_day', !form.once_per_day)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${form.once_per_day ? 'bg-brand-500' : 'bg-gray-200'}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.once_per_day ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
         </div>
       </Card>
 

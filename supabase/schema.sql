@@ -166,6 +166,7 @@ CREATE TABLE form_templates (
   bg_value        TEXT,
   reminder_enabled BOOLEAN DEFAULT false,
   reminder_days    TEXT[] DEFAULT '{}',   -- nama hari (Senin..Minggu) untuk pengingat otomatis
+  once_per_day    BOOLEAN DEFAULT false,  -- batasi pengisian maks. 1x per hari per jemaat
   created_by      TEXT,
   created_at      TIMESTAMPTZ DEFAULT now()
 );

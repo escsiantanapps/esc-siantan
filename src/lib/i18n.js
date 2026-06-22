@@ -309,6 +309,7 @@ export const translations = {
     'taskDetail.uploadFailed': 'Gagal mengunggah file.',
     'taskDetail.submitted': 'Jawaban berhasil dikirim.',
     'taskDetail.submitFailed': 'Gagal mengirim jawaban.',
+    'taskDetail.alreadyToday': 'Anda sudah mengisi tugas ini hari ini. Tugas ini hanya dapat diisi 1x per hari — coba lagi besok.',
 
     // Detail Kelas
     'classDetail.title': 'Detail Kelas',
@@ -1165,6 +1166,7 @@ export const translations = {
     'taskDetail.uploadFailed': 'Failed to upload file.',
     'taskDetail.submitted': 'Answer submitted successfully.',
     'taskDetail.submitFailed': 'Failed to submit answer.',
+    'taskDetail.alreadyToday': 'You already filled this task today. It can only be filled once per day — try again tomorrow.',
 
     // Class detail
     'classDetail.title': 'Class Detail',
