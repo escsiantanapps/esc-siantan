@@ -565,3 +565,9 @@ DROP POLICY IF EXISTS "task_files_read" ON storage.objects;
 CREATE POLICY "task_files_read" ON storage.objects
   FOR SELECT
   USING (bucket_id = 'task-files');
+
+-- ── Migrasi v19: rate-limit push notif di DB ─────────────────
+-- Menyimpan waktu terakhir admin mengirim push agar rate limit
+-- berlaku lintas instance serverless (tidak lagi in-memory).
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS last_push_sent_at TIMESTAMPTZ;

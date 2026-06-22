@@ -8,6 +8,9 @@ import { useAuth } from '@/hooks/useAuth'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import OfflineBanner from '@/components/OfflineBanner'
 
+// Onboarding
+import OnboardingPage, { ONBOARDING_KEY } from '@/pages/OnboardingPage'
+
 // Auth
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
@@ -109,7 +112,10 @@ function PKSRoute({ children }) {
 
 function PublicRoute({ children }) {
   const { user } = useAuth()
-  return user ? <Navigate to="/" replace /> : children
+  if (user) return <Navigate to="/" replace />
+  // Arahkan ke onboarding jika belum pernah dibuka
+  if (!localStorage.getItem(ONBOARDING_KEY)) return <Navigate to="/onboarding" replace />
+  return children
 }
 
 export default function App() {
@@ -127,6 +133,7 @@ export default function App() {
           </div>
         }>
         <Routes>
+          <Route path="/onboarding"      element={<OnboardingPage />} />
           <Route path="/login"          element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register"       element={<PublicRoute><RegisterPage /></PublicRoute>} />
           <Route path="/lupa-password"  element={<ForgotPasswordPage />} />

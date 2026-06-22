@@ -1,10 +1,8 @@
 import { supabase } from '@/lib/supabase'
 
-// Kunci publik VAPID (boleh ditaruh di klien). Bisa ditimpa lewat env
-// VITE_VAPID_PUBLIC_KEY; jika kosong pakai nilai default di bawah.
-const VAPID_PUBLIC_KEY =
-  import.meta.env.VITE_VAPID_PUBLIC_KEY ||
-  'BHAVtGqkc-2ynWWq_3UoA9YlEJiYzVOJeS-gAMPpoBX8fw_0KGz9jZeHc9vfGv5jBtfZCOIP4cKqoR4O8Mkkalo'
+// Kunci publik VAPID — wajib diset via env VITE_VAPID_PUBLIC_KEY.
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
+if (!VAPID_PUBLIC_KEY) throw new Error('VITE_VAPID_PUBLIC_KEY belum diset di .env')
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)

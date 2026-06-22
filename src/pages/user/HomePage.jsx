@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Clock, MapPin, Church, HandCoins } from 'lucide-react'
+import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { newsService, eventsService, classesService } from '@/services/contentService'
@@ -17,14 +17,23 @@ export default function HomePage() {
   const [events, setEvents] = useState([])
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
 
-  useEffect(() => {
+  function loadData() {
+    setLoading(true)
+    setFetchError(false)
+    let anyFailed = false
     Promise.all([
-      newsService.getAll().then(setNews).catch(() => {}),
-      eventsService.getAll({ status: 'Aktif' }).then(setEvents).catch(() => {}),
-      classesService.getAll({ status: 'Aktif' }).then(setClasses).catch(() => {}),
-    ]).finally(() => setLoading(false))
-  }, [])
+      newsService.getAll().then(setNews).catch(() => { anyFailed = true }),
+      eventsService.getAll({ status: 'Aktif' }).then(setEvents).catch(() => { anyFailed = true }),
+      classesService.getAll({ status: 'Aktif' }).then(setClasses).catch(() => { anyFailed = true }),
+    ]).finally(() => {
+      setLoading(false)
+      if (anyFailed) setFetchError(true)
+    })
+  }
+
+  useEffect(() => { loadData() }, [])
 
   const quickLinks = [
     { to: '/persembahan',        icon: HandCoins,     label: t('home.q.offering'), color: 'bg-emerald-100 text-emerald-600' },
@@ -75,6 +84,20 @@ export default function HomePage() {
         )}
 
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
+
+        {/* Peringatan gagal memuat (jaringan putus / error server) */}
+        {!loading && fetchError && (
+          <div className="rounded-2xl bg-orange-50 border border-orange-100 px-4 py-3 mb-5 flex items-center gap-3 animate-fade-in">
+            <WifiOff size={18} className="text-orange-400 flex-shrink-0" />
+            <p className="text-sm text-orange-700 flex-1">{t('home.fetchError') || 'Gagal memuat konten. Periksa koneksi internet kamu.'}</p>
+            <button
+              onClick={loadData}
+              className="flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-800 transition-colors"
+            >
+              <RefreshCw size={13} /> Coba lagi
+            </button>
+          </div>
+        )}
 
         {/* Event — carousel yang bisa digeser */}
         {events.length > 0 && (

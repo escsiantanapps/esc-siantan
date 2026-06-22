@@ -1,8 +1,6 @@
 // Paksa runtime Node (web-push butuh modul Node; bukan Edge).
 export const config = { runtime: 'nodejs' }
 
-// Rate-limit sederhana per-admin (best-effort, per instance fungsi).
-const lastSentByUser = new Map()
 const RATE_LIMIT_MS = 8000
 
 export default async function handler(req, res) {
@@ -43,18 +41,21 @@ export default async function handler(req, res) {
     const { data: userData, error: uErr } = await admin.auth.getUser(token)
     if (uErr || !userData?.user) return res.status(401).json({ error: 'Unauthorized' })
     const { data: caller } = await admin
-      .from('users').select('role').eq('auth_id', userData.user.id).single()
+      .from('users').select('role, user_id, last_push_sent_at').eq('auth_id', userData.user.id).single()
     if (!caller || !['Admin', 'Super Admin'].includes(caller.role)) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
-    // Cegah pengiriman beruntun (anti-spam sederhana).
+    // Rate-limit per-admin disimpan di DB agar berlaku lintas instance serverless.
     const now = Date.now()
-    const last = lastSentByUser.get(userData.user.id) || 0
-    if (now - last < RATE_LIMIT_MS) {
+    const lastSentAt = caller.last_push_sent_at ? new Date(caller.last_push_sent_at).getTime() : 0
+    if (now - lastSentAt < RATE_LIMIT_MS) {
       return res.status(429).json({ error: 'Terlalu cepat. Coba lagi beberapa detik.' })
     }
-    lastSentByUser.set(userData.user.id, now)
+    await admin
+      .from('users')
+      .update({ last_push_sent_at: new Date(now).toISOString() })
+      .eq('user_id', caller.user_id)
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const { title, body: message, url, userIds } = body
