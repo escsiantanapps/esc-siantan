@@ -63,11 +63,7 @@ kuota 1 GB) dengan peringatan saat hampir penuh.
 - Jadikan jemaat sebagai **Admin** atau cabut aksesnya.
 - Atur **halaman mana saja** yang boleh diakses tiap admin (per-orang).
 
-### 9.2 Tampilan (`/admin/tampilan`)
-- Atur **background halaman Login**: pilih **preset** gradien atau **unggah
-  gambar** sendiri. Pratinjau tersedia. Ketuk **Simpan**.
-
-### 9.3 Penyimpanan
+### 9.2 Penyimpanan
 - Indikator di Dashboard menampilkan perkiraan pemakaian storage. Bila mendekati
   penuh, hapus file lama (mis. bukti/lampiran yang tak perlu) atau tingkatkan
   paket Supabase.

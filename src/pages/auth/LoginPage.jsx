@@ -1,17 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { settingsService } from '@/services/settingsService'
-import { resolveLoginBg, DEFAULT_LOGIN_BG } from '@/config/loginBackgrounds'
 import { Mail, Lock, Eye, EyeOff, Check } from 'lucide-react'
 
 const REMEMBER_KEY = 'esc-remember-email'
-const BG_CACHE_KEY = 'esc-login-bg'
-
-function cachedBg() {
-  try { return JSON.parse(localStorage.getItem(BG_CACHE_KEY)) || DEFAULT_LOGIN_BG } catch { return DEFAULT_LOGIN_BG }
-}
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -22,15 +15,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  // Mulai dari background yang di-cache (hasil kunjungan terakhir) agar tidak
-  // berkedip ke default saat refresh; lalu segarkan dari server.
-  const [bg, setBg] = useState(cachedBg)
-
-  useEffect(() => {
-    settingsService.getLoginBackground().then(v => {
-      if (v) { setBg(v); localStorage.setItem(BG_CACHE_KEY, JSON.stringify(v)) }
-    }).catch(() => {})
-  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -49,7 +33,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10 relative" style={resolveLoginBg(bg)}>
+    <div className="min-h-screen flex items-center justify-center px-4 py-10 relative gradient-main">
       {/* Scrim lembut agar kartu kaca tetap terbaca di atas gambar apa pun */}
       <div className="absolute inset-0 bg-black/10" />
 
