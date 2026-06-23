@@ -1,8 +1,9 @@
 import { supabase } from '@/lib/supabase'
 
 // Kunci publik VAPID — wajib diset via env VITE_VAPID_PUBLIC_KEY.
+// Dicek saat subscribe() dipanggil (bukan saat modul di-import) agar
+// fitur lain tidak ikut crash jika env ini belum diset di suatu deployment.
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
-if (!VAPID_PUBLIC_KEY) throw new Error('VITE_VAPID_PUBLIC_KEY belum diset di .env')
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -34,6 +35,7 @@ export const pushService = {
 
   async subscribe(userId) {
     if (!this.supported()) throw new Error('Browser ini tidak mendukung notifikasi push.')
+    if (!VAPID_PUBLIC_KEY) throw new Error('VITE_VAPID_PUBLIC_KEY belum diset di .env')
 
     const permission = await Notification.requestPermission()
     if (permission !== 'granted') throw new Error('Izin notifikasi tidak diberikan.')
