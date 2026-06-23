@@ -108,12 +108,12 @@ export default function OnboardingPage() {
 
   return (
     <div
-      className={`min-h-screen bg-gradient-to-br ${slide.gradient} flex flex-col transition-all duration-500`}
+      className={`h-dvh overflow-hidden bg-gradient-to-br ${slide.gradient} flex flex-col transition-all duration-500`}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
       {/* Skip */}
-      <div className="flex justify-end p-5">
+      <div className="flex justify-end px-5 pt-4 pb-1 shrink-0">
         <button
           onClick={finish}
           className="text-sm text-white/70 hover:text-white transition px-3 py-1.5 rounded-full hover:bg-white/10"
@@ -124,25 +124,25 @@ export default function OnboardingPage() {
 
       {/* Konten utama */}
       <div
-        className={`flex-1 flex flex-col items-center justify-center px-8 text-center transition-all duration-180 ${
+        className={`flex-1 min-h-0 flex flex-col items-center justify-center px-8 text-center transition-all duration-180 ${
           exiting ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'
         }`}
       >
         {/* Icon besar */}
-        <div className="text-7xl mb-6 drop-shadow-lg select-none">{slide.icon}</div>
+        <div className="text-6xl mb-3 drop-shadow-lg select-none">{slide.icon}</div>
 
         {/* Tag */}
-        <span className="text-xs font-bold tracking-widest uppercase text-white/70 mb-3">
+        <span className="text-xs font-bold tracking-widest uppercase text-white/70 mb-2">
           {slide.tag}
         </span>
 
         {/* Judul */}
-        <h1 className="text-3xl font-extrabold text-white leading-tight mb-6 whitespace-pre-line tracking-tight">
+        <h1 className="text-2xl font-extrabold text-white leading-tight mb-4 whitespace-pre-line tracking-tight">
           {slide.title}
         </h1>
 
         {/* Kartu ayat */}
-        <div className="w-full max-w-sm bg-white/15 border border-white/30 rounded-2xl px-6 py-5 mb-6 backdrop-blur-sm">
+        <div className="w-full max-w-sm bg-white/15 border border-white/30 rounded-2xl px-6 py-4 mb-4 backdrop-blur-sm">
           <p className="text-white/95 text-sm leading-relaxed italic whitespace-pre-line mb-2">
             {slide.verse}
           </p>
@@ -154,7 +154,7 @@ export default function OnboardingPage() {
       </div>
 
       {/* Footer: dots + tombol */}
-      <div className="px-8 pb-12 flex items-center justify-between">
+      <div className="px-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-1 flex items-center justify-between shrink-0">
         <Dots total={SLIDES.length} active={index} />
 
         <button
