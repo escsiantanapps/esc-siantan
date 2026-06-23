@@ -63,6 +63,21 @@ export const pushService = {
     return true
   },
 
+  // Beri tahu PKS komsel bahwa anggota baru saja mengisi sebuah SOP/tugas.
+  // Dipanggil oleh anggota setelah submit tugas (fire-and-forget): kegagalan
+  // diabaikan agar tidak mengganggu alur pengisian. Server yang menentukan
+  // siapa PKS-nya & melakukan dedupe (lihat api/notify-pks.js).
+  async notifyLeaders(formId) {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) return
+    await fetch('/api/notify-pks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ formId }),
+    })
+  },
+
   // Kirim notifikasi ke semua pelanggan (dipanggil oleh admin). Memanggil
   // serverless function /api/send-push dengan access token admin.
   async broadcast({ title, body, url, userIds }) {

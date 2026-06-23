@@ -5,6 +5,7 @@ import { ClipboardList, CheckCircle2, Lock, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
+import { pushService } from '@/services/pushService'
 import { Card, Spinner, EmptyState, GradientHeader, Button, Input, Textarea, Select, Checkbox, Badge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
@@ -101,6 +102,8 @@ export default function TaskDetailPage() {
         volunteer_id: profile.user_id,
         data_json: form,
       })
+      // Beri tahu PKS komsel bahwa SOP ini sudah diisi (non-blocking).
+      pushService.notifyLeaders(id).catch(() => {})
       const all = await tasksService.getMyResponses(profile.user_id, id)
       setResponses(all.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at)))
       setForm(initialForm(template))

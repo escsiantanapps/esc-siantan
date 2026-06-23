@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, ClipboardCheck, Save, BarChart3, UserCircle, LogOut } from 'lucide-react'
+import { Users, ClipboardCheck, Save, BarChart3, UserCircle, LogOut, ChevronDown } from 'lucide-react'
 import { startOfMonth } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { komselService } from '@/services/contentService'
 import { evaluationService } from '@/services/evaluationService'
 import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, Select, Input, Button } from '@/components/ui'
+import PushToggle from '@/components/PushToggle'
 import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
+
+// Urutan tampil rincian SOP: yang terpenuhi dulu, lalu proses, lalu kosong.
+const STATUS_RANK = { TERPENUHI: 0, PROSES: 1, KOSONG: 2 }
 
 function getMonday(date) {
   const d = new Date(date)
@@ -40,6 +44,7 @@ export default function PKSDashboardPage() {
   const [error, setError] = useState('')
   const [evalRows, setEvalRows] = useState([])
   const [evalLoading, setEvalLoading] = useState(true)
+  const [openEval, setOpenEval] = useState({}) // user_id -> bool (rincian SOP terbuka)
 
   const userId = profile?.user_id
 
@@ -288,10 +293,13 @@ export default function PKSDashboardPage() {
                   <EmptyState icon={BarChart3} title={t('pks.noMembers')} description={t('pks.noMembersDesc')} />
                 ) : (
                   <>
-                    <p className="text-xs text-gray-400 mb-2">{t('pks.evalThisMonth', { start: formatDate(startOfMonth(new Date())), end: formatDate(new Date()) })}</p>
+                    <p className="text-xs text-gray-400 mb-1">{t('pks.evalThisMonth', { start: formatDate(startOfMonth(new Date())), end: formatDate(new Date()) })}</p>
+                    <p className="text-[11px] text-gray-400 mb-2">{t('pks.evalTapHint')}</p>
                     <Card className="divide-y divide-gray-100">
                       {members.map(m => {
-                        const rows = evalByUser[m.user_id] || []
+                        const rows = [...(evalByUser[m.user_id] || [])].sort(
+                          (a, b) => (STATUS_RANK[a.status] - STATUS_RANK[b.status]) || a.form.title.localeCompare(b.form.title)
+                        )
                         const done = rows.filter(r => r.status === 'TERPENUHI').length
                         const total = rows.length
                         const overall = total === 0
@@ -299,14 +307,39 @@ export default function PKSDashboardPage() {
                           : done === total
                             ? 'TERPENUHI'
                             : rows.every(r => r.status === 'KOSONG') ? 'KOSONG' : 'PROSES'
+                        const isOpen = !!openEval[m.user_id]
                         return (
-                          <div key={m.user_id} className="flex items-center gap-3 p-3.5">
-                            <Avatar name={m.name} src={m.photo_url} size="sm" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                              <p className="text-xs text-gray-400">{total > 0 ? t('pks.formsFulfilled', { done, total }) : t('pks.noActiveForm')}</p>
-                            </div>
-                            <StatusBadge status={overall} />
+                          <div key={m.user_id}>
+                            <button
+                              type="button"
+                              disabled={total === 0}
+                              onClick={() => setOpenEval(p => ({ ...p, [m.user_id]: !p[m.user_id] }))}
+                              className="w-full flex items-center gap-3 p-3.5 text-left disabled:cursor-default"
+                            >
+                              <Avatar name={m.name} src={m.photo_url} size="sm" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                                <p className="text-xs text-gray-400">{total > 0 ? t('pks.formsFulfilled', { done, total }) : t('pks.noActiveForm')}</p>
+                              </div>
+                              <StatusBadge status={overall} />
+                              {total > 0 && (
+                                <ChevronDown size={16} className={`text-gray-300 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                              )}
+                            </button>
+
+                            {isOpen && total > 0 && (
+                              <div className="px-3.5 pb-3 space-y-1.5">
+                                {rows.map(r => (
+                                  <div key={r.form.form_id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium text-gray-700 truncate">{r.form.title}</p>
+                                      <p className="text-[10px] text-gray-400">{t('pks.formProgress', { filled: r.filled, target: r.target })}</p>
+                                    </div>
+                                    <StatusBadge status={r.status} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )
                       })}
@@ -317,15 +350,21 @@ export default function PKSDashboardPage() {
             )}
 
             {tab === 'profil' && (
-              <Card className="p-6 flex flex-col items-center text-center">
-                <Avatar name={profile?.name} src={profile?.photo_url} size="xl" />
-                <p className="text-base font-semibold text-gray-900 mt-3">{profile?.name}</p>
-                <Badge color="orange" className="mt-1.5">{t('pks.coordinator')}</Badge>
-                <p className="text-sm text-gray-400 mt-1">{komsel?.name}</p>
-                <Button variant="outline" className="w-full mt-6" onClick={handleLogout}>
-                  <LogOut size={15} /> {t('common.logout')}
-                </Button>
-              </Card>
+              <div className="space-y-3">
+                <Card className="p-6 flex flex-col items-center text-center">
+                  <Avatar name={profile?.name} src={profile?.photo_url} size="xl" />
+                  <p className="text-base font-semibold text-gray-900 mt-3">{profile?.name}</p>
+                  <Badge color="orange" className="mt-1.5">{t('pks.coordinator')}</Badge>
+                  <p className="text-sm text-gray-400 mt-1">{komsel?.name}</p>
+                  <Button variant="outline" className="w-full mt-6" onClick={handleLogout}>
+                    <LogOut size={15} /> {t('common.logout')}
+                  </Button>
+                </Card>
+
+                {/* Aktifkan notifikasi agar PKS tahu saat anggota mengisi SOP. */}
+                <p className="text-xs text-gray-400 px-1">{t('pks.notifHint')}</p>
+                <PushToggle />
+              </div>
             )}
           </>
         )}
