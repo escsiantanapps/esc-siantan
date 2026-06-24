@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
+import { ONBOARDING_KEY } from '@/pages/OnboardingPage'
 import { Mail, Lock, Eye, EyeOff, Check } from 'lucide-react'
 
 const REMEMBER_KEY = 'esc-remember-email'
@@ -24,7 +25,8 @@ export default function LoginPage() {
       await login(form.email, form.password)
       if (remember) localStorage.setItem(REMEMBER_KEY, form.email)
       else localStorage.removeItem(REMEMBER_KEY)
-      navigate('/')
+      // Onboarding tampil sekali, pada login pertama di perangkat ini.
+      navigate(localStorage.getItem(ONBOARDING_KEY) ? '/' : '/onboarding')
     } catch {
       setError(t('auth.loginError'))
     } finally {

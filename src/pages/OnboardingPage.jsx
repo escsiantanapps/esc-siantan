@@ -2,10 +2,10 @@
  * OnboardingPage.jsx — ESC Siantan
  *
  * Slide perkenalan 4 layar dengan ayat Alkitab + motivasi.
- * Muncul HANYA sekali saat pertama buka app (ditandai dengan
- * localStorage key 'esc-onboarding-done').
+ * Muncul HANYA sekali, pada login pertama di perangkat ini (ditandai
+ * dengan localStorage key 'esc-onboarding-done').
  *
- * Setelah selesai → redirect ke /login.
+ * Setelah selesai → redirect ke beranda (/).
  */
 
 import { useState, useRef, useCallback } from 'react'
@@ -81,10 +81,10 @@ export default function OnboardingPage() {
   const slide = SLIDES[index]
   const isLast = index === SLIDES.length - 1
 
-  // Simpan flag & pergi ke login
+  // Simpan flag & pergi ke beranda
   function finish() {
     localStorage.setItem(ONBOARDING_KEY, '1')
-    navigate('/login', { replace: true })
+    navigate('/', { replace: true })
   }
 
   function next() {

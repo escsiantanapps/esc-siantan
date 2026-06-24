@@ -9,7 +9,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import OfflineBanner from '@/components/OfflineBanner'
 
 // Onboarding
-import OnboardingPage, { ONBOARDING_KEY } from '@/pages/OnboardingPage'
+import OnboardingPage from '@/pages/OnboardingPage'
 
 // Auth
 import LoginPage from '@/pages/auth/LoginPage'
@@ -112,8 +112,6 @@ function PKSRoute({ children }) {
 function PublicRoute({ children }) {
   const { user } = useAuth()
   if (user) return <Navigate to="/" replace />
-  // Arahkan ke onboarding jika belum pernah dibuka
-  if (!localStorage.getItem(ONBOARDING_KEY)) return <Navigate to="/onboarding" replace />
   return children
 }
 
