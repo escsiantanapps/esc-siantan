@@ -562,6 +562,7 @@ CREATE POLICY "leaves_select" ON task_leaves FOR SELECT USING (
 CREATE POLICY "leaves_insert_own" ON task_leaves FOR INSERT WITH CHECK (
   user_id = auth_user_id() AND status = 'Menunggu'
   AND (auth_user_role() = 'Volunteer' OR auth_user_role_secondary() = 'Volunteer')
+  AND proof_url IS NOT NULL
 );
 CREATE POLICY "leaves_delete_own_pending" ON task_leaves FOR DELETE USING (
   user_id = auth_user_id() AND status = 'Menunggu'
@@ -715,6 +716,7 @@ DROP POLICY IF EXISTS "leaves_insert_own" ON task_leaves;
 CREATE POLICY "leaves_insert_own" ON task_leaves FOR INSERT WITH CHECK (
   user_id = auth_user_id() AND status = 'Menunggu'
   AND (auth_user_role() = 'Volunteer' OR auth_user_role_secondary() = 'Volunteer')
+  AND proof_url IS NOT NULL
 );
 DROP POLICY IF EXISTS "leaves_delete_own_pending" ON task_leaves;
 CREATE POLICY "leaves_delete_own_pending" ON task_leaves FOR DELETE USING (

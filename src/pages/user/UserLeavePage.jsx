@@ -48,7 +48,7 @@ export default function UserLeavePage() {
     setUploading(true); setError('')
     try {
       file = await compressImage(file, { maxDim: 1600 })
-      validateUpload(file, { maxMB: 8 })
+      validateUpload(file, { maxMB: 8, image: true })
       const url = await leavesService.uploadProof(profile.user_id, file)
       set('proof_url', url)
       toast.success('Bukti berhasil diunggah.')
@@ -63,6 +63,7 @@ export default function UserLeavePage() {
     if (!form.start_date || !form.end_date) { setError('Tanggal mulai & selesai wajib diisi.'); return }
     if (form.end_date < form.start_date) { setError('Tanggal selesai tidak boleh sebelum tanggal mulai.'); return }
     if (form.start_date < minStart) { setError('Pengajuan tidak boleh mundur lebih dari 2 hari.'); return }
+    if (!form.proof_url) { setError('Bukti foto wajib diunggah.'); return }
     setSaving(true)
     try {
       await leavesService.create({
@@ -119,7 +120,7 @@ export default function UserLeavePage() {
             </div>
             <Textarea label="Alasan (opsional)" rows={2} value={form.reason} onChange={e => set('reason', e.target.value)} placeholder="cth: Sakit demam, surat dokter terlampir" />
             <Uploader
-              kind="image" label="Bukti (opsional)" hint="Foto surat dokter / bukti, maks 8 MB"
+              kind="image" label="Bukti Foto" required hint="Foto surat dokter / bukti, maks 8 MB"
               value={form.proof_url} uploading={uploading}
               onFile={handleProof} onClear={() => set('proof_url', '')}
             />
@@ -127,7 +128,7 @@ export default function UserLeavePage() {
               <CalendarOff size={16} /> Kirim Pengajuan
             </Button>
             <p className="text-xs text-gray-400 text-center">
-              Izin berlaku setelah disetujui admin. Periode yang disetujui tidak dihitung "Kosong" di evaluasi.
+              Bukti foto wajib. Izin berlaku setelah disetujui admin; periode yang disetujui tidak dihitung "Kosong" di evaluasi.
             </p>
           </Card>
         </section>
