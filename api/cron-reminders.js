@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     const todayId = norm(new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' }).format(new Date()))
 
     const { data: templates } = await admin
-      .from('form_templates').select('form_id, title, weekly_goal, period, reminder_enabled, reminder_days')
+      .from('form_templates').select('form_id, title, weekly_goal, period, reminder_enabled, reminder_days, allowed_roles')
       .eq('reminder_enabled', true)
     const due = (templates || []).filter(t => (t.reminder_days || []).some(d => norm(d) === todayId))
     if (due.length === 0) return res.status(200).json({ ok: true, today: todayId, due: 0 })
@@ -62,6 +62,22 @@ export default async function handler(req, res) {
       } else {
         const { data: us } = await admin.from('users').select('user_id').eq('status', 'Aktif')
         eligible = (us || []).map(u => u.user_id)
+      }
+
+      // Batasan role: bila diisi, saring eligible ke user dengan role yang cocok.
+      // Pertimbangkan role utama DAN role kedua (mis. Admin yang juga Volunteer
+      // tetap menerima pengingat). PKS dikenali lewat is_pks ATAU role 'PKS'.
+      const roles = tpl.allowed_roles || []
+      if (roles.length) {
+        const { data: urs } = await admin.from('users').select('user_id, role, role_secondary, is_pks')
+          .in('user_id', eligible.length ? eligible : ['__none__'])
+        const ok = new Set((urs || [])
+          .filter(u =>
+            roles.includes(u.role) ||
+            roles.includes(u.role_secondary) ||
+            (roles.includes('PKS') && (u.is_pks === true || u.role_secondary === 'PKS')))
+          .map(u => u.user_id))
+        eligible = eligible.filter(id => ok.has(id))
       }
 
       // Hitung yang sudah memenuhi target pada periode ini.

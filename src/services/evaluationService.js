@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { canAccessTemplate } from '@/services/tasksService'
 
 export const evaluationService = {
   // jumlah periode (minggu/bulan) dalam rentang tanggal
@@ -24,7 +25,7 @@ export const evaluationService = {
     }))
 
     let userQuery = supabase.from('users')
-      .select('user_id, name, role, komsel_id, photo_url, sp_level, user_ministries(ministry_id)')
+      .select('user_id, name, role, role_secondary, is_pks, komsel_id, photo_url, sp_level, user_ministries(ministry_id)')
       .eq('status', 'Aktif')
     userQuery = role ? userQuery.eq('role', role) : userQuery.in('role', ['Volunteer', 'Jemaat', 'PKS'])
     if (komselId) userQuery = userQuery.eq('komsel_id', komselId)
@@ -55,8 +56,8 @@ export const evaluationService = {
     const rows = []
     for (const u of users) {
       for (const t of templates) {
-        const allowed = t.allowed_ministry || []
-        if (allowed.length > 0 && !allowed.some(m => (u.ministry_ids || []).includes(m))) continue
+        // Lewati template yang tidak relevan untuk user ini (batasan role/ministry).
+        if (!canAccessTemplate(t, u)) continue
         const filled = responses.filter(r => r.volunteer_id === u.user_id && r.form_id === t.form_id).length
         const periods = this.periodsInRange(start, end, t.period)
         const target = (t.weekly_goal || 1) * periods

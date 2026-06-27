@@ -23,6 +23,13 @@ const FIELD_TYPES = [
 
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
 
+// Role yang bisa dibatasi untuk mengisi tugas (Admin/Super Admin selalu boleh).
+const ROLES = [
+  { value: 'Jemaat', label: 'Jemaat' },
+  { value: 'Volunteer', label: 'Volunteer' },
+  { value: 'PKS', label: 'PKS (Pemimpin Komsel)' },
+]
+
 function slugify(str) {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 }
@@ -59,7 +66,7 @@ export default function AdminTaskFormPage() {
   const [form, setForm] = useState({
     title: '', description: '', weekly_goal: 1, period: 'minggu',
     active_days: [], open_time: '00:00', close_time: '23:59',
-    allowed_ministry: [], fields_json: [],
+    allowed_roles: [], allowed_ministry: [], fields_json: [],
     bg_type: 'none', bg_value: '',
     reminder_enabled: false, reminder_days: [],
     once_per_day: false,
@@ -78,6 +85,7 @@ export default function AdminTaskFormPage() {
             active_days: t.active_days || [],
             open_time: t.open_time || '00:00',
             close_time: t.close_time || '23:59',
+            allowed_roles: t.allowed_roles || [],
             allowed_ministry: t.allowed_ministry || [],
             fields_json: t.fields_json || [],
             bg_type: t.bg_type || 'none',
@@ -112,6 +120,13 @@ export default function AdminTaskFormPage() {
     setForm(p => ({
       ...p,
       allowed_ministry: p.allowed_ministry.includes(mid) ? p.allowed_ministry.filter(m => m !== mid) : [...p.allowed_ministry, mid],
+    }))
+  }
+
+  function toggleRole(role) {
+    setForm(p => ({
+      ...p,
+      allowed_roles: p.allowed_roles.includes(role) ? p.allowed_roles.filter(r => r !== role) : [...p.allowed_roles, role],
     }))
   }
 
@@ -287,6 +302,16 @@ export default function AdminTaskFormPage() {
             <p className="text-xs text-gray-400">Pengingat dikirim otomatis sekitar pukul 08:00 WIB pada hari terpilih.</p>
           </>
         )}
+      </Card>
+
+      <Card className="p-4 mb-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-900">Role yang Dapat Mengisi</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {ROLES.map(r => (
+            <Checkbox key={r.value} label={r.label} checked={form.allowed_roles.includes(r.value)} onChange={() => toggleRole(r.value)} />
+          ))}
+        </div>
+        <p className="text-xs text-gray-400">Kosongkan semua agar semua role bisa mengisi. Admin selalu dapat mengakses.</p>
       </Card>
 
       <Card className="p-4 mb-4 space-y-3">

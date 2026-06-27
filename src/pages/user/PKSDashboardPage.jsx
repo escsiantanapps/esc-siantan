@@ -7,7 +7,6 @@ import { useToast } from '@/hooks/useToast'
 import { komselService } from '@/services/contentService'
 import { evaluationService } from '@/services/evaluationService'
 import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, Select, Input, Button } from '@/components/ui'
-import PushToggle from '@/components/PushToggle'
 import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
 
@@ -350,21 +349,15 @@ export default function PKSDashboardPage() {
             )}
 
             {tab === 'profil' && (
-              <div className="space-y-3">
-                <Card className="p-6 flex flex-col items-center text-center">
-                  <Avatar name={profile?.name} src={profile?.photo_url} size="xl" />
-                  <p className="text-base font-semibold text-gray-900 mt-3">{profile?.name}</p>
-                  <Badge color="orange" className="mt-1.5">{t('pks.coordinator')}</Badge>
-                  <p className="text-sm text-gray-400 mt-1">{komsel?.name}</p>
-                  <Button variant="outline" className="w-full mt-6" onClick={handleLogout}>
-                    <LogOut size={15} /> {t('common.logout')}
-                  </Button>
-                </Card>
-
-                {/* Aktifkan notifikasi agar PKS tahu saat anggota mengisi SOP. */}
-                <p className="text-xs text-gray-400 px-1">{t('pks.notifHint')}</p>
-                <PushToggle />
-              </div>
+              <Card className="p-6 flex flex-col items-center text-center">
+                <Avatar name={profile?.name} src={profile?.photo_url} size="xl" />
+                <p className="text-base font-semibold text-gray-900 mt-3">{profile?.name}</p>
+                <Badge color="orange" className="mt-1.5">{t('pks.coordinator')}</Badge>
+                <p className="text-sm text-gray-400 mt-1">{komsel?.name}</p>
+                <Button variant="outline" className="w-full mt-6" onClick={handleLogout}>
+                  <LogOut size={15} /> {t('common.logout')}
+                </Button>
+              </Card>
             )}
           </>
         )}

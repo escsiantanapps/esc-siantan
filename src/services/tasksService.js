@@ -1,14 +1,33 @@
 import { supabase } from '@/lib/supabase'
 
+// Cek apakah role user cocok dengan salah satu role target. User dapat punya
+// role utama (role) dan role kedua (role_secondary) — keduanya dipertimbangkan.
+// PKS dikenali lewat penanda is_pks ATAU role/role_secondary = 'PKS'.
+function userHasRole(profile, role) {
+  if (role === 'PKS') {
+    return profile?.is_pks === true || profile?.role === 'PKS' || profile?.role_secondary === 'PKS'
+  }
+  return profile?.role === role || profile?.role_secondary === role
+}
+
 // Cek apakah seorang user berhak mengakses sebuah template tugas.
-// Aturan: allowed_ministry kosong = terbuka untuk semua; Admin/Super Admin
-// selalu boleh; selain itu, salah satu ministry user harus ada di allowed_ministry.
+// Setiap batasan yang DIISI harus terpenuhi; batasan kosong diabaikan:
+//  - Admin/Super Admin selalu boleh (mereka mengelola tugas).
+//  - allowed_roles: bila diisi, role user harus termasuk salah satunya.
+//  - allowed_ministry: bila diisi, salah satu ministry user harus cocok.
 export function canAccessTemplate(template, profile) {
-  const allowed = template?.allowed_ministry || []
-  if (allowed.length === 0) return true
   if (['Admin', 'Super Admin'].includes(profile?.role)) return true
-  const mine = (profile?.ministry_ids || []).map(String)
-  return allowed.map(String).some(m => mine.includes(m))
+
+  const roles = template?.allowed_roles || []
+  if (roles.length > 0 && !roles.some(r => userHasRole(profile, r))) return false
+
+  const allowed = template?.allowed_ministry || []
+  if (allowed.length > 0) {
+    const mine = (profile?.ministry_ids || []).map(String)
+    if (!allowed.map(String).some(m => mine.includes(m))) return false
+  }
+
+  return true
 }
 
 // Ratakan relasi template_ministries jadi array allowed_ministry pada template.

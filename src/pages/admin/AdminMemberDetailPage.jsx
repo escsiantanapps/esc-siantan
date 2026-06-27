@@ -24,7 +24,7 @@ export default function AdminMemberDetailPage() {
   const [success, setSuccess] = useState('')
 
   const [form, setForm] = useState({
-    role: '', is_pks: false, status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
+    role: '', role_secondary: '', is_pks: false, status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
   })
 
   useEffect(() => { load() }, [id])
@@ -43,6 +43,7 @@ export default function AdminMemberDetailPage() {
       setForm({
         // 'PKS' lama kini direpresentasikan sebagai base role + flag is_pks.
         role: data.role === 'PKS' ? 'Volunteer' : (data.role || 'Jemaat'),
+        role_secondary: data.role_secondary || '',
         is_pks: data.is_pks === true || data.role === 'PKS',
         status: data.status || 'Aktif',
         sp_level: data.sp_level || 'Aman',
@@ -75,6 +76,7 @@ export default function AdminMemberDetailPage() {
       const updated = await usersService.update(id, {
         ...form,
         is_pks: isAdminRole ? false : form.is_pks, // Admin/Super Admin tidak boleh PKS
+        role_secondary: form.role_secondary || null,
         komsel_id: form.komsel_id || null,
       })
       setMember(updated)
@@ -215,29 +217,41 @@ export default function AdminMemberDetailPage() {
       {/* Pengaturan akun */}
       <Card className="p-4 mb-4 space-y-4">
         <h2 className="text-sm font-semibold text-gray-900">Pengaturan Akun</h2>
-        <div className="grid grid-cols-2 gap-3">
-          {canEditRole ? (
-            <Select label="Role Utama" value={form.role} onChange={e => {
-              const v = e.target.value
-              setForm(p => ({ ...p, role: v, is_pks: ['Admin', 'Super Admin'].includes(v) ? false : p.is_pks }))
-            }}>
-              {['Jemaat', 'Volunteer', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
-            </Select>
-          ) : (
-            <div className="space-y-1">
-              <label className="text-sm text-gray-600 font-medium">Role</label>
-              <div className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
-                <span className="text-sm text-gray-700">{form.role}{form.is_pks ? ' + PKS' : ''}</span>
-              </div>
-              <p className="text-xs text-gray-400">Hanya Super Admin yang dapat mengubah role.</p>
+        {canEditRole ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Select label="Role Utama" value={form.role} onChange={e => {
+                const v = e.target.value
+                setForm(p => ({ ...p, role: v, is_pks: ['Admin', 'Super Admin'].includes(v) ? false : p.is_pks }))
+              }}>
+                {['Jemaat', 'Volunteer', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
+              </Select>
+              <Select label="Role Kedua" value={form.role_secondary} onChange={e => set('role_secondary', e.target.value)}>
+                <option value="">Tidak ada</option>
+                {['Jemaat', 'Volunteer'].map(r => <option key={r} value={r}>{r}</option>)}
+              </Select>
             </div>
-          )}
-          <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
-            <option value="Menunggu Persetujuan">Menunggu Persetujuan</option>
-            <option value="Aktif">Aktif</option>
-            <option value="Nonaktif">Nonaktif</option>
-          </Select>
-        </div>
+            <p className="text-xs text-gray-400 -mt-1">
+              Role Kedua opsional — mis. Admin/Super Admin yang juga Volunteer agar tetap dapat
+              mengakses tugas dan menerima notifikasi untuk role tersebut.
+            </p>
+          </>
+        ) : (
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600 font-medium">Role</label>
+            <div className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+              <span className="text-sm text-gray-700">
+                {form.role}{form.role_secondary ? ` + ${form.role_secondary}` : ''}{form.is_pks ? ' + PKS' : ''}
+              </span>
+            </div>
+            <p className="text-xs text-gray-400">Hanya Super Admin yang dapat mengubah role.</p>
+          </div>
+        )}
+        <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
+          <option value="Menunggu Persetujuan">Menunggu Persetujuan</option>
+          <option value="Aktif">Aktif</option>
+          <option value="Nonaktif">Nonaktif</option>
+        </Select>
 
         {/* Peran tambahan: PKS (kecuali Admin & Super Admin) */}
         {canEditRole && (

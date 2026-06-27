@@ -25,6 +25,7 @@ CREATE TABLE users (
   email         TEXT,
   phone         TEXT,
   role          TEXT DEFAULT 'Jemaat' CHECK (role IN ('Jemaat','Volunteer','PKS','Admin','Super Admin')),
+  role_secondary TEXT CHECK (role_secondary IS NULL OR role_secondary IN ('Jemaat','Volunteer','PKS','Admin','Super Admin')),  -- peran kedua (mis. Admin yang juga Volunteer)
   status        TEXT DEFAULT 'Aktif' CHECK (status IN ('Aktif','Nonaktif','Menunggu Persetujuan')),
   gender        TEXT CHECK (gender IN ('Laki-laki','Perempuan')),
   birth_date    DATE,
@@ -167,6 +168,7 @@ CREATE TABLE form_templates (
   reminder_enabled BOOLEAN DEFAULT false,
   reminder_days    TEXT[] DEFAULT '{}',   -- nama hari (Senin..Minggu) untuk pengingat otomatis
   once_per_day    BOOLEAN DEFAULT false,  -- batasi pengisian maks. 1x per hari per jemaat
+  allowed_roles   TEXT[] DEFAULT '{}',    -- batasi role yang boleh mengisi (kosong = semua role)
   created_by      TEXT,
   created_at      TIMESTAMPTZ DEFAULT now()
 );
@@ -321,6 +323,11 @@ CREATE OR REPLACE FUNCTION auth_user_role() RETURNS text
   SELECT role FROM users WHERE auth_id = auth.uid()
 $$;
 
+CREATE OR REPLACE FUNCTION auth_user_role_secondary() RETURNS text
+  LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT role_secondary FROM users WHERE auth_id = auth.uid()
+$$;
+
 CREATE OR REPLACE FUNCTION auth_user_komsel() RETURNS text
   LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
   SELECT komsel_id FROM users WHERE auth_id = auth.uid()
@@ -423,14 +430,29 @@ CREATE POLICY "kl_admin_write" ON komsel_leaders FOR ALL
   USING (auth_user_role() IN ('Admin', 'Super Admin'))
   WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
 
--- ── form_templates: terbuka bila tak punya ministry, atau Admin, atau cocok ministry ──
-CREATE POLICY "templates_read_by_ministry" ON form_templates FOR SELECT USING (
-  NOT EXISTS (SELECT 1 FROM template_ministries tm WHERE tm.form_id = form_templates.form_id)
-  OR auth_user_role() IN ('Admin', 'Super Admin')
-  OR EXISTS (
-    SELECT 1 FROM template_ministries tm
-    JOIN user_ministries um ON um.ministry_id = tm.ministry_id
-    WHERE tm.form_id = form_templates.form_id AND um.user_id = auth_user_id()
+-- ── form_templates: Admin selalu; selain itu gerbang ROLE dan MINISTRY harus
+--    sama-sama lolos (batasan yang kosong dianggap lolos). ──
+CREATE POLICY "templates_read_access" ON form_templates FOR SELECT USING (
+  auth_user_role() IN ('Admin', 'Super Admin')
+  OR (
+    -- Gerbang role: kosong = semua role; selain itu role user harus cocok
+    -- (PKS dikenali lewat is_pks ATAU role = 'PKS').
+    (
+      coalesce(array_length(allowed_roles, 1), 0) = 0
+      OR auth_user_role() = ANY (allowed_roles)
+      OR auth_user_role_secondary() = ANY (allowed_roles)
+      OR ('PKS' = ANY (allowed_roles) AND auth_user_is_pks())
+    )
+    AND
+    -- Gerbang ministry: tidak dibatasi, atau salah satu ministry user cocok.
+    (
+      NOT EXISTS (SELECT 1 FROM template_ministries tm WHERE tm.form_id = form_templates.form_id)
+      OR EXISTS (
+        SELECT 1 FROM template_ministries tm
+        JOIN user_ministries um ON um.ministry_id = tm.ministry_id
+        WHERE tm.form_id = form_templates.form_id AND um.user_id = auth_user_id()
+      )
+    )
   )
 );
 
@@ -571,3 +593,46 @@ CREATE POLICY "task_files_read" ON storage.objects
 -- berlaku lintas instance serverless (tidak lagi in-memory).
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS last_push_sent_at TIMESTAMPTZ;
+
+-- ── Migrasi v20 + v21: akses tugas per ROLE + peran kedua ────
+-- Jalankan blok ini sekali di Supabase SQL Editor (urutan penting: kolom &
+-- helper dulu, baru policy yang memakainya).
+--   v20: allowed_roles pada form_templates (kosong = semua role boleh).
+--   v21: role_secondary pada users (mis. Admin yang juga Volunteer agar tetap
+--        dapat mengakses tugas & menerima notifikasi role tersebut).
+-- Policy SELECT form_templates menegakkan gerbang role (utama/kedua/PKS) DAN
+-- ministry di server.
+ALTER TABLE form_templates
+  ADD COLUMN IF NOT EXISTS allowed_roles TEXT[] DEFAULT '{}';
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS role_secondary TEXT
+  CHECK (role_secondary IS NULL OR role_secondary IN ('Jemaat','Volunteer','PKS','Admin','Super Admin'));
+
+CREATE OR REPLACE FUNCTION auth_user_role_secondary() RETURNS text
+  LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT role_secondary FROM users WHERE auth_id = auth.uid()
+$$;
+
+DROP POLICY IF EXISTS "templates_read_by_ministry" ON form_templates;
+DROP POLICY IF EXISTS "templates_read_access" ON form_templates;
+CREATE POLICY "templates_read_access" ON form_templates FOR SELECT USING (
+  auth_user_role() IN ('Admin', 'Super Admin')
+  OR (
+    (
+      coalesce(array_length(allowed_roles, 1), 0) = 0
+      OR auth_user_role() = ANY (allowed_roles)
+      OR auth_user_role_secondary() = ANY (allowed_roles)
+      OR ('PKS' = ANY (allowed_roles) AND auth_user_is_pks())
+    )
+    AND
+    (
+      NOT EXISTS (SELECT 1 FROM template_ministries tm WHERE tm.form_id = form_templates.form_id)
+      OR EXISTS (
+        SELECT 1 FROM template_ministries tm
+        JOIN user_ministries um ON um.ministry_id = tm.ministry_id
+        WHERE tm.form_id = form_templates.form_id AND um.user_id = auth_user_id()
+      )
+    )
+  )
+);
