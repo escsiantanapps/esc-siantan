@@ -14,7 +14,6 @@ export default function PersembahanPage() {
   const { t } = useLang()
   const [accounts, setAccounts] = useState([])
   const [history, setHistory] = useState([])
-  const [historyCategory, setHistoryCategory] = useState('')
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState('')
 
@@ -96,7 +95,6 @@ export default function PersembahanPage() {
 
   const qris = accounts.filter(a => a.kind === 'qris')
   const banks = accounts.filter(a => a.kind === 'bank')
-  const filteredHistory = historyCategory ? history.filter(o => o.category === historyCategory) : history
 
   return (
     <div className="pb-4">
@@ -178,24 +176,12 @@ export default function PersembahanPage() {
 
             {/* Riwayat */}
             <section>
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">{t('offering.myHistory')}</h3>
-                {history.length > 0 && (
-                  <div className="w-44 shrink-0">
-                    <Select value={historyCategory} onChange={e => setHistoryCategory(e.target.value)}>
-                      <option value="">{t('offering.allCategories')}</option>
-                      {OFFERING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </Select>
-                  </div>
-                )}
-              </div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('offering.myHistory')}</h3>
               {history.length === 0 ? (
-                <EmptyState icon={HandCoins} title={t('offering.noHistory')} description={t('offering.noHistoryDesc')} />
-              ) : filteredHistory.length === 0 ? (
                 <EmptyState icon={HandCoins} title={t('offering.noHistory')} description={t('offering.noHistoryDesc')} />
               ) : (
                 <Card className="divide-y divide-gray-100">
-                  {filteredHistory.map(o => (
+                  {history.map(o => (
                     <div key={o.offering_id} className="flex items-center gap-3 p-3.5">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900">{formatRupiah(o.amount)}</p>
