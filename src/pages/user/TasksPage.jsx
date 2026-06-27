@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, CheckCircle } from 'lucide-react'
+import { ClipboardList, CheckCircle, CalendarOff, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { Card, GradientHeader, Spinner, EmptyState } from '@/components/ui'
@@ -9,7 +9,7 @@ import { useLang } from '@/hooks/useLang'
 import { startOfWeek } from 'date-fns'
 
 export default function TasksPage() {
-  const { profile } = useAuth()
+  const { profile, isVolunteer } = useAuth()
   const { toast } = useToast()
   const { t } = useLang()
   const navigate = useNavigate()
@@ -53,6 +53,23 @@ export default function TasksPage() {
       <GradientHeader title={t('tasks.title')} subtitle={t('tasks.subtitle', { count: templates.length })} />
 
       <div className="px-4 py-4 space-y-3">
+        {/* Pintasan ajukan izin/sakit — khusus Volunteer */}
+        {isVolunteer && (
+          <button
+            onClick={() => navigate('/izin')}
+            className="w-full flex items-center gap-3 bg-surface border border-gray-100 rounded-2xl p-3.5 text-left active:scale-[0.99] transition"
+          >
+            <div className="w-9 h-9 rounded-xl bg-brand-100 flex items-center justify-center shrink-0">
+              <CalendarOff size={18} className="text-brand-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900">{t('tasks.leaveTitle')}</p>
+              <p className="text-xs text-gray-400">{t('tasks.leaveDesc')}</p>
+            </div>
+            <ChevronRight size={16} className="text-gray-300" />
+          </button>
+        )}
+
         {templates.length === 0 && (
           <EmptyState icon={ClipboardList} title={t('tasks.empty')} description={t('tasks.emptyDesc')} />
         )}

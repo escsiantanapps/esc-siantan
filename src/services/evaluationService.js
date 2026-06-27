@@ -52,6 +52,19 @@ export const evaluationService = {
       responses = data
     }
 
+    // Anggota dengan izin DISETUJUI yang beririsan dengan periode evaluasi →
+    // baris di bawah target ditandai "IZIN" (bukan "KOSONG"/"PROSES").
+    let leaveUserIds = new Set()
+    if (userIds.length) {
+      const { data: leaves } = await supabase.from('task_leaves')
+        .select('user_id')
+        .eq('status', 'Disetujui')
+        .in('user_id', userIds)
+        .lte('start_date', String(endDate).slice(0, 10))
+        .gte('end_date', String(startDate).slice(0, 10))
+      leaveUserIds = new Set((leaves || []).map(r => r.user_id))
+    }
+
     const start = new Date(startDate), end = new Date(endDate)
     const rows = []
     for (const u of users) {
@@ -62,7 +75,9 @@ export const evaluationService = {
         const periods = this.periodsInRange(start, end, t.period)
         const target = (t.weekly_goal || 1) * periods
         const minLulus = Math.max(1, Math.round(target * 0.8))
-        rows.push({ user: u, form: t, filled, target, minLulus, status: this.computeStatus(filled, target) })
+        let status = this.computeStatus(filled, target)
+        if (status !== 'TERPENUHI' && leaveUserIds.has(u.user_id)) status = 'IZIN'
+        rows.push({ user: u, form: t, filled, target, minLulus, status })
       }
     }
     return rows

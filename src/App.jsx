@@ -36,6 +36,7 @@ import ClassDetailPage from '@/pages/user/ClassDetailPage'
 import RegistrationStatusPage from '@/pages/user/RegistrationStatusPage'
 import PKSDashboardPage from '@/pages/user/PKSDashboardPage'
 import PersembahanPage from '@/pages/user/PersembahanPage'
+import UserLeavePage from '@/pages/user/UserLeavePage'
 import SettingsPage from '@/pages/user/SettingsPage'
 
 // Halaman berat (QR scanner) — dimuat saat dibutuhkan
@@ -61,6 +62,7 @@ const AdminMinistryPage = lazy(() => import('@/pages/admin/AdminMinistryPage'))
 const AdminKomselPage = lazy(() => import('@/pages/admin/AdminKomselPage'))
 const AdminEvaluationPage = lazy(() => import('@/pages/admin/AdminEvaluationPage'))
 const AdminOfferingsPage = lazy(() => import('@/pages/admin/AdminOfferingsPage'))
+const AdminLeavesPage = lazy(() => import('@/pages/admin/AdminLeavesPage'))
 const AdminPermissionsPage = lazy(() => import('@/pages/admin/AdminPermissionsPage'))
 
 // Layouts
@@ -156,6 +158,7 @@ export default function App() {
             <Route path="pemberkatan-nikah"    element={<WeddingPage />} />
             <Route path="status-pendaftaran"   element={<RegistrationStatusPage />} />
             <Route path="persembahan"          element={<PersembahanPage />} />
+            <Route path="izin"                 element={<UserLeavePage />} />
             <Route path="pks"                  element={<PKSRoute><PKSDashboardPage /></PKSRoute>} />
           </Route>
 
@@ -183,6 +186,7 @@ export default function App() {
             <Route path="komsel"               element={<AdminKomselPage />} />
             <Route path="evaluasi"             element={<AdminEvaluationPage />} />
             <Route path="persembahan"          element={<AdminOfferingsPage />} />
+            <Route path="izin"                 element={<AdminLeavesPage />} />
             <Route path="hak-akses"            element={<AdminPermissionsPage />} />
           </Route>
 

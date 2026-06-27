@@ -171,7 +171,7 @@ export function StatusBadge({ status }) {
     'Nonaktif': 'red', 'Menunggu Persetujuan': 'orange', 'Aman': 'green',
     'SP 1': 'orange', 'SP 2': 'red', 'SP 3': 'red', 'Hadir': 'green',
     'Tidak Hadir': 'red', 'Izin': 'amber', 'Terverifikasi': 'green',
-    'TERPENUHI': 'green', 'PROSES': 'amber', 'KOSONG': 'red',
+    'TERPENUHI': 'green', 'PROSES': 'amber', 'KOSONG': 'red', 'IZIN': 'blue',
   }
   const color = colors[status] || 'gray'
   const key = `status.${status}`

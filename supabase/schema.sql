@@ -313,6 +313,23 @@ CREATE TABLE activation_otp (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 1.24 IZIN / SAKIT TUGAS — anggota mengajukan, Admin menyetujui. Lihat migrasi v22.
+CREATE TABLE task_leaves (
+  leave_id    TEXT PRIMARY KEY DEFAULT 'LV-' || replace(gen_random_uuid()::text, '-', ''),
+  user_id     TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  type        TEXT NOT NULL DEFAULT 'Sakit' CHECK (type IN ('Sakit','Izin')),
+  start_date  DATE NOT NULL,
+  end_date    DATE NOT NULL,
+  reason      TEXT,
+  proof_url   TEXT,
+  status      TEXT NOT NULL DEFAULT 'Menunggu' CHECK (status IN ('Menunggu','Disetujui','Ditolak')),
+  reviewed_by TEXT,
+  reviewed_at TIMESTAMPTZ,
+  admin_note  TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX task_leaves_user_idx ON task_leaves (user_id, start_date);
+
 -- ============================================================
 -- 2. HELPER (SECURITY DEFINER) — baca peran/komsel user TANPA memicu RLS
 --    (mencegah rekursi pada policy tabel users). Lihat migrasi v10 & v13.
@@ -377,6 +394,7 @@ ALTER TABLE admin_user_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_settings           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE password_reset_otp     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activation_otp         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_leaves            ENABLE ROW LEVEL SECURITY;
 -- Catatan: class_attendance dibiarkan tanpa RLS (akses lewat anon/auth key
 -- sesuai perilaku aplikasi). Aktifkan + tambah policy bila ingin diperketat.
 
@@ -531,6 +549,30 @@ CREATE POLICY "ofr_admin_delete" ON offerings FOR DELETE USING (
   auth_user_role() IN ('Admin', 'Super Admin')
 );
 
+-- ── task_leaves: anggota ajukan miliknya; Admin setujui/tolak; PKS baca komselnya ──
+CREATE POLICY "leaves_select" ON task_leaves FOR SELECT USING (
+  user_id = auth_user_id()
+  OR auth_user_role() IN ('Admin', 'Super Admin')
+  OR EXISTS (
+    SELECT 1 FROM users u
+    WHERE u.user_id = task_leaves.user_id
+      AND u.komsel_id IS NOT NULL AND auth_leads_komsel(u.komsel_id)
+  )
+);
+CREATE POLICY "leaves_insert_own" ON task_leaves FOR INSERT WITH CHECK (
+  user_id = auth_user_id() AND status = 'Menunggu'
+  AND (auth_user_role() = 'Volunteer' OR auth_user_role_secondary() = 'Volunteer')
+);
+CREATE POLICY "leaves_delete_own_pending" ON task_leaves FOR DELETE USING (
+  user_id = auth_user_id() AND status = 'Menunggu'
+);
+CREATE POLICY "leaves_admin_update" ON task_leaves FOR UPDATE
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+CREATE POLICY "leaves_admin_delete" ON task_leaves FOR DELETE USING (
+  auth_user_role() IN ('Admin', 'Super Admin')
+);
+
 -- ── admin_user_permissions: admin ybs baca nav-nya / Super Admin baca-tulis ──
 CREATE POLICY "aup_select" ON admin_user_permissions FOR SELECT USING (
   user_id = auth_user_id() OR auth_user_role() = 'Super Admin'
@@ -635,4 +677,54 @@ CREATE POLICY "templates_read_access" ON form_templates FOR SELECT USING (
       )
     )
   )
+);
+
+-- ── Migrasi v22: izin/sakit tugas (task_leaves) ──────────────
+-- Tabel pengajuan izin: anggota mengajukan, Admin menyetujui. Periode yang
+-- disetujui dipakai evaluasi untuk menandai "Izin" (bukan "Kosong").
+-- Jalankan blok ini sekali di Supabase SQL Editor.
+CREATE TABLE IF NOT EXISTS task_leaves (
+  leave_id    TEXT PRIMARY KEY DEFAULT 'LV-' || replace(gen_random_uuid()::text, '-', ''),
+  user_id     TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  type        TEXT NOT NULL DEFAULT 'Sakit' CHECK (type IN ('Sakit','Izin')),
+  start_date  DATE NOT NULL,
+  end_date    DATE NOT NULL,
+  reason      TEXT,
+  proof_url   TEXT,
+  status      TEXT NOT NULL DEFAULT 'Menunggu' CHECK (status IN ('Menunggu','Disetujui','Ditolak')),
+  reviewed_by TEXT,
+  reviewed_at TIMESTAMPTZ,
+  admin_note  TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS task_leaves_user_idx ON task_leaves (user_id, start_date);
+
+ALTER TABLE task_leaves ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "leaves_select" ON task_leaves;
+CREATE POLICY "leaves_select" ON task_leaves FOR SELECT USING (
+  user_id = auth_user_id()
+  OR auth_user_role() IN ('Admin', 'Super Admin')
+  OR EXISTS (
+    SELECT 1 FROM users u
+    WHERE u.user_id = task_leaves.user_id
+      AND u.komsel_id IS NOT NULL AND auth_leads_komsel(u.komsel_id)
+  )
+);
+DROP POLICY IF EXISTS "leaves_insert_own" ON task_leaves;
+CREATE POLICY "leaves_insert_own" ON task_leaves FOR INSERT WITH CHECK (
+  user_id = auth_user_id() AND status = 'Menunggu'
+  AND (auth_user_role() = 'Volunteer' OR auth_user_role_secondary() = 'Volunteer')
+);
+DROP POLICY IF EXISTS "leaves_delete_own_pending" ON task_leaves;
+CREATE POLICY "leaves_delete_own_pending" ON task_leaves FOR DELETE USING (
+  user_id = auth_user_id() AND status = 'Menunggu'
+);
+DROP POLICY IF EXISTS "leaves_admin_update" ON task_leaves;
+CREATE POLICY "leaves_admin_update" ON task_leaves FOR UPDATE
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+DROP POLICY IF EXISTS "leaves_admin_delete" ON task_leaves;
+CREATE POLICY "leaves_admin_delete" ON task_leaves FOR DELETE USING (
+  auth_user_role() IN ('Admin', 'Super Admin')
 );
