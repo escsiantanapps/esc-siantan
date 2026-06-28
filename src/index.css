@@ -35,6 +35,14 @@ html {
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Hilangkan kedip highlight biru/abu saat mengetuk (rasa native app) */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Rasa native: tekan-lama pada link/tombol TIDAK memunculkan pratinjau URL
+   tujuan bawaan browser. Gambar tetap bisa disimpan via tekan-lama. */
+a, button {
+  -webkit-touch-callout: none;
 }
 
 /* Input tanggal/waktu: samakan tampilan & buat ikon kalender konsisten + bisa diklik.
