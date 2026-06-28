@@ -24,7 +24,7 @@ export default defineConfig({
         lang: 'id',
         dir: 'ltr',
         categories: ['lifestyle', 'social', 'productivity'],
-        background_color: '#000000',
+        background_color: '#ffffff',
         theme_color: '#00BFFF',
         orientation: 'portrait',
         icons: [
