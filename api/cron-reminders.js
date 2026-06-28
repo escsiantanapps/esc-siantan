@@ -94,6 +94,7 @@ export default async function handler(req, res) {
         url: `/tugas/${tpl.form_id}`,
       })
       let sent = 0
+      const errors = []
       await Promise.all(targets.flatMap(uid => (subsByUser[uid] || []).map(async s => {
         try {
           await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload)
@@ -101,11 +102,13 @@ export default async function handler(req, res) {
         } catch (err) {
           if (err.statusCode === 404 || err.statusCode === 410) {
             await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint); removed++
+          } else {
+            errors.push({ user_id: s.user_id, statusCode: err.statusCode || null, detail: String(err.body || err.message || err).slice(0, 300) })
           }
         }
       })))
       totalSent += sent
-      report.push({ form: tpl.title, targets: targets.length, sent })
+      report.push({ form: tpl.title, targets: targets.length, sent, errors })
     }
 
     return res.status(200).json({ ok: true, today: todayId, due: due.length, totalSent, removed, report })

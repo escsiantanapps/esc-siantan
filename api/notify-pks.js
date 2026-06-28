@@ -84,6 +84,7 @@ export default async function handler(req, res) {
     })
 
     let sent = 0, removed = 0
+    const errors = []
     await Promise.all(
       (subs || []).map(async s => {
         try {
@@ -96,12 +97,18 @@ export default async function handler(req, res) {
           if (err.statusCode === 404 || err.statusCode === 410) {
             await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint)
             removed++
+          } else {
+            errors.push({
+              user_id: s.user_id,
+              statusCode: err.statusCode || null,
+              detail: String(err.body || err.message || err).slice(0, 300),
+            })
           }
         }
       })
     )
 
-    return res.status(200).json({ ok: true, leaders: leaderIds.length, sent, removed })
+    return res.status(200).json({ ok: true, leaders: leaderIds.length, sent, removed, errors })
   } catch (err) {
     return res.status(500).json({ error: String(err?.message || err) })
   }

@@ -44,7 +44,16 @@ export default function AdminTasksPage() {
         url: `/tugas/${tpl.form_id}`,
         userIds,
       })
-      toast.success(tr('atask.reminderSent', { n: r?.sent ?? 0 }))
+      if ((r?.sent ?? 0) > 0) {
+        toast.success(tr('atask.reminderSent', { n: r.sent }))
+      } else if (r?.total) {
+        // Ada yang mengaktifkan notifikasi tapi semua gagal terkirim — jangan
+        // bilang "sukses", tampilkan alasan sebenarnya (lihat api/send-push.js).
+        const detail = r.errors?.[0]?.detail || 'Tidak diketahui'
+        toast.error(`Gagal kirim ke ${r.total} perangkat. Sebab: ${detail}`)
+      } else {
+        toast.info('Tidak ada jemaat yang mengaktifkan notifikasi push.')
+      }
     } catch (err) {
       toast.error(err.message || tr('atask.reminderFailed'))
     } finally {

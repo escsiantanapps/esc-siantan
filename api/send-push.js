@@ -69,6 +69,10 @@ export default async function handler(req, res) {
     const payload = JSON.stringify({ title, body: message || '', url: url || '/' })
     let sent = 0
     let removed = 0
+    // Kegagalan selain 404/410 (mis. VAPID key tidak cocok, payload ditolak)
+    // dulu ditelan diam-diam sehingga "sent: 0" tidak pernah kelihatan alasannya.
+    // Sekarang dikumpulkan agar pemanggil (UI admin) bisa lihat sebab sebenarnya.
+    const errors = []
 
     await Promise.all(
       (subs || []).map(async s => {
@@ -82,12 +86,18 @@ export default async function handler(req, res) {
           if (err.statusCode === 404 || err.statusCode === 410) {
             await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint)
             removed++
+          } else {
+            errors.push({
+              user_id: s.user_id,
+              statusCode: err.statusCode || null,
+              detail: String(err.body || err.message || err).slice(0, 300),
+            })
           }
         }
       })
     )
 
-    return res.status(200).json({ ok: true, total: (subs || []).length, sent, removed })
+    return res.status(200).json({ ok: true, total: (subs || []).length, sent, removed, errors })
   } catch (err) {
     // Apa pun yang gagal → JSON yang terbaca (termasuk error load modul).
     return res.status(500).json({
