@@ -2,23 +2,34 @@
    Menampilkan notifikasi saat ada push, dan membuka halaman tujuan saat diklik. */
 
 self.addEventListener('push', function (event) {
-  let data = {}
-  try {
-    data = event.data ? event.data.json() : {}
-  } catch (e) {
-    data = { title: 'ESC Siantan', body: event.data ? event.data.text() : '' }
-  }
+  event.waitUntil(
+    (async () => {
+      let data = {}
+      try {
+        data = event.data ? event.data.json() : {}
+      } catch (e) {
+        data = { title: 'ESC Siantan', body: event.data ? event.data.text() : '' }
+      }
 
-  const title = data.title || 'ESC Siantan'
-  const options = {
-    body: data.body || '',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-    vibrate: [80, 40, 80],
-    data: { url: data.url || '/' },
-  }
+      const title = data.title || 'ESC Siantan'
+      const options = {
+        body: data.body || '',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        vibrate: [80, 40, 80],
+        data: { url: data.url || '/' },
+      }
 
-  event.waitUntil(self.registration.showNotification(title, options))
+      try {
+        await self.registration.showNotification(title, options)
+      } catch (e) {
+        // Apa pun sebabnya (opsi tak valid, dll), TETAP tampilkan sesuatu.
+        // Push tanpa notifikasi yang terlihat ("silent push") membuat Chrome
+        // menghukum dengan mencabut subscription setelah beberapa kali.
+        await self.registration.showNotification('ESC Siantan', { body: 'Ada notifikasi baru.' })
+      }
+    })()
+  )
 })
 
 self.addEventListener('notificationclick', function (event) {
