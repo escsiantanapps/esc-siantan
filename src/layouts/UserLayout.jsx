@@ -39,26 +39,27 @@ export default function UserLayout() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto relative">
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto pb-20">
+      <main className="flex-1 overflow-y-auto pb-24">
         <Outlet />
       </main>
 
-      {/* Bottom navigation */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-surface border-t border-gray-100 z-50">
-        <div className="flex items-end">
+      {/* Bottom navigation — bar mengambang dengan tombol Scan menonjol (FAB) */}
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-surface rounded-t-[1.75rem] shadow-[0_-4px_24px_rgba(2,32,71,0.08)] z-50 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-end px-2">
           {LEFT_ITEMS.map(item => <NavItem key={item.to} {...item} />)}
 
-          {/* Tombol Scan menonjol di tengah */}
-          <div className="flex-1 flex justify-center">
-            <NavLink
-              to="/scan"
-              replace
-              aria-label="Scan QR Absensi"
-              className="-mt-6 w-14 h-14 rounded-full gradient-main text-white flex items-center justify-center shadow-lg ambient-shadow active:scale-95 transition-transform border-4 border-surface"
-            >
-              <ScanLine size={24} />
-            </NavLink>
-          </div>
+          {/* Tombol Scan: FAB melayang di tengah ala app modern (myBCA/Telkomsel) */}
+          <NavLink
+            to="/scan"
+            replace
+            aria-label="Scan QR Absensi"
+            className="flex-1 flex flex-col items-center gap-1 py-2 group"
+          >
+            <div className="-mt-9 w-16 h-16 rounded-full gradient-main text-white flex items-center justify-center border-[5px] border-surface shadow-[0_10px_22px_-6px_rgba(0,150,220,0.6)] group-active:scale-95 transition-transform">
+              <ScanLine size={26} strokeWidth={2.2} />
+            </div>
+            <span className="text-[10px] font-semibold text-brand-500">{t('nav.scan')}</span>
+          </NavLink>
 
           {RIGHT_ITEMS.map(item => <NavItem key={item.to} {...item} />)}
         </div>
