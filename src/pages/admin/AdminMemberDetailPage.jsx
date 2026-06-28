@@ -4,7 +4,7 @@ import { ArrowLeft, Trash2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
-import { Card, Avatar, Select, Textarea, Button, Spinner, Checkbox, EmptyState } from '@/components/ui'
+import { Card, Avatar, Select, Textarea, Input, Button, Spinner, Checkbox, EmptyState } from '@/components/ui'
 import { formatDate, formatPhone, hitungUmur } from '@/lib/utils'
 
 export default function AdminMemberDetailPage() {
@@ -25,6 +25,7 @@ export default function AdminMemberDetailPage() {
 
   const [form, setForm] = useState({
     role: '', role_secondary: '', is_pks: false, status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
+    name: '', phone: '', email: '', gender: '', birth_date: '', birth_place: '', address: '', blood_type: '', nik: '', social_media: '',
   })
 
   useEffect(() => { load() }, [id])
@@ -50,6 +51,16 @@ export default function AdminMemberDetailPage() {
         sp_notes: data.sp_notes || '',
         komsel_id: data.komsel_id || '',
         ministry_ids: data.ministry_ids || [],
+        name: data.name || '',
+        phone: data.phone || '',
+        email: data.email || '',
+        gender: data.gender || '',
+        birth_date: data.birth_date || '',
+        birth_place: data.birth_place || '',
+        address: data.address || '',
+        blood_type: data.blood_type || '',
+        nik: data.nik || '',
+        social_media: data.social_media || '',
       })
     } catch (err) {
       setError(err.message || 'Gagal memuat data jemaat.')
@@ -72,12 +83,23 @@ export default function AdminMemberDetailPage() {
   async function handleSave() {
     setError(''); setSuccess(''); setSaving(true)
     try {
-      const isAdminRole = ['Admin', 'Super Admin'].includes(form.role)
+      const { name, phone, email, gender, birth_date, birth_place, address, blood_type, nik, social_media, ...rest } = form
+      const isAdminRole = ['Admin', 'Super Admin'].includes(rest.role)
+      // Biodata jemaat (nama, kontak, alamat, dst.) hanya boleh diubah Super
+      // Admin — tidak dikirim sama sekali oleh Admin biasa agar tidak menimpa
+      // data terbaru (race) dan ditegakkan ulang di server (trigger guard_biodata_admin_edit).
+      const biodata = canEditRole ? {
+        name, phone, email: email || null,
+        gender: gender || null, birth_date: birth_date || null, birth_place: birth_place || null,
+        address: address || null, blood_type: blood_type || null, nik: nik || null,
+        social_media: social_media || null,
+      } : {}
       const updated = await usersService.update(id, {
-        ...form,
-        is_pks: isAdminRole ? false : form.is_pks, // Admin/Super Admin tidak boleh PKS
-        role_secondary: form.role_secondary || null,
-        komsel_id: form.komsel_id || null,
+        ...rest,
+        ...biodata,
+        is_pks: isAdminRole ? false : rest.is_pks, // Admin/Super Admin tidak boleh PKS
+        role_secondary: rest.role_secondary || null,
+        komsel_id: rest.komsel_id || null,
       })
       setMember(updated)
       setSuccess('Perubahan tersimpan.')
@@ -182,36 +204,70 @@ export default function AdminMemberDetailPage() {
             <p className="text-sm text-gray-400">{formatPhone(member.phone)}</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
-          <div>
-            <p className="text-xs text-gray-400">Tanggal Lahir</p>
-            <p className="text-gray-700">{member.birth_date ? `${formatDate(member.birth_date)} (${hitungUmur(member.birth_date)})` : '-'}</p>
+
+        {canEditRole ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-xs text-gray-400">
+              Biodata jemaat hanya dapat diubah oleh Super Admin.
+            </p>
+            <Input label="Nama Lengkap" value={form.name} onChange={e => set('name', e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="No. HP / WhatsApp" type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} />
+              <Input label="Email" type="email" value={form.email} onChange={e => set('email', e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Select label="Jenis Kelamin" value={form.gender} onChange={e => set('gender', e.target.value)}>
+                <option value="">Pilih...</option>
+                <option>Laki-laki</option>
+                <option>Perempuan</option>
+              </Select>
+              <Select label="Golongan Darah" value={form.blood_type} onChange={e => set('blood_type', e.target.value)}>
+                <option value="">Tidak tahu</option>
+                {['A', 'B', 'AB', 'O', '-'].map(b => <option key={b}>{b}</option>)}
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Tanggal Lahir" type="date" value={form.birth_date} onChange={e => set('birth_date', e.target.value)} />
+              <Input label="Tempat Lahir" value={form.birth_place} onChange={e => set('birth_place', e.target.value)} />
+            </div>
+            <Textarea label="Alamat Lengkap" rows={2} value={form.address} onChange={e => set('address', e.target.value)} />
+            <Input label="NIK" value={form.nik} onChange={e => set('nik', e.target.value)} />
+            <Input label="Instagram / Sosial Media" value={form.social_media} onChange={e => set('social_media', e.target.value)} />
+            <p className="text-xs text-gray-400">Terdaftar: {formatDate(member.created_at)}</p>
           </div>
-          <div>
-            <p className="text-xs text-gray-400">Tempat Lahir</p>
-            <p className="text-gray-700">{member.birth_place || '-'}</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+            <div>
+              <p className="text-xs text-gray-400">Tanggal Lahir</p>
+              <p className="text-gray-700">{member.birth_date ? `${formatDate(member.birth_date)} (${hitungUmur(member.birth_date)})` : '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Tempat Lahir</p>
+              <p className="text-gray-700">{member.birth_place || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Jenis Kelamin</p>
+              <p className="text-gray-700">{member.gender || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Golongan Darah</p>
+              <p className="text-gray-700">{member.blood_type || '-'}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-xs text-gray-400">Alamat</p>
+              <p className="text-gray-700">{member.address || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">NIK</p>
+              <p className="text-gray-700">{member.nik || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Terdaftar</p>
+              <p className="text-gray-700">{formatDate(member.created_at)}</p>
+            </div>
+            <p className="col-span-2 text-xs text-gray-400 pt-1">Hanya Super Admin yang dapat mengubah biodata jemaat.</p>
           </div>
-          <div>
-            <p className="text-xs text-gray-400">Jenis Kelamin</p>
-            <p className="text-gray-700">{member.gender || '-'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">Golongan Darah</p>
-            <p className="text-gray-700">{member.blood_type || '-'}</p>
-          </div>
-          <div className="col-span-2">
-            <p className="text-xs text-gray-400">Alamat</p>
-            <p className="text-gray-700">{member.address || '-'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">NIK</p>
-            <p className="text-gray-700">{member.nik || '-'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">Terdaftar</p>
-            <p className="text-gray-700">{formatDate(member.created_at)}</p>
-          </div>
-        </div>
+        )}
       </Card>
 
       {/* Pengaturan akun */}

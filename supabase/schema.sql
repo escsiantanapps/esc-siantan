@@ -819,3 +819,34 @@ CREATE POLICY "profile_photos_update" ON storage.objects
       OR name LIKE 'avatars/' || auth_user_id() || '.%'
     )
   );
+
+-- ── Migrasi v24: biodata jemaat (data pribadi) hanya boleh diubah Super
+-- Admin saat mengedit akun ORANG LAIN. Admin biasa tetap boleh: status,
+-- approval pendaftaran, komsel, ministry, dan SP (tidak disentuh trigger ini).
+-- Self-edit (jemaat mengubah biodatanya sendiri lewat Edit Profil) tetap
+-- bebas — trigger ini hanya aktif saat auth.uid() BUKAN pemilik baris.
+-- Jalankan blok ini sekali di Supabase SQL Editor.
+CREATE OR REPLACE FUNCTION guard_biodata_admin_edit() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS DISTINCT FROM OLD.auth_id AND auth_user_role() = 'Admin' THEN
+    IF NEW.name IS DISTINCT FROM OLD.name
+       OR NEW.phone IS DISTINCT FROM OLD.phone
+       OR NEW.email IS DISTINCT FROM OLD.email
+       OR NEW.gender IS DISTINCT FROM OLD.gender
+       OR NEW.birth_date IS DISTINCT FROM OLD.birth_date
+       OR NEW.birth_place IS DISTINCT FROM OLD.birth_place
+       OR NEW.address IS DISTINCT FROM OLD.address
+       OR NEW.blood_type IS DISTINCT FROM OLD.blood_type
+       OR NEW.nik IS DISTINCT FROM OLD.nik
+       OR NEW.social_media IS DISTINCT FROM OLD.social_media
+       OR NEW.photo_url IS DISTINCT FROM OLD.photo_url THEN
+      RAISE EXCEPTION 'Hanya Super Admin yang dapat mengubah biodata jemaat lain.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_biodata_admin_edit ON users;
+CREATE TRIGGER trg_guard_biodata_admin_edit
+  BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION guard_biodata_admin_edit();
