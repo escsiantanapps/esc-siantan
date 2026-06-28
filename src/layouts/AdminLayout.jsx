@@ -50,6 +50,8 @@ export default function AdminLayout() {
   const isSuperAdmin = profile?.role === 'Super Admin'
   const isAdminOnly = profile?.role === 'Admin'
   const isPKS = profile?.is_pks === true || profile?.role === 'PKS'
+  const isVolunteerSecondary = profile?.role_secondary === 'Volunteer'
+  const hasSecondaryAccess = isPKS || isVolunteerSecondary
   const [allowedPages, setAllowedPages] = useState(null)
   const [permLoading, setPermLoading] = useState(!isSuperAdmin)
 
@@ -119,15 +121,15 @@ export default function AdminLayout() {
         </div>
 
         {/* Panel switcher */}
-        {(!isAdminOnly || isPKS) && (
+        {(!isAdminOnly || hasSecondaryAccess) && (
           <div className="p-3 border-b border-gray-100">
             <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
               <NavLink
-                to={isAdminOnly ? '/pks' : '/'}
+                to={isAdminOnly && isPKS ? '/pks' : '/'}
                 className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
               >
                 <Smartphone size={14} strokeWidth={1.5} />
-                {isAdminOnly ? t('admin.switchPks') : t('admin.switchApp')}
+                {isAdminOnly && isPKS ? t('admin.switchPks') : t('admin.switchApp')}
               </NavLink>
               <span className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold bg-surface text-brand-600 shadow-sm">
                 <ShieldCheck size={14} strokeWidth={2} />

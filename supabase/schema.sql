@@ -730,3 +730,92 @@ DROP POLICY IF EXISTS "leaves_admin_delete" ON task_leaves;
 CREATE POLICY "leaves_admin_delete" ON task_leaves FOR DELETE USING (
   auth_user_role() IN ('Admin', 'Super Admin')
 );
+
+-- ── Migrasi v23: tutup gap keamanan hasil audit ──────────────
+-- Jalankan blok ini sekali di Supabase SQL Editor.
+--
+-- (a) PRIVILEGE ESCALATION: policy "users_edit_own" mengizinkan UPDATE baris
+--     sendiri tanpa WITH CHECK, jadi user biasa bisa mengubah kolom hak
+--     akses (role, role_secondary, status, is_pks, komsel_id) lewat
+--     supabase-js langsung dari klien. Trigger ini menolak perubahan kolom
+--     tersebut kecuali pemanggil sudah Admin/Super Admin.
+CREATE OR REPLACE FUNCTION guard_user_privilege_cols() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth_user_role() NOT IN ('Admin', 'Super Admin') THEN
+    IF NEW.role IS DISTINCT FROM OLD.role
+       OR NEW.role_secondary IS DISTINCT FROM OLD.role_secondary
+       OR NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.is_pks IS DISTINCT FROM OLD.is_pks
+       OR NEW.komsel_id IS DISTINCT FROM OLD.komsel_id THEN
+      RAISE EXCEPTION 'Tidak diizinkan mengubah kolom hak akses sendiri.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_user_privilege ON users;
+CREATE TRIGGER trg_guard_user_privilege
+  BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION guard_user_privilege_cols();
+
+-- (b) Tambah policy UPDATE eksplisit untuk Admin/Super Admin pada users
+--     (sebelumnya hanya "users_edit_own" → admin tidak bisa edit user lain
+--     murni lewat RLS; trigger di atas tetap berlaku sebagai pengaman kedua).
+DROP POLICY IF EXISTS "users_admin_update" ON users;
+CREATE POLICY "users_admin_update" ON users FOR UPDATE
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+
+-- (c) class_attendance dibiarkan TANPA RLS sebelumnya → bisa dibaca/ditulis
+--     siapa pun lewat anon key. Aktifkan + policy setara event_attendance.
+ALTER TABLE class_attendance ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "class_att_select" ON class_attendance;
+CREATE POLICY "class_att_select" ON class_attendance FOR SELECT USING (
+  auth_user_role() IN ('Admin', 'Super Admin') OR user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "class_att_insert" ON class_attendance;
+CREATE POLICY "class_att_insert" ON class_attendance FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "class_att_admin_delete" ON class_attendance;
+CREATE POLICY "class_att_admin_delete" ON class_attendance FOR DELETE USING (
+  auth_user_role() IN ('Admin', 'Super Admin')
+);
+
+-- (d) Storage 'profile-photos': policy insert/update sebelumnya hanya cek
+--     bucket_id, tanpa cek pemilik path → user authenticated mana pun bisa
+--     menimpa avatars/{user_lain}.* atau upload file arbitrer ke bucket
+--     publik. Batasi insert/update milik sendiri ke path avatars/{user_id}.*
+--     (folder lain seperti news/, events/, qris/, offerings/ tetap perlu
+--     insert oleh siapa pun yang authenticated — gerbang dilakukan di UI
+--     untuk fitur tersebut; ini menutup IDOR khusus avatar tanpa merusak
+--     fitur lain).
+DROP POLICY IF EXISTS "profile_photos_insert" ON storage.objects;
+CREATE POLICY "profile_photos_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'profile-photos'
+    AND (
+      NOT (name LIKE 'avatars/%')
+      OR name LIKE 'avatars/' || auth_user_id() || '.%'
+    )
+  );
+
+DROP POLICY IF EXISTS "profile_photos_update" ON storage.objects;
+CREATE POLICY "profile_photos_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'profile-photos'
+    AND (
+      NOT (name LIKE 'avatars/%')
+      OR name LIKE 'avatars/' || auth_user_id() || '.%'
+    )
+  )
+  WITH CHECK (
+    bucket_id = 'profile-photos'
+    AND (
+      NOT (name LIKE 'avatars/%')
+      OR name LIKE 'avatars/' || auth_user_id() || '.%'
+    )
+  );

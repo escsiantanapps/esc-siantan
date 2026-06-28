@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { LanguageProvider } from '@/contexts/LanguageContext'
@@ -71,15 +71,17 @@ import AdminLayout from '@/layouts/AdminLayout'
 
 function PrivateRoute({ children }) {
   const { user, profile, loading } = useAuth()
-  const location = useLocation()
   if (loading) return (
     <div className="flex items-center justify-center h-screen">
       <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
   if (!user) return <Navigate to="/login" replace />
+  // Admin murni (tanpa peran kedua) tidak punya keperluan di app mobile.
+  // Admin yang juga PKS atau Volunteer (role_secondary) tetap boleh masuk.
   const isPKS = profile?.is_pks === true || profile?.role === 'PKS'
-  if (profile?.role === 'Admin' && !(location.pathname === '/pks' && isPKS)) {
+  const hasSecondaryAccess = isPKS || !!profile?.role_secondary
+  if (profile?.role === 'Admin' && !hasSecondaryAccess) {
     return <Navigate to="/admin" replace />
   }
   if (profile && profile.status !== 'Aktif') return <AccountStatusPage />
