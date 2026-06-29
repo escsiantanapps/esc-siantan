@@ -179,7 +179,7 @@ export default function AdminDashboardPage() {
           <select
             value={bdayMonth}
             onChange={e => setBdayMonth(Number(e.target.value))}
-            className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-surface text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-surface text-gray-700"
           >
             {monthNames.map((name, i) => <option key={i} value={i}>{name}</option>)}
           </select>

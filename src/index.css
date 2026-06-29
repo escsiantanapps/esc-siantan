@@ -24,6 +24,16 @@
   --color-brand-700: #0077B6;
   --color-brand-800: #005c8e;
   --color-brand-900: #00415f;
+
+  /* Warna gradient brand -- TETAP SAMA di light & dark mode (elemen identitas
+     visual, bukan teks), jadi sengaja TIDAK dipakai ulang dari skala brand-*
+     di atas (brand-700/800 di-override beda nilainya untuk dark mode --
+     lihat blok .dark di bawah -- karena di sana keduanya dipakai sebagai
+     warna TEKS, bukan latar gradient; reuse langsung bikin gradient jadi
+     terang/rusak kontrasnya saat dark mode aktif). */
+  --gradient-1: #0098cc;
+  --gradient-2: #0077b6;
+  --gradient-3: #005c8e;
 }
 
 * {
@@ -43,6 +53,16 @@ html {
    tujuan bawaan browser. Gambar tetap bisa disimpan via tekan-lama. */
 a, button {
   -webkit-touch-callout: none;
+}
+
+/* Indikator fokus untuk kontrol form. Ditulis sebagai CSS biasa (bukan utility
+   ring/shadow Tailwind v4) karena di build ini utility tersebut tidak
+   menghasilkan box-shadow sama sekali pada elemen yang difokus -- diverifikasi
+   langsung tidak ada efek apa pun walau class-nya benar, baik di dev server
+   maupun build produksi. CSS polos di bawah ini dijamin bekerja di semua browser. */
+input:focus, textarea:focus, select:focus {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 1px;
 }
 
 /* Input tanggal/waktu: samakan tampilan & buat ikon kalender konsisten + bisa diklik.
@@ -112,9 +132,14 @@ h1, h2, h3 {
   letter-spacing: -0.01em;
 }
 
-/* Gradient utama aplikasi (biru langit ala Stitch) */
+/* Gradient utama aplikasi (biru langit ala Stitch).
+   Stop digelapkan dari versi awal (#00C6FF/#00A3E0/#0077B6) -- diukur langsung,
+   teks putih di atas #00C6FF cuma kontras ~2:1 (gagal WCAG AA bahkan untuk teks
+   besar). Versi ini pakai token brand-600/700/800 yang sudah ada, menjaga
+   kesan biru-langit tapi kontras teks judul (besar/tebal) jadi >=3:1 di semua
+   titik gradient. */
 .gradient-main {
-  background: linear-gradient(135deg, #00C6FF 0%, #00A3E0 55%, #0077B6 100%);
+  background: linear-gradient(135deg, var(--gradient-1) 0%, var(--gradient-2) 55%, var(--gradient-3) 100%);
 }
 
 /* ─── Gaya Stitch: glass card & ambient shadow ─────────── */

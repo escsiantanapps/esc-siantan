@@ -33,7 +33,7 @@ export function Input({ label, error, required, icon: Icon, rightElement, classN
       <div className="relative">
         {Icon && <Icon size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />}
         <input
-          className={`w-full py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition
+          className={`w-full py-2.5 text-sm bg-gray-50 border rounded-xl transition
             ${Icon ? 'pl-10' : 'pl-3'} ${rightElement ? 'pr-10' : 'pr-3'}
             ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
           {...props}
@@ -56,7 +56,7 @@ export function Textarea({ label, error, required, rows = 3, className = '', ...
       )}
       <textarea
         rows={rows}
-        className={`w-full px-3 py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent resize-none transition
+        className={`w-full px-3 py-2.5 text-sm bg-gray-50 border rounded-xl resize-none transition
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
         {...props}
       />
@@ -79,7 +79,7 @@ export function Select({ label, error, required, children, className = '', style
         </label>
       )}
       <select
-        className={`appearance-none w-full pl-3 pr-10 py-2.5 text-sm bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition cursor-pointer
+        className={`appearance-none w-full pl-3 pr-10 py-2.5 text-sm bg-gray-50 border rounded-xl transition cursor-pointer
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
         style={{ backgroundImage: SELECT_CHEVRON, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.7rem center', backgroundSize: '1.1em', ...style }}
         {...props}
@@ -97,7 +97,7 @@ export function Checkbox({ label, className = '', ...props }) {
     <label className={`flex items-center gap-2.5 cursor-pointer ${className}`}>
       <input
         type="checkbox"
-        className="w-4.5 h-4.5 rounded-md border-gray-300 text-brand-500 focus:ring-brand-400"
+        className="w-4.5 h-4.5 rounded-md border-gray-300 text-brand-500"
         {...props}
       />
       {label && <span className="text-sm text-gray-700">{label}</span>}
@@ -215,8 +215,8 @@ export function GradientHeader({ title, subtitle, back, children, wave = true })
             <ArrowLeft size={18} />
           </button>
         )}
-        <h1 className="font-display text-white text-lg font-semibold">{title}</h1>
-        {subtitle && <p className="text-white/70 text-sm mt-1">{subtitle}</p>}
+        <h1 className="font-display text-white text-lg font-semibold [text-shadow:0_1px_3px_rgba(0,0,0,0.25)]">{title}</h1>
+        {subtitle && <p className="text-white/85 text-sm mt-1 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">{subtitle}</p>}
         {children}
       </div>
 
