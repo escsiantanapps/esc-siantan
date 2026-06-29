@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { HandCoins, Plus, Pencil, Trash2, X, Printer, Check, Building2, QrCode } from 'lucide-react'
+import { HandCoins, Plus, Pencil, Trash2, X, Printer, FileSpreadsheet, Check, Building2, QrCode } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
@@ -7,8 +7,26 @@ import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsServi
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, StatusBadge, Avatar, Badge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
-import { formatDate, formatRupiah, validateUpload, compressImage } from '@/lib/utils'
+import { formatDate, formatPhone, formatRupiah, validateUpload, compressImage } from '@/lib/utils'
 import { printArchive } from '@/lib/printDoc'
+
+// Escape field CSV: bungkus kutip dua bila ada koma/kutip/baris baru, ganda-kan kutip di dalamnya.
+function csvField(v) {
+  const s = String(v ?? '')
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+}
+
+function downloadCsv(filename, rows) {
+  // BOM agar Excel membuka sebagai UTF-8 (nama jemaat bisa ada karakter non-ASCII).
+  const csv = '﻿' + rows.map(r => r.map(csvField).join(',')).join('\r\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 const emptyAcc = { kind: 'bank', label: '', account_no: '', account_name: '', image_url: '', sort: 0 }
 
@@ -76,6 +94,31 @@ export default function AdminOfferingsPage() {
     } catch (err) {
       toast.error(err.message || t('aoff.deleteFailed'))
     }
+  }
+
+  // Export rekap per jemaat (nama, no HP, total) untuk diimpor ke app finance.
+  // Selalu hanya yang Terverifikasi -- terlepas dari filter status di halaman --
+  // supaya uang yang belum/tidak terverifikasi tidak ikut tercatat di finance.
+  function exportFinance() {
+    const verified = items.filter(o => o.status === 'Terverifikasi')
+    if (verified.length === 0) { toast.info(t('aoff.exportEmpty')); return }
+
+    const byUser = new Map()
+    for (const o of verified) {
+      const uid = o.user_id || 'unknown'
+      const prev = byUser.get(uid) || { name: o.users?.name || '-', phone: o.users?.phone || '', total: 0 }
+      prev.total += Number(o.amount) || 0
+      byUser.set(uid, prev)
+    }
+
+    const rows = [[t('aoff.exportColName'), t('aoff.exportColPhone'), t('aoff.exportColTotal')]]
+    for (const { name, phone, total } of byUser.values()) {
+      rows.push([name, formatPhone(phone), total])
+    }
+
+    const periode = (startDate || endDate) ? `_${startDate || 'awal'}_${endDate || 'now'}` : ''
+    downloadCsv(`persembahan${periode}.csv`, rows)
+    toast.success(t('aoff.exportSuccess', { n: byUser.size }))
   }
 
   function archive() {
@@ -154,7 +197,12 @@ export default function AdminOfferingsPage() {
         title={t('aoff.title')}
         subtitle={t('aoff.subtitle')}
         action={tab === 'rekap' && items.length > 0
-          ? <Button size="sm" variant="outline" onClick={archive}><Printer size={15} /> {t('aoff.archivePdf')}</Button>
+          ? (
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={exportFinance}><FileSpreadsheet size={15} /> {t('aoff.exportFinance')}</Button>
+              <Button size="sm" variant="outline" onClick={archive}><Printer size={15} /> {t('aoff.archivePdf')}</Button>
+            </div>
+          )
           : tab === 'rekening'
             ? <Button size="sm" onClick={() => openAcc(null)}><Plus size={15} /> {t('a.add')}</Button>
             : null}

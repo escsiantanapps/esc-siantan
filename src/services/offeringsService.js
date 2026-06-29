@@ -64,7 +64,7 @@ export const offeringsService = {
   },
 
   async getAll({ startDate = null, endDate = null, category = '', status = '' } = {}) {
-    let q = supabase.from('offerings').select('*, users(name)').order('created_at', { ascending: false })
+    let q = supabase.from('offerings').select('*, users(name, phone)').order('created_at', { ascending: false })
     if (startDate) q = q.gte('created_at', startDate)
     if (endDate) q = q.lte('created_at', endDate)
     if (category) q = q.eq('category', category)
