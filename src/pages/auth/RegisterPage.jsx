@@ -108,6 +108,10 @@ export default function RegisterPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-2">{t('auth.readyTitle')}</h2>
               <p className="text-sm text-gray-500 mb-2">{t('auth.name')}: <strong className="text-gray-800">{form.name}</strong></p>
               <p className="text-sm text-gray-500 mb-6">{t('auth.email')}: <strong className="text-gray-800">{form.email}</strong></p>
+              <p className="text-xs text-gray-400 mb-4">
+                {t('auth.consentPrefix')}{' '}
+                <Link to="/kebijakan-privasi" className="text-brand-500 font-medium" target="_blank">{t('auth.privacyPolicy')}</Link>.
+              </p>
               <Button className="w-full" size="lg" loading={loading} onClick={handleSubmit}>
                 {t('auth.registerSubmit')}
               </Button>

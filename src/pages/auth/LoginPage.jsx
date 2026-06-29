@@ -111,6 +111,9 @@ export default function LoginPage() {
           <span className="text-white/30">•</span>
           <Link to="/aktivasi" className="text-xs text-white/75 hover:text-white transition">{t('act.link')}</Link>
         </div>
+        <div className="mt-3 text-center">
+          <Link to="/kebijakan-privasi" className="text-xs text-white/60 hover:text-white transition">{t('auth.privacyPolicy')}</Link>
+        </div>
       </div>
     </div>
   )

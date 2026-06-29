@@ -10,6 +10,7 @@ import OfflineBanner from '@/components/OfflineBanner'
 
 // Onboarding
 import OnboardingPage from '@/pages/OnboardingPage'
+import PrivacyPolicyPage from '@/pages/PrivacyPolicyPage'
 
 // Auth
 import LoginPage from '@/pages/auth/LoginPage'
@@ -135,6 +136,7 @@ export default function App() {
         }>
         <Routes>
           <Route path="/onboarding"      element={<OnboardingPage />} />
+          <Route path="/kebijakan-privasi" element={<PrivacyPolicyPage />} />
           <Route path="/login"          element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register"       element={<PublicRoute><RegisterPage /></PublicRoute>} />
           <Route path="/lupa-password"  element={<ForgotPasswordPage />} />

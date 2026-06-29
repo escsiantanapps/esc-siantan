@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Pencil, KeyRound, Moon, Sun, ChevronRight, LogOut, ChevronDown, Languages, Check } from 'lucide-react'
+import { Pencil, KeyRound, Moon, Sun, ChevronRight, LogOut, ChevronDown, Languages, Check, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
 import { useToast } from '@/hooks/useToast'
@@ -151,6 +151,22 @@ export default function SettingsPage() {
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">{t('settings.notifications')}</p>
           <PushToggle />
         </div>
+
+        {/* Legal */}
+        <Card className="p-2">
+          <button
+            onClick={() => navigate('/kebijakan-privasi')}
+            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all"
+          >
+            <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">
+              <ShieldCheck size={16} />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-medium text-gray-900">{t('auth.privacyPolicy')}</p>
+            </div>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </button>
+        </Card>
 
         {/* Keluar */}
         <button
