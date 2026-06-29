@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
-import { tasksService } from '@/services/tasksService'
+import { tasksService, taskCategoriesService } from '@/services/tasksService'
 import { usersService } from '@/services/usersService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Input, Textarea, Select, Checkbox, Button, Spinner } from '@/components/ui'
@@ -62,11 +62,12 @@ export default function AdminTaskFormPage() {
   const [bgUploading, setBgUploading] = useState(false)
   const [error, setError] = useState('')
   const [ministries, setMinistries] = useState([])
+  const [categories, setCategories] = useState([])
 
   const [form, setForm] = useState({
     title: '', description: '', weekly_goal: 1, period: 'minggu',
     active_days: [], open_time: '00:00', close_time: '23:59',
-    allowed_roles: [], allowed_ministry: [], fields_json: [],
+    category_id: '', allowed_roles: [], allowed_ministry: [], fields_json: [],
     bg_type: 'none', bg_value: '',
     reminder_enabled: false, reminder_days: [],
     once_per_day: false,
@@ -74,6 +75,7 @@ export default function AdminTaskFormPage() {
 
   useEffect(() => {
     usersService.getAllMinistries().then(setMinistries).catch(() => {})
+    taskCategoriesService.getAll().then(setCategories).catch(() => {})
     if (isEdit) {
       tasksService.getTemplateById(id)
         .then(t => {
@@ -85,6 +87,7 @@ export default function AdminTaskFormPage() {
             active_days: t.active_days || [],
             open_time: t.open_time || '00:00',
             close_time: t.close_time || '23:59',
+            category_id: t.category_id || '',
             allowed_roles: t.allowed_roles || [],
             allowed_ministry: t.allowed_ministry || [],
             fields_json: t.fields_json || [],
@@ -167,6 +170,7 @@ export default function AdminTaskFormPage() {
   async function handleSubmit() {
     setError('')
     if (!form.title.trim()) { setError('Judul tugas wajib diisi.'); return }
+    if (!form.category_id) { setError('Kategori tugas wajib dipilih.'); return }
     for (const f of form.fields_json) {
       if (!f.label.trim() || !f.key.trim()) { setError('Setiap field harus memiliki label.'); return }
     }
@@ -233,6 +237,13 @@ export default function AdminTaskFormPage() {
             <option value="bulan">Per Bulan</option>
           </Select>
         </div>
+        <Select label="Kategori Tugas" required value={form.category_id} onChange={e => set('category_id', e.target.value)}>
+          <option value="" disabled>Pilih kategori...</option>
+          {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
+        </Select>
+        <p className="text-xs text-gray-400 -mt-2">
+          Kategori menentukan gerbang akses tambahan (lihat halaman Kategori Tugas di menu Sistem). Tidak ada kategori? Pilih "Umum".
+        </p>
       </Card>
 
       <Card className="p-4 mb-4 space-y-3">

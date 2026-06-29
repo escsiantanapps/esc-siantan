@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { Calendar, MapPin, Plus, Pencil, QrCode, Users, X, Download } from 'lucide-react'
+import { Calendar, MapPin, Plus, Pencil, QrCode, Users, X, Download, FileSpreadsheet } from 'lucide-react'
 import { eventsService } from '@/services/contentService'
 import { eventAttendanceService } from '@/services/attendanceService'
-import { Card, PageHeader, Button, Spinner, EmptyState, StatusBadge, Badge, Avatar } from '@/components/ui'
+import { Card, PageHeader, Button, Input, Spinner, EmptyState, StatusBadge, Badge, Avatar } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { formatDate } from '@/lib/utils'
+import { downloadXlsx } from '@/lib/exportXlsx'
 
 export default function AdminEventsPage() {
   const { t } = useLang()
@@ -20,6 +21,7 @@ export default function AdminEventsPage() {
   const [rekapModal, setRekapModal] = useState(null)
   const [rekap, setRekap] = useState([])
   const [rekapLoading, setRekapLoading] = useState(false)
+  const [rekapDate, setRekapDate] = useState('')
   useBackClose(!!qrModal || !!rekapModal, () => { setQrModal(null); setRekapModal(null) })
 
   useEffect(() => {
@@ -34,13 +36,13 @@ export default function AdminEventsPage() {
       .catch(() => setQrDataUrl(''))
   }, [qrModal])
 
-  // Rekap: gabungkan pendaftar + status hadir.
+  // Rekap: gabungkan pendaftar + status hadir, opsional filter tanggal hadir.
   useEffect(() => {
     if (!rekapModal) return
     setRekapLoading(true)
     Promise.all([
       eventsService.getRegistrations(rekapModal.event_id),
-      eventAttendanceService.getByEvent(rekapModal.event_id),
+      eventAttendanceService.getByEvent(rekapModal.event_id, { date: rekapDate }),
     ])
       .then(([regs, att]) => {
         const attended = new Set((att || []).map(a => a.user_id))
@@ -48,12 +50,23 @@ export default function AdminEventsPage() {
           user_id: r.user_id,
           name: r.users?.name || '-',
           role: r.users?.role || '',
+          phone: r.users?.phone || '',
           present: attended.has(r.user_id),
         })))
       })
       .catch(() => setRekap([]))
       .finally(() => setRekapLoading(false))
-  }, [rekapModal])
+  }, [rekapModal, rekapDate])
+
+  async function exportRekap() {
+    await downloadXlsx({
+      filename: `pendaftar-${rekapModal.name}.xlsx`,
+      sheetName: 'Pendaftar',
+      titleLines: ['ESC Siantan', `Pendaftar Event: ${rekapModal.name}`],
+      headers: [t('aoff.exportColName'), t('aoff.exportColPhone'), 'Role', t('aevt.present')],
+      rows: rekap.map(r => [r.name, r.phone, r.role, r.present ? t('aevt.present') : t('aevt.notYet')]),
+    })
+  }
 
   const presentCount = rekap.filter(r => r.present).length
 
@@ -90,7 +103,7 @@ export default function AdminEventsPage() {
                 )}
               </div>
               <StatusBadge status={ev.status} />
-              <button onClick={() => setRekapModal(ev)} title={t('aevt.rekap')} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
+              <button onClick={() => { setRekapDate(''); setRekapModal(ev) }} title={t('aevt.rekap')} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
                 <Users size={16} />
               </button>
               <button onClick={() => setQrModal(ev)} title={t('a.qrAttendance')} className="p-2 text-gray-400 hover:text-green-500 shrink-0">
@@ -140,7 +153,16 @@ export default function AdminEventsPage() {
                 <X size={18} />
               </button>
             </div>
-            <p className="text-xs text-gray-400">{rekapModal.name}</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-400">{rekapModal.name}</p>
+              {rekap.length > 0 && (
+                <button onClick={exportRekap} className="text-xs text-brand-500 flex items-center gap-1 shrink-0">
+                  <FileSpreadsheet size={13} /> {t('a.exportExcel')}
+                </button>
+              )}
+            </div>
+            <Input type="date" value={rekapDate} onChange={e => setRekapDate(e.target.value)} />
+            <p className="text-[11px] text-gray-400 -mt-2">{t('aevt.dateFilterHint')}</p>
 
             {!rekapLoading && rekap.length > 0 && (
               <div className="flex gap-2">

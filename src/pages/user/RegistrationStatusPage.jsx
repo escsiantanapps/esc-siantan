@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Droplets, Heart, Calendar, ClipboardList } from 'lucide-react'
+import { Droplets, Heart, Baby, Calendar, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { registrationService, eventsService } from '@/services/contentService'
 import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
@@ -12,6 +12,7 @@ export default function RegistrationStatusPage() {
   const { t } = useLang()
   const [baptism, setBaptism] = useState([])
   const [wedding, setWedding] = useState([])
+  const [dedication, setDedication] = useState([])
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -24,13 +25,14 @@ export default function RegistrationStatusPage() {
       .then(([reg, evt]) => {
         setBaptism(reg.baptism)
         setWedding(reg.wedding)
+        setDedication(reg.dedication)
         setEvents(evt)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [profile?.user_id])
 
-  const isEmpty = !loading && baptism.length === 0 && wedding.length === 0 && events.length === 0
+  const isEmpty = !loading && baptism.length === 0 && wedding.length === 0 && dedication.length === 0 && events.length === 0
 
   return (
     <div className="pb-4">
@@ -75,6 +77,27 @@ export default function RegistrationStatusPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900">{item.groom_name} & {item.bride_name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{t('common.submitted')} {formatDate(item.created_at)}</p>
+                    {item.admin_note && <p className="text-xs text-gray-500 mt-1">{t('common.note')}: {item.admin_note}</p>}
+                  </div>
+                  <StatusBadge status={item.status} />
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!loading && dedication.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('regStatus.dedication')}</h2>
+            <div className="space-y-2.5">
+              {dedication.map(item => (
+                <Card key={item.dedication_id} className="p-3.5 flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                    <Baby size={18} className="text-amber-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{item.child_name}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{t('common.submitted')} {formatDate(item.created_at)}</p>
                     {item.admin_note && <p className="text-xs text-gray-500 mt-1">{t('common.note')}: {item.admin_note}</p>}
                   </div>

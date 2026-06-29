@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw } from 'lucide-react'
+import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { newsService, eventsService, classesService } from '@/services/contentService'
 import { Card, Spinner } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
+import BirthdayMessageCard from '@/components/BirthdayMessageCard'
 import EventCarousel from '@/components/EventCarousel'
 import { formatDate, spColor } from '@/lib/utils'
 
@@ -41,6 +42,7 @@ export default function HomePage() {
     { to: '/kelas',              icon: BookOpen,      label: t('home.q.classes'),  color: 'bg-blue-100 text-blue-600' },
     { to: '/baptisan',           icon: Droplets,      label: t('home.q.baptism'),  color: 'bg-teal-100 text-teal-600' },
     { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-100 text-pink-600' },
+    { to: '/penyerahan-anak',    icon: Baby,          label: t('home.q.dedication'), color: 'bg-amber-100 text-amber-600' },
     { to: '/status-pendaftaran', icon: Bell,          label: t('home.q.status'),   color: 'bg-purple-100 text-purple-600' },
   ]
 
@@ -69,6 +71,9 @@ export default function HomePage() {
             {t('home.welcomeQuote')}
           </p>
         </section>
+
+        {/* Pesan ulang tahun personal dari PKS, kalau ada yang belum dibaca */}
+        <BirthdayMessageCard />
 
         {/* Panduan akun baru: lengkapi data & aktifkan notifikasi */}
         <OnboardingPrompt />

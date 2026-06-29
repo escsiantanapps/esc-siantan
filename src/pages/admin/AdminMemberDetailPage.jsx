@@ -84,7 +84,6 @@ export default function AdminMemberDetailPage() {
     setError(''); setSuccess(''); setSaving(true)
     try {
       const { name, phone, email, gender, birth_date, birth_place, address, blood_type, nik, social_media, ...rest } = form
-      const isAdminRole = ['Admin', 'Super Admin'].includes(rest.role)
       // Biodata jemaat (nama, kontak, alamat, dst.) hanya boleh diubah Super
       // Admin — tidak dikirim sama sekali oleh Admin biasa agar tidak menimpa
       // data terbaru (race) dan ditegakkan ulang di server (trigger guard_biodata_admin_edit).
@@ -97,7 +96,7 @@ export default function AdminMemberDetailPage() {
       const updated = await usersService.update(id, {
         ...rest,
         ...biodata,
-        is_pks: isAdminRole ? false : rest.is_pks, // Admin/Super Admin tidak boleh PKS
+        is_pks: rest.is_pks,
         role_secondary: rest.role_secondary || null,
         komsel_id: rest.komsel_id || null,
       })
@@ -276,10 +275,7 @@ export default function AdminMemberDetailPage() {
         {canEditRole ? (
           <>
             <div className="grid grid-cols-2 gap-3">
-              <Select label="Role Utama" value={form.role} onChange={e => {
-                const v = e.target.value
-                setForm(p => ({ ...p, role: v, is_pks: ['Admin', 'Super Admin'].includes(v) ? false : p.is_pks }))
-              }}>
+              <Select label="Role Utama" value={form.role} onChange={e => set('role', e.target.value)}>
                 {['Jemaat', 'Volunteer', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
               </Select>
               <Select label="Role Kedua" value={form.role_secondary} onChange={e => set('role_secondary', e.target.value)}>
@@ -309,17 +305,16 @@ export default function AdminMemberDetailPage() {
           <option value="Nonaktif">Nonaktif</option>
         </Select>
 
-        {/* Peran tambahan: PKS (kecuali Admin & Super Admin) */}
+        {/* Peran tambahan: PKS */}
         {canEditRole && (
           <div>
             <Checkbox
               label="Juga sebagai PKS (Pemimpin Komsel)"
               checked={form.is_pks}
-              disabled={['Admin', 'Super Admin'].includes(form.role)}
               onChange={e => set('is_pks', e.target.checked)}
             />
             <p className="text-xs text-gray-400 mt-1">
-              Seseorang bisa memiliki 2 peran, mis. Volunteer + PKS. Admin & Super Admin tidak dapat merangkap PKS.
+              Seseorang bisa memiliki 2 peran, mis. Volunteer + PKS, atau Admin/Super Admin yang juga PKS.
               Untuk menetapkan komsel yang dipimpin, gunakan menu Kelola Komsel.
             </p>
           </div>

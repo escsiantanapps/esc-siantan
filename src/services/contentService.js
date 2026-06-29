@@ -44,7 +44,7 @@ export const eventsService = {
 
   async getRegistrations(eventId) {
     const { data, error } = await supabase.from('event_registrations')
-      .select('*, users(name, role)').eq('event_id', eventId)
+      .select('*, users(name, role, phone)').eq('event_id', eventId)
     if (error) throw error
     return data
   },
@@ -117,6 +117,15 @@ export const newsService = {
 }
 
 // ─── Baptism & Wedding Registrations ──────────────────────
+// Peta jenis registrasi -> nama tabel & kolom PK, dipakai getById/updateStatus
+// generik di bawah supaya menambah jenis baru (mis. penyerahan anak) tidak
+// perlu menulis ulang seluruh fungsi.
+const REGISTRATION_TABLES = {
+  baptism: { table: 'baptism_registrations', idCol: 'baptism_id' },
+  wedding: { table: 'wedding_registrations', idCol: 'wedding_id' },
+  dedication: { table: 'child_dedication_registrations', idCol: 'dedication_id' },
+}
+
 export const registrationService = {
   async submitBaptism(data) {
     const { data: result, error } = await supabase
@@ -132,14 +141,23 @@ export const registrationService = {
     return result
   },
 
+  async submitDedication(data) {
+    const { data: result, error } = await supabase
+      .from('child_dedication_registrations').insert(data).select().single()
+    if (error) throw error
+    return result
+  },
+
   async getMyRegistrations(userId) {
-    const [baptism, wedding] = await Promise.all([
+    const [baptism, wedding, dedication] = await Promise.all([
       supabase.from('baptism_registrations').select('*').eq('user_id', userId),
       supabase.from('wedding_registrations').select('*').eq('user_id', userId),
+      supabase.from('child_dedication_registrations').select('*').eq('user_id', userId),
     ])
     return {
       baptism: baptism.data || [],
       wedding: wedding.data || [],
+      dedication: dedication.data || [],
     }
   },
 
@@ -161,9 +179,17 @@ export const registrationService = {
     return data
   },
 
+  async getAllDedication({ status = '' } = {}) {
+    let query = supabase.from('child_dedication_registrations')
+      .select('*, users(name, phone)').order('created_at', { ascending: false })
+    if (status) query = query.eq('status', status)
+    const { data, error } = await query
+    if (error) throw error
+    return data
+  },
+
   async getById(type, id) {
-    const table = type === 'baptism' ? 'baptism_registrations' : 'wedding_registrations'
-    const idCol = type === 'baptism' ? 'baptism_id' : 'wedding_id'
+    const { table, idCol } = REGISTRATION_TABLES[type]
     const { data, error } = await supabase
       .from(table).select('*, users(name, phone, email)').eq(idCol, id).single()
     if (error) throw error
@@ -171,8 +197,7 @@ export const registrationService = {
   },
 
   async updateStatus(type, id, updates) {
-    const table = type === 'baptism' ? 'baptism_registrations' : 'wedding_registrations'
-    const idCol = type === 'baptism' ? 'baptism_id' : 'wedding_id'
+    const { table, idCol } = REGISTRATION_TABLES[type]
     const { data, error } = await supabase
       .from(table).update(updates).eq(idCol, id).select().single()
     if (error) throw error
@@ -221,6 +246,29 @@ export const classesService = {
     const { error } = await supabase.from('classes').delete().eq('class_id', id)
     if (error) throw error
   },
+
+  // ── Registrasi kelas (opsional -- absensi via QR tetap bisa tanpa daftar dulu) ──
+  async register(classId, userId) {
+    const registrationId = `CREG-${Date.now()}`
+    const { data, error } = await supabase.from('class_registrations')
+      .insert({ registration_id: registrationId, class_id: classId, user_id: userId }).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async getRegistrations(classId) {
+    const { data, error } = await supabase.from('class_registrations')
+      .select('*, users(name, role, phone)').eq('class_id', classId)
+    if (error) throw error
+    return data
+  },
+
+  async getMyRegistration(classId, userId) {
+    const { data, error } = await supabase.from('class_registrations')
+      .select('*').eq('class_id', classId).eq('user_id', userId).maybeSingle()
+    if (error) throw error
+    return data
+  },
 }
 
 // ─── Ministries (CRUD) ──────────────────────────────────────
@@ -251,9 +299,36 @@ export const ministriesService = {
 }
 
 // ─── Komsel (CRUD + anggota + absensi) ──────────────────────
+// Kategori komsel (mis. Youth, Kids, Dewasa) -- dikelola Admin & Super Admin.
+export const komselCategoriesService = {
+  async getAll() {
+    const { data, error } = await supabase.from('komsel_categories').select('*').order('name')
+    if (error) throw error
+    return data
+  },
+
+  async create(category) {
+    const { data, error } = await supabase.from('komsel_categories').insert(category).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async update(id, updates) {
+    const { data, error } = await supabase
+      .from('komsel_categories').update(updates).eq('category_id', id).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async delete(id) {
+    const { error } = await supabase.from('komsel_categories').delete().eq('category_id', id)
+    if (error) throw error
+  },
+}
+
 export const komselService = {
   async getAll() {
-    const { data, error } = await supabase.from('komsel').select('*').order('name')
+    const { data, error } = await supabase.from('komsel').select('*, komsel_categories(name)').order('name')
     if (error) throw error
     return data
   },
@@ -281,6 +356,13 @@ export const komselService = {
       .from('users').select('*').eq('komsel_id', komselId).eq('status', 'Aktif').order('name')
     if (error) throw error
     return data
+  },
+
+  // Tetapkan keanggotaan komsel langsung dari halaman Kelola Komsel, tanpa
+  // perlu pindah ke AdminMemberDetailPage.
+  async assignMember(komselId, userId) {
+    const { error } = await supabase.from('users').update({ komsel_id: komselId }).eq('user_id', userId)
+    if (error) throw error
   },
 
   // ── PKS (kepemimpinan komsel, many-to-many lewat komsel_leaders) ──
@@ -362,5 +444,78 @@ export const komselService = {
       .order('attendance_date', { ascending: false })
     if (error) throw error
     return data
+  },
+}
+
+// Persembahan kolektif komsel (dicatat PKS saat pertemuan, diverifikasi Admin) --
+// berbeda dari `offerings` yang per-individu jemaat.
+export const komselOfferingsService = {
+  async create({ komselId, category, amount, note, recordedBy }) {
+    const { data, error } = await supabase
+      .from('komsel_offerings')
+      .insert({ komsel_id: komselId, category, amount, note: note || null, recorded_by: recordedBy })
+      .select().single()
+    if (error) throw error
+    return data
+  },
+
+  async getByKomsel(komselId) {
+    const { data, error } = await supabase
+      .from('komsel_offerings').select('*').eq('komsel_id', komselId).order('created_at', { ascending: false })
+    if (error) throw error
+    return data
+  },
+
+  async getAll({ startDate = null, endDate = null, status = '' } = {}) {
+    let q = supabase.from('komsel_offerings').select('*, komsel(name)').order('created_at', { ascending: false })
+    if (startDate) q = q.gte('created_at', startDate)
+    if (endDate) q = q.lte('created_at', endDate)
+    if (status) q = q.eq('status', status)
+    const { data, error } = await q
+    if (error) throw error
+    return data
+  },
+
+  async setStatus(id, status, verifierId) {
+    const updates = { status }
+    if (status === 'Terverifikasi') {
+      updates.verified_at = new Date().toISOString()
+      updates.verified_by = verifierId || null
+    }
+    const { data, error } = await supabase
+      .from('komsel_offerings').update(updates).eq('id', id).select().single()
+    if (error) throw error
+    return data
+  },
+}
+
+// ─── Sertifikat (diterbitkan manual oleh Admin) ────────────
+export const certificatesService = {
+  async issue({ userId, title, fileUrl, issuedBy, note }) {
+    const { data, error } = await supabase
+      .from('certificates')
+      .insert({ user_id: userId, title, file_url: fileUrl, issued_by: issuedBy, note: note || null })
+      .select().single()
+    if (error) throw error
+    return data
+  },
+
+  async getMine(userId) {
+    const { data, error } = await supabase
+      .from('certificates').select('*').eq('user_id', userId).order('issued_at', { ascending: false })
+    if (error) throw error
+    return data
+  },
+
+  async getAll() {
+    const { data, error } = await supabase
+      .from('certificates').select('*, users(name, phone)').order('issued_at', { ascending: false })
+    if (error) throw error
+    return data
+  },
+
+  async remove(certificateId) {
+    const { error } = await supabase.from('certificates').delete().eq('certificate_id', certificateId)
+    if (error) throw error
   },
 }

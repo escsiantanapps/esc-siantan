@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { BookOpen, Plus, Pencil, Trash2, X, QrCode, ClipboardCheck, Download } from 'lucide-react'
+import { BookOpen, Plus, Pencil, Trash2, X, QrCode, ClipboardCheck, Download, Users, FileSpreadsheet } from 'lucide-react'
 import { classesService } from '@/services/contentService'
 import { classAttendanceService } from '@/services/attendanceService'
 import { pushService } from '@/services/pushService'
@@ -9,6 +9,7 @@ import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Textarea, Select, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
+import { downloadXlsx } from '@/lib/exportXlsx'
 
 const emptyForm = { name: '', description: '', schedule: '', location: '', teacher: '', status: 'Aktif', total_sessions: 1 }
 
@@ -26,10 +27,14 @@ export default function AdminClassesPage() {
   const [qrSession, setQrSession] = useState(1)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [attModal, setAttModal] = useState(null)
-  useBackClose(showModal || !!qrModal || !!attModal, () => {
-    setShowModal(false); setQrModal(null); setAttModal(null)
+  const [regModal, setRegModal] = useState(null)
+  const [registrants, setRegistrants] = useState([])
+  const [regLoading, setRegLoading] = useState(false)
+  useBackClose(showModal || !!qrModal || !!attModal || !!regModal, () => {
+    setShowModal(false); setQrModal(null); setAttModal(null); setRegModal(null)
   })
   const [attSession, setAttSession] = useState('')
+  const [attDate, setAttDate] = useState('')
   const [attendance, setAttendance] = useState([])
   const [attLoading, setAttLoading] = useState(false)
 
@@ -43,15 +48,37 @@ export default function AdminClassesPage() {
       .catch(() => setQrDataUrl(''))
   }, [qrModal, qrSession])
 
-  // Muat daftar hadir kelas terpilih, filter sesi.
+  // Muat daftar hadir kelas terpilih, filter sesi & tanggal.
   useEffect(() => {
     if (!attModal) return
     setAttLoading(true)
-    classAttendanceService.getByClass(attModal.class_id, { session: attSession })
+    classAttendanceService.getByClass(attModal.class_id, { session: attSession, date: attDate })
       .then(setAttendance)
       .catch(() => setAttendance([]))
       .finally(() => setAttLoading(false))
-  }, [attModal, attSession])
+  }, [attModal, attSession, attDate])
+
+  // Rekap pendaftar: gabungkan daftar + jumlah sesi yang sudah dihadiri.
+  useEffect(() => {
+    if (!regModal) return
+    setRegLoading(true)
+    Promise.all([
+      classesService.getRegistrations(regModal.class_id),
+      classAttendanceService.getByClass(regModal.class_id, {}),
+    ])
+      .then(([regs, att]) => {
+        const attendedCount = {}
+        for (const a of att || []) attendedCount[a.user_id] = (attendedCount[a.user_id] || 0) + 1
+        setRegistrants((regs || []).map(r => ({
+          user_id: r.user_id,
+          name: r.users?.name || '-',
+          role: r.users?.role || '',
+          attended: attendedCount[r.user_id] || 0,
+        })))
+      })
+      .catch(() => setRegistrants([]))
+      .finally(() => setRegLoading(false))
+  }, [regModal])
 
   function load() {
     setLoading(true)
@@ -136,7 +163,28 @@ export default function AdminClassesPage() {
 
   function openAttendance(cls) {
     setAttSession('')
+    setAttDate('')
     setAttModal(cls)
+  }
+
+  async function exportAttendance() {
+    await downloadXlsx({
+      filename: `kehadiran-${attModal.name}.xlsx`,
+      sheetName: 'Kehadiran',
+      titleLines: ['ESC Siantan', `Daftar Hadir Kelas: ${attModal.name}`],
+      headers: [t('aoff.exportColName'), t('aoff.exportColPhone'), 'Tanggal', 'Sesi'],
+      rows: attendance.map(a => [a.users?.name || '-', a.users?.phone || '', formatDate(a.attendance_date), a.session_no || '']),
+    })
+  }
+
+  async function exportRegistrants() {
+    await downloadXlsx({
+      filename: `pendaftar-${regModal.name}.xlsx`,
+      sheetName: 'Pendaftar',
+      titleLines: ['ESC Siantan', `Pendaftar Kelas: ${regModal.name}`],
+      headers: [t('aoff.exportColName'), 'Role', t('acls.sessionsAttended')],
+      rows: registrants.map(r => [r.name, r.role, `${r.attended}/${regModal.total_sessions || 1}`]),
+    })
   }
 
   return (
@@ -166,6 +214,9 @@ export default function AdminClassesPage() {
                 {cls.teacher && <p className="text-xs text-gray-400 mt-0.5 truncate">{t('acls.teacherLabel', { name: cls.teacher })}</p>}
               </div>
               <StatusBadge status={cls.status} />
+              <button onClick={() => setRegModal(cls)} title={t('acls.registrants')} className="p-2 text-gray-400 hover:text-purple-500 shrink-0">
+                <Users size={16} />
+              </button>
               <button onClick={() => openQr(cls)} title={t('a.qrAttendance')} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
                 <QrCode size={16} />
               </button>
@@ -264,14 +315,24 @@ export default function AdminClassesPage() {
                 <X size={18} />
               </button>
             </div>
-            <p className="text-xs text-gray-400">{attModal.name}</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-400">{attModal.name}</p>
+              {attendance.length > 0 && (
+                <button onClick={exportAttendance} className="text-xs text-brand-500 flex items-center gap-1 shrink-0">
+                  <FileSpreadsheet size={13} /> {t('a.exportExcel')}
+                </button>
+              )}
+            </div>
 
-            <Select value={attSession} onChange={e => setAttSession(e.target.value)}>
-              <option value="">{t('a.allSessions')}</option>
-              {Array.from({ length: attModal.total_sessions || 1 }, (_, i) => i + 1).map(n => (
-                <option key={n} value={n}>{t('a.sessionN', { n })}</option>
-              ))}
-            </Select>
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={attSession} onChange={e => setAttSession(e.target.value)}>
+                <option value="">{t('a.allSessions')}</option>
+                {Array.from({ length: attModal.total_sessions || 1 }, (_, i) => i + 1).map(n => (
+                  <option key={n} value={n}>{t('a.sessionN', { n })}</option>
+                ))}
+              </Select>
+              <Input type="date" value={attDate} onChange={e => setAttDate(e.target.value)} />
+            </div>
 
             {attLoading && <div className="flex justify-center py-8"><Spinner /></div>}
 
@@ -290,6 +351,50 @@ export default function AdminClassesPage() {
                       </p>
                     </div>
                     <Badge color="green">{t('status.Hadir')}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Modal Rekap Pendaftar */}
+      {regModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-4 space-y-3 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">{t('acls.registrants')}</h2>
+              <button onClick={() => setRegModal(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-400">{regModal.name}</p>
+              {registrants.length > 0 && (
+                <button onClick={exportRegistrants} className="text-xs text-brand-500 flex items-center gap-1 shrink-0">
+                  <FileSpreadsheet size={13} /> {t('a.exportExcel')}
+                </button>
+              )}
+            </div>
+
+            {regLoading && <div className="flex justify-center py-8"><Spinner /></div>}
+
+            {!regLoading && registrants.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-6">{t('acls.noRegistrants')}</p>
+            )}
+
+            {!regLoading && registrants.length > 0 && (
+              <div className="divide-y divide-gray-100">
+                {registrants.map(r => (
+                  <div key={r.user_id} className="py-2.5 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{r.name}</p>
+                      <p className="text-xs text-gray-400">{r.role}</p>
+                    </div>
+                    <Badge color={r.attended > 0 ? 'green' : 'gray'}>
+                      {t('acls.attendedOf', { attended: r.attended, total: regModal.total_sessions || 1 })}
+                    </Badge>
                   </div>
                 ))}
               </div>

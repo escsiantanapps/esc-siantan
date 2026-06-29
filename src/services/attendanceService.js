@@ -66,12 +66,14 @@ export const eventAttendanceService = {
     return data
   },
 
-  // Daftar hadir sebuah event (admin).
-  async getByEvent(eventId) {
-    const { data, error } = await supabase
+  // Daftar hadir sebuah event (admin), opsional filter tanggal (terhadap recorded_at).
+  async getByEvent(eventId, { date = '' } = {}) {
+    let query = supabase
       .from('event_attendance')
       .select('*, users(name, phone)')
       .eq('event_id', eventId)
+    if (date) query = query.gte('recorded_at', `${date}T00:00:00`).lte('recorded_at', `${date}T23:59:59`)
+    const { data, error } = await query
     if (error) throw error
     return data
   },

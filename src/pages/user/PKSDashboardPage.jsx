@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, ClipboardCheck, Save, BarChart3, UserCircle, LogOut, ChevronDown } from 'lucide-react'
+import { Users, ClipboardCheck, Save, BarChart3, UserCircle, LogOut, ChevronDown, HandCoins, X, Cake, Send } from 'lucide-react'
 import { startOfMonth } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
-import { komselService } from '@/services/contentService'
+import { komselService, komselOfferingsService } from '@/services/contentService'
+import { OFFERING_CATEGORIES } from '@/services/offeringsService'
+import { birthdayService } from '@/services/birthdayService'
 import { evaluationService } from '@/services/evaluationService'
 import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, Select, Input, Button } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
-import { formatDate } from '@/lib/utils'
+import { useBackClose } from '@/hooks/useBackClose'
+import { formatDate, formatRupiah, formatPhone, hitungUmur } from '@/lib/utils'
 
 // Urutan tampil rincian SOP: yang terpenuhi dulu, lalu proses, lalu kosong.
 const STATUS_RANK = { TERPENUHI: 0, PROSES: 1, KOSONG: 2 }
@@ -44,6 +47,18 @@ export default function PKSDashboardPage() {
   const [evalRows, setEvalRows] = useState([])
   const [evalLoading, setEvalLoading] = useState(true)
   const [openEval, setOpenEval] = useState({}) // user_id -> bool (rincian SOP terbuka)
+
+  const [komselOfferings, setKomselOfferings] = useState([])
+  const [offeringForm, setOfferingForm] = useState({ category: OFFERING_CATEGORIES[0], amount: '', note: '' })
+  const [offeringSaving, setOfferingSaving] = useState(false)
+  const [offeringError, setOfferingError] = useState('')
+
+  const [memberDetail, setMemberDetail] = useState(null)
+  useBackClose(!!memberDetail, () => setMemberDetail(null))
+
+  const [birthdayDrafts, setBirthdayDrafts] = useState({}) // user_id -> teks pesan
+  const [birthdaySent, setBirthdaySent] = useState({}) // user_id -> true setelah terkirim
+  const [birthdaySending, setBirthdaySending] = useState('')
 
   const userId = profile?.user_id
 
@@ -89,6 +104,63 @@ export default function PKSDashboardPage() {
       .catch(() => {})
       .finally(() => setEvalLoading(false))
   }, [selectedId])
+
+  // Riwayat persembahan komsel untuk komsel terpilih.
+  useEffect(() => {
+    if (!selectedId) return
+    komselOfferingsService.getByKomsel(selectedId).then(setKomselOfferings).catch(() => {})
+  }, [selectedId])
+
+  async function handleSubmitOffering() {
+    setOfferingError('')
+    const amount = Number(String(offeringForm.amount).replace(/\D/g, ''))
+    if (!amount || amount <= 0) { setOfferingError(t('offering.amountRequired')); return }
+    setOfferingSaving(true)
+    try {
+      await komselOfferingsService.create({
+        komselId: selectedId,
+        category: offeringForm.category,
+        amount,
+        note: offeringForm.note,
+        recordedBy: profile.user_id,
+      })
+      setOfferingForm({ category: OFFERING_CATEGORIES[0], amount: '', note: '' })
+      setKomselOfferings(await komselOfferingsService.getByKomsel(selectedId))
+      toast.success(t('pks.offeringSaved'))
+    } catch (err) {
+      setOfferingError(err.message || t('pks.offeringSaveFailed'))
+      toast.error(err.message || t('pks.offeringSaveFailed'))
+    } finally {
+      setOfferingSaving(false)
+    }
+  }
+
+  // Anggota komsel terpilih yang berulang tahun hari ini (cocokkan bulan+tanggal, abaikan tahun).
+  const todaysBirthdays = useMemo(() => {
+    const today = new Date()
+    return members.filter(m => {
+      if (!m.birth_date) return false
+      const d = new Date(m.birth_date)
+      return d.getUTCMonth() === today.getMonth() && d.getUTCDate() === today.getDate()
+    })
+  }, [members])
+
+  async function handleSendBirthday(member) {
+    const message = (birthdayDrafts[member.user_id] || '').trim()
+    if (!message) { toast.error(t('pks.birthdayMsgRequired')); return }
+    setBirthdaySending(member.user_id)
+    try {
+      await birthdayService.sendMessage({
+        recipientId: member.user_id, komselId: selectedId, senderId: profile.user_id, message,
+      })
+      setBirthdaySent(p => ({ ...p, [member.user_id]: true }))
+      toast.success(t('pks.birthdaySent', { name: member.name }))
+    } catch (err) {
+      toast.error(err.message || t('pks.birthdaySendFailed'))
+    } finally {
+      setBirthdaySending('')
+    }
+  }
 
   const komsel = useMemo(() => ledKomsels.find(k => k.komsel_id === selectedId) || null, [ledKomsels, selectedId])
 
@@ -173,28 +245,44 @@ export default function PKSDashboardPage() {
               </div>
             )}
 
-            <div className="flex gap-1.5 mb-4">
+            <div className="grid grid-cols-3 gap-1.5 mb-4">
               <button
                 onClick={() => setTab('anggota')}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'anggota' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+                className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'anggota' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
                 <Users size={15} /> {t('pks.tabMembers')}
               </button>
               <button
                 onClick={() => setTab('absensi')}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'absensi' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+                className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'absensi' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
                 <ClipboardCheck size={15} /> {t('pks.tabAttendance')}
               </button>
               <button
+                onClick={() => setTab('ulangtahun')}
+                className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors relative ${tab === 'ulangtahun' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+              >
+                <Cake size={15} />
+                {t('pks.tabBirthday')}
+                {todaysBirthdays.length > 0 && (
+                  <span className="absolute top-1 right-1.5 w-2 h-2 rounded-full bg-red-500" />
+                )}
+              </button>
+              <button
+                onClick={() => setTab('persembahan')}
+                className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'persembahan' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+              >
+                <HandCoins size={15} /> {t('pks.tabOffering')}
+              </button>
+              <button
                 onClick={() => setTab('evaluasi')}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'evaluasi' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+                className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'evaluasi' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
                 <BarChart3 size={15} /> {t('pks.tabEval')}
               </button>
               <button
                 onClick={() => setTab('profil')}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'profil' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
+                className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[11px] font-medium transition-colors ${tab === 'profil' ? 'bg-brand-500 text-white' : 'bg-surface text-gray-500 border border-gray-100'}`}
               >
                 <UserCircle size={15} /> {t('pks.tabProfile')}
               </button>
@@ -207,13 +295,17 @@ export default function PKSDashboardPage() {
                 ) : (
                   <Card className="divide-y divide-gray-100">
                     {members.map(m => (
-                      <div key={m.user_id} className="flex items-center gap-3 p-3.5">
+                      <button
+                        key={m.user_id}
+                        onClick={() => setMemberDetail(m)}
+                        className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-gray-50 transition-colors"
+                      >
                         <Avatar name={m.name} src={m.photo_url} size="sm" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
                           <p className="text-xs text-gray-400">{m.role}</p>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </Card>
                 )}
@@ -280,6 +372,81 @@ export default function PKSDashboardPage() {
                       ))}
                     </Card>
                   </div>
+                )}
+              </>
+            )}
+
+            {tab === 'ulangtahun' && (
+              <>
+                {todaysBirthdays.length === 0 ? (
+                  <EmptyState icon={Cake} title={t('pks.noBirthdayToday')} description={t('pks.noBirthdayTodayDesc')} />
+                ) : (
+                  <div className="space-y-3">
+                    {todaysBirthdays.map(m => (
+                      <Card key={m.user_id} className="p-3.5 space-y-2.5">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={m.name} src={m.photo_url} size="sm" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                            <p className="text-xs text-gray-400">🎂 {t('pks.birthdayToday')}</p>
+                          </div>
+                        </div>
+                        {birthdaySent[m.user_id] ? (
+                          <p className="text-xs text-green-600 flex items-center gap-1"><Send size={12} /> {t('pks.birthdaySent', { name: m.name })}</p>
+                        ) : (
+                          <>
+                            <Input
+                              placeholder={t('pks.birthdayMsgPh')}
+                              value={birthdayDrafts[m.user_id] || ''}
+                              onChange={e => setBirthdayDrafts(p => ({ ...p, [m.user_id]: e.target.value }))}
+                            />
+                            <Button
+                              size="sm" className="w-full"
+                              loading={birthdaySending === m.user_id}
+                              onClick={() => handleSendBirthday(m)}
+                            >
+                              <Send size={14} /> {t('pks.sendBirthday')}
+                            </Button>
+                          </>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {tab === 'persembahan' && (
+              <>
+                {offeringError && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-3">{offeringError}</div>}
+                <Card className="p-4 mb-4 space-y-3">
+                  <h2 className="text-sm font-semibold text-gray-900">{t('pks.recordOffering')}</h2>
+                  <Select label={t('offering.category')} value={offeringForm.category} onChange={e => setOfferingForm(p => ({ ...p, category: e.target.value }))}>
+                    {OFFERING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </Select>
+                  <Input label={t('offering.amount')} type="number" min="0" placeholder="0" value={offeringForm.amount} onChange={e => setOfferingForm(p => ({ ...p, amount: e.target.value }))} />
+                  <Input label={t('offering.noteOptional')} value={offeringForm.note} onChange={e => setOfferingForm(p => ({ ...p, note: e.target.value }))} />
+                  <Button className="w-full" loading={offeringSaving} onClick={handleSubmitOffering}>
+                    <Save size={15} /> {t('pks.saveOffering')}
+                  </Button>
+                </Card>
+
+                <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('pks.offeringHistory')}</h2>
+                {komselOfferings.length === 0 ? (
+                  <EmptyState icon={HandCoins} title={t('pks.noOfferings')} />
+                ) : (
+                  <Card className="divide-y divide-gray-100">
+                    {komselOfferings.map(o => (
+                      <div key={o.id} className="flex items-center gap-3 p-3.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">{formatRupiah(o.amount)}</p>
+                          <p className="text-xs text-gray-400 truncate">{o.category} · {formatDate(o.created_at)}</p>
+                          {o.note && <p className="text-xs text-gray-500 mt-0.5">{o.note}</p>}
+                        </div>
+                        <StatusBadge status={o.status} />
+                      </div>
+                    ))}
+                  </Card>
                 )}
               </>
             )}
@@ -362,6 +529,63 @@ export default function PKSDashboardPage() {
           </>
         )}
       </div>
+
+      {/* Detail anggota -- TANPA NIK, sengaja (lihat catatan privasi). */}
+      {memberDetail && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-4 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">{t('pks.memberDetail')}</h2>
+              <button onClick={() => setMemberDetail(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Avatar name={memberDetail.name} src={memberDetail.photo_url} size="lg" />
+              <div className="min-w-0">
+                <p className="text-base font-semibold text-gray-900 truncate">{memberDetail.name}</p>
+                <p className="text-sm text-gray-400">{memberDetail.role}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-xs text-gray-400">{t('pks.detailPhone')}</p>
+                <p className="text-gray-700">{formatPhone(memberDetail.phone)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">{t('pks.detailEmail')}</p>
+                <p className="text-gray-700 truncate">{memberDetail.email || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">{t('pks.detailGender')}</p>
+                <p className="text-gray-700">{memberDetail.gender || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">{t('pks.detailBloodType')}</p>
+                <p className="text-gray-700">{memberDetail.blood_type || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">{t('pks.detailBirthDate')}</p>
+                <p className="text-gray-700">{memberDetail.birth_date ? `${formatDate(memberDetail.birth_date)} (${hitungUmur(memberDetail.birth_date)})` : '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">{t('pks.detailBirthPlace')}</p>
+                <p className="text-gray-700">{memberDetail.birth_place || '-'}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-xs text-gray-400">{t('pks.detailAddress')}</p>
+                <p className="text-gray-700">{memberDetail.address || '-'}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-xs text-gray-400">{t('pks.detailSocialMedia')}</p>
+                <p className="text-gray-700">{memberDetail.social_media || '-'}</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

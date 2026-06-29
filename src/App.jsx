@@ -32,6 +32,8 @@ import EventDetailPage from '@/pages/user/EventDetailPage'
 import TaskDetailPage from '@/pages/user/TaskDetailPage'
 import BaptismPage from '@/pages/user/BaptismPage'
 import WeddingPage from '@/pages/user/WeddingPage'
+import PenyerahanAnakPage from '@/pages/user/PenyerahanAnakPage'
+import MyCertificatesPage from '@/pages/user/MyCertificatesPage'
 import ClassesPage from '@/pages/user/ClassesPage'
 import ClassDetailPage from '@/pages/user/ClassDetailPage'
 import RegistrationStatusPage from '@/pages/user/RegistrationStatusPage'
@@ -52,6 +54,8 @@ const AdminTaskFormPage = lazy(() => import('@/pages/admin/AdminTaskFormPage'))
 const AdminTaskResponsesPage = lazy(() => import('@/pages/admin/AdminTaskResponsesPage'))
 const AdminBaptismPage = lazy(() => import('@/pages/admin/AdminBaptismPage'))
 const AdminWeddingPage = lazy(() => import('@/pages/admin/AdminWeddingPage'))
+const AdminChildDedicationPage = lazy(() => import('@/pages/admin/AdminChildDedicationPage'))
+const AdminCertificatesPage = lazy(() => import('@/pages/admin/AdminCertificatesPage'))
 const AdminRegistrationDetailPage = lazy(() => import('@/pages/admin/AdminRegistrationDetailPage'))
 const AdminSPPage = lazy(() => import('@/pages/admin/AdminSPPage'))
 const AdminEventsPage = lazy(() => import('@/pages/admin/AdminEventsPage'))
@@ -65,6 +69,7 @@ const AdminEvaluationPage = lazy(() => import('@/pages/admin/AdminEvaluationPage
 const AdminOfferingsPage = lazy(() => import('@/pages/admin/AdminOfferingsPage'))
 const AdminLeavesPage = lazy(() => import('@/pages/admin/AdminLeavesPage'))
 const AdminPermissionsPage = lazy(() => import('@/pages/admin/AdminPermissionsPage'))
+const AdminTaskCategoriesPage = lazy(() => import('@/pages/admin/AdminTaskCategoriesPage'))
 
 // Layouts
 import UserLayout from '@/layouts/UserLayout'
@@ -160,6 +165,8 @@ export default function App() {
             <Route path="tugas/:id"            element={<TaskDetailPage />} />
             <Route path="baptisan"             element={<BaptismPage />} />
             <Route path="pemberkatan-nikah"    element={<WeddingPage />} />
+            <Route path="penyerahan-anak"      element={<PenyerahanAnakPage />} />
+            <Route path="sertifikat"           element={<MyCertificatesPage />} />
             <Route path="status-pendaftaran"   element={<RegistrationStatusPage />} />
             <Route path="persembahan"          element={<PersembahanPage />} />
             <Route path="izin"                 element={<UserLeavePage />} />
@@ -183,8 +190,11 @@ export default function App() {
             <Route path="tugas/:id/jawaban"    element={<AdminTaskResponsesPage />} />
             <Route path="baptisan"             element={<AdminBaptismPage />} />
             <Route path="nikah"                element={<AdminWeddingPage />} />
+            <Route path="penyerahan-anak"      element={<AdminChildDedicationPage />} />
+            <Route path="sertifikat"           element={<AdminCertificatesPage />} />
             <Route path="baptisan/:id"         element={<AdminRegistrationDetailPage />} />
             <Route path="nikah/:id"            element={<AdminRegistrationDetailPage />} />
+            <Route path="penyerahan-anak/:id"  element={<AdminRegistrationDetailPage />} />
             <Route path="sp"                   element={<AdminSPPage />} />
             <Route path="ministry"             element={<AdminMinistryPage />} />
             <Route path="komsel"               element={<AdminKomselPage />} />
@@ -192,6 +202,7 @@ export default function App() {
             <Route path="persembahan"          element={<AdminOfferingsPage />} />
             <Route path="izin"                 element={<AdminLeavesPage />} />
             <Route path="hak-akses"            element={<AdminPermissionsPage />} />
+            <Route path="kategori-tugas"       element={<AdminTaskCategoriesPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

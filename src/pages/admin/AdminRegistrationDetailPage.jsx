@@ -22,6 +22,11 @@ const WEDDING_DOCS = [
   { key: 'surat_baptis', label: 'Surat Baptis' },
 ]
 
+const DEDICATION_DOCS = [
+  { key: 'kartu_keluarga', label: 'Kartu Keluarga' },
+  { key: 'akta_lahir', label: 'Akta Lahir' },
+]
+
 function toDatetimeLocal(value) {
   if (!value) return ''
   const d = new Date(value)
@@ -34,9 +39,12 @@ export default function AdminRegistrationDetailPage() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { toast } = useToast()
-  const type = pathname.startsWith('/admin/nikah') ? 'wedding' : 'baptism'
-  const backTo = type === 'wedding' ? '/admin/nikah' : '/admin/baptisan'
-  const docs = type === 'wedding' ? WEDDING_DOCS : BAPTISM_DOCS
+  const type = pathname.startsWith('/admin/nikah')
+    ? 'wedding'
+    : pathname.startsWith('/admin/penyerahan-anak') ? 'dedication' : 'baptism'
+  const backTo = type === 'wedding' ? '/admin/nikah' : type === 'dedication' ? '/admin/penyerahan-anak' : '/admin/baptisan'
+  const docs = type === 'wedding' ? WEDDING_DOCS : type === 'dedication' ? DEDICATION_DOCS : BAPTISM_DOCS
+  const typeLabel = type === 'wedding' ? 'Pemberkatan Nikah' : type === 'dedication' ? 'Penyerahan Anak' : 'Baptisan'
 
   const [reg, setReg] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -80,7 +88,7 @@ export default function AdminRegistrationDetailPage() {
       toast.success('Status pendaftaran berhasil diperbarui.')
       // Beri tahu jemaat lewat push bila statusnya berubah
       if (reg.user_id && form.status !== reg.status) {
-        const jenis = type === 'wedding' ? 'Pemberkatan Nikah' : 'Baptisan'
+        const jenis = typeLabel
         pushService.broadcast({
           title: `Status ${jenis}: ${form.status}`,
           body: form.admin_note || `Pendaftaran ${jenis} Anda kini berstatus "${form.status}".`,
@@ -124,6 +132,21 @@ export default function AdminRegistrationDetailPage() {
         ],
         text: reg.testimony ? `Kesaksian / Alasan Ingin Dibaptis:\n${reg.testimony}` : '',
       }]
+    } else if (type === 'dedication') {
+      heading = reg.child_name
+      sections = [{
+        title: 'Data Anak & Orang Tua',
+        rows: [
+          ['Nama Anak', reg.child_name],
+          ['Tanggal Lahir', reg.child_birth_date ? `${formatDate(reg.child_birth_date)} (${hitungUmur(reg.child_birth_date)})` : '-'],
+          ['Tempat Lahir', reg.child_birth_place],
+          ['NIK (KK)', reg.nik],
+          ['Nama Ayah', reg.father_name],
+          ['Nama Ibu', reg.mother_name],
+          ['Alamat', reg.address],
+        ],
+        text: reg.notes ? `Catatan Tambahan:\n${reg.notes}` : '',
+      }]
     } else {
       heading = `${reg.groom_name} & ${reg.bride_name}`
       sections = [
@@ -155,9 +178,8 @@ export default function AdminRegistrationDetailPage() {
       .filter(d => reg.documents?.[d.key])
       .map(d => ({ label: d.label, url: reg.documents[d.key] }))
 
-    const jenis = type === 'wedding' ? 'Pemberkatan Nikah' : 'Baptisan'
     printArchive({
-      title: `Arsip Pendaftaran ${jenis}`,
+      title: `Arsip Pendaftaran ${typeLabel}`,
       heading, meta, sections, documents,
       footer: `Dicetak ${formatDate(new Date(), 'd MMMM yyyy, HH:mm')}`,
     })
@@ -179,7 +201,7 @@ export default function AdminRegistrationDetailPage() {
   return (
     <div className="max-w-2xl">
       <button onClick={() => navigate(backTo)} className="flex items-center gap-1 text-sm text-gray-500 mb-4">
-        <ArrowLeft size={16} /> Kembali ke {type === 'wedding' ? 'Pemberkatan Nikah' : 'Pendaftaran Baptisan'}
+        <ArrowLeft size={16} /> Kembali ke {type === 'wedding' ? 'Pemberkatan Nikah' : type === 'dedication' ? 'Penyerahan Anak' : 'Pendaftaran Baptisan'}
       </button>
 
       {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>}
@@ -189,7 +211,7 @@ export default function AdminRegistrationDetailPage() {
       <Card className="p-4 mb-4">
         <div className="flex items-center justify-between mb-2">
           <p className="text-base font-semibold text-gray-900">
-            {type === 'wedding' ? `${reg.groom_name} & ${reg.bride_name}` : reg.full_name}
+            {type === 'wedding' ? `${reg.groom_name} & ${reg.bride_name}` : type === 'dedication' ? reg.child_name : reg.full_name}
           </p>
           <StatusBadge status={reg.status} />
         </div>
@@ -219,6 +241,25 @@ export default function AdminRegistrationDetailPage() {
             <div>
               <p className="text-xs text-gray-400 mb-1">Kesaksian / Alasan Ingin Dibaptis</p>
               <p className="text-sm text-gray-700 whitespace-pre-line">{reg.testimony}</p>
+            </div>
+          )}
+        </Card>
+      ) : type === 'dedication' ? (
+        <Card className="p-4 mb-4 space-y-3">
+          <h2 className="text-sm font-semibold text-gray-900">Data Anak & Orang Tua</h2>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <Info label="Nama Anak" value={reg.child_name} />
+            <Info label="Tanggal Lahir" value={reg.child_birth_date ? `${formatDate(reg.child_birth_date)} (${hitungUmur(reg.child_birth_date)})` : '-'} />
+            <Info label="Tempat Lahir" value={reg.child_birth_place} />
+            <Info label="NIK (KK)" value={reg.nik} />
+            <Info label="Nama Ayah" value={reg.father_name} />
+            <Info label="Nama Ibu" value={reg.mother_name} />
+            <div className="col-span-2"><Info label="Alamat" value={reg.address} /></div>
+          </div>
+          {reg.notes && (
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Catatan Tambahan</p>
+              <p className="text-sm text-gray-700 whitespace-pre-line">{reg.notes}</p>
             </div>
           )}
         </Card>

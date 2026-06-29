@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { BookOpen, Clock, MapPin, User, QrCode, CheckCircle2, History } from 'lucide-react'
+import { BookOpen, Clock, MapPin, User, QrCode, CheckCircle2, History, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useToast } from '@/hooks/useToast'
 import { classesService } from '@/services/contentService'
 import { classAttendanceService } from '@/services/attendanceService'
 import { Card, Spinner, GradientHeader, EmptyState, StatusBadge, Button } from '@/components/ui'
@@ -12,10 +13,13 @@ export default function ClassDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const { toast } = useToast()
   const { t } = useLang()
   const [cls, setCls] = useState(null)
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
+  const [registration, setRegistration] = useState(null)
+  const [registering, setRegistering] = useState(false)
 
   useEffect(() => {
     classesService.getById(id).then(setCls).catch(() => {}).finally(() => setLoading(false))
@@ -24,7 +28,21 @@ export default function ClassDetailPage() {
   useEffect(() => {
     if (!profile?.user_id) return
     classAttendanceService.getMyHistory(id, profile.user_id).then(setHistory).catch(() => {})
+    classesService.getMyRegistration(id, profile.user_id).then(setRegistration).catch(() => {})
   }, [id, profile?.user_id])
+
+  async function handleRegister() {
+    setRegistering(true)
+    try {
+      const reg = await classesService.register(id, profile.user_id)
+      setRegistration(reg)
+      toast.success(t('classDetail.registerSuccess'))
+    } catch (err) {
+      toast.error(err.message || t('classDetail.registerFailed'))
+    } finally {
+      setRegistering(false)
+    }
+  }
 
   return (
     <div className="pb-4">
@@ -60,6 +78,16 @@ export default function ClassDetailPage() {
                   <p className="text-sm text-gray-600 flex items-center gap-2"><User size={15} className="text-gray-400" /> {cls.teacher}</p>
                 )}
               </div>
+
+              {registration ? (
+                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2.5">
+                  <CheckCircle2 size={16} className="text-green-500 shrink-0" /> {t('classDetail.registered')}
+                </div>
+              ) : (
+                <Button variant="outline" className="w-full" loading={registering} onClick={handleRegister}>
+                  <ClipboardList size={16} /> {t('classDetail.register')}
+                </Button>
+              )}
 
               <Button className="w-full" onClick={() => navigate('/kelas/absen')}>
                 <QrCode size={16} /> {t('classDetail.attendNow')}

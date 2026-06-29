@@ -4,29 +4,13 @@ import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsService'
+import { komselOfferingsService } from '@/services/contentService'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, StatusBadge, Avatar, Badge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { formatDate, formatPhone, formatRupiah, validateUpload, compressImage } from '@/lib/utils'
 import { printArchive } from '@/lib/printDoc'
-
-// Escape field CSV: bungkus kutip dua bila ada koma/kutip/baris baru, ganda-kan kutip di dalamnya.
-function csvField(v) {
-  const s = String(v ?? '')
-  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
-}
-
-function downloadCsv(filename, rows) {
-  // BOM agar Excel membuka sebagai UTF-8 (nama jemaat bisa ada karakter non-ASCII).
-  const csv = '﻿' + rows.map(r => r.map(csvField).join(',')).join('\r\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
+import { downloadXlsx } from '@/lib/exportXlsx'
 
 const emptyAcc = { kind: 'bank', label: '', account_no: '', account_name: '', image_url: '', sort: 0 }
 
@@ -50,8 +34,12 @@ export default function AdminOfferingsPage() {
   const [accUploading, setAccUploading] = useState(false)
   useBackClose(!!accModal, () => setAccModal(null))
 
+  const [komselItems, setKomselItems] = useState([])
+  const [komselLoading, setKomselLoading] = useState(true)
+
   useEffect(() => { loadRekap() }, [startDate, endDate, category, status])
   useEffect(() => { loadAccounts() }, [])
+  useEffect(() => { loadKomselOfferings() }, [])
 
   function loadRekap() {
     setLoading(true)
@@ -63,6 +51,10 @@ export default function AdminOfferingsPage() {
   }
   function loadAccounts() {
     offeringsService.getPaymentAccounts().then(setAccounts).catch(() => {})
+  }
+  function loadKomselOfferings() {
+    setKomselLoading(true)
+    komselOfferingsService.getAll().then(setKomselItems).catch(() => {}).finally(() => setKomselLoading(false))
   }
 
   const totals = useMemo(() => {
@@ -84,6 +76,16 @@ export default function AdminOfferingsPage() {
     }
   }
 
+  async function verifyKomsel(o, st) {
+    try {
+      await komselOfferingsService.setStatus(o.id, st, profile.user_id)
+      toast.success(st === 'Terverifikasi' ? t('aoff.verifiedToast') : t('aoff.rejectedToast'))
+      loadKomselOfferings()
+    } catch (err) {
+      toast.error(err.message || t('aoff.statusFailed'))
+    }
+  }
+
   async function removeOffering(o) {
     const ok = await confirm({ title: t('aoff.deleteRecTitle'), message: t('aoff.deleteRecMsg', { amount: formatRupiah(o.amount) }), confirmText: t('a.delete'), danger: true })
     if (!ok) return
@@ -99,7 +101,7 @@ export default function AdminOfferingsPage() {
   // Export rekap per jemaat (nama, no HP, total) untuk diimpor ke app finance.
   // Selalu hanya yang Terverifikasi -- terlepas dari filter status di halaman --
   // supaya uang yang belum/tidak terverifikasi tidak ikut tercatat di finance.
-  function exportFinance() {
+  async function exportFinance() {
     const verified = items.filter(o => o.status === 'Terverifikasi')
     if (verified.length === 0) { toast.info(t('aoff.exportEmpty')); return }
 
@@ -111,13 +113,19 @@ export default function AdminOfferingsPage() {
       byUser.set(uid, prev)
     }
 
-    const rows = [[t('aoff.exportColName'), t('aoff.exportColPhone'), t('aoff.exportColTotal')]]
-    for (const { name, phone, total } of byUser.values()) {
-      rows.push([name, formatPhone(phone), total])
-    }
+    const periodeLabel = (startDate || endDate)
+      ? `Periode: ${startDate ? formatDate(startDate) : t('aoff.arcStart')} – ${endDate ? formatDate(endDate) : t('aoff.arcNow')}`
+      : `Periode: ${t('aoff.arcAllTime')}`
+    const rows = [...byUser.values()].map(({ name, phone, total }) => [name, formatPhone(phone), total])
+    const periodeFile = (startDate || endDate) ? `_${startDate || 'awal'}_${endDate || 'now'}` : ''
 
-    const periode = (startDate || endDate) ? `_${startDate || 'awal'}_${endDate || 'now'}` : ''
-    downloadCsv(`persembahan${periode}.csv`, rows)
+    await downloadXlsx({
+      filename: `persembahan${periodeFile}.xlsx`,
+      sheetName: 'Rekap Persembahan',
+      titleLines: ['ESC Siantan', 'Rekap Persembahan Terverifikasi', periodeLabel],
+      headers: [t('aoff.exportColName'), t('aoff.exportColPhone'), t('aoff.exportColTotal')],
+      rows,
+    })
     toast.success(t('aoff.exportSuccess', { n: byUser.size }))
   }
 
@@ -209,7 +217,7 @@ export default function AdminOfferingsPage() {
       />
 
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
-        {[['rekap', t('aoff.tabRekap')], ['rekening', t('aoff.tabAccounts')]].map(([k, label]) => (
+        {[['rekap', t('aoff.tabRekap')], ['komsel', t('aoff.tabKomsel')], ['rekening', t('aoff.tabAccounts')]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === k ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}>
             {label}
@@ -278,6 +286,40 @@ export default function AdminOfferingsPage() {
                       <button onClick={() => verify(o, 'Ditolak')} className="text-xs text-red-500 hover:underline">{t('aoff.reject')}</button>
                     )}
                     <button onClick={() => removeOffering(o)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
+        </>
+      )}
+
+      {tab === 'komsel' && (
+        <>
+          {komselLoading && <div className="flex justify-center py-10"><Spinner /></div>}
+          {!komselLoading && komselItems.length === 0 && <EmptyState icon={HandCoins} title={t('aoff.emptyKomsel')} />}
+          {!komselLoading && komselItems.length > 0 && (
+            <Card className="divide-y divide-gray-100">
+              {komselItems.map(o => (
+                <div key={o.id} className="p-3.5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900">{formatRupiah(o.amount)}</p>
+                      <p className="text-xs text-gray-400 truncate">{o.komsel?.name || '-'} · {o.category} · {formatDate(o.created_at)}</p>
+                    </div>
+                    <StatusBadge status={o.status} />
+                  </div>
+                  {o.note && <p className="text-xs text-gray-500 mt-1.5">{o.note}</p>}
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex-1" />
+                    {o.status !== 'Terverifikasi' && (
+                      <button onClick={() => verifyKomsel(o, 'Terverifikasi')} className="text-xs text-green-600 hover:underline flex items-center gap-1">
+                        <Check size={13} /> {t('aoff.verify')}
+                      </button>
+                    )}
+                    {o.status !== 'Ditolak' && (
+                      <button onClick={() => verifyKomsel(o, 'Ditolak')} className="text-xs text-red-500 hover:underline">{t('aoff.reject')}</button>
+                    )}
                   </div>
                 </div>
               ))}

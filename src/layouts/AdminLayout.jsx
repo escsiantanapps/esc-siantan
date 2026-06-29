@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
-  LayoutDashboard, LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound
+  LayoutDashboard, LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, Tag
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
@@ -31,6 +31,7 @@ function buildMenu(isSuperAdmin, allowedPages) {
   if (isSuperAdmin) {
     items.push({ section: 'Sistem', sectionKey: 'admin.sec.Sistem' })
     items.push({ to: '/admin/hak-akses', icon: KeyRound, labelKey: 'admin.nav.hakAkses' })
+    items.push({ to: '/admin/kategori-tugas', icon: Tag, labelKey: 'admin.nav.kategoriTugas' })
   }
 
   return items
@@ -82,8 +83,8 @@ export default function AdminLayout() {
     </div>
   )
 
-  // Halaman khusus Super Admin (Hak Akses)
-  if (location.pathname === '/admin/hak-akses' && !isSuperAdmin) {
+  // Halaman khusus Super Admin (Hak Akses, Kategori Tugas)
+  if (['/admin/hak-akses', '/admin/kategori-tugas'].includes(location.pathname) && !isSuperAdmin) {
     return <Navigate to="/admin" replace />
   }
 

@@ -850,3 +850,203 @@ END $$;
 DROP TRIGGER IF EXISTS trg_guard_biodata_admin_edit ON users;
 CREATE TRIGGER trg_guard_biodata_admin_edit
   BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION guard_biodata_admin_edit();
+
+-- ── Migrasi v25: sprint 12 fitur (komsel, ulang tahun, penyerahan ────
+-- anak, sertifikat, kategori tugas, dll) ─────────────────────────────
+-- Gabungan skema untuk seluruh sprint fitur besar:
+--  - Kategori Komsel (Youth/Kids/dll, dikelola Admin & Super Admin) +
+--    Persembahan Komsel (PKS input, Admin verifikasi)
+--  - Pesan Ulang Tahun: PKS kirim pesan personal ke anggota komsel yang
+--    berulang tahun hari ini (notifikasi push terpisah lewat cron)
+--  - Registrasi Kelas (seperti Event) untuk rekap & export kehadiran
+--  - Sistem Penyerahan Anak (pendaftaran, struktur mirip Baptisan/Nikah)
+--  - Sistem Sertifikat (diterbitkan manual oleh Admin per jemaat)
+--  - Kategori Tugas (CRUD Super-Admin-only): gerbang akses TAMBAHAN di
+--    atas allowed_roles/allowed_ministry yang sudah ada (BUKAN
+--    pengganti). Kategori "Umum" dibuat otomatis & semua tugas lama
+--    dibackfill ke sana agar tidak kehilangan akses begitu fitur ini
+--    aktif.
+-- Jalankan blok ini sekali di Supabase SQL Editor.
+
+-- (1) Kategori Komsel
+CREATE TABLE IF NOT EXISTS komsel_categories (
+  category_id TEXT PRIMARY KEY DEFAULT 'KCAT-' || extract(epoch from now())::bigint,
+  name        TEXT NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE komsel ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES komsel_categories(category_id) ON DELETE SET NULL;
+
+ALTER TABLE komsel_categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "komsel_cat_select" ON komsel_categories;
+CREATE POLICY "komsel_cat_select" ON komsel_categories FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "komsel_cat_admin_write" ON komsel_categories;
+CREATE POLICY "komsel_cat_admin_write" ON komsel_categories FOR ALL
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+
+-- (2) Persembahan Komsel
+CREATE TABLE IF NOT EXISTS komsel_offerings (
+  id          TEXT PRIMARY KEY DEFAULT 'KOFR-' || replace(gen_random_uuid()::text, '-', ''),
+  komsel_id   TEXT REFERENCES komsel(komsel_id) ON DELETE CASCADE,
+  category    TEXT NOT NULL,
+  amount      BIGINT NOT NULL CHECK (amount > 0),
+  note        TEXT,
+  status      TEXT NOT NULL DEFAULT 'Menunggu' CHECK (status IN ('Menunggu', 'Terverifikasi', 'Ditolak')),
+  recorded_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  verified_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  verified_at TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE komsel_offerings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "komsel_ofr_admin_all" ON komsel_offerings;
+CREATE POLICY "komsel_ofr_admin_all" ON komsel_offerings FOR ALL
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+DROP POLICY IF EXISTS "komsel_ofr_pks_select" ON komsel_offerings;
+CREATE POLICY "komsel_ofr_pks_select" ON komsel_offerings FOR SELECT USING (auth_leads_komsel(komsel_id));
+DROP POLICY IF EXISTS "komsel_ofr_pks_insert" ON komsel_offerings;
+CREATE POLICY "komsel_ofr_pks_insert" ON komsel_offerings FOR INSERT WITH CHECK (
+  auth_leads_komsel(komsel_id) AND status = 'Menunggu'
+);
+
+-- (3) Pesan Ulang Tahun (PKS -> anggota komsel)
+CREATE TABLE IF NOT EXISTS birthday_messages (
+  id           TEXT PRIMARY KEY DEFAULT 'BDAY-' || replace(gen_random_uuid()::text, '-', ''),
+  recipient_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  komsel_id    TEXT REFERENCES komsel(komsel_id) ON DELETE SET NULL,
+  sender_id    TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  message      TEXT NOT NULL,
+  created_at   TIMESTAMPTZ DEFAULT now(),
+  read_at      TIMESTAMPTZ
+);
+
+ALTER TABLE birthday_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "bday_admin_all" ON birthday_messages;
+CREATE POLICY "bday_admin_all" ON birthday_messages FOR ALL
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+DROP POLICY IF EXISTS "bday_recipient_select" ON birthday_messages;
+CREATE POLICY "bday_recipient_select" ON birthday_messages FOR SELECT USING (recipient_id = auth_user_id());
+DROP POLICY IF EXISTS "bday_recipient_mark_read" ON birthday_messages;
+CREATE POLICY "bday_recipient_mark_read" ON birthday_messages FOR UPDATE
+  USING (recipient_id = auth_user_id())
+  WITH CHECK (recipient_id = auth_user_id());
+DROP POLICY IF EXISTS "bday_pks_insert" ON birthday_messages;
+CREATE POLICY "bday_pks_insert" ON birthday_messages FOR INSERT WITH CHECK (
+  sender_id = auth_user_id() AND auth_leads_komsel(komsel_id)
+);
+
+-- (4) Registrasi Kelas (struktur identik event_registrations)
+CREATE TABLE IF NOT EXISTS class_registrations (
+  registration_id TEXT PRIMARY KEY DEFAULT 'CREG-' || extract(epoch from now())::bigint,
+  class_id        TEXT REFERENCES classes(class_id) ON DELETE CASCADE,
+  user_id         TEXT REFERENCES users(user_id) ON DELETE CASCADE,
+  registered_at   TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(class_id, user_id)
+);
+
+ALTER TABLE class_registrations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "class_reg_select" ON class_registrations;
+CREATE POLICY "class_reg_select" ON class_registrations FOR SELECT USING (
+  auth_user_role() IN ('Admin', 'Super Admin') OR user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "class_reg_insert" ON class_registrations;
+CREATE POLICY "class_reg_insert" ON class_registrations FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "class_reg_admin_delete" ON class_registrations;
+CREATE POLICY "class_reg_admin_delete" ON class_registrations FOR DELETE USING (
+  auth_user_role() IN ('Admin', 'Super Admin')
+);
+
+-- (5) Sistem Penyerahan Anak (struktur mengikuti baptism_registrations)
+CREATE TABLE IF NOT EXISTS child_dedication_registrations (
+  dedication_id     TEXT PRIMARY KEY DEFAULT 'DED-' || extract(epoch from now())::bigint,
+  user_id           TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  child_name        TEXT NOT NULL,
+  child_birth_date  DATE,
+  child_birth_place TEXT,
+  father_name       TEXT,
+  mother_name       TEXT,
+  address           TEXT,
+  nik               TEXT,
+  notes             TEXT,
+  documents         JSONB DEFAULT '{}',
+  status            TEXT DEFAULT 'Menunggu' CHECK (status IN ('Menunggu','Sedang Ditinjau','Disetujui','Terjadwal','Selesai','Ditolak')),
+  scheduled_at      TIMESTAMPTZ,
+  admin_note        TEXT,
+  created_at        TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE child_dedication_registrations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dedication_select" ON child_dedication_registrations;
+CREATE POLICY "dedication_select" ON child_dedication_registrations FOR SELECT USING (
+  auth_user_role() IN ('Admin', 'Super Admin') OR user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "dedication_insert" ON child_dedication_registrations;
+CREATE POLICY "dedication_insert" ON child_dedication_registrations FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "dedication_admin_update" ON child_dedication_registrations;
+CREATE POLICY "dedication_admin_update" ON child_dedication_registrations FOR UPDATE
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+
+-- (6) Sistem Sertifikat (diterbitkan manual oleh Admin)
+CREATE TABLE IF NOT EXISTS certificates (
+  certificate_id TEXT PRIMARY KEY DEFAULT 'CERT-' || replace(gen_random_uuid()::text, '-', ''),
+  user_id        TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  title          TEXT NOT NULL,
+  file_url       TEXT NOT NULL,
+  issued_by      TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  issued_at      TIMESTAMPTZ DEFAULT now(),
+  note           TEXT
+);
+
+ALTER TABLE certificates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "cert_owner_select" ON certificates;
+CREATE POLICY "cert_owner_select" ON certificates FOR SELECT USING (
+  user_id = auth_user_id() OR auth_user_role() IN ('Admin', 'Super Admin')
+);
+DROP POLICY IF EXISTS "cert_admin_write" ON certificates;
+CREATE POLICY "cert_admin_write" ON certificates FOR ALL
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+
+-- (7) Kategori Tugas (Super-Admin-only, gerbang akses TAMBAHAN)
+CREATE TABLE IF NOT EXISTS task_categories (
+  category_id TEXT PRIMARY KEY DEFAULT 'TCAT-' || extract(epoch from now())::bigint,
+  name        TEXT NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS task_category_ministries (
+  category_id TEXT NOT NULL REFERENCES task_categories(category_id) ON DELETE CASCADE,
+  ministry_id TEXT NOT NULL REFERENCES ministries(ministry_id) ON DELETE CASCADE,
+  PRIMARY KEY (category_id, ministry_id)
+);
+
+ALTER TABLE form_templates ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES task_categories(category_id) ON DELETE SET NULL;
+
+ALTER TABLE task_categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "task_cat_select" ON task_categories;
+CREATE POLICY "task_cat_select" ON task_categories FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "task_cat_superadmin_write" ON task_categories;
+CREATE POLICY "task_cat_superadmin_write" ON task_categories FOR ALL
+  USING (auth_user_role() = 'Super Admin')
+  WITH CHECK (auth_user_role() = 'Super Admin');
+
+ALTER TABLE task_category_ministries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "task_catmin_select" ON task_category_ministries;
+CREATE POLICY "task_catmin_select" ON task_category_ministries FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "task_catmin_superadmin_write" ON task_category_ministries;
+CREATE POLICY "task_catmin_superadmin_write" ON task_category_ministries FOR ALL
+  USING (auth_user_role() = 'Super Admin')
+  WITH CHECK (auth_user_role() = 'Super Admin');
+
+-- Migrasi data: kategori default "Umum" (tanpa batasan ministry) lalu
+-- backfill semua form_templates lama supaya tidak kehilangan akses.
+INSERT INTO task_categories (category_id, name) VALUES ('TCAT-DEFAULT-UMUM', 'Umum')
+  ON CONFLICT (category_id) DO NOTHING;
+UPDATE form_templates SET category_id = 'TCAT-DEFAULT-UMUM' WHERE category_id IS NULL;

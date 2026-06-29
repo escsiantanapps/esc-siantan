@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.43.0",
     "date-fns": "^3.6.0",
+    "exceljs": "^4.4.0",
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.383.0",
     "qrcode": "^1.5.4",
