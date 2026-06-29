@@ -2,15 +2,26 @@ import { useEffect, useState } from 'react'
 import { BellRing } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { pushService } from '@/services/pushService'
 import { Card } from '@/components/ui'
+
+// TWA (APK Play Store) membuka halaman dengan document.referrer ini -- dipakai
+// Chrome untuk menandai konteks "trusted web activity". Pada sebagian device,
+// delegasi notifikasi TWA gagal walau push web biasa (PWA via Chrome) normal,
+// jadi hint instalasi alternatif hanya relevan ditampilkan di konteks ini.
+function isRunningAsTwa() {
+  return typeof document !== 'undefined' && document.referrer.startsWith('android-app://')
+}
 
 export default function PushToggle() {
   const { profile } = useAuth()
   const { toast } = useToast()
+  const { t } = useLang()
   const [supported] = useState(() => pushService.supported())
   const [subscribed, setSubscribed] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [isTwa] = useState(isRunningAsTwa)
 
   useEffect(() => {
     if (!supported) return
@@ -85,6 +96,12 @@ export default function PushToggle() {
           <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${subscribed ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>
       </div>
+
+      {isTwa && (
+        <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100">
+          {t('settings.twaNotifHint', { url: 'esc-siantan.vercel.app' })}
+        </p>
+      )}
     </Card>
   )
 }
