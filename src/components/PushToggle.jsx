@@ -91,7 +91,7 @@ export default function PushToggle() {
           role="switch"
           aria-checked={subscribed}
           aria-label="Aktifkan notifikasi push"
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${subscribed ? 'bg-brand-500' : 'bg-gray-200'}`}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${subscribed ? 'bg-brand-500' : 'bg-control-hover'}`}
         >
           <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${subscribed ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>
@@ -99,7 +99,7 @@ export default function PushToggle() {
 
       {isTwa && (
         <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100">
-          {t('settings.twaNotifHint', { url: 'esc-siantan.vercel.app' })}
+          {t('settings.twaNotifHint', { url: 'escsiantan.my.id' })}
         </p>
       )}
     </Card>
