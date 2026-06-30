@@ -255,6 +255,9 @@ export const translations = {
     'tasks.leaveDesc': 'Ajukan izin atau sakit di sini',
     'tasks.done': 'Selesai',
     'tasks.progress': '{done} dari {target} target — Berjalan',
+    'tasks.uncategorized': 'Lainnya',
+    'tasks.folderCount': '{count} tugas',
+    'tasks.folderProgress': '{done}/{total} selesai',
     'tasks.loadFailed': 'Gagal memuat tugas.',
 
     // Status badge
@@ -1221,6 +1224,9 @@ export const translations = {
     'tasks.leaveDesc': 'Request leave or sick here',
     'tasks.done': 'Done',
     'tasks.progress': '{done} of {target} target — In progress',
+    'tasks.uncategorized': 'Other',
+    'tasks.folderCount': '{count} tasks',
+    'tasks.folderProgress': '{done}/{total} done',
     'tasks.loadFailed': 'Failed to load tasks.',
 
     // Status badge
