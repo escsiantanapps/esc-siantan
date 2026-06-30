@@ -37,6 +37,8 @@ export default function AdminKomselPage() {
   const [assignResults, setAssignResults] = useState([])
   const [assignBusy, setAssignBusy] = useState(false)
 
+  const [catFilter, setCatFilter] = useState('')
+
   useBackClose(showModal || !!membersView || !!pksView || showCatModal || !!assignView, () => {
     setShowModal(false); setMembersView(null); setPksView(null); setShowCatModal(false); setAssignView(null)
   })
@@ -238,6 +240,10 @@ export default function AdminKomselPage() {
     }
   }
 
+  const filteredKomsel = catFilter
+    ? komsel.filter(k => (catFilter === '__none' ? !k.category_id : k.category_id === catFilter))
+    : komsel
+
   async function viewMembers(item) {
     setMembersView(item)
     setMembersLoading(true)
@@ -264,15 +270,49 @@ export default function AdminKomselPage() {
         }
       />
 
+      {!loading && categories.length > 0 && (
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-1 -mx-1 px-1">
+          <button
+            onClick={() => setCatFilter('')}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors
+              ${catFilter === '' ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+          >
+            {t('akom.allCategories')} <span className="opacity-70">({komsel.length})</span>
+          </button>
+          {categories.map(c => {
+            const n = komsel.filter(k => k.category_id === c.category_id).length
+            return (
+              <button
+                key={c.category_id}
+                onClick={() => setCatFilter(c.category_id)}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors
+                  ${catFilter === c.category_id ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+              >
+                {c.name} <span className="opacity-70">({n})</span>
+              </button>
+            )
+          })}
+          {komsel.some(k => !k.category_id) && (
+            <button
+              onClick={() => setCatFilter('__none')}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors
+                ${catFilter === '__none' ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+            >
+              {t('akom.categoryNone')} <span className="opacity-70">({komsel.filter(k => !k.category_id).length})</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
-      {!loading && komsel.length === 0 && (
+      {!loading && filteredKomsel.length === 0 && (
         <EmptyState icon={Users} title={t('akom.empty')} description={t('akom.emptyDesc')} />
       )}
 
-      {!loading && komsel.length > 0 && (
+      {!loading && filteredKomsel.length > 0 && (
         <Card className="divide-y divide-gray-100">
-          {komsel.map(item => (
+          {filteredKomsel.map(item => (
             <div key={item.komsel_id} className="flex items-center gap-3 p-3.5">
               <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
                 <Users size={20} className="text-green-500" />

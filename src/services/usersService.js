@@ -26,6 +26,48 @@ export const usersService = {
     return { data: (data || []).map(withMinistryIds), count }
   },
 
+  // Admin menambah jemaat baru langsung (tanpa akun login dulu) — jemaat
+  // mengaktifkan sendiri akunnya nanti lewat halaman Aktivasi (HP + OTP WA),
+  // pola yang sama dipakai utk data impor lama.
+  async create(form) {
+    const phone = (form.phone || '').trim()
+    if (phone) {
+      try {
+        const r = await fetch('/api/check-phone', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone }),
+        })
+        const j = await r.json().catch(() => ({}))
+        if (r.ok && j.available === false) throw new Error('PHONE_TAKEN')
+      } catch (e) {
+        if (e.message === 'PHONE_TAKEN') throw e
+        // error jaringan endpoint → abaikan, lanjutkan penyimpanan
+      }
+    }
+
+    const orNull = v => (v === '' || v === undefined ? null : v)
+    const payload = {
+      auth_id: null,
+      name: form.name,
+      phone: orNull(phone),
+      email: orNull(form.email),
+      role: form.role || 'Jemaat',
+      status: 'Aktif',
+      sp_level: 'Aman',
+      gender: orNull(form.gender),
+      birth_date: orNull(form.birth_date),
+      birth_place: orNull(form.birth_place),
+      address: orNull(form.address),
+      blood_type: orNull(form.blood_type),
+      nik: orNull(form.nik),
+      social_media: orNull(form.social_media),
+      komsel_id: orNull(form.komsel_id),
+    }
+    const { data, error } = await supabase.from('users').insert(payload).select().single()
+    if (error) throw error
+    return data
+  },
+
   async getById(id) {
     const { data, error } = await supabase
       .from('users').select('*, user_ministries(ministry_id)').eq('user_id', id).single()

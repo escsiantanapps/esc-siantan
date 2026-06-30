@@ -1050,3 +1050,16 @@ CREATE POLICY "task_catmin_superadmin_write" ON task_category_ministries FOR ALL
 INSERT INTO task_categories (category_id, name) VALUES ('TCAT-DEFAULT-UMUM', 'Umum')
   ON CONFLICT (category_id) DO NOTHING;
 UPDATE form_templates SET category_id = 'TCAT-DEFAULT-UMUM' WHERE category_id IS NULL;
+
+-- ── Migrasi v26: Admin bisa tambah jemaat baru langsung ──────────────
+-- Admin/Super Admin bisa membuat baris users baru (data jemaat) tanpa
+-- akun login dulu — jemaat mengaktifkan sendiri lewat halaman Aktivasi
+-- Akun (nomor HP + kode OTP WhatsApp), pola yang sama dipakai utk data
+-- impor lama. auth_id WAJIB NULL saat dibuat Admin (tidak boleh klaim
+-- akun auth orang lain secara langsung) — auth_id baru terisi lewat
+-- /api/activate-verify yang pakai service role.
+-- Jalankan blok ini sekali di Supabase SQL Editor.
+DROP POLICY IF EXISTS "users_admin_insert" ON users;
+CREATE POLICY "users_admin_insert" ON users FOR INSERT WITH CHECK (
+  auth_user_role() IN ('Admin', 'Super Admin') AND auth_id IS NULL
+);
