@@ -95,7 +95,7 @@ export default function MemberStats() {
 
       {/* Bar komposisi gender */}
       <div className="mb-5">
-        <div className="flex h-3 rounded-full overflow-hidden bg-gray-100">
+        <div className="flex h-3 rounded-full overflow-hidden bg-control">
           <div className="bg-blue-400" style={{ width: `${malePct}%` }} />
           <div className="bg-pink-400" style={{ width: `${femalePct}%` }} />
         </div>
@@ -119,7 +119,7 @@ export default function MemberStats() {
               className="w-full flex items-center gap-3 group"
             >
               <span className={`w-12 text-xs font-medium text-right shrink-0 ${active ? 'text-brand-600' : 'text-gray-500'}`}>{b.label}</span>
-              <span className="flex-1 h-6 rounded-lg bg-gray-100 overflow-hidden relative">
+              <span className="flex-1 h-6 rounded-lg bg-control overflow-hidden relative">
                 <span
                   className={`block h-full rounded-lg transition-all ${active ? 'bg-brand-500' : 'bg-brand-300 group-hover:bg-brand-400'}`}
                   style={{ width: `${Math.max(count ? 8 : 0, (count / maxCount) * 100)}%` }}

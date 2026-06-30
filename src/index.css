@@ -34,6 +34,13 @@
   --gradient-1: #0098cc;
   --gradient-2: #0077b6;
   --gradient-3: #005c8e;
+
+  /* Permukaan netral utk elemen INTERAKTIF (tombol secondary/ghost, tab/segment
+     control, chip filter, badge netral) -- token terpisah dari gray-100/200
+     karena gray-100/200 juga dipakai utk divider/track yang sengaja low-contrast.
+     Light mode: sama persis dgn gray-100/200 bawaan (tidak ada perubahan visual). */
+  --color-control: #f3f4f6;
+  --color-control-hover: #e5e7eb;
 }
 
 * {
@@ -281,6 +288,15 @@ h1, h2, h3 {
 
   --color-pink-50:  #2a1722;
   --color-pink-100: #3d2030;
+
+  /* Permukaan interaktif harus jelas lebih terang dari --color-surface (#1a1d22)
+     -- nilai gray-100 reguler (#1a1d23) nyaris identik dgn surface (rasio kontras
+     ~1:1, alias tak kelihatan), makanya tombol secondary/ghost/tab nyaris tak
+     kelihatan tanpa token terpisah ini. Nilai di bawah diukur (WCAG relative
+     luminance) supaya rasio kontras vs surface ~2:1 (rest) / ~2.8:1 (hover) --
+     cukup tegas terlihat sebagai chip terangkat tanpa terlalu terang/menyilaukan. */
+  --color-control: #454c59;
+  --color-control-hover: #5a6371;
 }
 
 .dark .gradient-text {

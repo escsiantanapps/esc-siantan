@@ -38,7 +38,7 @@ export default function AdminSPPage() {
             key={v}
             onClick={() => setTab(v)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-              ${tab === v ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+              ${tab === v ? 'gradient-main text-white' : 'bg-control text-gray-500'}`}
           >
             {v === '' ? t('asp.all') : t(`status.${v}`)}
           </button>

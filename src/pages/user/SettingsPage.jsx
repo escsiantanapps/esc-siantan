@@ -172,7 +172,7 @@ export default function SettingsPage() {
             onClick={() => navigate('/kebijakan-privasi')}
             className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all"
           >
-            <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">
+            <div className="w-9 h-9 rounded-full bg-control flex items-center justify-center text-gray-500 shrink-0">
               <ShieldCheck size={16} />
             </div>
             <div className="flex-1 min-w-0 text-left">

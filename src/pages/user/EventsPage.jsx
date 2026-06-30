@@ -47,7 +47,7 @@ export default function EventsPage() {
               key={value}
               onClick={() => setTab(value)}
               className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition ${
-                tab === value ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'
+                tab === value ? 'gradient-main text-white' : 'bg-control text-gray-500'
               }`}
             >
               {t(key)}

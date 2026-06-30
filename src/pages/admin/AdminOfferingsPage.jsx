@@ -216,7 +216,7 @@ export default function AdminOfferingsPage() {
             : null}
       />
 
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
+      <div className="flex gap-1 p-1 bg-control rounded-xl mb-4">
         {[['rekap', t('aoff.tabRekap')], ['komsel', t('aoff.tabKomsel')], ['rekening', t('aoff.tabAccounts')]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === k ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}>

@@ -136,7 +136,7 @@ export default function TasksPage() {
                       </span>
                     </div>
                     <div className="mt-2 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="flex-1 h-1.5 bg-control rounded-full overflow-hidden">
                         <div className={`h-full rounded-full transition-all duration-500 ${allDone ? 'bg-green-400' : theme.bar}`} style={{ width: `${pct}%` }} />
                       </div>
                       <span className="text-[10px] font-semibold text-gray-400 shrink-0">
@@ -202,7 +202,7 @@ function TaskCard({ tpl, progress, onClick, t }) {
           )}
           <span className="text-[11px] font-semibold text-gray-400">{Math.round(pct)}%</span>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-2 bg-control rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
             style={{

@@ -275,7 +275,7 @@ export default function AdminKomselPage() {
           <button
             onClick={() => setCatFilter('')}
             className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-              ${catFilter === '' ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+              ${catFilter === '' ? 'gradient-main text-white' : 'bg-control text-gray-500'}`}
           >
             {t('akom.allCategories')} <span className="opacity-70">({komsel.length})</span>
           </button>
@@ -286,7 +286,7 @@ export default function AdminKomselPage() {
                 key={c.category_id}
                 onClick={() => setCatFilter(c.category_id)}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-                  ${catFilter === c.category_id ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+                  ${catFilter === c.category_id ? 'gradient-main text-white' : 'bg-control text-gray-500'}`}
               >
                 {c.name} <span className="opacity-70">({n})</span>
               </button>
@@ -296,7 +296,7 @@ export default function AdminKomselPage() {
             <button
               onClick={() => setCatFilter('__none')}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-                ${catFilter === '__none' ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+                ${catFilter === '__none' ? 'gradient-main text-white' : 'bg-control text-gray-500'}`}
             >
               {t('akom.categoryNone')} <span className="opacity-70">({komsel.filter(k => !k.category_id).length})</span>
             </button>

@@ -8,10 +8,10 @@ export function Button({ children, variant = 'primary', size = 'md', loading, cl
   const sizes = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2.5 text-sm', lg: 'px-6 py-3 text-base' }
   const variants = {
     primary: 'gradient-main text-white shadow-sm',
-    secondary: 'bg-gray-100 text-gray-700 hover:bg-gray-200',
-    outline: 'border border-gray-200 text-gray-700 hover:bg-gray-50',
+    secondary: 'bg-control text-gray-700 hover:bg-control-hover',
+    outline: 'border border-gray-200 text-gray-700 hover:bg-control',
     danger: 'bg-red-500 text-white hover:bg-red-600',
-    ghost: 'text-gray-600 hover:bg-gray-100',
+    ghost: 'text-gray-600 hover:bg-control',
   }
   return (
     <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} disabled={loading} {...props}>
@@ -122,7 +122,7 @@ export function Card({ children, className = '', onClick, glass = false, ...prop
 // ─── Badge / Pill ────────────────────────────────────────
 export function Badge({ children, color = 'gray', className = '' }) {
   const colors = {
-    gray:   'bg-gray-100 text-gray-700',
+    gray:   'bg-control text-gray-700',
     orange: 'bg-brand-100 text-brand-700',
     red:    'bg-red-100 text-red-700',
     green:  'bg-green-100 text-green-700',
@@ -183,7 +183,7 @@ export function StatusBadge({ status }) {
 export function EmptyState({ icon: Icon, title, description, action }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-      {Icon && <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-4"><Icon size={26} className="text-gray-400" /></div>}
+      {Icon && <div className="w-14 h-14 rounded-2xl bg-control flex items-center justify-center mb-4"><Icon size={26} className="text-gray-400" /></div>}
       <p className="text-sm font-semibold text-gray-700 mb-1">{title}</p>
       {description && <p className="text-xs text-gray-400 mb-4 max-w-xs">{description}</p>}
       {action}
@@ -240,7 +240,7 @@ export function ThemeToggle({ className = '' }) {
       onClick={toggleTheme}
       aria-label="Ganti tema"
       title={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}
-      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 ${className || 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 ${className || 'bg-control text-gray-600 hover:bg-control-hover'}`}
     >
       {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
     </button>

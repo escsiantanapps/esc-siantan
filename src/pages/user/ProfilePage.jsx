@@ -190,7 +190,7 @@ export default function ProfilePage() {
         {/* Pengaturan */}
         <Card className="p-2">
           <Link to="/pengaturan" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
-            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0">
+            <div className="w-10 h-10 rounded-full bg-control flex items-center justify-center text-gray-600 shrink-0">
               <Settings size={18} />
             </div>
             <div className="flex-1 min-w-0">

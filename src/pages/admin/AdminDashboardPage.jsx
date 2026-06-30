@@ -154,7 +154,7 @@ export default function AdminDashboardPage() {
             </div>
             {storage && <span className={`text-sm font-bold ${SC.text}`}>{Math.round(storagePct)}%</span>}
           </div>
-          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-2.5 bg-control rounded-full overflow-hidden">
             <div className={`h-full rounded-full transition-all ${SC.bar}`} style={{ width: `${storagePct}%` }} />
           </div>
           {storage && <p className={`text-xs mt-2 ${SC.text}`}>{SC.msg}</p>}

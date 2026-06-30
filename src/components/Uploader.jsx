@@ -91,7 +91,7 @@ export default function Uploader({
             type="button" onClick={pick} disabled={uploading}
             className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50/40 transition-colors text-left disabled:opacity-60"
           >
-            <div className="w-9 h-9 rounded-lg bg-gray-100 text-gray-400 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-lg bg-control text-gray-400 flex items-center justify-center shrink-0">
               {uploading ? <Spin /> : <Paperclip size={16} />}
             </div>
             <div className="min-w-0">

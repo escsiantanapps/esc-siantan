@@ -255,7 +255,7 @@ export default function AdminTaskFormPage() {
               type="button"
               onClick={() => toggleDay(day)}
               className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors
-                ${form.active_days.includes(day) ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+                ${form.active_days.includes(day) ? 'gradient-main text-white' : 'bg-control text-gray-500'}`}
             >
               {day.slice(0, 3)}
             </button>
@@ -274,7 +274,7 @@ export default function AdminTaskFormPage() {
           <button
             type="button" role="switch" aria-checked={form.once_per_day}
             onClick={() => set('once_per_day', !form.once_per_day)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${form.once_per_day ? 'bg-brand-500' : 'bg-gray-200'}`}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${form.once_per_day ? 'bg-brand-500' : 'bg-control-hover'}`}
           >
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.once_per_day ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
@@ -291,7 +291,7 @@ export default function AdminTaskFormPage() {
           <button
             type="button" role="switch" aria-checked={form.reminder_enabled}
             onClick={() => set('reminder_enabled', !form.reminder_enabled)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${form.reminder_enabled ? 'bg-brand-500' : 'bg-gray-200'}`}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${form.reminder_enabled ? 'bg-brand-500' : 'bg-control-hover'}`}
           >
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.reminder_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
@@ -304,7 +304,7 @@ export default function AdminTaskFormPage() {
                 <button
                   key={day} type="button" onClick={() => toggleReminderDay(day)}
                   className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors
-                    ${form.reminder_days.includes(day) ? 'gradient-main text-white' : 'bg-gray-100 text-gray-500'}`}
+                    ${form.reminder_days.includes(day) ? 'gradient-main text-white' : 'bg-control text-gray-500'}`}
                 >
                   {day.slice(0, 3)}
                 </button>
@@ -347,7 +347,7 @@ export default function AdminTaskFormPage() {
           {form.bg_type === 'none' && 'Tanpa background'}
         </div>
         {/* Mode */}
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+        <div className="flex gap-1 p-1 bg-control rounded-xl">
           {[['none', 'Tidak ada'], ['preset', 'Pilihan'], ['image', 'Gambar']].map(([val, label]) => (
             <button key={val} type="button"
               onClick={() => { set('bg_type', val); if (val === 'none') set('bg_value', '') }}
