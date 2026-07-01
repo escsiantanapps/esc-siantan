@@ -4,6 +4,7 @@ import { HeartPulse, CalendarOff, Trash2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { leavesService, LEAVE_TYPES } from '@/services/leavesService'
+import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { Card, Spinner, GradientHeader, Button, Input, Select, Textarea, StatusBadge, EmptyState } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
@@ -20,6 +21,7 @@ export default function UserLeavePage() {
   const { toast, confirm } = useToast()
 
   const [list, setList] = useState([])
+  const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -27,11 +29,15 @@ export default function UserLeavePage() {
 
   const today = isoMinusDays(0)
   const minStart = isoMinusDays(2) // anti-backdate: maksimal mundur 2 hari
-  const [form, setForm] = useState({ type: 'Sakit', start_date: today, end_date: today, reason: '', proof_url: '' })
+  const [form, setForm] = useState({ type: 'Sakit', start_date: today, end_date: today, reason: '', proof_url: '', form_id: '' })
 
   useEffect(() => {
-    if (profile && isVolunteer) load()
-    else if (profile) setLoading(false)
+    if (profile && isVolunteer) {
+      load()
+      tasksService.getTemplates()
+        .then(all => setTemplates(all.filter(t => canAccessTemplate(t, profile))))
+        .catch(() => {})
+    } else if (profile) setLoading(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
@@ -66,6 +72,7 @@ export default function UserLeavePage() {
     if (!form.proof_url) { setError('Bukti foto wajib diunggah.'); return }
     setSaving(true)
     try {
+      const selectedTpl = form.form_id ? templates.find(t => t.form_id === form.form_id) : null
       await leavesService.create({
         userId: profile.user_id,
         type: form.type,
@@ -73,8 +80,10 @@ export default function UserLeavePage() {
         endDate: form.end_date,
         reason: form.reason,
         proofUrl: form.proof_url,
+        formId: form.form_id || null,
+        formTitle: selectedTpl?.title || null,
       })
-      setForm({ type: 'Sakit', start_date: today, end_date: today, reason: '', proof_url: '' })
+      setForm({ type: 'Sakit', start_date: today, end_date: today, reason: '', proof_url: '', form_id: '' })
       toast.success('Pengajuan terkirim. Menunggu persetujuan admin.')
       load()
     } catch (err) {
@@ -114,6 +123,12 @@ export default function UserLeavePage() {
             <Select label="Jenis" value={form.type} onChange={e => set('type', e.target.value)}>
               {LEAVE_TYPES.map(tp => <option key={tp} value={tp}>{tp}</option>)}
             </Select>
+            {templates.length > 0 && (
+              <Select label="Untuk Tugas/Form" value={form.form_id} onChange={e => set('form_id', e.target.value)}>
+                <option value="">(Pilih tugas yang ditinggalkan, opsional)</option>
+                {templates.map(t => <option key={t.form_id} value={t.form_id}>{t.title}</option>)}
+              </Select>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Input label="Tanggal Mulai" type="date" min={minStart} value={form.start_date} onChange={e => set('start_date', e.target.value)} />
               <Input label="Tanggal Selesai" type="date" min={form.start_date || minStart} value={form.end_date} onChange={e => set('end_date', e.target.value)} />
@@ -146,7 +161,9 @@ export default function UserLeavePage() {
                 <div key={it.leave_id} className="p-3.5">
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{it.type} · {formatDate(it.start_date)} – {formatDate(it.end_date)}</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {it.type}{it.form_title ? ` — ${it.form_title}` : ''} · {formatDate(it.start_date)} – {formatDate(it.end_date)}
+                      </p>
                       {it.reason && <p className="text-xs text-gray-400 truncate">{it.reason}</p>}
                     </div>
                     <StatusBadge status={it.status} />

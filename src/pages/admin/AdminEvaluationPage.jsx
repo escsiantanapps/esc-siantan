@@ -45,12 +45,11 @@ export default function AdminEvaluationPage() {
       setTemplates(tmpls)
       setMinistries(mins)
       setKomselList(komsel)
-      if (tmpls.length > 0) setFormId(tmpls[0].form_id)
     }).catch(() => {}).finally(() => setLoadingMeta(false))
   }, [])
 
   useEffect(() => {
-    if (loadingMeta || !formId) { setLoading(false); return }
+    if (loadingMeta) { setLoading(false); return }
     setLoading(true)
     evaluationService.getEvaluation({ startDate, endDate, formId, ministryId, komselId, role })
       .then(setRows)
@@ -73,10 +72,8 @@ export default function AdminEvaluationPage() {
     KOSONG: filteredRows.filter(r => r.status === 'KOSONG').length,
   }), [filteredRows])
 
-  // Cetak laporan: buka jendela print-friendly berisi ringkasan + tabel sesuai
-  // filter aktif. Memakai window.print() bawaan (tanpa dependensi PDF).
   function printReport() {
-    const tmplTitle = templates.find(tm => tm.form_id === formId)?.title || '-'
+    const tmplTitle = formId ? (templates.find(tm => tm.form_id === formId)?.title || '-') : 'Semua Form'
     const periode = `${formatDate(startDate)} – ${formatDate(endDate)}`
     const statusLabel = { TERPENUHI: t('aev.fulfilled'), PROSES: t('aev.inProgress'), KOSONG: t('aev.empty') }
     const meta = [
@@ -171,7 +168,7 @@ export default function AdminEvaluationPage() {
         </div>
         <div className="grid sm:grid-cols-2 gap-3">
           <Select label={t('aev.form')} value={formId} onChange={e => setFormId(e.target.value)}>
-            {templates.length === 0 && <option value="">{t('aev.noForm')}</option>}
+            <option value="">Semua Form</option>
             {templates.map(tm => <option key={tm.form_id} value={tm.form_id}>{tm.title}</option>)}
           </Select>
           <Select label={t('aev.role')} value={role} onChange={e => setRole(e.target.value)}>
@@ -231,11 +228,14 @@ export default function AdminEvaluationPage() {
           ) : (
             <Card className="divide-y divide-gray-100">
               {filteredRows.map(r => (
-                <div key={r.user.user_id} className="flex items-center gap-3 p-3.5">
+                <div key={`${r.user.user_id}-${r.form?.form_id}`} className="flex items-center gap-3 p-3.5">
                   <Avatar name={r.user.name} src={r.user.photo_url} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{r.user.name}</p>
-                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    {!formId && r.form && (
+                      <p className="text-[10px] font-semibold text-brand-500 truncate">{r.form.title}</p>
+                    )}
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       {(r.user.ministry_ids || []).slice(0, 2).map(id => (
                         ministryMap[id] && <Badge key={id} color="gray" className="text-[10px]! py-0!">{ministryMap[id]}</Badge>
                       ))}

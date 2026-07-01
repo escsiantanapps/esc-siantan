@@ -60,7 +60,9 @@ export default function AdminLeavesPage() {
                 <Avatar name={it.users?.name} src={it.users?.photo_url} size="sm" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{it.users?.name || '-'}</p>
-                  <p className="text-xs text-gray-400">{it.type} · {formatDate(it.start_date)} – {formatDate(it.end_date)}</p>
+                  <p className="text-xs text-gray-400">
+                    {it.type}{it.form_title ? ` — ${it.form_title}` : ''} · {formatDate(it.start_date)} – {formatDate(it.end_date)}
+                  </p>
                 </div>
                 <StatusBadge status={it.status} />
               </div>

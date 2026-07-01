@@ -1063,3 +1063,14 @@ DROP POLICY IF EXISTS "users_admin_insert" ON users;
 CREATE POLICY "users_admin_insert" ON users FOR INSERT WITH CHECK (
   auth_user_role() IN ('Admin', 'Super Admin') AND auth_id IS NULL
 );
+
+-- ── Migrasi v27: nama sesi per kelas + spesifikasi tugas di izin ──────────
+-- 1. classes.session_names TEXT[] — nama opsional per sesi, indeks 0 = sesi 1.
+--    Admin bisa beri nama deskriptif (cth: ['Doktrin Keselamatan','Doa']).
+-- 2. task_leaves.form_id TEXT + form_title TEXT — Volunteer bisa menyertakan
+--    form/tugas mana yang ditinggalkan saat mengajukan izin/sakit, untuk
+--    memudahkan Admin memvalidasi dan evaluasi dapat mempertimbangkan izin tsb.
+-- Jalankan blok ini sekali di Supabase SQL Editor.
+ALTER TABLE classes       ADD COLUMN IF NOT EXISTS session_names TEXT[];
+ALTER TABLE task_leaves   ADD COLUMN IF NOT EXISTS form_id    TEXT;
+ALTER TABLE task_leaves   ADD COLUMN IF NOT EXISTS form_title TEXT;

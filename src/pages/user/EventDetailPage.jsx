@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Calendar, MapPin, Clock, MessageCircle, CheckCircle2 } from 'lucide-react'
+import { Calendar, MapPin, Clock, MessageCircle, CheckCircle2, ScanLine } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { eventsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState, StatusBadge } from '@/components/ui'
@@ -70,7 +70,7 @@ export default function EventDetailPage() {
                   </div>
                   {event.event_time && (
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Clock size={15} className="text-brand-500" /> {event.event_time}
+                      <Clock size={15} className="text-brand-500" /> {event.event_time.slice(0, 5)}
                     </div>
                   )}
                   {event.location && (
@@ -91,13 +91,18 @@ export default function EventDetailPage() {
             )}
 
             {registration ? (
-              <Card className="p-4 flex items-center gap-3 bg-green-50 border-green-100">
-                <CheckCircle2 size={20} className="text-green-500" />
-                <div>
-                  <p className="text-sm font-semibold text-green-700">{t('eventDetail.registered')}</p>
-                  <p className="text-xs text-green-600">{t('eventDetail.ticket')}: {registration.ticket_id}</p>
-                </div>
-              </Card>
+              <>
+                <Card className="p-4 flex items-center gap-3 bg-green-50 border-green-100">
+                  <CheckCircle2 size={20} className="text-green-500" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-700">{t('eventDetail.registered')}</p>
+                    <p className="text-xs text-green-600">{t('eventDetail.ticket')}: {registration.ticket_id}</p>
+                  </div>
+                </Card>
+                <Button variant="outline" className="w-full" onClick={() => navigate('/scan')}>
+                  <ScanLine size={16} /> Scan QR Kehadiran
+                </Button>
+              </>
             ) : event.status === 'Aktif' ? (
               <Button className="w-full" size="lg" loading={registering} onClick={handleRegister}>
                 {t('eventDetail.register')}

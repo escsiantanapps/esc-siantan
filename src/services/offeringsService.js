@@ -4,7 +4,6 @@ export const OFFERING_CATEGORIES = [
   'Perpuluhan',
   'Persembahan',
   'Persembahan Syukur',
-  'Misi',
   'Diakonia',
   'Pembangunan',
   'Lainnya',

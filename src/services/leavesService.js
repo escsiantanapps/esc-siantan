@@ -12,7 +12,7 @@ export const leavesService = {
     return data
   },
 
-  async create({ userId, type, startDate, endDate, reason, proofUrl }) {
+  async create({ userId, type, startDate, endDate, reason, proofUrl, formId, formTitle }) {
     const { data, error } = await supabase.from('task_leaves').insert({
       user_id: userId,
       type,
@@ -20,6 +20,8 @@ export const leavesService = {
       end_date: endDate,
       reason: reason || null,
       proof_url: proofUrl || null,
+      form_id: formId || null,
+      form_title: formTitle || null,
     }).select().single()
     if (error) throw error
     return data

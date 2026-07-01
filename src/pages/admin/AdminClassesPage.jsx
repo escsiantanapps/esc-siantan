@@ -11,7 +11,7 @@ import { Card, PageHeader, Button, Input, Textarea, Select, Spinner, EmptyState,
 import { formatDate } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
 
-const emptyForm = { name: '', description: '', schedule: '', location: '', teacher: '', status: 'Aktif', total_sessions: 1 }
+const emptyForm = { name: '', description: '', schedule: '', location: '', teacher: '', status: 'Aktif', total_sessions: 1, session_names: [''] }
 
 export default function AdminClassesPage() {
   const { toast, confirm } = useToast()
@@ -96,6 +96,7 @@ export default function AdminClassesPage() {
 
   function openEdit(cls) {
     setEditing(cls)
+    const n = cls.total_sessions || 1
     setForm({
       name: cls.name || '',
       description: cls.description || '',
@@ -103,7 +104,8 @@ export default function AdminClassesPage() {
       location: cls.location || '',
       teacher: cls.teacher || '',
       status: cls.status || 'Aktif',
-      total_sessions: cls.total_sessions || 1,
+      total_sessions: n,
+      session_names: Array.from({ length: n }, (_, i) => (cls.session_names || [])[i] || ''),
     })
     setError('')
     setShowModal(true)
@@ -252,13 +254,41 @@ export default function AdminClassesPage() {
             <Input label={t('acls.location')} value={form.location} onChange={e => set('location', e.target.value)} />
             <Input label={t('acls.teacher')} value={form.teacher} onChange={e => set('teacher', e.target.value)} />
             <div className="grid grid-cols-2 gap-3">
-              <Input label={t('acls.totalSessions')} type="number" min="1" value={form.total_sessions} onChange={e => set('total_sessions', e.target.value)} />
+              <Input
+                label={t('acls.totalSessions')} type="number" min="1" value={form.total_sessions}
+                onChange={e => {
+                  const n = Math.max(1, Number(e.target.value) || 1)
+                  setForm(p => ({
+                    ...p,
+                    total_sessions: n,
+                    session_names: Array.from({ length: n }, (_, i) => (p.session_names || [])[i] || ''),
+                  }))
+                }}
+              />
               <Select label={t('acls.statusLabel')} value={form.status} onChange={e => set('status', e.target.value)}>
                 <option value="Aktif">{t('status.Aktif')}</option>
                 <option value="Nonaktif">{t('status.Nonaktif')}</option>
               </Select>
             </div>
             <p className="text-xs text-gray-400">{t('acls.sessionsHint')}</p>
+
+            {/* Nama per sesi */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-gray-600">Nama Sesi (opsional)</p>
+              {Array.from({ length: Number(form.total_sessions) || 1 }, (_, i) => (
+                <Input
+                  key={i}
+                  label={`Sesi ${i + 1}`}
+                  placeholder="cth: Doktrin Keselamatan"
+                  value={(form.session_names || [])[i] || ''}
+                  onChange={e => {
+                    const names = [...(form.session_names || Array(Number(form.total_sessions) || 1).fill(''))]
+                    names[i] = e.target.value
+                    set('session_names', names)
+                  }}
+                />
+              ))}
+            </div>
 
             <div className="flex gap-2 pt-1">
               <Button variant="ghost" className="flex-1" onClick={() => setShowModal(false)}>{t('a.cancel')}</Button>
@@ -284,9 +314,10 @@ export default function AdminClassesPage() {
 
             <div className="text-left">
               <Select label={t('a.sessionN', { n: '' }).trim()} value={qrSession} onChange={e => setQrSession(Number(e.target.value))}>
-                {Array.from({ length: qrModal.total_sessions || 1 }, (_, i) => i + 1).map(n => (
-                  <option key={n} value={n}>{t('a.sessionN', { n })}</option>
-                ))}
+                {Array.from({ length: qrModal.total_sessions || 1 }, (_, i) => i + 1).map(n => {
+                  const sName = (qrModal.session_names || [])[n - 1]
+                  return <option key={n} value={n}>{sName ? `Sesi ${n}: ${sName}` : t('a.sessionN', { n })}</option>
+                })}
               </Select>
             </div>
 
@@ -295,7 +326,11 @@ export default function AdminClassesPage() {
             ) : (
               <div className="flex justify-center py-10"><Spinner /></div>
             )}
-            <p className="text-xs text-gray-400">{t('acls.qrHint', { n: qrSession })}</p>
+            <p className="text-xs text-gray-400">
+              {(qrModal.session_names || [])[qrSession - 1]
+                ? `QR Sesi ${qrSession}: ${qrModal.session_names[qrSession - 1]}`
+                : t('acls.qrHint', { n: qrSession })}
+            </p>
             {qrDataUrl && (
               <a href={qrDataUrl} download={`QR-${qrModal.name}-Sesi${qrSession}.png`}>
                 <Button variant="outline" className="w-full"><Download size={15} /> {t('a.downloadQr')}</Button>
@@ -327,9 +362,10 @@ export default function AdminClassesPage() {
             <div className="grid grid-cols-2 gap-2">
               <Select value={attSession} onChange={e => setAttSession(e.target.value)}>
                 <option value="">{t('a.allSessions')}</option>
-                {Array.from({ length: attModal.total_sessions || 1 }, (_, i) => i + 1).map(n => (
-                  <option key={n} value={n}>{t('a.sessionN', { n })}</option>
-                ))}
+                {Array.from({ length: attModal.total_sessions || 1 }, (_, i) => i + 1).map(n => {
+                  const sName = (attModal.session_names || [])[n - 1]
+                  return <option key={n} value={n}>{sName ? `Sesi ${n}: ${sName}` : t('a.sessionN', { n })}</option>
+                })}
               </Select>
               <Input type="date" value={attDate} onChange={e => setAttDate(e.target.value)} />
             </div>

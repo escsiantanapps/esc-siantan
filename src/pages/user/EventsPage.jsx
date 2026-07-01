@@ -77,7 +77,7 @@ export default function EventsPage() {
                 <h3 className="text-xl font-bold text-white">{featured.name}</h3>
                 <div className="flex flex-wrap items-center gap-3 mt-1.5 text-white/90 text-xs">
                   <span className="flex items-center gap-1">
-                    <Calendar size={13} /> {formatDate(featured.event_date)}{featured.event_time ? ` · ${featured.event_time}` : ''}
+                    <Calendar size={13} /> {formatDate(featured.event_date)}{featured.event_time ? ` · ${featured.event_time.slice(0, 5)}` : ''}
                   </span>
                   {featured.location && <span className="flex items-center gap-1"><MapPin size={13} /> {featured.location}</span>}
                 </div>
@@ -101,7 +101,7 @@ export default function EventsPage() {
                     <StatusBadge status={ev.status} />
                   </div>
                   <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                    <Clock size={11} /> {ev.event_time || formatDate(ev.event_date)}
+                    <Clock size={11} /> {ev.event_time ? ev.event_time.slice(0, 5) : formatDate(ev.event_date)}
                   </p>
                   {ev.location && (
                     <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1"><MapPin size={11} /> {ev.location}</p>
