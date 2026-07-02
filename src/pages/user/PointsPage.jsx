@@ -69,6 +69,12 @@ export default function PointsPage() {
         {/* Katalog tukar poin */}
         {!loading && tab === 'katalog' && (
           <>
+            {/* Banner promo Natal */}
+            <div className="mb-4 rounded-2xl px-4 py-3 bg-gradient-to-r from-red-500 to-green-600 text-white flex items-center gap-3 shadow-sm">
+              <Gift size={22} className="shrink-0" />
+              <p className="text-sm font-semibold leading-snug">🎄 Tukarkan dengan hadiah natal di Tanggal 25 Desember</p>
+            </div>
+
             <Card className="p-3.5 mb-4 flex items-center gap-3 bg-brand-50 border-brand-100">
               <ScanLine size={18} className="text-brand-500 shrink-0" />
               <p className="text-xs text-brand-700 flex-1">Tunjukkan tiket QR dari admin, lalu pindai lewat tombol Scan untuk menukar poin.</p>

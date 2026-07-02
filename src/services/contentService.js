@@ -594,9 +594,18 @@ export const appSettingsService = {
   },
 
   async set(key, value) {
-    const { error } = await supabase
-      .from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() })
+    // .select() + cek baris kembali: bila RLS diam-diam menyaring tulisan
+    // (mis. bukan Admin/Super Admin, atau kunci tak diizinkan policy), upsert
+    // bisa "sukses" tanpa error tapi 0 baris tersimpan — deteksi & laporkan.
+    const { data, error } = await supabase
+      .from('app_settings')
+      .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      .select()
     if (error) throw error
+    if (!data || data.length === 0) {
+      throw new Error('Perubahan tidak tersimpan (akses ditolak). Hanya Admin/Super Admin yang dapat mengubah pengaturan ini.')
+    }
+    return data[0]
   },
 }
 

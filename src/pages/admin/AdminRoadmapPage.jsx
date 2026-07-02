@@ -18,16 +18,16 @@ export default function AdminRoadmapPage() {
   const [saving, setSaving] = useState(false)
   const [uploadingIdx, setUploadingIdx] = useState(-1)
 
+  async function loadFromDb() {
+    const map = await appSettingsService.getMany(['discipleship_roadmap', 'roadmap_show_count'])
+    const v = map.discipleship_roadmap
+    if (Array.isArray(v) && v.length > 0 && v.every(s => s && s.title)) setStages(v)
+    const n = Number(map.roadmap_show_count)
+    if (Number.isFinite(n) && n >= 0) setShowCount(n)
+  }
+
   useEffect(() => {
-    appSettingsService.getMany(['discipleship_roadmap', 'roadmap_show_count'])
-      .then(map => {
-        const v = map.discipleship_roadmap
-        if (Array.isArray(v) && v.length > 0 && v.every(s => s && s.title)) setStages(v)
-        const n = Number(map.roadmap_show_count)
-        if (Number.isFinite(n) && n >= 0) setShowCount(n)
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    loadFromDb().catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   function setStage(i, key, val) {
@@ -58,9 +58,12 @@ export default function AdminRoadmapPage() {
     try {
       await appSettingsService.set('discipleship_roadmap', stages)
       await appSettingsService.set('roadmap_show_count', Math.max(0, Number(showCount) || 0))
+      // Muat ulang dari DB supaya yang tampil = yang benar-benar tersimpan
+      // (bukan sekadar state lokal) — konfirmasi visual persistensi.
+      await loadFromDb()
       toast.success('Roadmap tersimpan.')
     } catch (err) {
-      toast.error(err.message || 'Gagal menyimpan (hanya Super Admin yang dapat menulis pengaturan).')
+      toast.error(err.message || 'Gagal menyimpan pengaturan roadmap.')
     } finally {
       setSaving(false)
     }
