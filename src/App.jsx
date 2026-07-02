@@ -7,6 +7,7 @@ import { ToastProvider } from '@/contexts/ToastContext'
 import { useAuth } from '@/hooks/useAuth'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import OfflineBanner from '@/components/OfflineBanner'
+import InstallPrompt from '@/components/InstallPrompt'
 
 // Onboarding
 import OnboardingPage from '@/pages/OnboardingPage'
@@ -134,6 +135,7 @@ export default function App() {
       <AuthProvider>
         <ToastProvider>
         <OfflineBanner />
+        <InstallPrompt />
         <Suspense fallback={
           <div className="flex items-center justify-center h-screen">
             <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />

@@ -36,14 +36,19 @@ export default function UserLayout() {
   // back dari tab kembali ke Beranda dulu, baru dari Beranda minta konfirmasi.
   useExitConfirm(location.pathname === '/', () => toast.info(t('app.exitConfirm')))
 
+  // Panel PKS tampil layar penuh tanpa navbar jemaat — sama seperti panel
+  // admin. Kembali ke app jemaat lewat tombol back di header panel.
+  const inPanel = location.pathname.startsWith('/pks')
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto relative">
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto pb-24">
+      <main className={`flex-1 overflow-y-auto ${inPanel ? 'pb-6' : 'pb-24'}`}>
         <Outlet />
       </main>
 
       {/* Bottom navigation — bar mengambang dengan tombol Scan menonjol (FAB) */}
+      {!inPanel && (
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-surface rounded-t-[1.75rem] shadow-[0_-4px_24px_rgba(2,32,71,0.08)] z-50 pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-end px-2">
           {LEFT_ITEMS.map(item => <NavItem key={item.to} {...item} />)}
@@ -64,6 +69,7 @@ export default function UserLayout() {
           {RIGHT_ITEMS.map(item => <NavItem key={item.to} {...item} />)}
         </div>
       </nav>
+      )}
     </div>
   )
 }

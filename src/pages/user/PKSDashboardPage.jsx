@@ -220,7 +220,7 @@ export default function PKSDashboardPage() {
   if (!loading && ledKomsels.length === 0) {
     return (
       <div className="pb-4">
-        <GradientHeader title={t('pks.title')} subtitle={t('pks.subtitleLeader')} />
+        <GradientHeader title={t('pks.title')} subtitle={t('pks.subtitleLeader')} back={() => navigate('/profil')} />
         <div className="px-4 pt-4">
           <EmptyState icon={Users} title={t('pks.noKomsel')} description={t('pks.noKomselDesc')} />
         </div>
@@ -230,7 +230,7 @@ export default function PKSDashboardPage() {
 
   return (
     <div className="pb-4">
-      <GradientHeader title={t('pks.title')} subtitle={komsel?.name || t('profile.komsel')} />
+      <GradientHeader title={t('pks.title')} subtitle={komsel?.name || t('profile.komsel')} back={() => navigate('/profil')} />
 
       <div className="px-4 -mt-2 pt-4">
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}

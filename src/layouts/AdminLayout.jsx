@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
-  LayoutDashboard, LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, Tag
+  LayoutDashboard, LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, Tag, ArrowLeft
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
@@ -205,6 +205,17 @@ export default function AdminLayout() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar mobile */}
         <header className="lg:hidden bg-surface border-b border-gray-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-20">
+          {/* Kembali ke app jemaat — tujuan sama dgn panel switcher di sidebar.
+              Admin murni tanpa peran kedua tidak punya akses app jemaat. */}
+          {(!isAdminOnly || hasSecondaryAccess) && (
+            <button
+              onClick={() => navigate(isAdminOnly && isPKS ? '/pks' : '/')}
+              aria-label="Kembali ke aplikasi"
+              className="p-1 -ml-1 text-gray-500"
+            >
+              <ArrowLeft size={22} />
+            </button>
+          )}
           <button onClick={() => setOpen(true)} className="p-1 text-gray-500">
             <Menu size={22} />
           </button>

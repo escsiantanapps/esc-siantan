@@ -47,6 +47,14 @@ export const translations = {
     'settings.off': 'Nonaktif',
     'settings.notifications': 'Notifikasi',
     'settings.twaNotifHint': 'Notifikasi tidak masuk di app ini? Pada sebagian HP, coba buka {url} lewat Chrome → menu (⋮) → "Tambahkan ke Layar Utama" sebagai alternatif.',
+
+    // Popup ajakan pasang app (PWA via Chrome)
+    'install.title': 'Pasang Aplikasi ESC Siantan',
+    'install.desc': 'Pasang langsung dari Chrome — lebih cepat, layar penuh, dan notifikasi tetap masuk.',
+    'install.install': 'Pasang Aplikasi',
+    'install.manualAndroid': 'Buka menu Chrome (⋮) di kanan atas, lalu pilih "Tambahkan ke Layar Utama" atau "Instal aplikasi".',
+    'install.manualIos': 'Ketuk tombol Bagikan di Safari, lalu pilih "Tambah ke Layar Utama".',
+    'install.continueWeb': 'Tetap lanjut di website',
     'settings.language': 'Bahasa',
     'settings.languageDesc': 'Pilih bahasa aplikasi',
     'settings.logout': 'Keluar',
@@ -1026,6 +1034,14 @@ export const translations = {
     'settings.off': 'Off',
     'settings.notifications': 'Notifications',
     'settings.twaNotifHint': 'Not receiving notifications in this app? On some phones, try opening {url} in Chrome → menu (⋮) → "Add to Home Screen" as an alternative.',
+
+    // Install prompt (PWA via Chrome)
+    'install.title': 'Install the ESC Siantan App',
+    'install.desc': 'Install straight from Chrome — faster, full screen, and notifications keep working.',
+    'install.install': 'Install App',
+    'install.manualAndroid': 'Open the Chrome menu (⋮) in the top right, then choose "Add to Home Screen" or "Install app".',
+    'install.manualIos': 'Tap the Share button in Safari, then choose "Add to Home Screen".',
+    'install.continueWeb': 'Continue on website',
     'settings.language': 'Language',
     'settings.languageDesc': 'Choose the app language',
     'settings.logout': 'Log out',
