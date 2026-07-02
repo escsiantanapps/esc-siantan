@@ -578,28 +578,39 @@ export const certificatesService = {
 
 // ─── Pengaturan aplikasi (app_settings key/value) ──────────
 // Dibaca siapa saja (termasuk pra-login); ditulis Super Admin (RLS).
+//
+// PENTING: kolom `app_settings.value` di DB produksi bertipe TEXT (tabel dibuat
+// versi lama; schema.sql menyebut JSONB tapi belum diterapkan). Karena itu nilai
+// SELALU disimpan sebagai STRING JSON (stringify saat tulis) dan di-parse saat
+// baca. Pola ini aman baik untuk kolom text maupun jsonb — dan data lama yang
+// terlanjur tersimpan sebagai teks JSON (mis. '[{...}]', '50') tetap terbaca
+// benar lewat parse dengan fallback.
+function parseSetting(v) {
+  if (typeof v !== 'string') return v ?? null   // sudah objek (bila kolom jsonb)
+  try { return JSON.parse(v) } catch { return v } // teks biasa non-JSON → apa adanya
+}
+
 export const appSettingsService = {
   async get(key) {
     const { data, error } = await supabase
       .from('app_settings').select('value').eq('key', key).maybeSingle()
     if (error) throw error
-    return data?.value ?? null
+    return data ? parseSetting(data.value) : null
   },
 
   async getMany(keys) {
     const { data, error } = await supabase
       .from('app_settings').select('key, value').in('key', keys)
     if (error) throw error
-    return Object.fromEntries((data || []).map(r => [r.key, r.value]))
+    return Object.fromEntries((data || []).map(r => [r.key, parseSetting(r.value)]))
   },
 
   async set(key, value) {
-    // .select() + cek baris kembali: bila RLS diam-diam menyaring tulisan
-    // (mis. bukan Admin/Super Admin, atau kunci tak diizinkan policy), upsert
-    // bisa "sukses" tanpa error tapi 0 baris tersimpan — deteksi & laporkan.
+    // Simpan sebagai string JSON (lihat catatan di atas) + .select() untuk
+    // mendeteksi tulisan yang diam-diam tersaring RLS (0 baris tersimpan).
     const { data, error } = await supabase
       .from('app_settings')
-      .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      .upsert({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }, { onConflict: 'key' })
       .select()
     if (error) throw error
     if (!data || data.length === 0) {
