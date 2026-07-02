@@ -32,7 +32,7 @@ export default function InformationDetailPage() {
         {!loading && news && (
           <Card className="overflow-hidden">
             {news.thumbnail_url && (
-              <img src={news.thumbnail_url} alt={news.title} className="w-full h-44 object-cover" />
+              <img src={news.thumbnail_url} alt={news.title} className="w-full aspect-video object-cover" />
             )}
             <div className="p-4 space-y-3">
               <div>

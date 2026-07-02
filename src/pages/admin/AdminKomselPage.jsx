@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Users, Plus, Pencil, Trash2, X, Eye, Crown, Search, UserPlus, Tag } from 'lucide-react'
+import { Users, Plus, Pencil, Trash2, X, Eye, Crown, Search, UserPlus, Tag, CalendarCheck, ChevronDown } from 'lucide-react'
 import { komselService, komselCategoriesService } from '@/services/contentService'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
+import { formatDate } from '@/lib/utils'
 
 const emptyForm = { name: '', max_capacity: '', category_id: '' }
 
@@ -39,8 +40,16 @@ export default function AdminKomselPage() {
 
   const [catFilter, setCatFilter] = useState('')
 
-  useBackClose(showModal || !!membersView || !!pksView || showCatModal || !!assignView, () => {
-    setShowModal(false); setMembersView(null); setPksView(null); setShowCatModal(false); setAssignView(null)
+  // Absensi via sesi QR
+  const [sessionsView, setSessionsView] = useState(null)
+  const [sessions, setSessions] = useState([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [openSessionId, setOpenSessionId] = useState(null)
+  const [sessionRows, setSessionRows] = useState([])
+  const [sessionRowsLoading, setSessionRowsLoading] = useState(false)
+
+  useBackClose(showModal || !!membersView || !!pksView || showCatModal || !!assignView || !!sessionsView, () => {
+    setShowModal(false); setMembersView(null); setPksView(null); setShowCatModal(false); setAssignView(null); setSessionsView(null)
   })
   const [leaders, setLeaders] = useState([])
   const [leadersLoading, setLeadersLoading] = useState(false)
@@ -257,6 +266,52 @@ export default function AdminKomselPage() {
     }
   }
 
+  // Lihat daftar sesi absensi (yang dibuat PKS lewat QR) untuk sebuah komsel.
+  async function viewSessions(item) {
+    setSessionsView(item)
+    setOpenSessionId(null)
+    setSessionRows([])
+    setSessionsLoading(true)
+    try {
+      setSessions(await komselService.getSessions(item.komsel_id))
+    } catch {
+      setSessions([])
+    } finally {
+      setSessionsLoading(false)
+    }
+  }
+
+  // Buka/tutup rincian kehadiran satu sesi.
+  async function toggleSession(sessionId) {
+    if (openSessionId === sessionId) { setOpenSessionId(null); return }
+    setOpenSessionId(sessionId)
+    setSessionRowsLoading(true)
+    try {
+      setSessionRows(await komselService.getSessionAttendance(sessionId))
+    } catch {
+      setSessionRows([])
+    } finally {
+      setSessionRowsLoading(false)
+    }
+  }
+
+  async function deleteSession(session) {
+    const ok = await confirm({
+      title: 'Hapus sesi absensi?',
+      message: `Sesi "${session.title}" beserta data kehadirannya akan dihapus permanen.`,
+      confirmText: t('a.delete'), danger: true,
+    })
+    if (!ok) return
+    try {
+      await komselService.deleteSession(session.session_id)
+      setSessions(s => s.filter(x => x.session_id !== session.session_id))
+      if (openSessionId === session.session_id) setOpenSessionId(null)
+      toast.success('Sesi dihapus.')
+    } catch (err) {
+      toast.error(err.message || t('akom.deleteFailed'))
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -333,6 +388,9 @@ export default function AdminKomselPage() {
               <button onClick={() => openPks(item)} title={t('akom.managePks')} className="p-2 text-gray-400 hover:text-amber-500 shrink-0">
                 <Crown size={16} />
               </button>
+              <button onClick={() => viewSessions(item)} title="Absensi Sesi (QR)" className="p-2 text-gray-400 hover:text-teal-500 shrink-0">
+                <CalendarCheck size={16} />
+              </button>
               <button onClick={() => viewMembers(item)} title={t('akom.membersBtn')} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
                 <Eye size={16} />
               </button>
@@ -404,6 +462,73 @@ export default function AdminKomselPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Modal Absensi Sesi (QR) */}
+      {sessionsView && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                <CalendarCheck size={16} className="text-teal-500" /> Absensi Sesi — {sessionsView.name}
+              </h2>
+              <button onClick={() => setSessionsView(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-gray-400">Sesi absensi yang dibuat PKS; anggota mencatat kehadiran dengan memindai QR sesi.</p>
+
+            {sessionsLoading && <div className="flex justify-center py-8"><Spinner /></div>}
+
+            {!sessionsLoading && sessions.length === 0 && (
+              <EmptyState icon={CalendarCheck} title="Belum ada sesi" description="Belum ada sesi absensi QR yang dibuat untuk komsel ini." />
+            )}
+
+            {!sessionsLoading && sessions.length > 0 && (
+              <div className="space-y-2">
+                {sessions.map(s => {
+                  const open = openSessionId === s.session_id
+                  return (
+                    <div key={s.session_id} className="border border-gray-100 rounded-xl overflow-hidden">
+                      <div className="flex items-center gap-2 p-3">
+                        <button onClick={() => toggleSession(s.session_id)} className="flex-1 flex items-center gap-2 text-left min-w-0">
+                          <ChevronDown size={15} className={`text-gray-300 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{s.title}</p>
+                            <p className="text-xs text-gray-400">{formatDate(s.session_date)}</p>
+                          </div>
+                        </button>
+                        <button onClick={() => deleteSession(s)} className="p-1.5 text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
+                      </div>
+                      {open && (
+                        <div className="px-3 pb-3 border-t border-gray-100 pt-2">
+                          {sessionRowsLoading ? (
+                            <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+                          ) : sessionRows.length === 0 ? (
+                            <p className="text-xs text-gray-400 py-2">Belum ada anggota yang memindai sesi ini.</p>
+                          ) : (
+                            <>
+                              <p className="text-xs font-semibold text-gray-500 mb-2">Hadir ({sessionRows.length})</p>
+                              <div className="space-y-1.5">
+                                {sessionRows.map(r => (
+                                  <div key={r.attendance_id} className="flex items-center gap-2.5">
+                                    <Avatar name={r.users?.name} src={r.users?.photo_url} size="sm" />
+                                    <p className="text-sm text-gray-800 truncate flex-1">{r.users?.name || '-'}</p>
+                                    <Badge color="green">Hadir</Badge>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </Card>

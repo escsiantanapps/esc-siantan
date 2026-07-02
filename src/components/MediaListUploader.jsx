@@ -1,5 +1,6 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { UploadCloud, X, Video } from 'lucide-react'
+import ImageCropper from '@/components/ImageCropper'
 
 function Spin() {
   return <span className="w-5 h-5 border-2 rounded-full animate-spin border-brand-500 border-t-transparent" />
@@ -8,12 +9,15 @@ function Spin() {
 // Uploader daftar media (foto ATAU video) — dipakai admin untuk mengelola
 // galeri foto (maks 5) & video (maks 2) pada Kelas/Event/Informasi.
 // Logika unggah tetap di pemanggil lewat onAdd(file) → mengembalikan URL.
+// Foto dibingkai dulu lewat ImageCropper (rasio 16:9, sama dgn carousel) agar
+// tidak terpotong; video langsung diunggah.
 export default function MediaListUploader({
   kind = 'image',        // 'image' | 'video'
   label, hint, max = 5,
   urls = [], onChange, uploading,
 }) {
   const inputRef = useRef(null)
+  const [pendingFile, setPendingFile] = useState(null)
   const isVideo = kind === 'video'
   const full = urls.length >= max
 
@@ -21,12 +25,21 @@ export default function MediaListUploader({
   function onFile(e) {
     const f = e.target.files?.[0]
     e.target.value = ''
-    if (f) onChange({ type: 'add', file: f })
+    if (!f) return
+    if (isVideo) onChange({ type: 'add', file: f })
+    else setPendingFile(f)
   }
   function remove(i) { onChange({ type: 'remove', index: i }) }
 
   return (
     <div className="space-y-2">
+      {pendingFile && (
+        <ImageCropper
+          file={pendingFile} aspect={16 / 9}
+          onCancel={() => setPendingFile(null)}
+          onCropped={f => { setPendingFile(null); onChange({ type: 'add', file: f }) }}
+        />
+      )}
       {label && <label className="text-sm text-gray-600 font-medium">{label} <span className="text-gray-400 font-normal">({urls.length}/{max})</span></label>}
       <input
         ref={inputRef} type="file" className="hidden"

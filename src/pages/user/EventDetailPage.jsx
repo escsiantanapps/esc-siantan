@@ -57,7 +57,7 @@ export default function EventDetailPage() {
           <div className="space-y-4">
             <Card className="overflow-hidden">
               {event.thumbnail_url && (
-                <img src={event.thumbnail_url} alt={event.name} className="w-full h-44 object-cover" />
+                <img src={event.thumbnail_url} alt={event.name} className="w-full aspect-video object-cover" />
               )}
               <div className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">

@@ -163,7 +163,7 @@ export default function AdminEventFormPage() {
         <h2 className="text-sm font-semibold text-gray-900">Informasi Event</h2>
 
         <Uploader
-          kind="image" label="Gambar Sampul" hint="JPG/PNG, maks 5 MB"
+          kind="image" crop aspect={16 / 9} label="Gambar Sampul" hint="Atur bingkai (16:9) agar tidak terpotong · maks 5 MB"
           value={form.thumbnail_url} uploading={uploading}
           onFile={handleUpload} onClear={() => set('thumbnail_url', '')}
         />

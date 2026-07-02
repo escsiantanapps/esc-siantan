@@ -1,5 +1,6 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { UploadCloud, Paperclip, X, Eye } from 'lucide-react'
+import ImageCropper from '@/components/ImageCropper'
 
 function Spin({ light }) {
   return <span className={`w-5 h-5 border-2 rounded-full animate-spin ${light ? 'border-white border-t-transparent' : 'border-brand-500 border-t-transparent'}`} />
@@ -9,21 +10,33 @@ function Spin({ light }) {
 //   kind="image" → drop-area + pratinjau foto
 //   kind="file"  → kartu file + tautan lihat
 // Logika unggah tetap di pemanggil: `onFile(file)` dipanggil saat memilih.
+// Bila crop=true (khusus kind="image"), foto dibingkai dulu lewat ImageCropper
+// pada rasio `aspect` sebelum diteruskan ke onFile — supaya tidak terpotong.
 export default function Uploader({
   kind = 'file', value, onFile, onClear, uploading,
-  label, hint, accept, required,
+  label, hint, accept, required, crop = false, aspect = 16 / 9,
 }) {
   const inputRef = useRef(null)
+  const [pendingFile, setPendingFile] = useState(null)
   const pick = () => inputRef.current?.click()
   function onChange(e) {
     const f = e.target.files?.[0]
     e.target.value = ''
-    if (f) onFile(f)
+    if (!f) return
+    if (crop && kind === 'image') setPendingFile(f)
+    else onFile(f)
   }
   const defaultAccept = kind === 'image' ? 'image/*' : 'image/*,.pdf'
 
   return (
     <div className="space-y-1.5">
+      {pendingFile && (
+        <ImageCropper
+          file={pendingFile} aspect={aspect}
+          onCancel={() => setPendingFile(null)}
+          onCropped={f => { setPendingFile(null); onFile(f) }}
+        />
+      )}
       {label && (
         <label className="text-sm text-gray-600 font-medium">
           {label}{required && <span className="text-red-500 ml-0.5">*</span>}

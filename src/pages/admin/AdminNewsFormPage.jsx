@@ -156,7 +156,7 @@ export default function AdminNewsFormPage() {
         <h2 className="text-sm font-semibold text-gray-900">{t('anf.section')}</h2>
 
         <Uploader
-          kind="image" label={t('anf.cover')} hint={t('anf.coverHint')}
+          kind="image" crop aspect={16 / 9} label={t('anf.cover')} hint={t('anf.coverHint')}
           value={form.thumbnail_url} uploading={uploading}
           onFile={handleUpload} onClear={() => set('thumbnail_url', '')}
         />
