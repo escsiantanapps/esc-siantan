@@ -90,15 +90,17 @@ export default function LoginPage() {
           >
             <span className={`w-5 h-5 rounded-md flex items-center justify-center border transition
               ${remember ? 'bg-white border-white' : 'bg-white/10 border-white/50'}`}>
-              {remember && <Check size={13} className="text-gray-800" strokeWidth={3} />}
+              {remember && <Check size={13} className="text-[#1f2937]" strokeWidth={3} />}
             </span>
             {t('auth.rememberMe')}
           </button>
 
-          {/* Tombol Login (gradien hijau) */}
+          {/* Tombol Login — teks pakai warna gelap literal (bukan text-gray-900
+              yang di-remap jadi terang saat dark mode → tak terlihat di atas
+              tombol putih). */}
           <button
             type="submit" disabled={loading}
-            className="w-full mt-1 py-3.5 rounded-2xl font-display text-lg font-bold text-gray-900 bg-white shadow-lg shadow-black/20 transition active:scale-[0.99] hover:bg-white/90 disabled:opacity-70"
+            className="w-full mt-1 py-3.5 rounded-2xl font-display text-lg font-bold text-[#111827] bg-white shadow-lg shadow-black/20 transition active:scale-[0.99] hover:bg-white/90 disabled:opacity-70"
           >
             {loading ? '…' : t('auth.signIn')}
           </button>

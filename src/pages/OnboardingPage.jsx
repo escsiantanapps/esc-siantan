@@ -215,7 +215,7 @@ export default function OnboardingPage() {
             px-7 py-3 rounded-2xl font-bold text-sm shadow-lg transition-all duration-200
             active:scale-95 hover:scale-105
             ${isLast
-              ? 'bg-white text-gray-900'
+              ? 'bg-white text-[#111827]'
               : 'bg-white/20 border border-white/40 text-white hover:bg-white/30'
             }
           `}
