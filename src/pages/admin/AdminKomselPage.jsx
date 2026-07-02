@@ -40,16 +40,16 @@ export default function AdminKomselPage() {
 
   const [catFilter, setCatFilter] = useState('')
 
-  // Absensi via sesi QR
-  const [sessionsView, setSessionsView] = useState(null)
-  const [sessions, setSessions] = useState([])
-  const [sessionsLoading, setSessionsLoading] = useState(false)
+  // Rekap absensi sesi QR per bulan (section bawah halaman)
+  const thisMonth = new Date().toISOString().slice(0, 7)
+  const [recapKomselId, setRecapKomselId] = useState('')
+  const [recapMonth, setRecapMonth] = useState(thisMonth)
+  const [recap, setRecap] = useState(null) // { sessions, byMember: [{user_id,name,photo_url,count}] }
+  const [recapLoading, setRecapLoading] = useState(false)
   const [openSessionId, setOpenSessionId] = useState(null)
-  const [sessionRows, setSessionRows] = useState([])
-  const [sessionRowsLoading, setSessionRowsLoading] = useState(false)
 
-  useBackClose(showModal || !!membersView || !!pksView || showCatModal || !!assignView || !!sessionsView, () => {
-    setShowModal(false); setMembersView(null); setPksView(null); setShowCatModal(false); setAssignView(null); setSessionsView(null)
+  useBackClose(showModal || !!membersView || !!pksView || showCatModal || !!assignView, () => {
+    setShowModal(false); setMembersView(null); setPksView(null); setShowCatModal(false); setAssignView(null)
   })
   const [leaders, setLeaders] = useState([])
   const [leadersLoading, setLeadersLoading] = useState(false)
@@ -266,34 +266,44 @@ export default function AdminKomselPage() {
     }
   }
 
-  // Lihat daftar sesi absensi (yang dibuat PKS lewat QR) untuk sebuah komsel.
-  async function viewSessions(item) {
-    setSessionsView(item)
+  // Muat rekap absensi sesi (QR) untuk komsel + bulan terpilih, lalu agregasi
+  // jumlah kehadiran tiap anggota pada bulan itu.
+  async function loadRecap(komselId, ym) {
+    if (!komselId || !ym) { setRecap(null); return }
+    setRecapLoading(true)
     setOpenSessionId(null)
-    setSessionRows([])
-    setSessionsLoading(true)
     try {
-      setSessions(await komselService.getSessions(item.komsel_id))
+      const sessions = await komselService.getSessionsInMonth(komselId, ym)
+      const rows = await komselService.getAttendanceForSessions(sessions.map(s => s.session_id))
+      // Hitung kehadiran per anggota + lampirkan daftar hadir ke tiap sesi.
+      const byMemberMap = new Map()
+      const perSession = {}
+      for (const r of rows) {
+        (perSession[r.session_id] ||= []).push(r)
+        const cur = byMemberMap.get(r.user_id) || { user_id: r.user_id, name: r.users?.name || '-', photo_url: r.users?.photo_url, count: 0 }
+        cur.count += 1
+        byMemberMap.set(r.user_id, cur)
+      }
+      const byMember = [...byMemberMap.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      const withRows = sessions.map(s => ({ ...s, attendees: perSession[s.session_id] || [] }))
+      setRecap({ sessions: withRows, byMember, total: rows.length })
     } catch {
-      setSessions([])
+      setRecap(null)
     } finally {
-      setSessionsLoading(false)
+      setRecapLoading(false)
     }
   }
 
-  // Buka/tutup rincian kehadiran satu sesi.
-  async function toggleSession(sessionId) {
-    if (openSessionId === sessionId) { setOpenSessionId(null); return }
-    setOpenSessionId(sessionId)
-    setSessionRowsLoading(true)
-    try {
-      setSessionRows(await komselService.getSessionAttendance(sessionId))
-    } catch {
-      setSessionRows([])
-    } finally {
-      setSessionRowsLoading(false)
-    }
-  }
+  // Default: pilih komsel pertama begitu daftar termuat.
+  useEffect(() => {
+    if (!recapKomselId && komsel.length > 0) setRecapKomselId(komsel[0].komsel_id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [komsel])
+
+  useEffect(() => {
+    loadRecap(recapKomselId, recapMonth)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recapKomselId, recapMonth])
 
   async function deleteSession(session) {
     const ok = await confirm({
@@ -304,8 +314,8 @@ export default function AdminKomselPage() {
     if (!ok) return
     try {
       await komselService.deleteSession(session.session_id)
-      setSessions(s => s.filter(x => x.session_id !== session.session_id))
       if (openSessionId === session.session_id) setOpenSessionId(null)
+      loadRecap(recapKomselId, recapMonth)
       toast.success('Sesi dihapus.')
     } catch (err) {
       toast.error(err.message || t('akom.deleteFailed'))
@@ -388,9 +398,6 @@ export default function AdminKomselPage() {
               <button onClick={() => openPks(item)} title={t('akom.managePks')} className="p-2 text-gray-400 hover:text-amber-500 shrink-0">
                 <Crown size={16} />
               </button>
-              <button onClick={() => viewSessions(item)} title="Absensi Sesi (QR)" className="p-2 text-gray-400 hover:text-teal-500 shrink-0">
-                <CalendarCheck size={16} />
-              </button>
               <button onClick={() => viewMembers(item)} title={t('akom.membersBtn')} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
                 <Eye size={16} />
               </button>
@@ -403,6 +410,106 @@ export default function AdminKomselPage() {
             </div>
           ))}
         </Card>
+      )}
+
+      {/* ── Section: Rekap Absensi Sesi Komsel per Bulan ── */}
+      {!loading && komsel.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1.5">
+            <CalendarCheck size={16} className="text-teal-500" /> Rekap Absensi Sesi Komsel
+          </h2>
+          <p className="text-xs text-gray-400 mb-3">Kehadiran anggota dari sesi absensi QR yang dibuat PKS, dirangkum per bulan.</p>
+
+          <Card className="p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Select label="Komsel" value={recapKomselId} onChange={e => setRecapKomselId(e.target.value)}>
+                {komsel.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
+              </Select>
+              <Input label="Bulan" type="month" value={recapMonth} onChange={e => setRecapMonth(e.target.value)} />
+            </div>
+
+            {recapLoading && <div className="flex justify-center py-8"><Spinner /></div>}
+
+            {!recapLoading && recap && recap.sessions.length === 0 && (
+              <EmptyState icon={CalendarCheck} title="Belum ada sesi bulan ini" description="Tidak ada sesi absensi QR pada komsel & bulan ini." />
+            )}
+
+            {!recapLoading && recap && recap.sessions.length > 0 && (
+              <>
+                {/* Ringkasan */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-teal-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-teal-600">{recap.sessions.length}</p>
+                    <p className="text-[11px] text-gray-500">sesi bulan ini</p>
+                  </div>
+                  <div className="rounded-xl bg-brand-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-brand-600">{recap.total}</p>
+                    <p className="text-[11px] text-gray-500">total kehadiran</p>
+                  </div>
+                </div>
+
+                {/* Rekap per anggota */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-2">Kehadiran per Anggota</p>
+                  {recap.byMember.length === 0 ? (
+                    <p className="text-xs text-gray-400">Belum ada anggota yang memindai sesi bulan ini.</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {recap.byMember.map(m => (
+                        <div key={m.user_id} className="flex items-center gap-3 py-2">
+                          <Avatar name={m.name} src={m.photo_url} size="sm" />
+                          <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                          <Badge color="green">{m.count}/{recap.sessions.length} hadir</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Daftar sesi (bisa dibuka utk lihat peserta) */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-2">Daftar Sesi</p>
+                  <div className="space-y-2">
+                    {recap.sessions.map(s => {
+                      const open = openSessionId === s.session_id
+                      return (
+                        <div key={s.session_id} className="border border-gray-100 rounded-xl overflow-hidden">
+                          <div className="flex items-center gap-2 p-3">
+                            <button onClick={() => setOpenSessionId(open ? null : s.session_id)} className="flex-1 flex items-center gap-2 text-left min-w-0">
+                              <ChevronDown size={15} className={`text-gray-300 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{s.title}</p>
+                                <p className="text-xs text-gray-400">{formatDate(s.session_date)} · {s.attendees.length} hadir</p>
+                              </div>
+                            </button>
+                            <button onClick={() => deleteSession(s)} className="p-1.5 text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
+                          </div>
+                          {open && (
+                            <div className="px-3 pb-3 border-t border-gray-100 pt-2">
+                              {s.attendees.length === 0 ? (
+                                <p className="text-xs text-gray-400 py-1">Belum ada anggota yang memindai sesi ini.</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {s.attendees.map(r => (
+                                    <div key={r.user_id} className="flex items-center gap-2.5">
+                                      <Avatar name={r.users?.name} src={r.users?.photo_url} size="sm" />
+                                      <p className="text-sm text-gray-800 truncate flex-1">{r.users?.name || '-'}</p>
+                                      <Badge color="green">Hadir</Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
       )}
 
       {showModal && (
@@ -462,73 +569,6 @@ export default function AdminKomselPage() {
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-          </Card>
-        </div>
-      )}
-
-      {/* Modal Absensi Sesi (QR) */}
-      {sessionsView && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md p-4 space-y-3 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
-                <CalendarCheck size={16} className="text-teal-500" /> Absensi Sesi — {sessionsView.name}
-              </h2>
-              <button onClick={() => setSessionsView(null)} className="text-gray-400 hover:text-gray-600">
-                <X size={18} />
-              </button>
-            </div>
-            <p className="text-xs text-gray-400">Sesi absensi yang dibuat PKS; anggota mencatat kehadiran dengan memindai QR sesi.</p>
-
-            {sessionsLoading && <div className="flex justify-center py-8"><Spinner /></div>}
-
-            {!sessionsLoading && sessions.length === 0 && (
-              <EmptyState icon={CalendarCheck} title="Belum ada sesi" description="Belum ada sesi absensi QR yang dibuat untuk komsel ini." />
-            )}
-
-            {!sessionsLoading && sessions.length > 0 && (
-              <div className="space-y-2">
-                {sessions.map(s => {
-                  const open = openSessionId === s.session_id
-                  return (
-                    <div key={s.session_id} className="border border-gray-100 rounded-xl overflow-hidden">
-                      <div className="flex items-center gap-2 p-3">
-                        <button onClick={() => toggleSession(s.session_id)} className="flex-1 flex items-center gap-2 text-left min-w-0">
-                          <ChevronDown size={15} className={`text-gray-300 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{s.title}</p>
-                            <p className="text-xs text-gray-400">{formatDate(s.session_date)}</p>
-                          </div>
-                        </button>
-                        <button onClick={() => deleteSession(s)} className="p-1.5 text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
-                      </div>
-                      {open && (
-                        <div className="px-3 pb-3 border-t border-gray-100 pt-2">
-                          {sessionRowsLoading ? (
-                            <div className="flex justify-center py-4"><Spinner size="sm" /></div>
-                          ) : sessionRows.length === 0 ? (
-                            <p className="text-xs text-gray-400 py-2">Belum ada anggota yang memindai sesi ini.</p>
-                          ) : (
-                            <>
-                              <p className="text-xs font-semibold text-gray-500 mb-2">Hadir ({sessionRows.length})</p>
-                              <div className="space-y-1.5">
-                                {sessionRows.map(r => (
-                                  <div key={r.attendance_id} className="flex items-center gap-2.5">
-                                    <Avatar name={r.users?.name} src={r.users?.photo_url} size="sm" />
-                                    <p className="text-sm text-gray-800 truncate flex-1">{r.users?.name || '-'}</p>
-                                    <Badge color="green">Hadir</Badge>
-                                  </div>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
               </div>
             )}
           </Card>

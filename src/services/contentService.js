@@ -448,6 +448,29 @@ export const komselService = {
     return data
   },
 
+  // Sesi absensi dalam satu bulan (ym = 'YYYY-MM') untuk rekap bulanan admin.
+  async getSessionsInMonth(komselId, ym) {
+    const [y, m] = ym.split('-').map(Number)
+    const start = `${ym}-01`
+    const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10) // hari terakhir bulan
+    const { data, error } = await supabase.from('komsel_sessions')
+      .select('*').eq('komsel_id', komselId)
+      .gte('session_date', start).lte('session_date', end)
+      .order('session_date', { ascending: false })
+    if (error) throw error
+    return data
+  },
+
+  // Semua kehadiran untuk sekumpulan sesi (dipakai agregasi rekap bulanan).
+  async getAttendanceForSessions(sessionIds) {
+    if (!sessionIds || sessionIds.length === 0) return []
+    const { data, error } = await supabase.from('komsel_attendance')
+      .select('session_id, user_id, users(name, photo_url)')
+      .in('session_id', sessionIds)
+    if (error) throw error
+    return data
+  },
+
   async getSessionById(sessionId) {
     const { data, error } = await supabase.from('komsel_sessions')
       .select('*, komsel(name)').eq('session_id', sessionId).single()
