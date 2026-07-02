@@ -168,6 +168,7 @@ export function StatusBadge({ status }) {
   const colors = {
     'Menunggu': 'orange', 'Sedang Ditinjau': 'amber', 'Disetujui': 'green',
     'Terjadwal': 'blue', 'Selesai': 'gray', 'Ditolak': 'red', 'Aktif': 'green',
+    'Mulai': 'blue', 'Sedang Berlangsung': 'green', 'Dibatalkan': 'red', 'Digunakan': 'gray',
     'Nonaktif': 'red', 'Menunggu Persetujuan': 'orange', 'Aman': 'green',
     'SP 1': 'orange', 'SP 2': 'red', 'SP 3': 'red', 'Hadir': 'green',
     'Tidak Hadir': 'red', 'Izin': 'amber', 'Terverifikasi': 'green',

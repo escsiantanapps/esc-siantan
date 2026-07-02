@@ -1,7 +1,7 @@
 import {
   Users, Calendar, Newspaper, BookOpen,
   ClipboardList, Droplets, Heart, AlertTriangle, BarChart3,
-  Layers, Network, HandCoins, CalendarOff, Baby, Award,
+  Layers, Network, HandCoins, CalendarOff, Baby, Award, Map, Gift, Church,
 } from 'lucide-react'
 
 // Daftar halaman admin yang aksesnya bisa dibatasi untuk role "Admin"
@@ -13,10 +13,13 @@ export const ADMIN_PAGES = [
   { to: '/admin/berita',   icon: Newspaper,     label: 'Berita & Info',      section: 'Konten',      labelKey: 'admin.nav.berita',      sectionKey: 'admin.sec.Konten' },
   { to: '/admin/events',   icon: Calendar,      label: 'Events',             section: 'Konten',      labelKey: 'admin.nav.events',      sectionKey: 'admin.sec.Konten' },
   { to: '/admin/kelas',    icon: BookOpen,      label: 'Kelas',              section: 'Konten',      labelKey: 'admin.nav.kelas',       sectionKey: 'admin.sec.Konten' },
+  { to: '/admin/roadmap',  icon: Map,           label: 'Roadmap Pemuridan',  section: 'Konten',      labelKey: 'admin.nav.roadmap',     sectionKey: 'admin.sec.Konten' },
   { to: '/admin/tugas',    icon: ClipboardList, label: 'Tugas & Form',       section: 'Pelayanan',   labelKey: 'admin.nav.tugas',       sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/evaluasi', icon: BarChart3,     label: 'Evaluasi & Laporan', section: 'Pelayanan',   labelKey: 'admin.nav.evaluasi',    sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/izin',     icon: CalendarOff,   label: 'Izin / Sakit',       section: 'Pelayanan',   labelKey: 'admin.nav.izin',        sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/persembahan', icon: HandCoins,  label: 'Persembahan',        section: 'Organisasi',  labelKey: 'admin.nav.persembahan', sectionKey: 'admin.sec.Organisasi' },
+  { to: '/admin/ibadah-minggu', icon: Church,   label: 'Ibadah Minggu',      section: 'Konten',      labelKey: 'admin.nav.ibadahMinggu', sectionKey: 'admin.sec.Konten' },
+  { to: '/admin/tukar-poin',  icon: Gift,       label: 'Tukar Poin',         section: 'Organisasi',  labelKey: 'admin.nav.tukarPoin',  sectionKey: 'admin.sec.Organisasi' },
   { to: '/admin/baptisan', icon: Droplets,      label: 'Baptisan',           section: 'Pelayanan',   labelKey: 'admin.nav.baptisan',    sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/nikah',    icon: Heart,         label: 'Pemberkatan Nikah',  section: 'Pelayanan',   labelKey: 'admin.nav.nikah',       sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/penyerahan-anak', icon: Baby,   label: 'Penyerahan Anak',    section: 'Pelayanan',   labelKey: 'admin.nav.dedikasi',    sectionKey: 'admin.sec.Pelayanan' },

@@ -61,7 +61,16 @@ supabase/schema.sql — SATU file berisi seluruh schema + riwayat migrasi bernom
 
 ## Konvensi Migrasi Database
 
-`supabase/schema.sql` adalah satu file akumulatif. Setiap perubahan skema ditambahkan sebagai blok baru di akhir file dengan header `-- ── Migrasi vNN: <deskripsi> ──`, lalu **dijalankan manual** oleh user di Supabase SQL Editor (tidak ada migration runner otomatis). Migrasi terbaru: **v26** (Admin bisa insert jemaat baru langsung).
+`supabase/schema.sql` adalah satu file akumulatif. Setiap perubahan skema ditambahkan sebagai blok baru di akhir file dengan header `-- ── Migrasi vNN: <deskripsi> ──`, lalu **dijalankan manual** oleh user di Supabase SQL Editor (tidak ada migration runner otomatis). Migrasi terbaru: **v28** (sistem poin, NIJ, kartu jemaat, sesi komsel QR, status 3-fase, media foto/video, biodata tambahan). v27 = nama sesi kelas + spesifikasi tugas di izin.
+
+### Sistem Poin (v28) — penting
+Saldo `users.points` **hanya** ditulis oleh fungsi Postgres `SECURITY DEFINER` (`apply_points`, dipanggil trigger kehadiran + RPC `award_biodata_points`/`redeem_ticket`). Klien TIDAK PERNAH meng-`update` kolom `points` langsung — trigger `guard_user_privilege_cols` menolaknya (escape hatch: `current_setting('app.allow_points_update')`). Semua akses poin dari klien lewat `src/services/pointsService.js` (RPC). +1 poin otomatis saat insert ke `class_attendance`/`event_attendance`/`sunday_attendance`/`komsel_attendance` (komsel HANYA yang punya `session_id`, yaitu hasil scan QR sesi — checklist manual PKS tidak memberi poin).
+
+### Status Kelas & Event (v28)
+Nilai status kini **`Mulai` → `Sedang Berlangsung` → `Selesai`** (bukan `Aktif`/`Nonaktif` lagi). Migrasi v28 memetakan data lama (`Aktif`→`Mulai`, kelas `Nonaktif`→`Selesai`). Beranda & Informasi menampilkan yang `Mulai`/`Sedang Berlangsung`; tab riwayat = `Selesai`. Event masih boleh `Dibatalkan`.
+
+### QR prefixes (menu Scan)
+`ESC-ABSEN:<classId>:<sesi>` (kelas), `ESC-EVENT:<eventId>` (event), `ESC-KOMSEL:<sessionId>` (sesi komsel PKS), `ESC-SUNDAY:<YYYY-MM-DD>` (ibadah minggu, QR dari admin), `ESC-REDEEM:<ticketId>` (tukar poin). Semua ditangani di `AttendanceScanPage.jsx`.
 
 Pola wajib di tiap blok migrasi (supaya aman dijalankan ulang / idempotent):
 - `CREATE TABLE IF NOT EXISTS ...`

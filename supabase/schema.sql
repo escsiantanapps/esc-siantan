@@ -1074,3 +1074,382 @@ CREATE POLICY "users_admin_insert" ON users FOR INSERT WITH CHECK (
 ALTER TABLE classes       ADD COLUMN IF NOT EXISTS session_names TEXT[];
 ALTER TABLE task_leaves   ADD COLUMN IF NOT EXISTS form_id    TEXT;
 ALTER TABLE task_leaves   ADD COLUMN IF NOT EXISTS form_title TEXT;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v28: Sistem Poin, NIJ, Kartu Jemaat, Sesi Komsel QR, ──────
+-- ── Status 3-fase, Media Foto/Video, Biodata Tambahan ─────────────────
+-- ══════════════════════════════════════════════════════════════════════
+-- Jalankan blok ini sekali di Supabase SQL Editor (utuh dari atas ke bawah).
+
+-- ── (1) Kolom baru users: NIJ, kartu jemaat, biodata, poin, last seen ──
+ALTER TABLE users ADD COLUMN IF NOT EXISTS nij VARCHAR(10) UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS membership_card_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS membership_card_issued_at DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS marital_status TEXT CHECK (marital_status IS NULL OR marital_status IN ('Lajang','Menikah','Duda/Janda'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pekerjaan TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pekerjaan_posisi TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pekerjaan_bidang TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pekerjaan_perusahaan TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pekerjaan_pendapatan TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pendidikan_terakhir TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pendidikan_bidang TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS biodata_points_awarded BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS points INT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS users_points_idx ON users (points DESC);
+
+-- ── (2) Media foto/video pada Kelas, Event, Informasi ──
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS photo_urls TEXT[] DEFAULT '{}';
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS video_urls TEXT[] DEFAULT '{}';
+ALTER TABLE events  ADD COLUMN IF NOT EXISTS photo_urls TEXT[] DEFAULT '{}';
+ALTER TABLE events  ADD COLUMN IF NOT EXISTS video_urls TEXT[] DEFAULT '{}';
+ALTER TABLE news    ADD COLUMN IF NOT EXISTS photo_urls TEXT[] DEFAULT '{}';
+ALTER TABLE news    ADD COLUMN IF NOT EXISTS video_urls TEXT[] DEFAULT '{}';
+
+-- ── (3) Kontak WA per gender (Kelas & Event) ──
+-- contact_wa lama pada events dipakai sebagai kontak Admin Laki-laki.
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS contact_wa TEXT;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS contact_wa_female TEXT;
+ALTER TABLE events  ADD COLUMN IF NOT EXISTS contact_wa_female TEXT;
+
+-- ── (4) Siklus status 3 fase: Mulai → Sedang Berlangsung → Selesai ──
+-- Nilai lama dipetakan: Aktif → Mulai; Nonaktif (kelas) → Selesai.
+-- 'Dibatalkan' (event) tetap diizinkan sebagai status legacy.
+ALTER TABLE events DROP CONSTRAINT IF EXISTS events_status_check;
+UPDATE events  SET status = 'Mulai'   WHERE status = 'Aktif';
+UPDATE classes SET status = 'Mulai'   WHERE status = 'Aktif';
+UPDATE classes SET status = 'Selesai' WHERE status = 'Nonaktif';
+ALTER TABLE events ADD CONSTRAINT events_status_check
+  CHECK (status IN ('Mulai','Sedang Berlangsung','Selesai','Dibatalkan'));
+
+-- ── (5) Baptisan terikat kelas baptisan ──
+ALTER TABLE baptism_registrations ADD COLUMN IF NOT EXISTS class_id TEXT REFERENCES classes(class_id) ON DELETE SET NULL;
+
+-- ── (6) Sesi Absensi Komsel (QR oleh PKS, dipindai jemaat) ──
+CREATE TABLE IF NOT EXISTS komsel_sessions (
+  session_id   TEXT PRIMARY KEY DEFAULT 'KSES-' || replace(gen_random_uuid()::text, '-', ''),
+  komsel_id    TEXT REFERENCES komsel(komsel_id) ON DELETE CASCADE,
+  session_date DATE DEFAULT current_date,
+  title        TEXT NOT NULL,
+  created_by   TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE komsel_sessions ENABLE ROW LEVEL SECURITY;
+-- Semua user login boleh baca (dibutuhkan validasi saat scan QR).
+DROP POLICY IF EXISTS "ksess_read" ON komsel_sessions;
+CREATE POLICY "ksess_read" ON komsel_sessions FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "ksess_write" ON komsel_sessions;
+CREATE POLICY "ksess_write" ON komsel_sessions FOR ALL
+  USING (auth_user_role() IN ('Admin','Super Admin') OR auth_leads_komsel(komsel_id))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin') OR auth_leads_komsel(komsel_id));
+
+ALTER TABLE komsel_attendance
+  ADD COLUMN IF NOT EXISTS session_id TEXT REFERENCES komsel_sessions(session_id) ON DELETE CASCADE;
+-- Satu kehadiran per sesi per user (hanya untuk baris hasil scan QR).
+CREATE UNIQUE INDEX IF NOT EXISTS komsel_att_session_uniq
+  ON komsel_attendance (session_id, user_id) WHERE session_id IS NOT NULL;
+-- Jemaat boleh mencatat kehadirannya SENDIRI lewat scan QR sesi:
+-- wajib menyertakan session_id yang valid & komsel_id-nya cocok dgn sesi itu.
+DROP POLICY IF EXISTS "komsel_att_self_scan" ON komsel_attendance;
+CREATE POLICY "komsel_att_self_scan" ON komsel_attendance FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND session_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM komsel_sessions s
+    WHERE s.session_id = komsel_attendance.session_id
+      AND s.komsel_id = komsel_attendance.komsel_id
+  )
+);
+-- Jemaat boleh melihat baris kehadirannya sendiri (cek duplikat scan).
+DROP POLICY IF EXISTS "komsel_att_self_select" ON komsel_attendance;
+CREATE POLICY "komsel_att_self_select" ON komsel_attendance FOR SELECT USING (
+  user_id = auth_user_id()
+);
+
+-- ── (7) Kehadiran Ibadah Minggu (QR harian dari Admin) ──
+CREATE TABLE IF NOT EXISTS sunday_attendance (
+  attendance_id   TEXT PRIMARY KEY DEFAULT 'SUN-' || replace(gen_random_uuid()::text, '-', ''),
+  user_id         TEXT REFERENCES users(user_id) ON DELETE CASCADE,
+  attendance_date DATE DEFAULT current_date,
+  scanned_at      TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, attendance_date)
+);
+ALTER TABLE sunday_attendance ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "sunday_att_select" ON sunday_attendance;
+CREATE POLICY "sunday_att_select" ON sunday_attendance FOR SELECT USING (
+  auth_user_role() IN ('Admin','Super Admin') OR user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "sunday_att_insert" ON sunday_attendance;
+CREATE POLICY "sunday_att_insert" ON sunday_attendance FOR INSERT WITH CHECK (
+  user_id = auth_user_id() AND attendance_date = current_date
+);
+DROP POLICY IF EXISTS "sunday_att_admin_delete" ON sunday_attendance;
+CREATE POLICY "sunday_att_admin_delete" ON sunday_attendance FOR DELETE USING (
+  auth_user_role() IN ('Admin','Super Admin')
+);
+
+-- ── (8) Katalog produk penukaran poin + tiket + riwayat transaksi ──
+CREATE TABLE IF NOT EXISTS redeemable_products (
+  product_id   TEXT PRIMARY KEY DEFAULT 'PRD-' || replace(gen_random_uuid()::text, '-', ''),
+  name         TEXT NOT NULL,
+  points_cost  INT NOT NULL CHECK (points_cost > 0),
+  description  TEXT,
+  image_url    TEXT,
+  stock        INT DEFAULT 0,
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE redeemable_products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "products_read" ON redeemable_products;
+CREATE POLICY "products_read" ON redeemable_products FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "products_admin_write" ON redeemable_products;
+CREATE POLICY "products_admin_write" ON redeemable_products FOR ALL
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+
+CREATE TABLE IF NOT EXISTS point_transactions (
+  transaction_id TEXT PRIMARY KEY DEFAULT 'PTX-' || replace(gen_random_uuid()::text, '-', ''),
+  user_id        TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  amount         INT NOT NULL,
+  description    TEXT NOT NULL,
+  created_at     TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ptx_user_idx ON point_transactions (user_id, created_at DESC);
+ALTER TABLE point_transactions ENABLE ROW LEVEL SECURITY;
+-- Hanya SELECT (milik sendiri / admin). INSERT hanya lewat fungsi SECURITY
+-- DEFINER di bawah — sengaja TIDAK ada policy INSERT untuk klien.
+DROP POLICY IF EXISTS "ptx_select" ON point_transactions;
+CREATE POLICY "ptx_select" ON point_transactions FOR SELECT USING (
+  auth_user_role() IN ('Admin','Super Admin') OR user_id = auth_user_id()
+);
+
+CREATE TABLE IF NOT EXISTS redemption_tickets (
+  ticket_id    TEXT PRIMARY KEY DEFAULT 'TCK-' || replace(gen_random_uuid()::text, '-', ''),
+  product_id   TEXT REFERENCES redeemable_products(product_id) ON DELETE CASCADE,
+  points_cost  INT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'Aktif' CHECK (status IN ('Aktif','Digunakan','Expired')),
+  redeemed_by  TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  redeemed_at  TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE redemption_tickets ENABLE ROW LEVEL SECURITY;
+-- Tiket dikelola admin; jemaat menukar lewat fungsi redeem_ticket (definer).
+DROP POLICY IF EXISTS "tickets_admin_all" ON redemption_tickets;
+CREATE POLICY "tickets_admin_all" ON redemption_tickets FOR ALL
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+
+-- ── (9) Trigger NIJ otomatis (10 digit unik, saat baris users dibuat) ──
+CREATE OR REPLACE FUNCTION generate_unique_nij() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  new_nij VARCHAR(10);
+  exists_nij BOOLEAN;
+BEGIN
+  IF NEW.nij IS NULL THEN
+    LOOP
+      new_nij := floor(random() * 9000000000 + 1000000000)::text;
+      SELECT EXISTS (SELECT 1 FROM users WHERE nij = new_nij) INTO exists_nij;
+      EXIT WHEN NOT exists_nij;
+    END LOOP;
+    NEW.nij := new_nij;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_generate_nij ON users;
+CREATE TRIGGER trg_generate_nij
+  BEFORE INSERT ON users FOR EACH ROW EXECUTE FUNCTION generate_unique_nij();
+
+-- Backfill NIJ untuk baris lama yang belum punya.
+UPDATE users SET nij = NULL WHERE nij = '';
+DO $$
+DECLARE r RECORD; new_nij TEXT;
+BEGIN
+  FOR r IN SELECT user_id FROM users WHERE nij IS NULL LOOP
+    LOOP
+      new_nij := floor(random() * 9000000000 + 1000000000)::text;
+      EXIT WHEN NOT EXISTS (SELECT 1 FROM users WHERE nij = new_nij);
+    END LOOP;
+    UPDATE users SET nij = new_nij WHERE user_id = r.user_id;
+  END LOOP;
+END $$;
+
+-- ── (10) Keamanan poin: kolom sensitif TIDAK boleh diubah klien ──
+-- Perluas guard privilege (v23): non-admin dilarang mengubah points,
+-- biodata_points_awarded, nij, dan kolom kartu jemaat pada baris MANA PUN
+-- (termasuk miliknya). Fungsi definer poin memakai escape hatch
+-- current_setting('app.allow_points_update') supaya tetap bisa menulis.
+CREATE OR REPLACE FUNCTION guard_user_privilege_cols() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth_user_role() NOT IN ('Admin', 'Super Admin') THEN
+    IF NEW.role IS DISTINCT FROM OLD.role
+       OR NEW.role_secondary IS DISTINCT FROM OLD.role_secondary
+       OR NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.is_pks IS DISTINCT FROM OLD.is_pks
+       OR NEW.komsel_id IS DISTINCT FROM OLD.komsel_id THEN
+      RAISE EXCEPTION 'Tidak diizinkan mengubah kolom hak akses sendiri.';
+    END IF;
+    IF COALESCE(current_setting('app.allow_points_update', true), '') <> '1' THEN
+      IF NEW.points IS DISTINCT FROM OLD.points
+         OR NEW.biodata_points_awarded IS DISTINCT FROM OLD.biodata_points_awarded THEN
+        RAISE EXCEPTION 'Poin tidak dapat diubah langsung.';
+      END IF;
+    END IF;
+    IF NEW.nij IS DISTINCT FROM OLD.nij
+       OR NEW.membership_card_url IS DISTINCT FROM OLD.membership_card_url
+       OR NEW.membership_card_issued_at IS DISTINCT FROM OLD.membership_card_issued_at THEN
+      RAISE EXCEPTION 'Kolom kartu jemaat hanya dapat diubah Admin.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+-- NIJ & kartu jemaat orang lain hanya boleh diubah Super Admin (konsisten v24).
+CREATE OR REPLACE FUNCTION guard_biodata_admin_edit() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS DISTINCT FROM OLD.auth_id AND auth_user_role() = 'Admin' THEN
+    IF NEW.name IS DISTINCT FROM OLD.name
+       OR NEW.phone IS DISTINCT FROM OLD.phone
+       OR NEW.email IS DISTINCT FROM OLD.email
+       OR NEW.gender IS DISTINCT FROM OLD.gender
+       OR NEW.birth_date IS DISTINCT FROM OLD.birth_date
+       OR NEW.birth_place IS DISTINCT FROM OLD.birth_place
+       OR NEW.address IS DISTINCT FROM OLD.address
+       OR NEW.blood_type IS DISTINCT FROM OLD.blood_type
+       OR NEW.nik IS DISTINCT FROM OLD.nik
+       OR NEW.social_media IS DISTINCT FROM OLD.social_media
+       OR NEW.photo_url IS DISTINCT FROM OLD.photo_url
+       OR NEW.nij IS DISTINCT FROM OLD.nij
+       OR NEW.membership_card_url IS DISTINCT FROM OLD.membership_card_url
+       OR NEW.membership_card_issued_at IS DISTINCT FROM OLD.membership_card_issued_at THEN
+      RAISE EXCEPTION 'Hanya Super Admin yang dapat mengubah biodata jemaat lain.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+-- ── (11) Fungsi inti poin (SECURITY DEFINER) ──
+-- Penulis tunggal saldo poin + riwayat transaksi. Tidak dipanggil klien
+-- langsung — hanya dari trigger kehadiran & fungsi redeem/biodata di bawah.
+CREATE OR REPLACE FUNCTION apply_points(p_user_id TEXT, p_amount INT, p_desc TEXT) RETURNS void
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  PERFORM set_config('app.allow_points_update', '1', true);
+  UPDATE users SET points = GREATEST(0, COALESCE(points, 0) + p_amount) WHERE user_id = p_user_id;
+  INSERT INTO point_transactions (user_id, amount, description) VALUES (p_user_id, p_amount, p_desc);
+  PERFORM set_config('app.allow_points_update', '', true);
+END $$;
+REVOKE EXECUTE ON FUNCTION apply_points(TEXT, INT, TEXT) FROM PUBLIC, anon, authenticated;
+
+-- +1 poin otomatis saat kehadiran tercatat (kelas, event, ibadah minggu,
+-- komsel via scan QR sesi). Duplikat dicegah oleh unique constraint tabelnya.
+CREATE OR REPLACE FUNCTION award_attendance_point() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'komsel_attendance' THEN
+    -- Hanya kehadiran hasil scan QR sesi (bukan checklist manual PKS) yang
+    -- memberi poin — checklist manual bisa dihapus/ditulis ulang massal.
+    IF NEW.session_id IS NULL OR NEW.status IS DISTINCT FROM 'Hadir' THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+  PERFORM apply_points(NEW.user_id, 1,
+    CASE TG_TABLE_NAME
+      WHEN 'class_attendance'  THEN 'Kehadiran kelas'
+      WHEN 'event_attendance'  THEN 'Kehadiran event'
+      WHEN 'sunday_attendance' THEN 'Kehadiran ibadah minggu'
+      WHEN 'komsel_attendance' THEN 'Kehadiran komsel'
+      ELSE 'Kehadiran'
+    END);
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_point_class_att  ON class_attendance;
+CREATE TRIGGER trg_point_class_att  AFTER INSERT ON class_attendance  FOR EACH ROW EXECUTE FUNCTION award_attendance_point();
+DROP TRIGGER IF EXISTS trg_point_event_att  ON event_attendance;
+CREATE TRIGGER trg_point_event_att  AFTER INSERT ON event_attendance  FOR EACH ROW EXECUTE FUNCTION award_attendance_point();
+DROP TRIGGER IF EXISTS trg_point_sunday_att ON sunday_attendance;
+CREATE TRIGGER trg_point_sunday_att AFTER INSERT ON sunday_attendance FOR EACH ROW EXECUTE FUNCTION award_attendance_point();
+DROP TRIGGER IF EXISTS trg_point_komsel_att ON komsel_attendance;
+CREATE TRIGGER trg_point_komsel_att AFTER INSERT ON komsel_attendance FOR EACH ROW EXECUTE FUNCTION award_attendance_point();
+
+-- +5 poin biodata lengkap (sekali seumur akun). Dipanggil klien via RPC;
+-- validasi kelengkapan dilakukan DI SERVER, bukan mempercayai klien.
+CREATE OR REPLACE FUNCTION award_biodata_points() RETURNS jsonb
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE u RECORD;
+BEGIN
+  SELECT * INTO u FROM users WHERE auth_id = auth.uid();
+  IF u IS NULL THEN RETURN jsonb_build_object('awarded', false, 'reason', 'no_user'); END IF;
+  IF u.biodata_points_awarded THEN RETURN jsonb_build_object('awarded', false, 'reason', 'already'); END IF;
+  IF COALESCE(u.name,'') = '' OR COALESCE(u.phone,'') = '' OR u.gender IS NULL
+     OR u.birth_date IS NULL OR COALESCE(u.birth_place,'') = '' OR COALESCE(u.address,'') = ''
+     OR u.marital_status IS NULL OR COALESCE(u.pekerjaan,'') = ''
+     OR COALESCE(u.pendidikan_terakhir,'') = '' THEN
+    RETURN jsonb_build_object('awarded', false, 'reason', 'incomplete');
+  END IF;
+  PERFORM set_config('app.allow_points_update', '1', true);
+  UPDATE users SET biodata_points_awarded = true WHERE user_id = u.user_id;
+  PERFORM set_config('app.allow_points_update', '', true);
+  PERFORM apply_points(u.user_id, 5, 'Melengkapi biodata');
+  RETURN jsonb_build_object('awarded', true);
+END $$;
+
+-- Tukar poin: scan tiket QR (ESC-REDEEM:<ticket_id>) → potong poin + tandai
+-- tiket Digunakan, atomik. Dipanggil klien via RPC.
+CREATE OR REPLACE FUNCTION redeem_ticket(p_ticket_id TEXT) RETURNS jsonb
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  t RECORD;
+  uid TEXT;
+  bal INT;
+  pname TEXT;
+BEGIN
+  uid := auth_user_id();
+  IF uid IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'no_user'); END IF;
+  SELECT * INTO t FROM redemption_tickets WHERE ticket_id = p_ticket_id FOR UPDATE;
+  IF t IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_found'); END IF;
+  IF t.status <> 'Aktif' THEN RETURN jsonb_build_object('ok', false, 'reason', 'used'); END IF;
+  SELECT points INTO bal FROM users WHERE user_id = uid;
+  IF COALESCE(bal, 0) < t.points_cost THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'insufficient', 'needed', t.points_cost, 'balance', COALESCE(bal, 0));
+  END IF;
+  SELECT name INTO pname FROM redeemable_products WHERE product_id = t.product_id;
+  UPDATE redemption_tickets SET status = 'Digunakan', redeemed_by = uid, redeemed_at = now()
+    WHERE ticket_id = p_ticket_id;
+  PERFORM apply_points(uid, -t.points_cost, 'Tukar poin: ' || COALESCE(pname, 'produk'));
+  RETURN jsonb_build_object('ok', true, 'product', pname, 'cost', t.points_cost, 'balance', COALESCE(bal, 0) - t.points_cost);
+END $$;
+
+-- Leaderboard poin: nama + foto + poin (RLS users membatasi SELECT antar
+-- jemaat, jadi disediakan lewat definer dengan kolom seperlunya saja).
+CREATE OR REPLACE FUNCTION get_points_leaderboard(p_limit INT DEFAULT 10)
+  RETURNS TABLE (user_id TEXT, name TEXT, photo_url TEXT, points INT)
+  LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT u.user_id, u.name, u.photo_url, COALESCE(u.points, 0)
+  FROM users u
+  WHERE u.status = 'Aktif'
+  ORDER BY COALESCE(u.points, 0) DESC, u.name ASC
+  LIMIT LEAST(GREATEST(COALESCE(p_limit, 10), 1), 100)
+$$;
+
+-- ── (12) Seed pengaturan default ──
+INSERT INTO app_settings (key, value) VALUES ('roadmap_show_count', '1'::jsonb)
+  ON CONFLICT (key) DO NOTHING;
+INSERT INTO app_settings (key, value) VALUES ('baptism_status', '"open"'::jsonb)
+  ON CONFLICT (key) DO NOTHING;
+
+-- Admin (bukan hanya Super Admin) boleh menulis kunci pengaturan konten
+-- tertentu: roadmap pemuridan & status pendaftaran baptisan.
+DROP POLICY IF EXISTS "app_settings_admin_content" ON app_settings;
+CREATE POLICY "app_settings_admin_content" ON app_settings FOR ALL
+  USING (
+    auth_user_role() IN ('Admin','Super Admin')
+    AND key IN ('discipleship_roadmap','roadmap_show_count','baptism_status')
+  )
+  WITH CHECK (
+    auth_user_role() IN ('Admin','Super Admin')
+    AND key IN ('discipleship_roadmap','roadmap_show_count','baptism_status')
+  );

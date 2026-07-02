@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, MapPin, Clock, QrCode } from 'lucide-react'
 import { classesService } from '@/services/contentService'
@@ -6,11 +6,19 @@ import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/compon
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 
+// Siklus status kelas: Mulai → Sedang Berlangsung → Selesai (riwayat).
+const TABS = [
+  { value: 'Mulai', key: 'status.Mulai' },
+  { value: 'Sedang Berlangsung', key: 'status.Sedang Berlangsung' },
+  { value: 'Selesai', key: 'status.Selesai' },
+]
+
 export default function ClassesPage() {
   const { toast } = useToast()
   const { t } = useLang()
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('Mulai')
 
   useEffect(() => {
     classesService.getAll().then(setClasses)
@@ -18,6 +26,8 @@ export default function ClassesPage() {
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const filtered = useMemo(() => classes.filter(c => c.status === tab), [classes, tab])
 
   return (
     <div className="pb-4">
@@ -28,15 +38,30 @@ export default function ClassesPage() {
       </GradientHeader>
 
       <div className="px-4 -mt-2 pt-4">
+        {/* Tabs status */}
+        <div className="flex gap-2 mb-4">
+          {TABS.map(({ value, key }) => (
+            <button
+              key={value}
+              onClick={() => setTab(value)}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition ${
+                tab === value ? 'gradient-main text-white' : 'bg-control text-gray-500'
+              }`}
+            >
+              {t(key)}
+            </button>
+          ))}
+        </div>
+
         {loading && <div className="flex justify-center py-8"><Spinner /></div>}
 
-        {!loading && classes.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <EmptyState icon={BookOpen} title={t('classes.empty')} description={t('classes.emptyDesc')} />
         )}
 
         {/* Kartu kelas dengan cover ala Stitch */}
         <div className="space-y-3.5">
-          {classes.map(cls => (
+          {filtered.map(cls => (
             <Link key={cls.class_id} to={`/kelas/${cls.class_id}`} className="block">
               <Card glass className="overflow-hidden hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
                 <div className="relative h-28">

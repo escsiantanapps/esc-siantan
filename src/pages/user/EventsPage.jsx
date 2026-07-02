@@ -7,10 +7,12 @@ import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
 
+// Siklus status event: Mulai (belum mulai) → Sedang Berlangsung → Selesai.
+// Event Selesai otomatis pindah ke tab riwayat "Selesai".
 const TABS = [
-  { value: 'Aktif', key: 'events.tabActive' },
+  { value: 'Mulai', key: 'status.Mulai' },
+  { value: 'Sedang Berlangsung', key: 'status.Sedang Berlangsung' },
   { value: 'Selesai', key: 'events.tabDone' },
-  { value: 'Semua', key: 'events.tabAll' },
 ]
 
 export default function EventsPage() {
@@ -18,7 +20,7 @@ export default function EventsPage() {
   const { t } = useLang()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('Aktif')
+  const [tab, setTab] = useState('Mulai')
 
   useEffect(() => {
     eventsService.getAll().then(setEvents)
@@ -27,10 +29,7 @@ export default function EventsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const filtered = useMemo(() => {
-    if (tab === 'Semua') return events
-    return events.filter(ev => ev.status === tab)
-  }, [events, tab])
+  const filtered = useMemo(() => events.filter(ev => ev.status === tab), [events, tab])
 
   const featured = filtered[0]
   const rest = filtered.slice(1)

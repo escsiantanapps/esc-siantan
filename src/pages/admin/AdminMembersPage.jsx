@@ -5,11 +5,18 @@ import { usersService } from '@/services/usersService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useBackClose } from '@/hooks/useBackClose'
+import { Sparkles } from 'lucide-react'
 import { Card, Input, Select, Textarea, Button, PageHeader, Spinner, EmptyState, Badge, StatusBadge, Avatar } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 import { spColor } from '@/lib/utils'
 
 const LIMIT = 20
+
+// Anggap online bila last_seen_at dalam 5 menit terakhir (heartbeat 2 menit).
+function isOnline(lastSeen) {
+  if (!lastSeen) return false
+  return Date.now() - new Date(lastSeen).getTime() < 5 * 60 * 1000
+}
 
 const emptyAddForm = {
   name: '', phone: '', email: '', role: 'Jemaat', komsel_id: '',
@@ -30,6 +37,7 @@ export default function AdminMembersPage() {
   const [status, setStatus] = useState(searchParams.get('status') || '')
   const [ministry, setMinistry] = useState('')
   const [komsel, setKomsel] = useState('')
+  const [sort, setSort] = useState('name')
   const [ministries, setMinistries] = useState([])
   const [komselList, setKomselList] = useState([])
   const [page, setPage] = useState(1)
@@ -49,7 +57,7 @@ export default function AdminMembersPage() {
 
   function loadMembers() {
     setLoading(true)
-    return usersService.getAll({ search, role, status, ministry, komsel, page, limit: LIMIT })
+    return usersService.getAll({ search, role, status, ministry, komsel, page, limit: LIMIT, sort })
       .then(({ data, count }) => { setMembers(data); setCount(count) })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -59,7 +67,7 @@ export default function AdminMembersPage() {
     setLoading(true)
     const timer = setTimeout(loadMembers, 300)
     return () => clearTimeout(timer)
-  }, [search, role, status, ministry, komsel, page])
+  }, [search, role, status, ministry, komsel, page, sort])
 
   function setAdd(key, val) { setAddForm(p => ({ ...p, [key]: val })) }
 
@@ -130,6 +138,10 @@ export default function AdminMembersPage() {
           <option value="">{t('amem.allKomsel')}</option>
           {komselList.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
         </Select>
+        <Select value={sort} onChange={e => { setSort(e.target.value); setPage(1) }}>
+          <option value="name">Urutkan: Nama</option>
+          <option value="points">Urutkan: Poin Terbanyak</option>
+        </Select>
       </div>
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
@@ -142,9 +154,21 @@ export default function AdminMembersPage() {
         <Card className="divide-y divide-gray-100">
           {members.map(m => (
             <Link key={m.user_id} to={`/admin/jemaat/${m.user_id}`} className="flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors">
-              <Avatar name={m.name} src={m.photo_url} />
+              <div className="relative shrink-0">
+                <Avatar name={m.name} src={m.photo_url} />
+                {/* Indikator online/offline (hijau = aktif < 5 menit lalu) */}
+                <span
+                  title={isOnline(m.last_seen_at) ? 'Online' : 'Offline'}
+                  className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface ${isOnline(m.last_seen_at) ? 'bg-green-500' : 'bg-gray-300'}`}
+                />
+              </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-brand-600 shrink-0">
+                    <Sparkles size={10} /> {m.points ?? 0}
+                  </span>
+                </div>
                 <p className="text-xs text-gray-400">{t(`role.${m.role}`)}{m.phone ? ` · ${m.phone}` : ''}</p>
                 {((m.ministry_ids?.length > 0) || m.komsel_id || m.is_pks || m.role === 'PKS') && (
                   <div className="flex items-center gap-1 mt-1 flex-wrap">

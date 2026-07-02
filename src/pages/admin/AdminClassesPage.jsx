@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { BookOpen, Plus, Pencil, Trash2, X, QrCode, ClipboardCheck, Download, Users, FileSpreadsheet } from 'lucide-react'
-import { classesService } from '@/services/contentService'
+import { classesService, mediaService } from '@/services/contentService'
 import { classAttendanceService } from '@/services/attendanceService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Textarea, Select, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
-import { formatDate } from '@/lib/utils'
+import MediaListUploader from '@/components/MediaListUploader'
+import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
 
-const emptyForm = { name: '', description: '', schedule: '', location: '', teacher: '', status: 'Aktif', total_sessions: 1, session_names: [''] }
+const emptyForm = { name: '', description: '', schedule: '', location: '', teacher: '', status: 'Mulai', total_sessions: 1, session_names: [''], contact_wa: '', contact_wa_female: '', photo_urls: [], video_urls: [] }
 
 export default function AdminClassesPage() {
   const { toast, confirm } = useToast()
@@ -37,6 +38,7 @@ export default function AdminClassesPage() {
   const [attDate, setAttDate] = useState('')
   const [attendance, setAttendance] = useState([])
   const [attLoading, setAttLoading] = useState(false)
+  const [mediaBusy, setMediaBusy] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -87,6 +89,32 @@ export default function AdminClassesPage() {
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
+  async function handleMedia(kind, action) {
+    if (action.type === 'remove') {
+      const key = kind === 'video' ? 'video_urls' : 'photo_urls'
+      set(key, form[key].filter((_, i) => i !== action.index))
+      return
+    }
+    setMediaBusy(true)
+    try {
+      let file = action.file
+      if (kind === 'video') {
+        validateUpload(file, { maxMB: 50 })
+        const url = await mediaService.uploadVideo('classes', file)
+        set('video_urls', [...form.video_urls, url])
+      } else {
+        file = await compressImage(file, { maxDim: 1600 })
+        validateUpload(file, { maxMB: 5, image: true })
+        const url = await mediaService.uploadPhoto('classes', file)
+        set('photo_urls', [...form.photo_urls, url])
+      }
+    } catch (err) {
+      toast.error(err.message || t('acls.saveFailed'))
+    } finally {
+      setMediaBusy(false)
+    }
+  }
+
   function openCreate() {
     setEditing(null)
     setForm(emptyForm)
@@ -103,9 +131,13 @@ export default function AdminClassesPage() {
       schedule: cls.schedule || '',
       location: cls.location || '',
       teacher: cls.teacher || '',
-      status: cls.status || 'Aktif',
+      status: cls.status || 'Mulai',
       total_sessions: n,
       session_names: Array.from({ length: n }, (_, i) => (cls.session_names || [])[i] || ''),
+      contact_wa: cls.contact_wa || '',
+      contact_wa_female: cls.contact_wa_female || '',
+      photo_urls: cls.photo_urls || [],
+      video_urls: cls.video_urls || [],
     })
     setError('')
     setShowModal(true)
@@ -266,8 +298,9 @@ export default function AdminClassesPage() {
                 }}
               />
               <Select label={t('acls.statusLabel')} value={form.status} onChange={e => set('status', e.target.value)}>
-                <option value="Aktif">{t('status.Aktif')}</option>
-                <option value="Nonaktif">{t('status.Nonaktif')}</option>
+                <option value="Mulai">{t('status.Mulai')}</option>
+                <option value="Sedang Berlangsung">{t('status.Sedang Berlangsung')}</option>
+                <option value="Selesai">{t('status.Selesai')}</option>
               </Select>
             </div>
             <p className="text-xs text-gray-400">{t('acls.sessionsHint')}</p>
@@ -288,6 +321,20 @@ export default function AdminClassesPage() {
                   }}
                 />
               ))}
+            </div>
+
+            {/* Galeri media */}
+            <div className="space-y-3 pt-1">
+              <MediaListUploader
+                kind="image" label="Foto" max={5} hint="Maks 5 foto — carousel auto-slide di halaman detail"
+                urls={form.photo_urls} uploading={mediaBusy}
+                onChange={a => handleMedia('image', a)}
+              />
+              <MediaListUploader
+                kind="video" label="Video" max={2} hint="Maks 2 video — autoplay (mute), maks 50 MB/video"
+                urls={form.video_urls} uploading={mediaBusy}
+                onChange={a => handleMedia('video', a)}
+              />
             </div>
 
             <div className="flex gap-2 pt-1">

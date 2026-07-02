@@ -7,6 +7,7 @@ import { useLang } from '@/hooks/useLang'
 import { usersService } from '@/services/usersService'
 import { Card, Badge, StatusBadge, Spinner } from '@/components/ui'
 import SkyTime from '@/components/SkyTime'
+import MembershipCard from '@/components/MembershipCard'
 import { formatDate, hitungUmur, formatPhone } from '@/lib/utils'
 
 export default function ProfilePage() {
@@ -112,6 +113,12 @@ export default function ProfilePage() {
         )}
 
         {loading && <div className="flex justify-center py-4"><Spinner /></div>}
+
+        {/* Kartu Jemaat (PNG dari admin, expired 1 tahun sejak terbit) */}
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900 mb-2">Kartu Jemaat</h2>
+          <MembershipCard profile={profile} placeholder />
+        </div>
 
         {/* Informasi Pribadi */}
         <Card className="p-4">

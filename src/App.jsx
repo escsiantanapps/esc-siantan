@@ -42,6 +42,7 @@ import PKSDashboardPage from '@/pages/user/PKSDashboardPage'
 import PersembahanPage from '@/pages/user/PersembahanPage'
 import UserLeavePage from '@/pages/user/UserLeavePage'
 import SettingsPage from '@/pages/user/SettingsPage'
+import PointsPage from '@/pages/user/PointsPage'
 
 // Halaman berat (QR scanner) — dimuat saat dibutuhkan
 const AttendanceScanPage = lazy(() => import('@/pages/user/AttendanceScanPage'))
@@ -71,6 +72,9 @@ const AdminOfferingsPage = lazy(() => import('@/pages/admin/AdminOfferingsPage')
 const AdminLeavesPage = lazy(() => import('@/pages/admin/AdminLeavesPage'))
 const AdminPermissionsPage = lazy(() => import('@/pages/admin/AdminPermissionsPage'))
 const AdminTaskCategoriesPage = lazy(() => import('@/pages/admin/AdminTaskCategoriesPage'))
+const AdminRoadmapPage = lazy(() => import('@/pages/admin/AdminRoadmapPage'))
+const AdminRedeemPage = lazy(() => import('@/pages/admin/AdminRedeemPage'))
+const AdminSundayPage = lazy(() => import('@/pages/admin/AdminSundayPage'))
 
 // Layouts
 import UserLayout from '@/layouts/UserLayout'
@@ -171,6 +175,7 @@ export default function App() {
             <Route path="sertifikat"           element={<MyCertificatesPage />} />
             <Route path="status-pendaftaran"   element={<RegistrationStatusPage />} />
             <Route path="persembahan"          element={<PersembahanPage />} />
+            <Route path="poin"                 element={<PointsPage />} />
             <Route path="izin"                 element={<UserLeavePage />} />
             <Route path="pks"                  element={<PKSRoute><PKSDashboardPage /></PKSRoute>} />
           </Route>
@@ -203,6 +208,9 @@ export default function App() {
             <Route path="evaluasi"             element={<AdminEvaluationPage />} />
             <Route path="persembahan"          element={<AdminOfferingsPage />} />
             <Route path="izin"                 element={<AdminLeavesPage />} />
+            <Route path="roadmap"              element={<AdminRoadmapPage />} />
+            <Route path="tukar-poin"           element={<AdminRedeemPage />} />
+            <Route path="ibadah-minggu"        element={<AdminSundayPage />} />
             <Route path="hak-akses"            element={<AdminPermissionsPage />} />
             <Route path="kategori-tugas"       element={<AdminTaskCategoriesPage />} />
           </Route>

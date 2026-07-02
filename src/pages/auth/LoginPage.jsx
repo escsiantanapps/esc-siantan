@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { ONBOARDING_KEY } from '@/pages/OnboardingPage'
+import { shouldShowOnboarding } from '@/pages/OnboardingPage'
 import { Mail, Lock, Eye, EyeOff, Check } from 'lucide-react'
 
 const REMEMBER_KEY = 'esc-remember-email'
@@ -25,8 +25,10 @@ export default function LoginPage() {
       await login(form.email, form.password)
       if (remember) localStorage.setItem(REMEMBER_KEY, form.email)
       else localStorage.removeItem(REMEMBER_KEY)
-      // Onboarding tampil sekali, pada login pertama di perangkat ini.
-      navigate(localStorage.getItem(ONBOARDING_KEY) ? '/' : '/onboarding')
+      // Roadmap Pemuridan tampil selama jumlah tayang di perangkat ini masih
+      // di bawah batas yang diatur admin (roadmap_show_count, default 1).
+      const showRoadmap = await shouldShowOnboarding().catch(() => false)
+      navigate(showRoadmap ? '/onboarding' : '/')
     } catch {
       setError(t('auth.loginError'))
     } finally {

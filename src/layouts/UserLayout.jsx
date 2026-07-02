@@ -1,8 +1,14 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Home, Newspaper, ClipboardList, User, ScanLine } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
+import { useAuth } from '@/hooks/useAuth'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
+import { usersService } from '@/services/usersService'
+import { shouldShowOnboarding } from '@/pages/OnboardingPage'
+
+const ROADMAP_SESSION_CHECK = 'esc-roadmap-checked'
 
 // Item kiri & kanan; tombol Scan disisipkan menonjol di tengah.
 const LEFT_ITEMS = [
@@ -30,11 +36,37 @@ function NavItem({ to, icon: Icon, labelKey, exact }) {
 
 export default function UserLayout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { toast } = useToast()
   const { t } = useLang()
+  const { profile } = useAuth()
+
+  // Heartbeat kehadiran online: perbarui last_seen_at saat app dibuka lalu
+  // tiap 2 menit selama app aktif. Dipakai indikator online/offline di admin.
+  useEffect(() => {
+    const uid = profile?.user_id
+    if (!uid) return
+    usersService.heartbeat(uid).catch(() => {})
+    const timer = setInterval(() => usersService.heartbeat(uid).catch(() => {}), 120000)
+    return () => clearInterval(timer)
+  }, [profile?.user_id])
   // Konfirmasi keluar hanya di Beranda (root). Tab lain pakai replace, jadi
   // back dari tab kembali ke Beranda dulu, baru dari Beranda minta konfirmasi.
   useExitConfirm(location.pathname === '/', () => toast.info(t('app.exitConfirm')))
+
+  // Roadmap Pemuridan "selalu muncul saat membuka aplikasi" selama jumlah
+  // tayang di perangkat masih di bawah batas admin — dicek sekali per sesi
+  // browser (login lewat LoginPage sudah punya cek sendiri).
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(ROADMAP_SESSION_CHECK)) return
+      sessionStorage.setItem(ROADMAP_SESSION_CHECK, '1')
+    } catch { return }
+    shouldShowOnboarding()
+      .then(show => { if (show) navigate('/onboarding') })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Panel PKS tampil layar penuh tanpa navbar jemaat — sama seperti panel
   // admin. Kembali ke app jemaat lewat tombol back di header panel.

@@ -4,6 +4,7 @@ import { Camera, X } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
+import { pointsService } from '@/services/pointsService'
 import { Avatar, Button, Input, Select, Textarea, GradientHeader, Spinner } from '@/components/ui'
 import { validateUpload, compressImage } from '@/lib/utils'
 
@@ -23,6 +24,14 @@ export default function EditProfilePage() {
     blood_type: profile?.blood_type || '',
     social_media: profile?.social_media || '',
     photo_url: profile?.photo_url || '',
+    marital_status: profile?.marital_status || '',
+    pekerjaan: profile?.pekerjaan || '',
+    pekerjaan_posisi: profile?.pekerjaan_posisi || '',
+    pekerjaan_bidang: profile?.pekerjaan_bidang || '',
+    pekerjaan_perusahaan: profile?.pekerjaan_perusahaan || '',
+    pekerjaan_pendapatan: profile?.pekerjaan_pendapatan || '',
+    pendidikan_terakhir: profile?.pendidikan_terakhir || '',
+    pendidikan_bidang: profile?.pendidikan_bidang || '',
   })
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -73,9 +82,16 @@ export default function EditProfilePage() {
         gender: form.gender || null,
         blood_type: form.blood_type || null,
         birth_date: form.birth_date || null,
+        marital_status: form.marital_status || null,
         ...(canServe ? { ministry_ids: ministryIds } : {}),
       })
       toast.success('Profil berhasil disimpan.')
+      // Bonus 5 poin bila biodata lengkap — validasi terjadi di server
+      // (sekali seumur akun; diam-diam bila belum lengkap/sudah pernah).
+      try {
+        const res = await pointsService.claimBiodataPoints()
+        if (res?.awarded) toast.success('🎉 +5 poin — biodata lengkap!')
+      } catch { /* abaikan */ }
       navigate('/profil')
     } catch (err) {
       setError(err.message || 'Gagal menyimpan profil.')
@@ -125,6 +141,45 @@ export default function EditProfilePage() {
           {['A', 'B', 'AB', 'O'].map(b => <option key={b}>{b}</option>)}
         </Select>
         <Input label="Instagram / Sosial Media" placeholder="@username" value={form.social_media} onChange={e => set('social_media', e.target.value)} />
+
+        {/* ── Status & Pekerjaan ── */}
+        <div className="pt-2">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Status & Pekerjaan</h3>
+          <div className="space-y-4">
+            <Select label="Status Pernikahan" value={form.marital_status} onChange={e => set('marital_status', e.target.value)}>
+              <option value="">Pilih...</option>
+              <option>Lajang</option>
+              <option>Menikah</option>
+              <option>Duda/Janda</option>
+            </Select>
+            <Input label="Pekerjaan" placeholder="cth: Karyawan Swasta / Wiraswasta / Pelajar" value={form.pekerjaan} onChange={e => set('pekerjaan', e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Posisi" placeholder="cth: Staff" value={form.pekerjaan_posisi} onChange={e => set('pekerjaan_posisi', e.target.value)} />
+              <Input label="Bidang Pekerjaan" placeholder="cth: Retail" value={form.pekerjaan_bidang} onChange={e => set('pekerjaan_bidang', e.target.value)} />
+            </div>
+            <Input label="Nama Perusahaan" value={form.pekerjaan_perusahaan} onChange={e => set('pekerjaan_perusahaan', e.target.value)} />
+            <Select label="Pendapatan Tahunan" value={form.pekerjaan_pendapatan} onChange={e => set('pekerjaan_pendapatan', e.target.value)}>
+              <option value="">Pilih...</option>
+              <option>&lt; Rp 25 juta</option>
+              <option>Rp 25–60 juta</option>
+              <option>Rp 60–120 juta</option>
+              <option>&gt; Rp 120 juta</option>
+              <option>Tidak ingin mengisi</option>
+            </Select>
+          </div>
+        </div>
+
+        {/* ── Pendidikan ── */}
+        <div className="pt-2">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Pendidikan</h3>
+          <div className="space-y-4">
+            <Select label="Pendidikan Terakhir" value={form.pendidikan_terakhir} onChange={e => set('pendidikan_terakhir', e.target.value)}>
+              <option value="">Pilih...</option>
+              {['SD', 'SMP', 'SMA/SMK', 'D1–D3', 'S1', 'S2', 'S3'].map(p => <option key={p}>{p}</option>)}
+            </Select>
+            <Input label="Bidang Pendidikan" placeholder="cth: Teknik Informatika" value={form.pendidikan_bidang} onChange={e => set('pendidikan_bidang', e.target.value)} />
+          </div>
+        </div>
 
         {/* Pelayanan (khusus Volunteer) */}
         {canServe && (

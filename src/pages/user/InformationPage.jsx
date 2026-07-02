@@ -16,7 +16,9 @@ export default function InformationPage() {
   useEffect(() => {
     Promise.all([
       newsService.getAll().then(setNews).catch(() => {}),
-      classesService.getAll({ status: 'Aktif' }).then(setClasses).catch(() => {}),
+      classesService.getAll().then(list =>
+        setClasses((list || []).filter(c => ['Mulai', 'Sedang Berlangsung'].includes(c.status)))
+      ).catch(() => {}),
     ]).finally(() => setLoading(false))
   }, [])
 

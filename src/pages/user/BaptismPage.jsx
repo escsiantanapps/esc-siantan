@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Droplets } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
-import { registrationService } from '@/services/contentService'
-import { Card, Button, Input, Textarea, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
+import { registrationService, classesService, appSettingsService } from '@/services/contentService'
+import { Card, Button, Input, Textarea, Select, Spinner, StatusBadge, GradientHeader, EmptyState } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
+
+// Kelas dianggap "Kelas Baptisan" bila namanya mengandung kata "baptis".
+export function isBaptismClass(cls) {
+  return /baptis/i.test(cls?.name || '')
+}
 
 const STEP_KEYS = ['baptism.step0', 'baptism.step1', 'baptism.step2', 'baptism.step3']
 
@@ -27,23 +33,32 @@ export default function BaptismPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [uploadingKey, setUploadingKey] = useState(null)
+  const [baptismClasses, setBaptismClasses] = useState([])
+  const [regOpen, setRegOpen] = useState(true)
 
   const [form, setForm] = useState({
     full_name: '', birth_date: '', birth_place: '', address: '', nik: '',
     father_name: '', mother_name: '',
-    supervisor: '', class_done: '', testimony: '',
+    supervisor: '', class_done: '', testimony: '', class_id: '',
     documents: {},
   })
 
   useEffect(() => {
     if (!profile) return
     setForm(p => ({ ...p, full_name: profile.name || '', address: profile.address || '', nik: profile.nik || '' }))
-    registrationService.getMyRegistrations(profile.user_id)
-      .then(({ baptism }) => {
+    Promise.all([
+      registrationService.getMyRegistrations(profile.user_id).catch(() => ({ baptism: [] })),
+      classesService.getAll().catch(() => []),
+      appSettingsService.get('baptism_status').catch(() => 'open'),
+    ])
+      .then(([{ baptism }, classes, status]) => {
         const active = baptism.find(b => !['Ditolak', 'Selesai'].includes(b.status))
         setExisting(active || null)
+        setBaptismClasses(
+          (classes || []).filter(c => isBaptismClass(c) && ['Mulai', 'Sedang Berlangsung'].includes(c.status))
+        )
+        setRegOpen(status !== 'closed')
       })
-      .catch(() => {})
       .finally(() => setLoading(false))
   }, [profile])
 
@@ -72,6 +87,7 @@ export default function BaptismPage() {
     if (step === 0) {
       if (!form.full_name.trim()) return t('baptism.nameRequired')
       if (!form.birth_date) return t('baptism.birthRequired')
+      if (baptismClasses.length > 0 && !form.class_id) return 'Silakan pilih Kelas Baptisan.'
     }
     return ''
   }
@@ -92,7 +108,7 @@ export default function BaptismPage() {
     setError('')
     setSaving(true)
     try {
-      const result = await registrationService.submitBaptism({ ...form, user_id: profile.user_id })
+      const result = await registrationService.submitBaptism({ ...form, class_id: form.class_id || null, user_id: profile.user_id })
       setExisting(result)
       toast.success(t('baptism.submitted'))
     } catch (err) {
@@ -104,6 +120,20 @@ export default function BaptismPage() {
   }
 
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
+
+  // Pendaftaran ditutup admin — tetap boleh melihat status yang sudah ada,
+  // tapi tidak bisa mendaftar baru.
+  if (!regOpen && !existing) {
+    return (
+      <div className="pb-4">
+        <GradientHeader title={t('baptism.title')} back={() => navigate('/')} />
+        <div className="px-4 py-4">
+          <EmptyState icon={Droplets} title="Pendaftaran Ditutup"
+            description="Pendaftaran baptisan sedang tidak dibuka. Silakan hubungi admin gereja untuk informasi jadwal berikutnya." />
+        </div>
+      </div>
+    )
+  }
 
   if (existing) {
     return (
@@ -147,6 +177,12 @@ export default function BaptismPage() {
         <Card className="p-4 space-y-4">
           {step === 0 && (
             <>
+              {baptismClasses.length > 0 && (
+                <Select label="Kelas Baptisan" required value={form.class_id} onChange={e => set('class_id', e.target.value)}>
+                  <option value="">Pilih kelas baptisan...</option>
+                  {baptismClasses.map(c => <option key={c.class_id} value={c.class_id}>{c.name}</option>)}
+                </Select>
+              )}
               <Input label={t('common.fullName')} required value={form.full_name} onChange={e => set('full_name', e.target.value)} />
               <Input label={t('common.birthDate')} type="date" required value={form.birth_date} onChange={e => set('birth_date', e.target.value)} />
               <Input label={t('common.birthPlace')} placeholder={t('common.birthPlacePh')} value={form.birth_place} onChange={e => set('birth_place', e.target.value)} />

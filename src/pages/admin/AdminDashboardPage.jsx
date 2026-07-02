@@ -37,7 +37,7 @@ export default function AdminDashboardPage() {
     try {
       const [members, events, tasks, spUsers, baptism, wedding, pendingUsers, newMembers, pending, bdays] = await Promise.all([
         supabase.from('users').select('*', { count: 'exact', head: true }),
-        supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'Aktif'),
+        supabase.from('events').select('*', { count: 'exact', head: true }).in('status', ['Mulai', 'Sedang Berlangsung']),
         supabase.from('form_templates').select('*', { count: 'exact', head: true }),
         supabase.from('users').select('*', { count: 'exact', head: true }).neq('sp_level', 'Aman'),
         supabase.from('baptism_registrations').select('*', { count: 'exact', head: true }).eq('status', 'Menunggu'),

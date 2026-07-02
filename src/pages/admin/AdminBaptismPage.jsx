@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Droplets, ChevronRight } from 'lucide-react'
-import { registrationService } from '@/services/contentService'
+import { registrationService, appSettingsService } from '@/services/contentService'
+import { useToast } from '@/hooks/useToast'
 import { Card, Select, PageHeader, Spinner, EmptyState, StatusBadge } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, formatPhone } from '@/lib/utils'
@@ -10,9 +11,12 @@ const STATUSES = ['Menunggu', 'Sedang Ditinjau', 'Disetujui', 'Terjadwal', 'Sele
 
 export default function AdminBaptismPage() {
   const { t } = useLang()
+  const { toast } = useToast()
   const [registrations, setRegistrations] = useState([])
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
+  const [regOpen, setRegOpen] = useState(true)
+  const [savingGate, setSavingGate] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -22,9 +26,41 @@ export default function AdminBaptismPage() {
       .finally(() => setLoading(false))
   }, [status])
 
+  useEffect(() => {
+    appSettingsService.get('baptism_status').then(s => setRegOpen(s !== 'closed')).catch(() => {})
+  }, [])
+
+  async function toggleGate() {
+    const next = !regOpen
+    setSavingGate(true)
+    try {
+      await appSettingsService.set('baptism_status', next ? 'open' : 'closed')
+      setRegOpen(next)
+      toast.success(next ? 'Pendaftaran baptisan dibuka.' : 'Pendaftaran baptisan ditutup.')
+    } catch (err) {
+      toast.error(err.message || 'Gagal menyimpan pengaturan.')
+    } finally {
+      setSavingGate(false)
+    }
+  }
+
   return (
     <div>
       <PageHeader title={t('abap.title')} subtitle={t('areg.count', { count: registrations.length })} />
+
+      {/* Buka/tutup pendaftaran baptisan (menu cepat Beranda jemaat ikut hilang bila ditutup) */}
+      <Card className="p-4 mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-gray-900">Pendaftaran Baptisan</p>
+          <p className="text-xs text-gray-400">{regOpen ? 'Sedang dibuka untuk jemaat.' : 'Sedang ditutup — jemaat tidak bisa mendaftar.'}</p>
+        </div>
+        <button
+          onClick={toggleGate} disabled={savingGate} role="switch" aria-checked={regOpen}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${regOpen ? 'bg-brand-500' : 'bg-control-hover'}`}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${regOpen ? 'translate-x-6' : 'translate-x-1'}`} />
+        </button>
+      </Card>
 
       <div className="mb-4 max-w-xs">
         <Select value={status} onChange={e => setStatus(e.target.value)}>

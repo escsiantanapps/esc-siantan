@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { BookOpen, Clock, MapPin, User, QrCode, CheckCircle2, History, ClipboardList } from 'lucide-react'
+import { BookOpen, Clock, MapPin, User, QrCode, CheckCircle2, History, ClipboardList, MessageCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { classesService } from '@/services/contentService'
 import { classAttendanceService } from '@/services/attendanceService'
 import { Card, Spinner, GradientHeader, EmptyState, StatusBadge, Button } from '@/components/ui'
+import MediaGallery from '@/components/MediaGallery'
 import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
 
@@ -92,7 +93,24 @@ export default function ClassDetailPage() {
               <Button className="w-full" onClick={() => navigate('/kelas/absen')}>
                 <QrCode size={16} /> {t('classDetail.attendNow')}
               </Button>
+
+              {/* Kontak WA admin sesuai gender jemaat */}
+              {(() => {
+                const wa = profile?.gender === 'Perempuan'
+                  ? (cls.contact_wa_female || cls.contact_wa)
+                  : (cls.contact_wa || cls.contact_wa_female)
+                return wa ? (
+                  <a href={`https://wa.me/${wa.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+                    <Button variant="outline" className="w-full">
+                      <MessageCircle size={16} /> {t('common.contactWa')}
+                    </Button>
+                  </a>
+                ) : null
+              })()}
             </Card>
+
+            {/* Galeri foto & video */}
+            <MediaGallery photos={cls.photo_urls} videos={cls.video_urls} />
 
             {/* Riwayat Kehadiran Saya */}
             <Card className="p-4">

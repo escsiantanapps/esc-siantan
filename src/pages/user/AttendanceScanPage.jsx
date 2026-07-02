@@ -2,13 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, XCircle, ScanLine, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { classesService, eventsService } from '@/services/contentService'
+import { classesService, eventsService, komselService } from '@/services/contentService'
 import { classAttendanceService, eventAttendanceService } from '@/services/attendanceService'
+import { pointsService } from '@/services/pointsService'
 import { Card, Spinner, GradientHeader, Button } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 
 const CLASS_PREFIX = 'ESC-ABSEN:'
 const EVENT_PREFIX = 'ESC-EVENT:'
+const KOMSEL_PREFIX = 'ESC-KOMSEL:'
+const SUNDAY_PREFIX = 'ESC-SUNDAY:'
+const REDEEM_PREFIX = 'ESC-REDEEM:'
 
 export default function AttendanceScanPage() {
   const { profile } = useAuth()
@@ -61,13 +65,20 @@ export default function AttendanceScanPage() {
   async function handleScan(decodedText) {
     if (processingRef.current) return
     const text = (decodedText || '').trim()
-    if (!text.startsWith(CLASS_PREFIX) && !text.startsWith(EVENT_PREFIX)) return
+    const known = [CLASS_PREFIX, EVENT_PREFIX, KOMSEL_PREFIX, SUNDAY_PREFIX, REDEEM_PREFIX]
+    if (!known.some(p => text.startsWith(p))) return
     processingRef.current = true
 
     if (text.startsWith(CLASS_PREFIX)) {
       await handleClass(text.slice(CLASS_PREFIX.length))
-    } else {
+    } else if (text.startsWith(EVENT_PREFIX)) {
       await handleEvent(text.slice(EVENT_PREFIX.length))
+    } else if (text.startsWith(KOMSEL_PREFIX)) {
+      await handleKomsel(text.slice(KOMSEL_PREFIX.length))
+    } else if (text.startsWith(SUNDAY_PREFIX)) {
+      await handleSunday()
+    } else {
+      await handleRedeem(text.slice(REDEEM_PREFIX.length))
     }
   }
 
@@ -103,6 +114,46 @@ export default function AttendanceScanPage() {
       }
     } catch {
       setResult({ type: 'error', message: t('scan.eventInvalid') })
+    }
+  }
+
+  async function handleKomsel(sessionId) {
+    try {
+      const session = await komselService.getSessionById(sessionId)
+      try {
+        await komselService.checkInSession(session, profile.user_id)
+        setResult({ type: 'success', message: `Kehadiran komsel "${session.komsel?.name || ''}" tercatat. +1 poin! 🎉` })
+      } catch (err) {
+        setResult({ type: 'duplicate', message: err.message || 'Kehadiran sesi ini sudah tercatat.' })
+      }
+    } catch {
+      setResult({ type: 'error', message: 'Sesi komsel tidak ditemukan atau sudah berakhir.' })
+    }
+  }
+
+  async function handleSunday() {
+    try {
+      await pointsService.checkInSunday(profile.user_id)
+      setResult({ type: 'success', message: 'Kehadiran ibadah minggu tercatat. +1 poin! 🎉' })
+    } catch (err) {
+      setResult({ type: 'duplicate', message: err.message || 'Kehadiran ibadah hari ini sudah tercatat.' })
+    }
+  }
+
+  async function handleRedeem(ticketId) {
+    try {
+      const res = await pointsService.redeemTicket(ticketId)
+      if (res?.ok) {
+        setResult({ type: 'success', message: `Penukaran berhasil: ${res.product || 'produk'} (−${res.cost} poin). Sisa poin: ${res.balance}.` })
+      } else if (res?.reason === 'insufficient') {
+        setResult({ type: 'error', message: `Poin tidak cukup. Butuh ${res.needed}, poin Anda ${res.balance}.` })
+      } else if (res?.reason === 'used') {
+        setResult({ type: 'duplicate', message: 'Tiket ini sudah digunakan atau tidak berlaku.' })
+      } else {
+        setResult({ type: 'error', message: 'Tiket tidak ditemukan.' })
+      }
+    } catch (err) {
+      setResult({ type: 'error', message: err.message || 'Gagal memproses penukaran.' })
     }
   }
 

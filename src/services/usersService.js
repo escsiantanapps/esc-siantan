@@ -8,7 +8,7 @@ function withMinistryIds(u) {
 }
 
 export const usersService = {
-  async getAll({ search = '', role = '', status = '', ministry = '', komsel = '', page = 1, limit = 20 } = {}) {
+  async getAll({ search = '', role = '', status = '', ministry = '', komsel = '', page = 1, limit = 20, sort = 'name' } = {}) {
     let query = supabase.from('users').select('*, user_ministries(ministry_id)', { count: 'exact' })
     if (search) query = query.ilike('name', `%${search}%`)
     if (role) query = query.eq('role', role)
@@ -20,7 +20,8 @@ export const usersService = {
       query = query.in('user_id', ids.length ? ids : ['__none__'])
     }
     const from = (page - 1) * limit
-    query = query.range(from, from + limit - 1).order('name')
+    query = query.range(from, from + limit - 1)
+    query = sort === 'points' ? query.order('points', { ascending: false }).order('name') : query.order('name')
     const { data, error, count } = await query
     if (error) throw error
     return { data: (data || []).map(withMinistryIds), count }
@@ -164,5 +165,13 @@ export const usersService = {
     const { data, error } = await query.order('name')
     if (error) throw error
     return data
+  },
+
+  // Heartbeat kehadiran online: perbarui last_seen_at milik sendiri.
+  // Dipanggil berkala dari UserLayout — gagal diam-diam (bukan fitur kritis).
+  async heartbeat(userId) {
+    await supabase.from('users')
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq('user_id', userId)
   },
 }

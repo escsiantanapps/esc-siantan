@@ -4,6 +4,7 @@ import { Calendar, MapPin, Clock, MessageCircle, CheckCircle2, ScanLine } from '
 import { useAuth } from '@/hooks/useAuth'
 import { eventsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState, StatusBadge } from '@/components/ui'
+import MediaGallery from '@/components/MediaGallery'
 import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
 
@@ -86,6 +87,9 @@ export default function EventDetailPage() {
               </div>
             </Card>
 
+            {/* Galeri foto & video */}
+            <MediaGallery photos={event.photo_urls} videos={event.video_urls} />
+
             {error && (
               <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>
             )}
@@ -103,7 +107,7 @@ export default function EventDetailPage() {
                   <ScanLine size={16} /> Scan QR Kehadiran
                 </Button>
               </>
-            ) : event.status === 'Aktif' ? (
+            ) : ['Mulai', 'Sedang Berlangsung'].includes(event.status) ? (
               <Button className="w-full" size="lg" loading={registering} onClick={handleRegister}>
                 {t('eventDetail.register')}
               </Button>
@@ -111,13 +115,21 @@ export default function EventDetailPage() {
               <p className="text-center text-sm text-gray-400">{t('eventDetail.closed')}</p>
             )}
 
-            {event.contact_wa && (
-              <a href={`https://wa.me/${event.contact_wa.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" className="w-full">
-                  <MessageCircle size={16} /> {t('common.contactWa')}
-                </Button>
-              </a>
-            )}
+            {/* Kontak WA admin sesuai gender jemaat: Laki-laki → admin
+                laki-laki (contact_wa), Perempuan → admin perempuan
+                (contact_wa_female); fallback ke yang tersedia. */}
+            {(() => {
+              const wa = profile?.gender === 'Perempuan'
+                ? (event.contact_wa_female || event.contact_wa)
+                : (event.contact_wa || event.contact_wa_female)
+              return wa ? (
+                <a href={`https://wa.me/${wa.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" className="w-full">
+                    <MessageCircle size={16} /> {t('common.contactWa')}
+                  </Button>
+                </a>
+              ) : null
+            })()}
           </div>
         )}
       </div>

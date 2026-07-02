@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Tahap 2: Tunas bertumbuh -->
+  <circle cx="100" cy="100" r="88" fill="rgba(255,255,255,0.10)"/>
+  <path d="M28 146 Q100 132 172 146" stroke="rgba(255,255,255,0.85)" stroke-width="4" stroke-linecap="round"/>
+  <!-- batang tunas -->
+  <path d="M100 144 Q100 108 100 84" stroke="rgba(255,255,255,0.95)" stroke-width="5" stroke-linecap="round"/>
+  <!-- daun kiri -->
+  <path d="M100 104 Q70 96 62 68 Q92 72 100 96z" fill="rgba(255,255,255,0.9)"/>
+  <!-- daun kanan -->
+  <path d="M100 92 Q130 84 138 56 Q108 60 100 84z" fill="rgba(255,255,255,0.75)"/>
+  <!-- pucuk -->
+  <path d="M100 84 Q96 70 100 60 Q104 70 100 84z" fill="rgba(255,255,255,0.95)"/>
+  <!-- matahari kecil -->
+  <circle cx="46" cy="44" r="11" fill="rgba(255,255,255,0.9)"/>
+  <g stroke="rgba(255,255,255,0.7)" stroke-width="3" stroke-linecap="round">
+    <path d="M46 26v-6"/><path d="M46 68v-6"/><path d="M28 44h-6"/><path d="M70 44h-6"/>
+  </g>
+</svg>

@@ -1,59 +1,85 @@
 /**
  * OnboardingPage.jsx — ESC Siantan
  *
- * Slide perkenalan 4 layar dengan ayat Alkitab + motivasi.
- * Muncul HANYA sekali, pada login pertama di perangkat ini (ditandai
- * dengan localStorage key 'esc-onboarding-done').
+ * Roadmap Pemuridan: 4 tahap perkembangan rohani jemaat (biji → tunas →
+ * pohon → berbuah). Isi tahap (judul, fokus, karakteristik, sikap, gambar)
+ * dimuat dinamis dari app_settings key 'discipleship_roadmap' — bisa diedit
+ * Admin lewat /admin/roadmap. Bila belum ada di DB, pakai DEFAULT_ROADMAP.
  *
- * Setelah selesai → redirect ke beranda (/).
+ * Frekuensi tayang diatur app_settings 'roadmap_show_count' (default 1):
+ * jumlah penayangan di perangkat dilacak di localStorage — selama masih di
+ * bawah batas, roadmap muncul lagi saat aplikasi dibuka.
  */
 
-import { useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { appSettingsService } from '@/services/contentService'
 
-export const ONBOARDING_KEY = 'esc-onboarding-done'
+export const ONBOARDING_KEY = 'esc-onboarding-done'          // legacy (pra-v28)
+export const ROADMAP_SEEN_KEY = 'esc-roadmap-seen-count'
 
-// ─── Data slide ──────────────────────────────────────────────────────────────
-const SLIDES = [
+// Gradien latar per tahap (kelas literal — jangan diinterpolasi).
+const STAGE_GRADIENTS = [
+  'from-sky-600 to-blue-800',
+  'from-teal-600 to-cyan-800',
+  'from-indigo-600 to-purple-800',
+  'from-amber-500 to-orange-700',
+]
+
+// Konten bawaan — dipakai bila admin belum menyimpan template sendiri.
+export const DEFAULT_ROADMAP = [
   {
-    icon: '✝️',
-    gradient: 'from-sky-600 to-blue-800',
-    tag: 'Selamat Datang',
-    title: 'Shalom di\nESC Siantan',
-    verse: '"Kasihilah seorang akan yang lain,\nsebagaimana Aku telah mengasihi kamu."',
-    ref: 'Yohanes 13:34',
-    desc: 'Aplikasi ini hadir untuk mendekatkan kita satu sama lain — sebagai satu tubuh Kristus.',
+    title: 'Biji — Lahir Baru',
+    focus: 'Keselamatan & pertobatan',
+    characteristics: 'Percaya kepada Tuhan Yesus, dibaptis, dan mulai membangun kebiasaan rohani.',
+    attitude: 'Haus akan Firman, terbuka untuk dibimbing.',
+    image: '/images/roadmap/tahap1.svg',
   },
   {
-    icon: '🙌',
-    gradient: 'from-indigo-600 to-purple-800',
-    tag: 'Ibadah & Komunitas',
-    title: 'Bertumbuh\nBersama',
-    verse: '"Janganlah kita menjauhkan diri dari pertemuan-pertemuan ibadah kita."',
-    ref: 'Ibrani 10:25',
-    desc: 'Cek jadwal ibadah, daftar event, dan pantau kehadiran — semua dalam satu tempat.',
+    title: 'Tunas — Bertumbuh',
+    focus: 'Pengenalan akan Firman',
+    characteristics: 'Rutin saat teduh, setia ibadah & komsel, mulai mengenal karunia.',
+    attitude: 'Setia dalam persekutuan dan disiplin rohani.',
+    image: '/images/roadmap/tahap2.svg',
   },
   {
-    icon: '🕊️',
-    gradient: 'from-teal-600 to-cyan-800',
-    tag: 'Pelayanan',
-    title: 'Melayani\ndengan Sukacita',
-    verse: '"Layanilah seorang akan yang lain, sesuai dengan karunia yang telah diperoleh tiap-tiap orang."',
-    ref: '1 Petrus 4:10',
-    desc: 'Kelola tugas pelayanan, absensi, persembahan, dan kelas pembinaan dengan mudah.',
+    title: 'Pohon — Berakar Kuat',
+    focus: 'Karakter Kristus & pelayanan',
+    characteristics: 'Terlibat pelayanan, hidup jadi teladan, kuat menghadapi tantangan.',
+    attitude: 'Rendah hati, setia, dapat dipercaya.',
+    image: '/images/roadmap/tahap3.svg',
   },
   {
-    icon: '🌟',
-    gradient: 'from-amber-500 to-orange-700',
-    tag: 'Siap Memulai',
-    title: 'Segala Perkara\nDapat Kutanggung',
-    verse: '"Segala perkara dapat kutanggung di dalam Dia yang memberi kekuatan kepadaku."',
-    ref: 'Filipi 4:13',
-    desc: 'Masuk atau daftarkan akun kamu, dan mulailah perjalanan bersama komunitas ESC Siantan.',
+    title: 'Berbuah — Memuridkan',
+    focus: 'Multiplikasi & memimpin',
+    characteristics: 'Membimbing jiwa baru, memimpin kelompok, menjadi berkat bagi banyak orang.',
+    attitude: 'Hati bapa: memberi hidup bagi orang lain.',
+    image: '/images/roadmap/tahap4.svg',
   },
 ]
 
-// ─── Komponen dot indicator ───────────────────────────────────────────────────
+// Jumlah penayangan roadmap yang sudah terjadi di perangkat ini.
+export function getRoadmapSeenCount() {
+  try {
+    const n = Number(localStorage.getItem(ROADMAP_SEEN_KEY))
+    if (Number.isFinite(n) && n >= 0) return n
+    // Migrasi dari flag lama: user lama yang sudah pernah lihat onboarding
+    // dianggap sudah 1x tayang supaya tidak muncul lagi saat batas = 1.
+    return localStorage.getItem(ONBOARDING_KEY) ? 1 : 0
+  } catch { return 1 }
+}
+
+// Cek apakah roadmap masih perlu ditayangkan (dibanding batas dari admin).
+export async function shouldShowOnboarding() {
+  try {
+    const limit = Number(await appSettingsService.get('roadmap_show_count'))
+    const max = Number.isFinite(limit) && limit >= 0 ? limit : 1
+    return getRoadmapSeenCount() < max
+  } catch {
+    return getRoadmapSeenCount() < 1
+  }
+}
+
 function Dots({ total, active }) {
   return (
     <div className="flex items-center gap-2">
@@ -61,9 +87,7 @@ function Dots({ total, active }) {
         <span
           key={i}
           className={`rounded-full transition-all duration-300 ${
-            i === active
-              ? 'w-6 h-2 bg-white'
-              : 'w-2 h-2 bg-white/40'
+            i === active ? 'w-6 h-2 bg-white' : 'w-2 h-2 bg-white/40'
           }`}
         />
       ))}
@@ -71,19 +95,31 @@ function Dots({ total, active }) {
   )
 }
 
-// ─── Halaman utama ────────────────────────────────────────────────────────────
 export default function OnboardingPage() {
   const navigate  = useNavigate()
+  const [stages, setStages] = useState(DEFAULT_ROADMAP)
   const [index, setIndex] = useState(0)
   const [exiting, setExiting] = useState(false)
   const touchStartX = useRef(null)
 
-  const slide = SLIDES[index]
-  const isLast = index === SLIDES.length - 1
+  // Muat template dari DB; fallback diam-diam ke DEFAULT_ROADMAP.
+  useEffect(() => {
+    appSettingsService.get('discipleship_roadmap')
+      .then(v => {
+        if (Array.isArray(v) && v.length > 0 && v.every(s => s && s.title)) setStages(v)
+      })
+      .catch(() => {})
+  }, [])
 
-  // Simpan flag & pergi ke beranda
+  const slide = stages[index]
+  const isLast = index === stages.length - 1
+
+  // Catat 1 penayangan & pergi ke beranda.
   function finish() {
-    localStorage.setItem(ONBOARDING_KEY, '1')
+    try {
+      localStorage.setItem(ROADMAP_SEEN_KEY, String(getRoadmapSeenCount() + 1))
+      localStorage.setItem(ONBOARDING_KEY, '1')
+    } catch { /* private mode */ }
     navigate('/', { replace: true })
   }
 
@@ -101,19 +137,22 @@ export default function OnboardingPage() {
   function onTouchEnd(e) {
     if (touchStartX.current === null) return
     const diff = touchStartX.current - e.changedTouches[0].clientX
-    if (diff > 50)  next()                                     // swipe kiri → next
-    if (diff < -50 && index > 0) setIndex(i => i - 1)        // swipe kanan → prev
+    if (diff > 50)  next()
+    if (diff < -50 && index > 0) setIndex(i => i - 1)
     touchStartX.current = null
   }
 
+  const gradient = STAGE_GRADIENTS[index % STAGE_GRADIENTS.length]
+
   return (
     <div
-      className={`h-dvh overflow-hidden bg-gradient-to-br ${slide.gradient} flex flex-col transition-all duration-500`}
+      className={`h-dvh overflow-hidden bg-gradient-to-br ${gradient} flex flex-col transition-all duration-500`}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
       {/* Skip */}
-      <div className="flex justify-end px-5 pt-4 pb-1 shrink-0">
+      <div className="flex items-center justify-between px-5 pt-4 pb-1 shrink-0">
+        <span className="text-xs font-bold tracking-widest uppercase text-white/60">Roadmap Pemuridan</span>
         <button
           onClick={finish}
           className="text-sm text-white/70 hover:text-white transition px-3 py-1.5 rounded-full hover:bg-white/10"
@@ -128,12 +167,14 @@ export default function OnboardingPage() {
           exiting ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'
         }`}
       >
-        {/* Icon besar */}
-        <div className="text-6xl mb-3 drop-shadow-lg select-none">{slide.icon}</div>
+        {/* Ilustrasi tahap */}
+        {slide.image && (
+          <img src={slide.image} alt={slide.title} className="w-36 h-36 mb-2 drop-shadow-lg select-none" draggable="false" />
+        )}
 
-        {/* Tag */}
+        {/* Tag tahap */}
         <span className="text-xs font-bold tracking-widest uppercase text-white/70 mb-2">
-          {slide.tag}
+          Tahap {index + 1} dari {stages.length}
         </span>
 
         {/* Judul */}
@@ -141,21 +182,32 @@ export default function OnboardingPage() {
           {slide.title}
         </h1>
 
-        {/* Kartu ayat */}
-        <div className="w-full max-w-sm bg-white/15 border border-white/30 rounded-2xl px-6 py-4 mb-4 backdrop-blur-sm">
-          <p className="text-white/95 text-sm leading-relaxed italic whitespace-pre-line mb-2">
-            {slide.verse}
-          </p>
-          <p className="text-white/60 text-xs font-semibold tracking-wide">— {slide.ref}</p>
+        {/* Kartu isi tahap */}
+        <div className="w-full max-w-sm bg-white/15 border border-white/30 rounded-2xl px-6 py-4 backdrop-blur-sm text-left space-y-2.5">
+          {slide.focus && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">Fokus</p>
+              <p className="text-white/95 text-sm leading-relaxed">{slide.focus}</p>
+            </div>
+          )}
+          {slide.characteristics && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">Karakteristik</p>
+              <p className="text-white/95 text-sm leading-relaxed">{slide.characteristics}</p>
+            </div>
+          )}
+          {slide.attitude && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">Sikap</p>
+              <p className="text-white/95 text-sm leading-relaxed">{slide.attitude}</p>
+            </div>
+          )}
         </div>
-
-        {/* Deskripsi */}
-        <p className="text-white/80 text-sm leading-relaxed max-w-xs">{slide.desc}</p>
       </div>
 
       {/* Footer: dots + tombol */}
       <div className="px-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-1 flex items-center justify-between shrink-0">
-        <Dots total={SLIDES.length} active={index} />
+        <Dots total={stages.length} active={index} />
 
         <button
           onClick={next}

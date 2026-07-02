@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { newsService } from '@/services/contentService'
+import { newsService, mediaService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { Card, Input, Textarea, Button, Spinner } from '@/components/ui'
 import Uploader from '@/components/Uploader'
+import MediaListUploader from '@/components/MediaListUploader'
 import { validateUpload, compressImage } from '@/lib/utils'
 
 export default function AdminNewsFormPage() {
@@ -24,7 +25,9 @@ export default function AdminNewsFormPage() {
 
   const [form, setForm] = useState({
     title: '', content: '', contact_wa: '', thumbnail_url: '',
+    photo_urls: [], video_urls: [],
   })
+  const [mediaBusy, setMediaBusy] = useState(false)
 
   useEffect(() => {
     if (!isEdit) return
@@ -34,12 +37,40 @@ export default function AdminNewsFormPage() {
         content: item.content || '',
         contact_wa: item.contact_wa || '',
         thumbnail_url: item.thumbnail_url || '',
+        photo_urls: item.photo_urls || [],
+        video_urls: item.video_urls || [],
       }))
       .catch(err => setError(err.message || t('anf.loadFailed')))
       .finally(() => setLoading(false))
   }, [id])
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
+
+  async function handleMedia(kind, action) {
+    if (action.type === 'remove') {
+      const key = kind === 'video' ? 'video_urls' : 'photo_urls'
+      set(key, form[key].filter((_, i) => i !== action.index))
+      return
+    }
+    setMediaBusy(true)
+    try {
+      let file = action.file
+      if (kind === 'video') {
+        validateUpload(file, { maxMB: 50 })
+        const url = await mediaService.uploadVideo('news', file)
+        set('video_urls', [...form.video_urls, url])
+      } else {
+        file = await compressImage(file, { maxDim: 1600 })
+        validateUpload(file, { maxMB: 5, image: true })
+        const url = await mediaService.uploadPhoto('news', file)
+        set('photo_urls', [...form.photo_urls, url])
+      }
+    } catch (err) {
+      toast.error(err.message || 'Gagal mengunggah media.')
+    } finally {
+      setMediaBusy(false)
+    }
+  }
 
   async function handleUpload(file) {
     if (!file) return
@@ -133,6 +164,21 @@ export default function AdminNewsFormPage() {
         <Input label={t('anf.titleLabel')} required value={form.title} onChange={e => set('title', e.target.value)} />
         <Textarea label={t('anf.content')} rows={6} value={form.content} onChange={e => set('content', e.target.value)} />
         <Input label={t('anf.contactWa')} placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
+      </Card>
+
+      {/* Galeri media */}
+      <Card className="p-4 mb-4 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-900">Galeri Media</h2>
+        <MediaListUploader
+          kind="image" label="Foto" max={5} hint="Maks 5 foto — carousel auto-slide di halaman detail"
+          urls={form.photo_urls} uploading={mediaBusy}
+          onChange={a => handleMedia('image', a)}
+        />
+        <MediaListUploader
+          kind="video" label="Video" max={2} hint="Maks 2 video — autoplay (mute), maks 50 MB/video"
+          urls={form.video_urls} uploading={mediaBusy}
+          onChange={a => handleMedia('video', a)}
+        />
       </Card>
 
       <div className="flex gap-2">

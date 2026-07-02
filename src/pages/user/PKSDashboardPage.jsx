@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, ClipboardCheck, Save, BarChart3, UserCircle, LogOut, ChevronDown, HandCoins, X, Cake, Send } from 'lucide-react'
+import QRCode from 'qrcode'
+import { Users, ClipboardCheck, Save, BarChart3, UserCircle, LogOut, ChevronDown, HandCoins, X, Cake, Send, QrCode, Plus, Download } from 'lucide-react'
 import { startOfMonth } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
@@ -59,6 +60,13 @@ export default function PKSDashboardPage() {
   const [birthdayDrafts, setBirthdayDrafts] = useState({}) // user_id -> teks pesan
   const [birthdaySent, setBirthdaySent] = useState({}) // user_id -> true setelah terkirim
   const [birthdaySending, setBirthdaySending] = useState('')
+
+  // Sesi absensi komsel (QR dipindai anggota).
+  const [sessionTitle, setSessionTitle] = useState('')
+  const [creatingSession, setCreatingSession] = useState(false)
+  const [activeSession, setActiveSession] = useState(null) // { ...session, qr }
+  const [sessionAttendance, setSessionAttendance] = useState([])
+  useBackClose(!!activeSession, () => setActiveSession(null))
 
   const userId = profile?.user_id
 
@@ -161,6 +169,37 @@ export default function PKSDashboardPage() {
       setBirthdaySending('')
     }
   }
+
+  // Buat sesi absensi baru → tampilkan QR untuk dipindai anggota.
+  async function handleCreateSession() {
+    const title = sessionTitle.trim() || `Komsel ${formatDate(new Date())}`
+    setCreatingSession(true)
+    try {
+      const session = await komselService.createSession(selectedId, title, profile.user_id)
+      const qr = await QRCode.toDataURL(`ESC-KOMSEL:${session.session_id}`, { width: 320, margin: 1 }).catch(() => '')
+      setActiveSession({ ...session, qr })
+      setSessionAttendance([])
+      setSessionTitle('')
+    } catch (err) {
+      toast.error(err.message || t('pks.attendanceSaveFailed'))
+    } finally {
+      setCreatingSession(false)
+    }
+  }
+
+  // Muat siapa saja yang sudah scan sesi aktif (refresh manual).
+  async function refreshSessionAttendance() {
+    if (!activeSession) return
+    try { setSessionAttendance(await komselService.getSessionAttendance(activeSession.session_id)) }
+    catch { /* abaikan */ }
+  }
+  useEffect(() => {
+    if (!activeSession) return
+    refreshSessionAttendance()
+    const timer = setInterval(refreshSessionAttendance, 8000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession?.session_id])
 
   const komsel = useMemo(() => ledKomsels.find(k => k.komsel_id === selectedId) || null, [ledKomsels, selectedId])
 
@@ -316,45 +355,76 @@ export default function PKSDashboardPage() {
               <>
                 {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-3">{error}</div>}
 
-                {alreadySubmitted ? (
-                  <div className="bg-green-50 border border-green-100 text-green-700 text-sm rounded-xl px-4 py-3 mb-4">
-                    {t('pks.alreadySubmitted')}
-                  </div>
-                ) : members.length === 0 ? (
-                  <EmptyState icon={ClipboardCheck} title={t('pks.noMembers')} description={t('pks.addMembersFirst')} />
-                ) : (
-                  <>
-                    <p className="text-xs text-gray-400 mb-2">{t('pks.attendanceFor', { date: formatDate(new Date()) })}</p>
-                    <div className="space-y-2.5 mb-4">
-                      {members.map(m => (
-                        <Card key={m.user_id} className="p-3 space-y-2">
-                          <div className="flex items-center gap-3">
-                            <Avatar name={m.name} src={m.photo_url} size="sm" />
-                            <p className="text-sm font-medium text-gray-900 flex-1 truncate">{m.name}</p>
-                            <div className="w-36 shrink-0">
-                              <Select
-                                value={statuses[m.user_id] || 'Hadir'}
-                                onChange={e => setStatuses(p => ({ ...p, [m.user_id]: e.target.value }))}
-                              >
-                                <option value="Hadir">{t('status.Hadir')}</option>
-                                <option value="Tidak Hadir">{t('status.Tidak Hadir')}</option>
-                                <option value="Izin">{t('status.Izin')}</option>
-                              </Select>
-                            </div>
-                          </div>
-                          <Input
-                            placeholder={t('pks.prayerNote')}
-                            value={notes[m.user_id] || ''}
-                            onChange={e => setNotes(p => ({ ...p, [m.user_id]: e.target.value }))}
-                          />
-                        </Card>
-                      ))}
+                {/* Absensi via QR: PKS buat sesi → anggota memindai untuk mencatat
+                    kehadiran sendiri (+1 poin). Menggantikan checklist manual. */}
+                <Card className="p-4 mb-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center">
+                      <QrCode size={16} className="text-brand-500" />
                     </div>
-                    <Button className="w-full" loading={saving} onClick={handleSubmit}>
-                      <Save size={15} /> {t('pks.saveAttendance')}
-                    </Button>
-                  </>
-                )}
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Sesi Absensi QR</p>
+                      <p className="text-xs text-gray-400">Anggota memindai QR untuk hadir &amp; dapat 1 poin</p>
+                    </div>
+                  </div>
+                  <Input
+                    placeholder="Judul sesi (mis. Komsel Rabu, PA Yohanes 3)"
+                    value={sessionTitle}
+                    onChange={e => setSessionTitle(e.target.value)}
+                  />
+                  <Button className="w-full" loading={creatingSession} onClick={handleCreateSession}>
+                    <Plus size={15} /> Buat Sesi &amp; Tampilkan QR
+                  </Button>
+                </Card>
+
+                {/* Checklist manual (opsional, tanpa poin) */}
+                <details className="mb-4 group">
+                  <summary className="cursor-pointer text-sm font-medium text-gray-600 flex items-center gap-1.5 py-1">
+                    <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
+                    Absensi Manual (tanpa poin)
+                  </summary>
+                  <div className="pt-3">
+                    {alreadySubmitted ? (
+                      <div className="bg-green-50 border border-green-100 text-green-700 text-sm rounded-xl px-4 py-3">
+                        {t('pks.alreadySubmitted')}
+                      </div>
+                    ) : members.length === 0 ? (
+                      <EmptyState icon={ClipboardCheck} title={t('pks.noMembers')} description={t('pks.addMembersFirst')} />
+                    ) : (
+                      <>
+                        <p className="text-xs text-gray-400 mb-2">{t('pks.attendanceFor', { date: formatDate(new Date()) })}</p>
+                        <div className="space-y-2.5 mb-4">
+                          {members.map(m => (
+                            <Card key={m.user_id} className="p-3 space-y-2">
+                              <div className="flex items-center gap-3">
+                                <Avatar name={m.name} src={m.photo_url} size="sm" />
+                                <p className="text-sm font-medium text-gray-900 flex-1 truncate">{m.name}</p>
+                                <div className="w-36 shrink-0">
+                                  <Select
+                                    value={statuses[m.user_id] || 'Hadir'}
+                                    onChange={e => setStatuses(p => ({ ...p, [m.user_id]: e.target.value }))}
+                                  >
+                                    <option value="Hadir">{t('status.Hadir')}</option>
+                                    <option value="Tidak Hadir">{t('status.Tidak Hadir')}</option>
+                                    <option value="Izin">{t('status.Izin')}</option>
+                                  </Select>
+                                </div>
+                              </div>
+                              <Input
+                                placeholder={t('pks.prayerNote')}
+                                value={notes[m.user_id] || ''}
+                                onChange={e => setNotes(p => ({ ...p, [m.user_id]: e.target.value }))}
+                              />
+                            </Card>
+                          ))}
+                        </div>
+                        <Button className="w-full" loading={saving} onClick={handleSubmit}>
+                          <Save size={15} /> {t('pks.saveAttendance')}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </details>
 
                 {history.length > 0 && (
                   <div className="mt-6">
@@ -529,6 +599,44 @@ export default function PKSDashboardPage() {
           </>
         )}
       </div>
+
+      {/* Modal Sesi Absensi QR aktif */}
+      {activeSession && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-sm p-5 space-y-4 max-h-[90vh] overflow-y-auto text-center">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">Sesi Absensi Aktif</h2>
+              <button onClick={() => setActiveSession(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-gray-600">{activeSession.title}</p>
+            {activeSession.qr
+              ? <img src={activeSession.qr} alt="QR Sesi" className="w-full rounded-xl border border-gray-100" />
+              : <div className="flex justify-center py-10"><Spinner /></div>}
+            <p className="text-xs text-gray-400">Minta anggota memindai QR ini lewat menu Scan. Kehadiran &amp; poin tercatat otomatis.</p>
+            {activeSession.qr && (
+              <a href={activeSession.qr} download={`QR-${activeSession.title}.png`}>
+                <Button variant="outline" className="w-full"><Download size={15} /> Unduh QR</Button>
+              </a>
+            )}
+
+            <div className="text-left pt-2 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Sudah hadir ({sessionAttendance.length})</p>
+              {sessionAttendance.length === 0 ? (
+                <p className="text-xs text-gray-400">Belum ada yang memindai. Daftar diperbarui otomatis.</p>
+              ) : (
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {sessionAttendance.map(a => (
+                    <div key={a.attendance_id} className="flex items-center gap-2">
+                      <Avatar name={a.users?.name} src={a.users?.photo_url} size="sm" />
+                      <p className="text-sm text-gray-700 truncate">{a.users?.name || '-'}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Detail anggota -- TANPA NIK, sengaja (lihat catatan privasi). */}
       {memberDetail && (

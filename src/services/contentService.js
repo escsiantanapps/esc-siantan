@@ -430,6 +430,62 @@ export const komselService = {
     return data
   },
 
+  // ── Sesi Absensi Komsel (QR: ESC-KOMSEL:<session_id>) ──
+  // PKS membuat sesi → QR ditampilkan → jemaat scan utk catat kehadirannya
+  // sendiri (+1 poin otomatis via trigger DB).
+  async createSession(komselId, title, createdBy) {
+    const { data, error } = await supabase.from('komsel_sessions')
+      .insert({ komsel_id: komselId, title, created_by: createdBy }).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async getSessions(komselId) {
+    const { data, error } = await supabase.from('komsel_sessions')
+      .select('*').eq('komsel_id', komselId)
+      .order('created_at', { ascending: false }).limit(30)
+    if (error) throw error
+    return data
+  },
+
+  async getSessionById(sessionId) {
+    const { data, error } = await supabase.from('komsel_sessions')
+      .select('*, komsel(name)').eq('session_id', sessionId).single()
+    if (error) throw error
+    return data
+  },
+
+  async deleteSession(sessionId) {
+    const { error } = await supabase.from('komsel_sessions').delete().eq('session_id', sessionId)
+    if (error) throw error
+  },
+
+  // Kehadiran satu sesi (untuk PKS memantau siapa saja yang sudah scan).
+  async getSessionAttendance(sessionId) {
+    const { data, error } = await supabase.from('komsel_attendance')
+      .select('*, users(name, photo_url)').eq('session_id', sessionId)
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    return data
+  },
+
+  // Jemaat mencatat kehadirannya sendiri lewat scan QR sesi.
+  async checkInSession(session, userId) {
+    const { data, error } = await supabase.from('komsel_attendance')
+      .insert({
+        komsel_id: session.komsel_id,
+        user_id: userId,
+        session_id: session.session_id,
+        attendance_date: session.session_date,
+        status: 'Hadir',
+      }).select().single()
+    if (error) {
+      if (error.code === '23505') throw new Error('Kehadiran sesi ini sudah tercatat.')
+      throw error
+    }
+    return data
+  },
+
   async getAttendanceHistory(komselId) {
     const { data, error } = await supabase
       .from('komsel_attendance').select('*, users(name)')
@@ -517,5 +573,50 @@ export const certificatesService = {
   async remove(certificateId) {
     const { error } = await supabase.from('certificates').delete().eq('certificate_id', certificateId)
     if (error) throw error
+  },
+}
+
+// ─── Pengaturan aplikasi (app_settings key/value) ──────────
+// Dibaca siapa saja (termasuk pra-login); ditulis Super Admin (RLS).
+export const appSettingsService = {
+  async get(key) {
+    const { data, error } = await supabase
+      .from('app_settings').select('value').eq('key', key).maybeSingle()
+    if (error) throw error
+    return data?.value ?? null
+  },
+
+  async getMany(keys) {
+    const { data, error } = await supabase
+      .from('app_settings').select('key, value').in('key', keys)
+    if (error) throw error
+    return Object.fromEntries((data || []).map(r => [r.key, r.value]))
+  },
+
+  async set(key, value) {
+    const { error } = await supabase
+      .from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() })
+    if (error) throw error
+  },
+}
+
+// ─── Upload media (foto/video) utk Kelas, Event, Informasi ──
+// Foto → bucket profile-photos (publik, konsisten dgn thumbnail); video →
+// bucket task-files (publik, tanpa batasan mime gambar).
+export const mediaService = {
+  async uploadPhoto(folder, file) {
+    const ext = file.name.split('.').pop()
+    const path = `${folder}/media/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const { error } = await supabase.storage.from('profile-photos').upload(path, file)
+    if (error) throw error
+    return supabase.storage.from('profile-photos').getPublicUrl(path).data.publicUrl
+  },
+
+  async uploadVideo(folder, file) {
+    const ext = file.name.split('.').pop()
+    const path = `${folder}/video/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const { error } = await supabase.storage.from('task-files').upload(path, file)
+    if (error) throw error
+    return supabase.storage.from('task-files').getPublicUrl(path).data.publicUrl
   },
 }

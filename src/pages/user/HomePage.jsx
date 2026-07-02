@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw } from 'lucide-react'
+import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw, Sparkles } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { newsService, eventsService, classesService } from '@/services/contentService'
+import { newsService, eventsService, classesService, appSettingsService } from '@/services/contentService'
 import { Card, Spinner } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
 import BirthdayMessageCard from '@/components/BirthdayMessageCard'
+import MembershipCard from '@/components/MembershipCard'
 import EventCarousel from '@/components/EventCarousel'
 import { formatDate, spColor } from '@/lib/utils'
 
@@ -19,15 +20,19 @@ export default function HomePage() {
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
+  const [baptismOpen, setBaptismOpen] = useState(true)
 
   function loadData() {
     setLoading(true)
     setFetchError(false)
     let anyFailed = false
+    // Beranda menampilkan yang belum selesai (status Mulai / Sedang Berlangsung).
+    const ongoing = list => (list || []).filter(x => ['Mulai', 'Sedang Berlangsung'].includes(x.status))
     Promise.all([
       newsService.getAll().then(setNews).catch(() => { anyFailed = true }),
-      eventsService.getAll({ status: 'Aktif' }).then(setEvents).catch(() => { anyFailed = true }),
-      classesService.getAll({ status: 'Aktif' }).then(setClasses).catch(() => { anyFailed = true }),
+      eventsService.getAll().then(list => setEvents(ongoing(list))).catch(() => { anyFailed = true }),
+      classesService.getAll().then(list => setClasses(ongoing(list))).catch(() => { anyFailed = true }),
+      appSettingsService.get('baptism_status').then(s => setBaptismOpen(s !== 'closed')).catch(() => {}),
     ]).finally(() => {
       setLoading(false)
       if (anyFailed) setFetchError(true)
@@ -40,7 +45,7 @@ export default function HomePage() {
     { to: '/persembahan',        icon: HandCoins,     label: t('home.q.offering'), color: 'bg-emerald-100 text-emerald-600' },
     { to: '/events',             icon: Calendar,      label: t('home.q.events'),   color: 'bg-red-100 text-red-600' },
     { to: '/kelas',              icon: BookOpen,      label: t('home.q.classes'),  color: 'bg-blue-100 text-blue-600' },
-    { to: '/baptisan',           icon: Droplets,      label: t('home.q.baptism'),  color: 'bg-teal-100 text-teal-600' },
+    ...(baptismOpen ? [{ to: '/baptisan', icon: Droplets, label: t('home.q.baptism'), color: 'bg-teal-100 text-teal-600' }] : []),
     { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-100 text-pink-600' },
     { to: '/penyerahan-anak',    icon: Baby,          label: t('home.q.dedication'), color: 'bg-amber-100 text-amber-600' },
     { to: '/status-pendaftaran', icon: Bell,          label: t('home.q.status'),   color: 'bg-purple-100 text-purple-600' },
@@ -57,7 +62,13 @@ export default function HomePage() {
             </div>
             <span className="font-display font-bold text-brand-500 text-base">ESC Siantan</span>
           </div>
-          <NotificationBell />
+          <div className="flex items-center gap-2">
+            <Link to="/poin" className="flex items-center gap-1 bg-brand-50 text-brand-600 rounded-full pl-2 pr-2.5 py-1 active:scale-95 transition-transform">
+              <Sparkles size={14} />
+              <span className="text-xs font-bold">{profile?.points ?? 0}</span>
+            </Link>
+            <NotificationBell />
+          </div>
         </div>
       </header>
 
@@ -74,6 +85,13 @@ export default function HomePage() {
 
         {/* Pesan ulang tahun personal dari PKS, kalau ada yang belum dibaca */}
         <BirthdayMessageCard />
+
+        {/* Kartu Jemaat (tampil hanya bila sudah diunggah admin) */}
+        {profile?.membership_card_url && (
+          <div className="mb-5 animate-fade-in-up">
+            <MembershipCard profile={profile} />
+          </div>
+        )}
 
         {/* Panduan akun baru: lengkapi data & aktifkan notifikasi */}
         <OnboardingPrompt />

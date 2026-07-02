@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { eventsService } from '@/services/contentService'
+import { eventsService, mediaService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Input, Textarea, Select, Button, Spinner } from '@/components/ui'
 import Uploader from '@/components/Uploader'
+import MediaListUploader from '@/components/MediaListUploader'
 import { validateUpload, compressImage } from '@/lib/utils'
 
 export default function AdminEventFormPage() {
@@ -22,8 +23,10 @@ export default function AdminEventFormPage() {
 
   const [form, setForm] = useState({
     name: '', description: '', event_date: '', event_time: '', location: '',
-    capacity: '', status: 'Aktif', thumbnail_url: '', contact_wa: '',
+    capacity: '', status: 'Mulai', thumbnail_url: '', contact_wa: '', contact_wa_female: '',
+    photo_urls: [], video_urls: [],
   })
+  const [mediaBusy, setMediaBusy] = useState(false)
 
   useEffect(() => {
     if (!isEdit) return
@@ -35,15 +38,45 @@ export default function AdminEventFormPage() {
         event_time: ev.event_time || '',
         location: ev.location || '',
         capacity: ev.capacity ?? '',
-        status: ev.status || 'Aktif',
+        status: ev.status || 'Mulai',
         thumbnail_url: ev.thumbnail_url || '',
         contact_wa: ev.contact_wa || '',
+        contact_wa_female: ev.contact_wa_female || '',
+        photo_urls: ev.photo_urls || [],
+        video_urls: ev.video_urls || [],
       }))
       .catch(err => setError(err.message || 'Gagal memuat event.'))
       .finally(() => setLoading(false))
   }, [id])
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
+
+  // Kelola galeri foto/video (tambah = unggah lalu simpan URL; hapus = buang URL).
+  async function handleMedia(kind, action) {
+    if (action.type === 'remove') {
+      const key = kind === 'video' ? 'video_urls' : 'photo_urls'
+      set(key, form[key].filter((_, i) => i !== action.index))
+      return
+    }
+    setMediaBusy(true)
+    try {
+      let file = action.file
+      if (kind === 'video') {
+        validateUpload(file, { maxMB: 50 })
+        const url = await mediaService.uploadVideo('events', file)
+        set('video_urls', [...form.video_urls, url])
+      } else {
+        file = await compressImage(file, { maxDim: 1600 })
+        validateUpload(file, { maxMB: 5, image: true })
+        const url = await mediaService.uploadPhoto('events', file)
+        set('photo_urls', [...form.photo_urls, url])
+      }
+    } catch (err) {
+      toast.error(err.message || 'Gagal mengunggah media.')
+    } finally {
+      setMediaBusy(false)
+    }
+  }
 
   async function handleUpload(file) {
     if (!file) return
@@ -148,13 +181,33 @@ export default function AdminEventFormPage() {
         <div className="grid grid-cols-2 gap-3">
           <Input label="Kapasitas" type="number" min="0" value={form.capacity} onChange={e => set('capacity', e.target.value)} />
           <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
-            <option value="Aktif">Aktif</option>
+            <option value="Mulai">Belum Mulai</option>
+            <option value="Sedang Berlangsung">Sedang Berlangsung</option>
             <option value="Selesai">Selesai</option>
             <option value="Dibatalkan">Dibatalkan</option>
           </Select>
         </div>
 
-        <Input label="Kontak WhatsApp" placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Kontak WA (Laki-laki)" placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
+          <Input label="Kontak WA (Perempuan)" placeholder="08xxxxxxxxxx" value={form.contact_wa_female} onChange={e => set('contact_wa_female', e.target.value)} />
+        </div>
+        <p className="text-xs text-gray-400 -mt-1">Jemaat laki-laki diarahkan ke kontak laki-laki, perempuan ke kontak perempuan. Kosongkan salah satu untuk memakai satu kontak untuk semua.</p>
+      </Card>
+
+      {/* Galeri media (tampil di halaman detail event) */}
+      <Card className="p-4 mb-4 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-900">Galeri Media</h2>
+        <MediaListUploader
+          kind="image" label="Foto" max={5} hint="Maks 5 foto — carousel auto-slide di halaman detail"
+          urls={form.photo_urls} uploading={mediaBusy}
+          onChange={a => handleMedia('image', a)}
+        />
+        <MediaListUploader
+          kind="video" label="Video" max={2} hint="Maks 2 video — autoplay (mute) di halaman detail, maks 50 MB/video"
+          urls={form.video_urls} uploading={mediaBusy}
+          onChange={a => handleMedia('video', a)}
+        />
       </Card>
 
       <div className="flex gap-2">

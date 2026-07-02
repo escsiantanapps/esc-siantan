@@ -4,8 +4,11 @@ import { ArrowLeft, Trash2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
+import { mediaService } from '@/services/contentService'
 import { Card, Avatar, Select, Textarea, Input, Button, Spinner, Checkbox, EmptyState } from '@/components/ui'
-import { formatDate, formatPhone, hitungUmur } from '@/lib/utils'
+import Uploader from '@/components/Uploader'
+import MembershipCard from '@/components/MembershipCard'
+import { formatDate, formatPhone, hitungUmur, validateUpload } from '@/lib/utils'
 
 export default function AdminMemberDetailPage() {
   const { id } = useParams()
@@ -26,7 +29,9 @@ export default function AdminMemberDetailPage() {
   const [form, setForm] = useState({
     role: '', role_secondary: '', is_pks: false, status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
     name: '', phone: '', email: '', gender: '', birth_date: '', birth_place: '', address: '', blood_type: '', nik: '', social_media: '',
+    membership_card_url: '', membership_card_issued_at: '',
   })
+  const [cardUploading, setCardUploading] = useState(false)
 
   useEffect(() => { load() }, [id])
 
@@ -61,6 +66,8 @@ export default function AdminMemberDetailPage() {
         blood_type: data.blood_type || '',
         nik: data.nik || '',
         social_media: data.social_media || '',
+        membership_card_url: data.membership_card_url || '',
+        membership_card_issued_at: data.membership_card_issued_at || '',
       })
     } catch (err) {
       setError(err.message || 'Gagal memuat data jemaat.')
@@ -83,15 +90,21 @@ export default function AdminMemberDetailPage() {
   async function handleSave() {
     setError(''); setSuccess(''); setSaving(true)
     try {
-      const { name, phone, email, gender, birth_date, birth_place, address, blood_type, nik, social_media, ...rest } = form
-      // Biodata jemaat (nama, kontak, alamat, dst.) hanya boleh diubah Super
-      // Admin — tidak dikirim sama sekali oleh Admin biasa agar tidak menimpa
-      // data terbaru (race) dan ditegakkan ulang di server (trigger guard_biodata_admin_edit).
+      const {
+        name, phone, email, gender, birth_date, birth_place, address, blood_type, nik, social_media,
+        membership_card_url, membership_card_issued_at, ...rest
+      } = form
+      // Biodata jemaat (nama, kontak, alamat, dst.) + kartu jemaat hanya boleh
+      // diubah Super Admin — tidak dikirim sama sekali oleh Admin biasa agar
+      // tidak menimpa data terbaru (race) dan ditegakkan ulang di server
+      // (trigger guard_biodata_admin_edit).
       const biodata = canEditRole ? {
         name, phone, email: email || null,
         gender: gender || null, birth_date: birth_date || null, birth_place: birth_place || null,
         address: address || null, blood_type: blood_type || null, nik: nik || null,
         social_media: social_media || null,
+        membership_card_url: membership_card_url || null,
+        membership_card_issued_at: membership_card_issued_at || null,
       } : {}
       const updated = await usersService.update(id, {
         ...rest,
@@ -148,6 +161,25 @@ export default function AdminMemberDetailPage() {
     }
   }
 
+  async function handleCardUpload(file) {
+    setCardUploading(true)
+    try {
+      // Kartu jemaat = murni file PNG dari admin — TIDAK dikompres/dikonversi
+      // supaya desain kartu tetap tajam persis seperti aslinya.
+      validateUpload(file, { maxMB: 5, image: true })
+      const url = await mediaService.uploadPhoto('membership-cards', file)
+      set('membership_card_url', url)
+      if (!form.membership_card_issued_at) {
+        set('membership_card_issued_at', new Date().toISOString().slice(0, 10))
+      }
+      toast.success('Kartu terunggah — jangan lupa Simpan Perubahan.')
+    } catch (err) {
+      toast.error(err.message || 'Gagal mengunggah kartu.')
+    } finally {
+      setCardUploading(false)
+    }
+  }
+
   // Aturan ini juga ditegakkan di server (api/delete-user).
   const isSelf = member?.user_id === profile?.user_id
   const targetIsAdmin = ['Admin', 'Super Admin'].includes(member?.role)
@@ -201,6 +233,9 @@ export default function AdminMemberDetailPage() {
             <p className="text-base font-semibold text-gray-900">{member.name}</p>
             <p className="text-sm text-gray-400">{member.email || '-'}</p>
             <p className="text-sm text-gray-400">{formatPhone(member.phone)}</p>
+            {member.nij && (
+              <p className="text-xs font-mono font-semibold text-brand-600 mt-0.5">NIJ: {member.nij}</p>
+            )}
           </div>
         </div>
 
@@ -266,6 +301,35 @@ export default function AdminMemberDetailPage() {
             </div>
             <p className="col-span-2 text-xs text-gray-400 pt-1">Hanya Super Admin yang dapat mengubah biodata jemaat.</p>
           </div>
+        )}
+      </Card>
+
+      {/* Kartu Jemaat (PNG diunggah Super Admin, expired 1 tahun) */}
+      <Card className="p-4 mb-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-900">Kartu Jemaat</h2>
+        {canEditRole ? (
+          <>
+            <Uploader
+              kind="image" label="File Kartu (PNG)" hint="Gambar kartu jemaat, maks 5 MB"
+              value={form.membership_card_url} uploading={cardUploading}
+              onFile={handleCardUpload}
+              onClear={() => set('membership_card_url', '')}
+            />
+            <Input
+              label="Tanggal Pembuatan" type="date"
+              value={form.membership_card_issued_at}
+              onChange={e => set('membership_card_issued_at', e.target.value)}
+            />
+            <p className="text-xs text-gray-400">
+              Masa berlaku dihitung otomatis 1 tahun sejak Tanggal Pembuatan — lewat dari itu
+              kartu tampil dengan label merah &quot;Kedaluwarsa&quot; di app jemaat.
+            </p>
+          </>
+        ) : (
+          <>
+            <MembershipCard profile={member} placeholder />
+            <p className="text-xs text-gray-400">Hanya Super Admin yang dapat mengunggah/mengubah kartu jemaat.</p>
+          </>
         )}
       </Card>
 
