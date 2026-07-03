@@ -88,10 +88,15 @@ export default function EditProfilePage() {
       toast.success('Profil berhasil disimpan.')
       // Bonus 5 poin bila biodata lengkap — validasi terjadi di server
       // (sekali seumur akun; diam-diam bila belum lengkap/sudah pernah).
+      // Kegagalan RPC (mis. migrasi belum dijalankan di DB) ditampilkan sebagai
+      // error, bukan ditelan diam-diam — supaya mudah didiagnosis.
       try {
         const res = await pointsService.claimBiodataPoints()
         if (res?.awarded) toast.success('🎉 +5 poin — biodata lengkap!')
-      } catch { /* abaikan */ }
+      } catch (err) {
+        console.error('claimBiodataPoints gagal:', err)
+        toast.error('Gagal memproses bonus poin biodata: ' + (err.message || 'unknown'))
+      }
       navigate('/profil')
     } catch (err) {
       setError(err.message || 'Gagal menyimpan profil.')

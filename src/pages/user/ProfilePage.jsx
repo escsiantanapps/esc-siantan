@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight } from 'lucide-react'
+import { LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight, QrCode } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
@@ -119,6 +119,18 @@ export default function ProfilePage() {
           <h2 className="text-sm font-semibold text-gray-900 mb-2">Kartu Jemaat</h2>
           <MembershipCard profile={profile} placeholder />
         </div>
+
+        {/* Kartu QR personal — verifikasi keanggotaan saat dipindai Admin/PKS */}
+        <Link to="/kartu-qr" className="flex items-center gap-3 bg-surface border border-gray-100 rounded-2xl px-4 py-3.5 ambient-shadow">
+          <div className="w-9 h-9 rounded-full bg-brand-50 flex items-center justify-center text-brand-500 shrink-0">
+            <QrCode size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900">Kartu QR Saya</p>
+            <p className="text-xs text-gray-400">Unduh QR untuk verifikasi keanggotaan</p>
+          </div>
+          <ChevronRight size={16} className="text-gray-300" />
+        </Link>
 
         {/* Informasi Pribadi */}
         <Card className="p-4">

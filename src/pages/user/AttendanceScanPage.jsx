@@ -5,7 +5,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { classesService, eventsService, komselService } from '@/services/contentService'
 import { classAttendanceService, eventAttendanceService } from '@/services/attendanceService'
 import { pointsService } from '@/services/pointsService'
-import { Card, Spinner, GradientHeader, Button } from '@/components/ui'
+import { usersService } from '@/services/usersService'
+import { isCardExpired } from '@/components/MembershipCard'
+import { Card, Spinner, GradientHeader, Button, StatusBadge, Avatar } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 
 const CLASS_PREFIX = 'ESC-ABSEN:'
@@ -13,9 +15,10 @@ const EVENT_PREFIX = 'ESC-EVENT:'
 const KOMSEL_PREFIX = 'ESC-KOMSEL:'
 const SUNDAY_PREFIX = 'ESC-SUNDAY:'
 const REDEEM_PREFIX = 'ESC-REDEEM:'
+const MEMBER_PREFIX = 'ESC-MEMBER:'
 
 export default function AttendanceScanPage() {
-  const { profile } = useAuth()
+  const { profile, isAdmin, isPKS } = useAuth()
   const navigate = useNavigate()
   const { t } = useLang()
   const [ready, setReady] = useState(false)
@@ -65,7 +68,7 @@ export default function AttendanceScanPage() {
   async function handleScan(decodedText) {
     if (processingRef.current) return
     const text = (decodedText || '').trim()
-    const known = [CLASS_PREFIX, EVENT_PREFIX, KOMSEL_PREFIX, SUNDAY_PREFIX, REDEEM_PREFIX]
+    const known = [CLASS_PREFIX, EVENT_PREFIX, KOMSEL_PREFIX, SUNDAY_PREFIX, REDEEM_PREFIX, MEMBER_PREFIX]
     if (!known.some(p => text.startsWith(p))) return
     processingRef.current = true
 
@@ -77,6 +80,8 @@ export default function AttendanceScanPage() {
       await handleKomsel(text.slice(KOMSEL_PREFIX.length))
     } else if (text.startsWith(SUNDAY_PREFIX)) {
       await handleSunday()
+    } else if (text.startsWith(MEMBER_PREFIX)) {
+      await handleMember(text.slice(MEMBER_PREFIX.length))
     } else {
       await handleRedeem(text.slice(REDEEM_PREFIX.length))
     }
@@ -157,6 +162,25 @@ export default function AttendanceScanPage() {
     }
   }
 
+  // Verifikasi kartu QR personal jemaat (ESC-MEMBER:<nij>). Hanya Admin/Super
+  // Admin/PKS yang boleh scan — jemaat biasa tidak boleh membaca data jemaat lain.
+  async function handleMember(nij) {
+    if (!isAdmin && !isPKS) {
+      setResult({ type: 'error', message: 'Hanya Admin/PKS yang dapat memverifikasi kartu jemaat.' })
+      return
+    }
+    try {
+      const member = await usersService.getByNij(nij)
+      if (!member) {
+        setResult({ type: 'error', message: 'Kartu tidak valid — jemaat tidak ditemukan.' })
+        return
+      }
+      setResult({ type: 'member', member })
+    } catch {
+      setResult({ type: 'error', message: 'Gagal memverifikasi kartu.' })
+    }
+  }
+
   function scanAgain() {
     setResult(null)
     processingRef.current = false
@@ -183,7 +207,23 @@ export default function AttendanceScanPage() {
           </p>
         )}
 
-        {result && (
+        {result && result.type === 'member' && (
+          <Card className="p-5 flex flex-col items-center text-center gap-3 animate-fade-in-up">
+            <Avatar name={result.member.name} src={result.member.photo_url} size="xl" />
+            <div>
+              <p className="text-base font-semibold text-gray-900">{result.member.name}</p>
+              <p className="text-xs text-gray-400">NIJ: {result.member.nij}</p>
+            </div>
+            <StatusBadge status={result.member.status} />
+            <p className="text-sm text-gray-700">{result.member.points ?? 0} poin</p>
+            {isCardExpired(result.member.membership_card_issued_at) && (
+              <p className="text-xs text-red-500 font-medium">Kartu jemaat kedaluwarsa</p>
+            )}
+            <Button onClick={scanAgain}><RotateCcw size={15} /> {t('scan.scanAgain')}</Button>
+          </Card>
+        )}
+
+        {result && result.type !== 'member' && (
           <Card className="p-5 flex flex-col items-center text-center gap-3 animate-fade-in-up">
             {result.type === 'success' && <CheckCircle2 size={40} className="text-green-500" />}
             {result.type === 'duplicate' && <CheckCircle2 size={40} className="text-amber-500" />}

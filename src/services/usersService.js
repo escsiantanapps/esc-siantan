@@ -76,6 +76,17 @@ export const usersService = {
     return withMinistryIds(data)
   },
 
+  // Lookup via NIJ (Nomor Identitas Jemaat) — dipakai saat scan QR kartu
+  // personal jemaat (ESC-MEMBER:<nij>). RLS membatasi siapa yang boleh baca
+  // baris user lain (Admin/Super Admin/PKS yang memimpin komsel bersangkutan).
+  async getByNij(nij) {
+    const { data, error } = await supabase.from('users')
+      .select('user_id, name, photo_url, status, points, komsel_id, nij, membership_card_issued_at')
+      .eq('nij', nij).maybeSingle()
+    if (error) throw error
+    return data
+  },
+
   async update(id, updates) {
     // ministry_ids bukan kolom lagi — kelola lewat tabel relasi.
     const { ministry_ids, user_ministries, ...scalar } = updates

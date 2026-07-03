@@ -66,6 +66,15 @@ export default async function handler(req, res) {
     const { data: subs, error: sErr } = await query
     if (sErr) return res.status(500).json({ error: sErr.message })
 
+    // Bila tidak ada subscription untuk target user, cek apakah ada subscription
+    // aktif di sistem sama sekali — supaya pemanggil (UI admin) bisa membedakan
+    // "memang tidak ada yang aktifkan push" vs "ada, tapi bukan dari target ini".
+    let totalSystemWide = null
+    if ((subs || []).length === 0 && Array.isArray(userIds) && userIds.length) {
+      const { count } = await admin.from('push_subscriptions').select('*', { count: 'exact', head: true })
+      totalSystemWide = count ?? 0
+    }
+
     const payload = JSON.stringify({ title, body: message || '', url: url || '/' })
     let sent = 0
     let removed = 0
@@ -97,7 +106,11 @@ export default async function handler(req, res) {
       })
     )
 
-    return res.status(200).json({ ok: true, total: (subs || []).length, sent, removed, errors })
+    return res.status(200).json({
+      ok: true, total: (subs || []).length, sent, removed, errors,
+      targetCount: Array.isArray(userIds) ? userIds.length : null,
+      totalSystemWide,
+    })
   } catch (err) {
     // Apa pun yang gagal → JSON yang terbaca (termasuk error load modul).
     return res.status(500).json({

@@ -52,7 +52,10 @@ export default function AdminTasksPage() {
         const detail = r.errors?.[0]?.detail || 'Tidak diketahui'
         toast.error(`Gagal kirim ke ${r.total} perangkat. Sebab: ${detail}`)
       } else {
-        toast.info('Tidak ada jemaat yang mengaktifkan notifikasi push.')
+        const sysNote = r?.totalSystemWide != null
+          ? ` (${r.totalSystemWide} aktif di sistem, tapi bukan dari ${r?.targetCount ?? 0} jemaat yang belum menyelesaikan tugas ini)`
+          : ''
+        toast.info(`Tidak ada dari jemaat yang belum menyelesaikan tugas ini yang mengaktifkan notifikasi push.${sysNote}`)
       }
     } catch (err) {
       toast.error(err.message || tr('atask.reminderFailed'))
