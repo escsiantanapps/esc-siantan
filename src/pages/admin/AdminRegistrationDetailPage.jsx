@@ -11,18 +11,25 @@ import { printArchive } from '@/lib/printDoc'
 const STATUSES = ['Menunggu', 'Sedang Ditinjau', 'Disetujui', 'Terjadwal', 'Selesai', 'Ditolak']
 
 const BAPTISM_DOCS = [
-  { key: 'ktp', label: 'Foto KTP / Kartu Keluarga' },
+  { key: 'ktp', label: 'Foto KTP (atau KTP Orang Tua)' },
+  { key: 'kartu_keluarga', label: 'Kartu Keluarga' },
   { key: 'foto', label: 'Pas Foto' },
 ]
 
 const WEDDING_DOCS = [
   { key: 'ktp_pria', label: 'KTP Mempelai Pria' },
   { key: 'ktp_wanita', label: 'KTP Mempelai Wanita' },
-  { key: 'kartu_keluarga', label: 'Kartu Keluarga' },
-  { key: 'surat_baptis', label: 'Surat Baptis' },
+  { key: 'kk_pria', label: 'Kartu Keluarga Pria' },
+  { key: 'kk_wanita', label: 'Kartu Keluarga Wanita' },
+  { key: 'surat_baptis_pria', label: 'Surat Baptis Pria' },
+  { key: 'surat_baptis_wanita', label: 'Surat Baptis Wanita' },
+  { key: 'surat_belum_menikah_pria', label: 'Surat Ket. Belum Pernah Menikah Pria' },
+  { key: 'surat_belum_menikah_wanita', label: 'Surat Ket. Belum Pernah Menikah Wanita' },
 ]
 
 const DEDICATION_DOCS = [
+  { key: 'ktp_ayah', label: 'KTP Ayah' },
+  { key: 'ktp_ibu', label: 'KTP Ibu' },
   { key: 'kartu_keluarga', label: 'Kartu Keluarga' },
   { key: 'akta_lahir', label: 'Akta Lahir' },
 ]
@@ -152,19 +159,37 @@ export default function AdminRegistrationDetailPage() {
       sections = [
         { title: 'Mempelai Pria', rows: [
           ['Nama Lengkap', reg.groom_name],
+          ['Tempat Lahir', reg.groom_birth_place],
           ['Tanggal Lahir', reg.groom_birth_date ? formatDate(reg.groom_birth_date) : '-'],
+          ['No. KTP', reg.groom_ktp],
+          ['Nama Akun Disdukcapil', reg.groom_disdukcapil_name],
           ['No. HP', formatPhone(reg.groom_phone)],
-          ['Sudah Dibaptis', reg.groom_baptized ? 'Ya' : 'Belum'],
+          ['Alamat', reg.groom_address],
+          ['Status Pernikahan', reg.groom_marital_history],
           ['Nama Ayah', reg.groom_father],
+          ['No. HP Ayah', formatPhone(reg.groom_father_phone)],
           ['Nama Ibu', reg.groom_mother],
+          ['No. HP Ibu', formatPhone(reg.groom_mother_phone)],
+          ['Sudah Dibaptis', reg.groom_baptized ? 'Ya' : 'Belum'],
+          ['Tanggal Baptisan', reg.groom_baptism_date ? formatDate(reg.groom_baptism_date) : '-'],
+          ['Baptis di Gereja', reg.groom_baptism_church],
         ] },
         { title: 'Mempelai Wanita', rows: [
           ['Nama Lengkap', reg.bride_name],
+          ['Tempat Lahir', reg.bride_birth_place],
           ['Tanggal Lahir', reg.bride_birth_date ? formatDate(reg.bride_birth_date) : '-'],
+          ['No. KTP', reg.bride_ktp],
+          ['Nama Akun Disdukcapil', reg.bride_disdukcapil_name],
           ['No. HP', formatPhone(reg.bride_phone)],
-          ['Sudah Dibaptis', reg.bride_baptized ? 'Ya' : 'Belum'],
+          ['Alamat', reg.bride_address],
+          ['Status Pernikahan', reg.bride_marital_history],
           ['Nama Ayah', reg.bride_father],
+          ['No. HP Ayah', formatPhone(reg.bride_father_phone)],
           ['Nama Ibu', reg.bride_mother],
+          ['No. HP Ibu', formatPhone(reg.bride_mother_phone)],
+          ['Sudah Dibaptis', reg.bride_baptized ? 'Ya' : 'Belum'],
+          ['Tanggal Baptisan', reg.bride_baptism_date ? formatDate(reg.bride_baptism_date) : '-'],
+          ['Baptis di Gereja', reg.bride_baptism_church],
         ] },
         { title: 'Detail Acara', rows: [
           ['Rencana Tanggal', reg.planned_date ? formatDate(reg.planned_date) : '-'],
@@ -269,22 +294,48 @@ export default function AdminRegistrationDetailPage() {
             <h2 className="text-sm font-semibold text-gray-900">Mempelai Pria</h2>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <Info label="Nama Lengkap" value={reg.groom_name} />
+              <Info label="Tempat Lahir" value={reg.groom_birth_place} />
               <Info label="Tanggal Lahir" value={reg.groom_birth_date ? formatDate(reg.groom_birth_date) : '-'} />
+              <Info label="No. KTP" value={reg.groom_ktp} />
+              <Info label="Nama Akun Disdukcapil" value={reg.groom_disdukcapil_name} />
               <Info label="No. HP" value={formatPhone(reg.groom_phone)} />
-              <Info label="Sudah Dibaptis" value={reg.groom_baptized ? 'Ya' : 'Belum'} />
+              <Info label="Status Pernikahan" value={reg.groom_marital_history} />
               <Info label="Nama Ayah" value={reg.groom_father} />
+              <Info label="No. HP Ayah" value={formatPhone(reg.groom_father_phone)} />
               <Info label="Nama Ibu" value={reg.groom_mother} />
+              <Info label="No. HP Ibu" value={formatPhone(reg.groom_mother_phone)} />
+              <Info label="Sudah Dibaptis" value={reg.groom_baptized ? 'Ya' : 'Belum'} />
+              {reg.groom_baptized && (
+                <>
+                  <Info label="Tanggal Baptisan" value={reg.groom_baptism_date ? formatDate(reg.groom_baptism_date) : '-'} />
+                  <Info label="Baptis di Gereja" value={reg.groom_baptism_church} />
+                </>
+              )}
+              <div className="col-span-2"><Info label="Alamat" value={reg.groom_address} /></div>
             </div>
           </Card>
           <Card className="p-4 mb-4 space-y-3">
             <h2 className="text-sm font-semibold text-gray-900">Mempelai Wanita</h2>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <Info label="Nama Lengkap" value={reg.bride_name} />
+              <Info label="Tempat Lahir" value={reg.bride_birth_place} />
               <Info label="Tanggal Lahir" value={reg.bride_birth_date ? formatDate(reg.bride_birth_date) : '-'} />
+              <Info label="No. KTP" value={reg.bride_ktp} />
+              <Info label="Nama Akun Disdukcapil" value={reg.bride_disdukcapil_name} />
               <Info label="No. HP" value={formatPhone(reg.bride_phone)} />
-              <Info label="Sudah Dibaptis" value={reg.bride_baptized ? 'Ya' : 'Belum'} />
+              <Info label="Status Pernikahan" value={reg.bride_marital_history} />
               <Info label="Nama Ayah" value={reg.bride_father} />
+              <Info label="No. HP Ayah" value={formatPhone(reg.bride_father_phone)} />
               <Info label="Nama Ibu" value={reg.bride_mother} />
+              <Info label="No. HP Ibu" value={formatPhone(reg.bride_mother_phone)} />
+              <Info label="Sudah Dibaptis" value={reg.bride_baptized ? 'Ya' : 'Belum'} />
+              {reg.bride_baptized && (
+                <>
+                  <Info label="Tanggal Baptisan" value={reg.bride_baptism_date ? formatDate(reg.bride_baptism_date) : '-'} />
+                  <Info label="Baptis di Gereja" value={reg.bride_baptism_church} />
+                </>
+              )}
+              <div className="col-span-2"><Info label="Alamat" value={reg.bride_address} /></div>
             </div>
           </Card>
           <Card className="p-4 mb-4 space-y-3">

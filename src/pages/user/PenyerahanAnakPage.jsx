@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Info } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
@@ -11,6 +12,8 @@ import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 const STEP_KEYS = ['dedication.step0', 'dedication.step1', 'dedication.step2']
 
 const DOCS = [
+  { key: 'ktp_ayah', labelKey: 'dedication.docKtpAyah' },
+  { key: 'ktp_ibu', labelKey: 'dedication.docKtpIbu' },
   { key: 'kartu_keluarga', labelKey: 'dedication.docKK' },
   { key: 'akta_lahir', labelKey: 'dedication.docAkta' },
 ]
@@ -172,6 +175,17 @@ export default function PenyerahanAnakPage() {
               ))}
               <Textarea label={t('dedication.notes')} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} />
               <p className="text-xs text-gray-400">{t('dedication.docsOptional')}</p>
+
+              <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 space-y-1.5">
+                <div className="flex items-center gap-2 text-amber-700 font-semibold text-sm">
+                  <Info size={15} /> {t('dedication.receptionistInfoTitle')}
+                </div>
+                <ul className="text-xs text-amber-700 list-disc pl-4 space-y-1">
+                  <li>{t('dedication.receptionistInfo1')}</li>
+                  <li>{t('dedication.receptionistInfo2')}</li>
+                  <li>{t('dedication.receptionistInfo3')}</li>
+                </ul>
+              </div>
             </>
           )}
         </Card>

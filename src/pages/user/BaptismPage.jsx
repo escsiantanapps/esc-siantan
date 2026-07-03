@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Droplets } from 'lucide-react'
+import { Droplets, Info } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { registrationService, classesService, appSettingsService } from '@/services/contentService'
@@ -18,6 +18,7 @@ const STEP_KEYS = ['baptism.step0', 'baptism.step1', 'baptism.step2', 'baptism.s
 
 const DOCS = [
   { key: 'ktp', labelKey: 'baptism.docKtp' },
+  { key: 'kartu_keluarga', labelKey: 'baptism.docKK' },
   { key: 'foto', labelKey: 'baptism.docFoto' },
 ]
 
@@ -216,6 +217,18 @@ export default function BaptismPage() {
                 />
               ))}
               <p className="text-xs text-gray-400">{t('baptism.docsOptional')}</p>
+
+              <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 space-y-1.5">
+                <div className="flex items-center gap-2 text-amber-700 font-semibold text-sm">
+                  <Info size={15} /> {t('baptism.receptionistInfoTitle')}
+                </div>
+                <ul className="text-xs text-amber-700 list-disc pl-4 space-y-1">
+                  <li>{t('baptism.receptionistInfo1')}</li>
+                  <li>{t('baptism.receptionistInfo2')}</li>
+                  <li>{t('baptism.receptionistInfo3')}</li>
+                  <li>{t('baptism.receptionistInfo4')}</li>
+                </ul>
+              </div>
             </>
           )}
         </Card>

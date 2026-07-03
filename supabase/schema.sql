@@ -1453,3 +1453,24 @@ CREATE POLICY "app_settings_admin_content" ON app_settings FOR ALL
     auth_user_role() IN ('Admin','Super Admin')
     AND key IN ('discipleship_roadmap','roadmap_show_count','baptism_status')
   );
+
+-- ── Migrasi v29: Lengkapi field formulir Pernikahan sesuai formulir resmi ──
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS groom_birth_place TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS groom_ktp TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS groom_disdukcapil_name TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS groom_baptism_date DATE;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS groom_baptism_church TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS groom_marital_history TEXT CHECK (groom_marital_history IN ('Belum Pernah','Pernah'));
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS groom_address TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS groom_father_phone TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS groom_mother_phone TEXT;
+
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_birth_place TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_ktp TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_disdukcapil_name TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_baptism_date DATE;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_baptism_church TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_marital_history TEXT CHECK (bride_marital_history IN ('Belum Pernah','Pernah'));
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_address TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_father_phone TEXT;
+ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_mother_phone TEXT;
