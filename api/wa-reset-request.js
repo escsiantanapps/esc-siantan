@@ -1,5 +1,6 @@
-// Lupa password via WhatsApp OTP — langkah 1: kirim kode ke WhatsApp terdaftar.
-// Identitas dipakai = email (login). Kode dikirim ke users.phone via Fonnte.
+// Lupa password — langkah 1: kirim kode OTP.
+// Jalur utama: email OTP via Supabase Auth (gratis).
+// Fallback: WhatsApp OTP via Fonnte jika email sintetis atau email gagal.
 export const config = { runtime: 'nodejs' }
 
 function waTarget(phone) {
@@ -9,19 +10,29 @@ function waTarget(phone) {
   else if (d.startsWith('8')) d = '62' + d
   return d
 }
+function hasRealEmail(email) {
+  return typeof email === 'string' && email.includes('@') && !email.endsWith('@wa.esc-siantan.app')
+}
+function maskEmail(email) {
+  const [local, domain] = email.split('@')
+  return local.slice(0, 1) + '***@' + domain
+}
 
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+    const { checkRateLimit } = await import('./_lib/rate-limit.js')
+    if (checkRateLimit(req, res, { endpoint: 'wa-reset-request' })) return
+
     const { createClient } = await import('@supabase/supabase-js')
-    const { createHash } = await import('crypto')
+    const { createHash, randomInt } = await import('crypto')
 
     const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+    const ANON_KEY = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim()
     const FONNTE_TOKEN = (process.env.FONNTE_TOKEN || '').trim()
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Konfigurasi Supabase belum lengkap.' })
-    if (!FONNTE_TOKEN) return res.status(500).json({ error: 'FONNTE_TOKEN belum diatur di server.' })
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
@@ -34,18 +45,34 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Akun dengan email tersebut tidak ditemukan.' })
     }
     const target = waTarget(user.phone)
+
+    // ── Jalur email (utama) ───────────────────────────────────────────────────
+    if (hasRealEmail(email) && ANON_KEY) {
+      const anon = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } })
+      const { error: otpErr } = await anon.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false },
+      })
+      if (!otpErr) {
+        return res.status(200).json({ ok: true, method: 'email', masked: maskEmail(email) })
+      }
+      console.error('Email OTP gagal, fallback ke WA:', otpErr.message)
+    }
+
+    // ── Jalur WhatsApp (fallback) ─────────────────────────────────────────────
+    if (!FONNTE_TOKEN) return res.status(500).json({ error: 'FONNTE_TOKEN belum diatur di server.' })
     if (!target) {
       return res.status(400).json({ error: 'Nomor WhatsApp belum terdaftar untuk akun ini. Hubungi admin.' })
     }
 
-    // Cooldown 60 detik: jangan kirim ulang terlalu cepat.
+    // Cooldown 60 detik.
     const { data: existing } = await admin
       .from('password_reset_otp').select('created_at').eq('email', email).maybeSingle()
     if (existing && (Date.now() - new Date(existing.created_at).getTime()) < 60_000) {
       return res.status(429).json({ error: 'Tunggu sebentar sebelum meminta kode lagi.' })
     }
 
-    const code = String(Math.floor(100000 + Math.random() * 900000))
+    const code = String(randomInt(100000, 1000000))
     const codeHash = createHash('sha256').update(code + email).digest('hex')
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString()
     const { error: upErr } = await admin.from('password_reset_otp').upsert(
@@ -65,9 +92,8 @@ export default async function handler(req, res) {
       return res.status(502).json({ error: 'Gagal mengirim WhatsApp. Coba lagi atau hubungi admin.' })
     }
 
-    // Samarkan nomor untuk ditampilkan (mis. 6281****1234).
     const masked = target.slice(0, 4) + '****' + target.slice(-4)
-    return res.status(200).json({ ok: true, masked })
+    return res.status(200).json({ ok: true, method: 'whatsapp', masked })
   } catch (e) {
     return res.status(500).json({ error: 'Terjadi kesalahan: ' + (e?.message || 'unknown') })
   }

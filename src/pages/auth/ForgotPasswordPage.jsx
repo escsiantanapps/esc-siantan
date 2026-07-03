@@ -24,7 +24,8 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
-  const [cooldown, setCooldown] = useState(0) // detik sebelum boleh kirim ulang
+  const [cooldown, setCooldown] = useState(0)
+  const [method, setMethod] = useState('')
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -38,8 +39,14 @@ export default function ForgotPasswordPage() {
     setError(''); setInfo(''); setLoading(true)
     try {
       const r = await postJson('/api/wa-reset-request', { email: email.trim() })
+      const m = r.method || 'whatsapp'
+      setMethod(m)
       setStep('otp')
-      setInfo(t('auth.waCodeSent', { wa: r.masked || '' }))
+      if (m === 'email') {
+        setInfo(t('auth.emailCodeSent', { email: r.masked || '' }))
+      } else {
+        setInfo(t('auth.waCodeSent', { wa: r.masked || '' }))
+      }
       setCooldown(60)
     } catch (err) {
       setError(err.message || t('auth.sendCodeFailed'))
@@ -52,11 +59,18 @@ export default function ForgotPasswordPage() {
     e.preventDefault()
     setError('')
     if (!/^\d{6}$/.test(otp.trim())) { setError(t('auth.otpInvalid')); return }
-    if (password.length < 6) { setError(t('auth.pwMin6')); return }
+    if (password.length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+      setError(t('auth.pwMin8')); return
+    }
     if (password !== confirm) { setError(t('auth.pwMismatch6')); return }
     setLoading(true)
     try {
-      await postJson('/api/wa-reset-verify', { email: email.trim(), code: otp.trim(), newPassword: password })
+      await postJson('/api/wa-reset-verify', {
+        email: email.trim(),
+        code: otp.trim(),
+        newPassword: password,
+        method,
+      })
       navigate('/login', { replace: true, state: { reset: true } })
     } catch (err) {
       setError(err.message || t('auth.otpWrong'))
@@ -111,7 +125,7 @@ export default function ForgotPasswordPage() {
                 <Button type="submit" loading={loading} className="w-full" size="lg">{t('auth.saveNewPassword')}</Button>
               </form>
               <div className="mt-5 flex items-center justify-between text-sm">
-                <button onClick={() => { setStep('email'); setOtp(''); setError(''); setInfo('') }} className="text-gray-500">{t('auth.changeEmail')}</button>
+                <button onClick={() => { setStep('email'); setOtp(''); setError(''); setInfo(''); setMethod('') }} className="text-gray-500">{t('auth.changeEmail')}</button>
                 <button onClick={sendCode} disabled={loading || cooldown > 0} className="text-brand-500 disabled:opacity-50">
                   {cooldown > 0 ? t('auth.resendIn', { s: cooldown }) : t('auth.resendCode')}
                 </button>

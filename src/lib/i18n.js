@@ -174,8 +174,9 @@ export const translations = {
 
     // Auth — Lupa kata sandi
     'auth.forgotTitle': 'Lupa Kata Sandi',
-    'auth.forgotSubEmail': 'Kami akan kirim kode OTP ke WhatsApp kamu',
+    'auth.forgotSubEmail': 'Kami akan kirim kode OTP ke email atau WhatsApp kamu',
     'auth.waCodeSent': 'Kode OTP dikirim ke WhatsApp {wa}. Cek pesan WhatsApp kamu.',
+    'auth.emailCodeSent': 'Kode OTP dikirim ke email {email}. Cek inbox & folder spam.',
     'auth.forgotSubOtp': 'Masukkan kode & kata sandi baru',
     'auth.enterEmail': 'Masukkan email kamu',
     'auth.sendCode': 'Kirim Kode',
@@ -185,8 +186,9 @@ export const translations = {
     'act.subPhone': 'Untuk jemaat lama yang belum punya akses masuk',
     'act.subOtp': 'Masukkan kode & buat kata sandi',
     'act.phoneLabel': 'Nomor WhatsApp',
-    'act.phoneHint': 'Gunakan nomor yang terdaftar di data jemaat. Kode dikirim ke WhatsApp.',
+    'act.phoneHint': 'Gunakan nomor yang terdaftar di data jemaat.',
     'act.codeSent': 'Kode aktivasi dikirim ke WhatsApp {wa}.',
+    'act.emailCodeSent': 'Kode aktivasi dikirim ke email {email}. Cek inbox & folder spam.',
     'act.newPassword': 'Buat Kata Sandi',
     'act.submit': 'Aktifkan & Masuk',
     'act.changePhone': 'Ganti nomor',
@@ -1167,8 +1169,9 @@ export const translations = {
 
     // Auth — Forgot password
     'auth.forgotTitle': 'Forgot Password',
-    'auth.forgotSubEmail': "We'll send an OTP to your WhatsApp",
+    'auth.forgotSubEmail': "We'll send an OTP to your email or WhatsApp",
     'auth.waCodeSent': 'OTP sent to WhatsApp {wa}. Check your WhatsApp.',
+    'auth.emailCodeSent': 'OTP sent to email {email}. Check your inbox & spam folder.',
     'auth.forgotSubOtp': 'Enter the code & your new password',
     'auth.enterEmail': 'Enter your email',
     'auth.sendCode': 'Send Code',
@@ -1178,8 +1181,9 @@ export const translations = {
     'act.subPhone': 'For existing members who cannot sign in yet',
     'act.subOtp': 'Enter the code & create a password',
     'act.phoneLabel': 'WhatsApp number',
-    'act.phoneHint': 'Use the number registered in member data. Code is sent to WhatsApp.',
+    'act.phoneHint': 'Use the number registered in member data.',
     'act.codeSent': 'Activation code sent to WhatsApp {wa}.',
+    'act.emailCodeSent': 'Activation code sent to email {email}. Check your inbox & spam folder.',
     'act.newPassword': 'Create Password',
     'act.submit': 'Activate & Sign in',
     'act.changePhone': 'Change number',

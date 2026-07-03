@@ -11,7 +11,6 @@ async function postJson(url, payload) {
   return data
 }
 
-// Aktivasi akun jemaat lama (data impor) memakai nomor HP + OTP WhatsApp.
 export default function ActivatePage() {
   const { t } = useLang()
   const navigate = useNavigate()
@@ -24,6 +23,7 @@ export default function ActivatePage() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [cooldown, setCooldown] = useState(0)
+  const [method, setMethod] = useState('')
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -37,7 +37,15 @@ export default function ActivatePage() {
     setError(''); setInfo(''); setLoading(true)
     try {
       const r = await postJson('/api/activate-request', { phone: phone.trim() })
-      setStep('otp'); setInfo(t('act.codeSent', { wa: r.masked || '' })); setCooldown(60)
+      const m = r.method || 'whatsapp'
+      setMethod(m)
+      setStep('otp')
+      if (m === 'email') {
+        setInfo(t('act.emailCodeSent', { email: r.masked || '' }))
+      } else {
+        setInfo(t('act.codeSent', { wa: r.masked || '' }))
+      }
+      setCooldown(60)
     } catch (err) { setError(err.message) } finally { setLoading(false) }
   }
 
@@ -45,11 +53,18 @@ export default function ActivatePage() {
     e.preventDefault()
     setError('')
     if (!/^\d{6}$/.test(otp.trim())) { setError(t('auth.otpInvalid')); return }
-    if (password.length < 6) { setError(t('auth.pwMin6')); return }
+    if (password.length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+      setError(t('auth.pwMin8')); return
+    }
     if (password !== confirm) { setError(t('auth.pwMismatch6')); return }
     setLoading(true)
     try {
-      const r = await postJson('/api/activate-verify', { phone: phone.trim(), code: otp.trim(), password })
+      const r = await postJson('/api/activate-verify', {
+        phone: phone.trim(),
+        code: otp.trim(),
+        password,
+        method,
+      })
       if (r.access_token && r.refresh_token) {
         await supabase.auth.setSession({ access_token: r.access_token, refresh_token: r.refresh_token })
         navigate('/', { replace: true })
@@ -89,7 +104,7 @@ export default function ActivatePage() {
               <Input label={t('auth.confirmPassword')} type="password" placeholder="••••••••" required value={confirm} onChange={e => setConfirm(e.target.value)} />
               <Button type="submit" loading={loading} className="w-full" size="lg">{t('act.submit')}</Button>
               <div className="flex items-center justify-between text-sm">
-                <button type="button" onClick={() => { setStep('phone'); setOtp(''); setError(''); setInfo('') }} className="text-gray-500">{t('act.changePhone')}</button>
+                <button type="button" onClick={() => { setStep('phone'); setOtp(''); setError(''); setInfo(''); setMethod('') }} className="text-gray-500">{t('act.changePhone')}</button>
                 <button type="button" onClick={sendCode} disabled={loading || cooldown > 0} className="text-brand-500 disabled:opacity-50">
                   {cooldown > 0 ? t('auth.resendIn', { s: cooldown }) : t('auth.resendCode')}
                 </button>
