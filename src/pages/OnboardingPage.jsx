@@ -1,7 +1,7 @@
 /**
  * OnboardingPage.jsx — ESC Siantan
  *
- * Roadmap Pemuridan: 4 tahap perkembangan rohani jemaat (biji → tunas →
+ * Roadmap Pemuridan: 4 tahap perkembangan rohani jemaat (benih → tunas →
  * pohon → berbuah). Isi tahap (judul, fokus, karakteristik, sikap, gambar)
  * dimuat dinamis dari app_settings key 'discipleship_roadmap' — bisa diedit
  * Admin lewat /admin/roadmap. Bila belum ada di DB, pakai DEFAULT_ROADMAP.
@@ -29,7 +29,7 @@ const STAGE_GRADIENTS = [
 // Konten bawaan — dipakai bila admin belum menyimpan template sendiri.
 export const DEFAULT_ROADMAP = [
   {
-    title: 'Biji — Lahir Baru',
+    title: 'Benih — Lahir Baru',
     focus: 'Keselamatan & pertobatan',
     characteristics: 'Percaya kepada Tuhan Yesus, dibaptis, dan mulai membangun kebiasaan rohani.',
     attitude: 'Haus akan Firman, terbuka untuk dibimbing.',
@@ -146,7 +146,7 @@ export default function OnboardingPage() {
 
   return (
     <div
-      className={`h-dvh overflow-hidden bg-gradient-to-br ${gradient} flex flex-col transition-all duration-500`}
+      className={`h-svh overflow-hidden bg-gradient-to-br ${gradient} flex flex-col transition-all duration-500`}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >

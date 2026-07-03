@@ -26,7 +26,6 @@ import HomePage from '@/pages/user/HomePage'
 import TasksPage from '@/pages/user/TasksPage'
 import ProfilePage from '@/pages/user/ProfilePage'
 import EditProfilePage from '@/pages/user/EditProfilePage'
-import MyQrCardPage from '@/pages/user/MyQrCardPage'
 import InformationPage from '@/pages/user/InformationPage'
 import InformationDetailPage from '@/pages/user/InformationDetailPage'
 import EventsPage from '@/pages/user/EventsPage'
@@ -159,7 +158,6 @@ export default function App() {
             <Route index                        element={<HomePage />} />
             <Route path="profil"               element={<ProfilePage />} />
             <Route path="profil/edit"          element={<EditProfilePage />} />
-            <Route path="kartu-qr"             element={<MyQrCardPage />} />
             <Route path="pengaturan"           element={<SettingsPage />} />
             <Route path="informasi"            element={<InformationPage />} />
             <Route path="informasi/:id"        element={<InformationDetailPage />} />

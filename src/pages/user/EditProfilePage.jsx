@@ -153,9 +153,10 @@ export default function EditProfilePage() {
           <div className="space-y-4">
             <Select label="Status Pernikahan" value={form.marital_status} onChange={e => set('marital_status', e.target.value)}>
               <option value="">Pilih...</option>
-              <option>Lajang</option>
+              <option>Single</option>
               <option>Menikah</option>
-              <option>Duda/Janda</option>
+              <option>Duda</option>
+              <option>Janda</option>
             </Select>
             <Input label="Pekerjaan" placeholder="cth: Karyawan Swasta / Wiraswasta / Pelajar" value={form.pekerjaan} onChange={e => set('pekerjaan', e.target.value)} />
             <div className="grid grid-cols-2 gap-3">

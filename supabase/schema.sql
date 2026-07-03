@@ -1474,3 +1474,14 @@ ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_marital_history
 ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_address TEXT;
 ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_father_phone TEXT;
 ALTER TABLE wedding_registrations ADD COLUMN IF NOT EXISTS bride_mother_phone TEXT;
+
+-- ── Migrasi v30: Pisah opsi Status Pernikahan jadi Single/Menikah/Duda/Janda ──
+-- Migrasi data lama: 'Lajang' → 'Single'; 'Duda/Janda' dipecah berdasar gender.
+UPDATE users SET marital_status = 'Single' WHERE marital_status = 'Lajang';
+UPDATE users SET marital_status = 'Duda' WHERE marital_status = 'Duda/Janda' AND gender = 'Laki-laki';
+UPDATE users SET marital_status = 'Janda' WHERE marital_status = 'Duda/Janda' AND gender = 'Perempuan';
+UPDATE users SET marital_status = 'Duda' WHERE marital_status = 'Duda/Janda' AND gender IS NULL;
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_marital_status_check;
+ALTER TABLE users ADD CONSTRAINT users_marital_status_check
+  CHECK (marital_status IS NULL OR marital_status IN ('Single','Menikah','Duda','Janda'));

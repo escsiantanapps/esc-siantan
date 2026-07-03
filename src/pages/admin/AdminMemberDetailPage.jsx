@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import QRCode from 'qrcode'
+import { ArrowLeft, Trash2, Download } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
@@ -32,6 +33,8 @@ export default function AdminMemberDetailPage() {
     membership_card_url: '', membership_card_issued_at: '',
   })
   const [cardUploading, setCardUploading] = useState(false)
+  const [qrDataUrl, setQrDataUrl] = useState('')
+  const [qrLoading, setQrLoading] = useState(false)
 
   useEffect(() => { load() }, [id])
 
@@ -158,6 +161,21 @@ export default function AdminMemberDetailPage() {
       setError(err.message || 'Gagal menghapus akun.')
       toast.error(err.message || 'Gagal menghapus akun.')
       setDeleting(false)
+    }
+  }
+
+  // Kartu QR verifikasi keanggotaan (ESC-MEMBER:<nij>) — hanya bisa di-generate
+  // & diunduh dari panel Admin, tidak ada akses self-service untuk jemaat.
+  async function generateQr() {
+    if (!member?.nij) return
+    setQrLoading(true)
+    try {
+      const url = await QRCode.toDataURL(`ESC-MEMBER:${member.nij}`, { width: 320, margin: 1 })
+      setQrDataUrl(url)
+    } catch (err) {
+      toast.error('Gagal membuat QR: ' + (err.message || 'unknown'))
+    } finally {
+      setQrLoading(false)
     }
   }
 
@@ -330,6 +348,32 @@ export default function AdminMemberDetailPage() {
             <MembershipCard profile={member} placeholder />
             <p className="text-xs text-gray-400">Hanya Super Admin yang dapat mengunggah/mengubah kartu jemaat.</p>
           </>
+        )}
+      </Card>
+
+      {/* QR Kartu Jemaat (verifikasi keanggotaan) — hanya di panel Admin,
+          tidak ada akses self-service untuk jemaat. */}
+      <Card className="p-4 mb-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-900">QR Verifikasi Keanggotaan</h2>
+        {!member.nij ? (
+          <p className="text-sm text-gray-400">NIJ belum tersedia untuk jemaat ini.</p>
+        ) : (
+          <div className="flex flex-col items-center gap-3">
+            {qrDataUrl ? (
+              <img src={qrDataUrl} alt="QR Kartu Jemaat" className="w-48 h-48 rounded-xl border border-gray-100" />
+            ) : (
+              <Button variant="outline" loading={qrLoading} onClick={generateQr}>Generate QR</Button>
+            )}
+            {qrDataUrl && (
+              <a href={qrDataUrl} download={`Kartu-QR-${member.name}.png`} className="w-full">
+                <Button variant="outline" className="w-full"><Download size={15} /> Unduh QR</Button>
+              </a>
+            )}
+            <p className="text-xs text-gray-400 text-center">
+              QR ini memverifikasi bahwa jemaat terdaftar di GBI El Shaddai Siantan.
+              Pindai lewat menu Scan (Admin/PKS) untuk melihat status & saldo poin.
+            </p>
+          </div>
         )}
       </Card>
 

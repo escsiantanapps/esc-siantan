@@ -20,7 +20,9 @@ export default function AdminTasksPage() {
     tasksService.getTemplates().then(setTemplates).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
-  // Kirim notifikasi pengingat ke jemaat yang BELUM memenuhi tugas pada periode ini.
+  // Kirim notifikasi pengingat ke SEMUA jemaat yang jadi target tugas ini
+  // (sesuai batasan role/ministry template), terlepas sudah/belum selesai —
+  // reminder ini bersifat pengingat umum, bukan hanya utk yang kurang.
   async function sendReminder(tpl) {
     const ok = await confirm({
       title: tr('atask.remindTitle'),
@@ -36,8 +38,8 @@ export default function AdminTasksPage() {
       const rows = await evaluationService.getEvaluation({
         formId: tpl.form_id, startDate: periodStart.toISOString(), endDate: new Date().toISOString(),
       })
-      const userIds = rows.filter(r => r.status !== 'TERPENUHI').map(r => r.user.user_id)
-      if (userIds.length === 0) { toast.info(tr('atask.allDone')); return }
+      const userIds = rows.map(r => r.user.user_id)
+      if (userIds.length === 0) { toast.info(tr('atask.noTarget')); return }
       const r = await pushService.broadcast({
         title: tr('atask.pushTitle'),
         body: tr('atask.pushBody', { title: tpl.title }),
@@ -53,9 +55,9 @@ export default function AdminTasksPage() {
         toast.error(`Gagal kirim ke ${r.total} perangkat. Sebab: ${detail}`)
       } else {
         const sysNote = r?.totalSystemWide != null
-          ? ` (${r.totalSystemWide} aktif di sistem, tapi bukan dari ${r?.targetCount ?? 0} jemaat yang belum menyelesaikan tugas ini)`
+          ? ` (${r.totalSystemWide} aktif di sistem, tapi bukan dari ${r?.targetCount ?? 0} jemaat target tugas ini)`
           : ''
-        toast.info(`Tidak ada dari jemaat yang belum menyelesaikan tugas ini yang mengaktifkan notifikasi push.${sysNote}`)
+        toast.info(`Tidak ada dari jemaat target tugas ini yang mengaktifkan notifikasi push.${sysNote}`)
       }
     } catch (err) {
       toast.error(err.message || tr('atask.reminderFailed'))
