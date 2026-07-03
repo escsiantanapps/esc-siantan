@@ -8,7 +8,7 @@ import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 
-const STEP_KEYS = ['wedding.step0', 'wedding.step1', 'wedding.step2', 'wedding.step3']
+const STEP_KEYS = ['wedding.step0', 'wedding.step1', 'wedding.step2']
 
 const DOCS = [
   { key: 'ktp_pria', labelKey: 'wedding.docKtpGroom' },
@@ -70,8 +70,10 @@ export default function WeddingPage() {
   }
 
   function validateStep() {
-    if (step === 0 && !form.groom_name.trim()) return t('wedding.groomNameRequired')
-    if (step === 1 && !form.bride_name.trim()) return t('wedding.brideNameRequired')
+    if (step === 0) {
+      if (!form.groom_name.trim()) return t('wedding.groomNameRequired')
+      if (!form.bride_name.trim()) return t('wedding.brideNameRequired')
+    }
     return ''
   }
 
@@ -154,17 +156,17 @@ export default function WeddingPage() {
         <Card className="p-4 space-y-4">
           {step === 0 && (
             <>
+              <p className="text-sm font-semibold text-brand-600">{t('wedding.groomSection')}</p>
               <Input label={t('wedding.groomName')} required value={form.groom_name} onChange={e => set('groom_name', e.target.value)} />
               <Input label={t('common.birthDate')} type="date" value={form.groom_birth_date} onChange={e => set('groom_birth_date', e.target.value)} />
               <Input label={t('common.phoneWa')} type="tel" value={form.groom_phone} onChange={e => set('groom_phone', e.target.value)} />
               <Input label={t('common.fatherName')} value={form.groom_father} onChange={e => set('groom_father', e.target.value)} />
               <Input label={t('common.motherName')} value={form.groom_mother} onChange={e => set('groom_mother', e.target.value)} />
               <Checkbox label={t('wedding.baptized')} checked={form.groom_baptized} onChange={e => set('groom_baptized', e.target.checked)} />
-            </>
-          )}
 
-          {step === 1 && (
-            <>
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-sm font-semibold text-brand-600">{t('wedding.brideSection')}</p>
+              </div>
               <Input label={t('wedding.brideName')} required value={form.bride_name} onChange={e => set('bride_name', e.target.value)} />
               <Input label={t('common.birthDate')} type="date" value={form.bride_birth_date} onChange={e => set('bride_birth_date', e.target.value)} />
               <Input label={t('common.phoneWa')} type="tel" value={form.bride_phone} onChange={e => set('bride_phone', e.target.value)} />
@@ -174,7 +176,7 @@ export default function WeddingPage() {
             </>
           )}
 
-          {step === 2 && (
+          {step === 1 && (
             <>
               <Input label={t('wedding.plannedDate')} type="date" value={form.planned_date} onChange={e => set('planned_date', e.target.value)} />
               <Input label={t('wedding.estGuests')} type="number" placeholder={t('wedding.estGuestsPh')} value={form.estimated_guests} onChange={e => set('estimated_guests', e.target.value)} />
@@ -183,7 +185,7 @@ export default function WeddingPage() {
             </>
           )}
 
-          {step === 3 && (
+          {step === 2 && (
             <>
               {DOCS.map(doc => (
                 <Uploader

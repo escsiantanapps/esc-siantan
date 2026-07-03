@@ -490,10 +490,11 @@ export const translations = {
 
     // Pemberkatan Nikah
     'wedding.title': 'Pemberkatan Nikah',
-    'wedding.step0': 'Mempelai Pria',
-    'wedding.step1': 'Mempelai Wanita',
-    'wedding.step2': 'Detail Acara',
-    'wedding.step3': 'Dokumen',
+    'wedding.step0': 'Data Mempelai',
+    'wedding.step1': 'Detail Acara',
+    'wedding.step2': 'Dokumen',
+    'wedding.groomSection': 'Mempelai Pria',
+    'wedding.brideSection': 'Mempelai Wanita',
     'wedding.docKtpGroom': 'KTP Mempelai Pria',
     'wedding.docKtpBride': 'KTP Mempelai Wanita',
     'wedding.docKK': 'Kartu Keluarga',
@@ -1485,10 +1486,11 @@ export const translations = {
 
     // Wedding Blessing
     'wedding.title': 'Wedding Blessing',
-    'wedding.step0': 'Groom',
-    'wedding.step1': 'Bride',
-    'wedding.step2': 'Event Details',
-    'wedding.step3': 'Documents',
+    'wedding.step0': 'Couple Info',
+    'wedding.step1': 'Event Details',
+    'wedding.step2': 'Documents',
+    'wedding.groomSection': 'Groom',
+    'wedding.brideSection': 'Bride',
     'wedding.docKtpGroom': "Groom's ID Card",
     'wedding.docKtpBride': "Bride's ID Card",
     'wedding.docKK': 'Family Card',
