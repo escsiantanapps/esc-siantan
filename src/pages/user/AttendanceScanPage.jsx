@@ -44,26 +44,36 @@ export default function AttendanceScanPage() {
         return
       }
 
-      // Minta izin kamera LEBIH DULU lewat getUserMedia. Dua alasan: (1) di iOS
-      // Safari & sebagian Android, enumerateDevices() hanya mengembalikan label
-      // kamera setelah izin diberikan — tanpa langkah ini filter regex kita
-      // sering tak match apa pun; (2) memaksa prompt izin muncul sekali di
-      // awal, bukan setelah html5-qrcode mencoba start dan gagal senyap.
       try {
+        // Minta izin kamera LEBIH DULU lewat getUserMedia. Dua alasan: (1) di iOS
+        // Safari & sebagian Android, enumerateDevices() hanya mengembalikan label
+        // kamera setelah izin diberikan — tanpa langkah ini filter regex kita
+        // sering tak match apa pun; (2) memaksa prompt izin muncul sekali di
+        // awal, bukan setelah html5-qrcode mencoba start dan gagal senyap.
+        // Coba ideal environment (belakang) terlebih dahulu.
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' } },
           audio: false,
         })
         stream.getTracks().forEach(tr => tr.stop())
       } catch (err) {
-        const name = err?.name || 'Error'
-        let hint = err?.message || ''
-        if (name === 'NotAllowedError') hint = 'Izin kamera ditolak. Aktifkan di pengaturan situs.'
-        else if (name === 'NotFoundError') hint = 'Tidak ada kamera terdeteksi.'
-        else if (name === 'NotReadableError') hint = 'Kamera sedang dipakai aplikasi lain.'
-        setErrDetail(`${name}: ${hint}`)
-        setResult({ type: 'error', message: t('scan.cameraError') })
-        return
+        // Jika gagal karena constraint (seperti OverconstrainedError di desktop), coba video: true
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          })
+          stream.getTracks().forEach(tr => tr.stop())
+        } catch (err2) {
+          const name = err2?.name || 'Error'
+          let hint = err2?.message || ''
+          if (name === 'NotAllowedError') hint = 'Izin kamera ditolak. Aktifkan di pengaturan situs.'
+          else if (name === 'NotFoundError') hint = 'Tidak ada kamera terdeteksi.'
+          else if (name === 'NotReadableError') hint = 'Kamera sedang dipakai aplikasi lain.'
+          setErrDetail(`${name}: ${hint}`)
+          setResult({ type: 'error', message: t('scan.cameraError') })
+          return
+        }
       }
       if (cancelled) return
 
@@ -91,6 +101,7 @@ export default function AttendanceScanPage() {
       candidates.push({ facingMode: { ideal: 'environment' } })
       candidates.push({ facingMode: 'environment' })
       candidates.push({ facingMode: 'user' })
+      candidates.push({}) // Fallback terakhir: kamera apa pun yang tersedia
       if (cancelled) return
 
       let started = false
