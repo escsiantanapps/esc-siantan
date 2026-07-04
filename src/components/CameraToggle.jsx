@@ -57,6 +57,7 @@ export default function CameraToggle() {
     if (busy) return
     setBusy(true)
     try {
+      // Coba ideal environment (belakang) terlebih dahulu
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' } },
         audio: false,
@@ -65,15 +66,26 @@ export default function CameraToggle() {
       setState('granted')
       toast.success('Izin kamera aktif. Anda sudah bisa scan QR.')
     } catch (err) {
-      const name = err?.name || 'Error'
-      if (name === 'NotAllowedError') {
-        setState('denied')
-        setShowHelp(true)
-        toast.error('Izin ditolak. Ikuti panduan di bawah untuk mengaktifkan.')
-      } else if (name === 'NotFoundError') {
-        toast.error('Tidak ada kamera terdeteksi pada perangkat.')
-      } else {
-        toast.error(`${name}: ${err?.message || 'Gagal meminta izin.'}`)
+      // Fallback untuk desktop jika ideal environment gagal (OverconstrainedError)
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        })
+        stream.getTracks().forEach(tr => tr.stop())
+        setState('granted')
+        toast.success('Izin kamera aktif. Anda sudah bisa scan QR.')
+      } catch (err2) {
+        const name = err2?.name || 'Error'
+        if (name === 'NotAllowedError') {
+          setState('denied')
+          setShowHelp(true)
+          toast.error('Izin ditolak. Ikuti panduan di bawah untuk mengaktifkan.')
+        } else if (name === 'NotFoundError') {
+          toast.error('Tidak ada kamera terdeteksi pada perangkat.')
+        } else {
+          toast.error(`${name}: ${err2?.message || 'Gagal meminta izin.'}`)
+        }
       }
     } finally {
       setBusy(false)
