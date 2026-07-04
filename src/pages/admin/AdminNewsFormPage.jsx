@@ -94,23 +94,39 @@ export default function AdminNewsFormPage() {
     if (!form.title.trim()) { setError(t('anf.titleRequired')); return }
     setSaving(true)
     try {
+      // Helper: kirim broadcast lalu tampilkan hasilnya secara eksplisit.
+      // Sebelumnya kegagalan/broadcast kosong ditelan diam-diam sehingga admin
+      // tak tahu kenapa notifikasi tidak sampai. Sekarang selalu ada toast
+      // dgn hasil sebenarnya (sent, error, atau tidak ada subscriber).
+      const reportPush = (r) => {
+        if (!r) return
+        if ((r.sent ?? 0) > 0) {
+          toast.success(t('anf.notifSent', { n: r.sent }))
+        } else if (r.total > 0) {
+          const detail = r.errors?.[0]?.detail || 'Tidak diketahui'
+          toast.error(`Gagal kirim ke ${r.total} perangkat. Sebab: ${detail}`)
+        } else {
+          toast.info('Notifikasi tidak terkirim: belum ada jemaat yang mengaktifkan push.')
+        }
+      }
+      const reportPushError = (err) => {
+        toast.error(`Notifikasi gagal: ${err?.message || err}`)
+      }
+
       if (isEdit) {
         await newsService.update(id, form)
         pushService.broadcast({
           title: t('anf.pushUpdated'),
           body: form.title,
           url: `/informasi/${id}`,
-        }).catch(() => {})
+        }).then(reportPush).catch(reportPushError)
       } else {
         const created = await newsService.create(form)
-        // Kirim notifikasi push ke semua jemaat (tidak menggagalkan simpan bila gagal)
         pushService.broadcast({
           title: t('anf.pushNew'),
           body: form.title,
           url: created?.news_id ? `/informasi/${created.news_id}` : '/informasi',
-        }).then(r => {
-          if (r?.sent != null) toast.success(t('anf.notifSent', { n: r.sent }))
-        }).catch(() => {})
+        }).then(reportPush).catch(reportPushError)
       }
       toast.success(isEdit ? t('anf.updated') : t('anf.created'))
       navigate('/admin/berita')

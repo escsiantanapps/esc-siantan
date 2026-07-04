@@ -8,6 +8,7 @@ import { useLang } from '@/hooks/useLang'
 import { LOCALES } from '@/lib/i18n'
 import { Card, Button, Input, ThemeToggle, GradientHeader } from '@/components/ui'
 import PushToggle from '@/components/PushToggle'
+import PushDiagnosticsCard from '@/components/PushDiagnosticsCard'
 
 export default function SettingsPage() {
   const { profile, login, updatePassword, logout } = useAuth()
@@ -161,9 +162,10 @@ export default function SettingsPage() {
         </Card>
 
         {/* Notifikasi */}
-        <div>
+        <div className="space-y-3">
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">{t('settings.notifications')}</p>
           <PushToggle />
+          <PushDiagnosticsCard />
         </div>
 
         {/* Legal */}
