@@ -117,16 +117,39 @@ export default function CameraToggle() {
         <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-600">
           {state === 'denied' ? (
             <>
-              <p className="font-semibold text-gray-800 mb-2">Cara mengaktifkan izin kamera di Chrome:</p>
-              <ol className="list-decimal ml-4 space-y-1 text-[11px]">
-                <li>Ketuk ikon <b>gembok/(i)</b> di sebelah alamat situs</li>
-                <li>Ketuk <b>Izin</b> (atau "Site settings")</li>
-                <li>Pada <b>Kamera</b>, pilih <b>Izinkan</b></li>
-                <li>Kembali ke halaman ini, ketuk sakelar di atas lagi</li>
+              <p className="font-semibold text-gray-800 mb-2">Kenapa prompt kamera tak muncul lagi?</p>
+              <p className="text-[11px] mb-3">
+                Chrome mengingat keputusan "blokir" seumur hidup situs, dan tidak
+                menyediakan cara untuk aplikasi memicu prompt lagi. Anda harus
+                <b> mereset izin di Chrome secara manual</b>. Ada 2 cara:
+              </p>
+
+              <p className="font-semibold text-gray-800 mb-1">Cara A — cepat (jika ada ikon gembok):</p>
+              <ol className="list-decimal ml-4 space-y-1 text-[11px] mb-3">
+                <li>Ketuk ikon <b>gembok / (i) / 🛡️</b> di sebelah alamat <code>escsiantan.my.id</code></li>
+                <li>Ketuk <b>Izin</b> atau <b>Setelan situs</b></li>
+                <li>Pada <b>Kamera</b> ubah dari "Blokir" → <b>Izinkan</b> (atau "Tanyakan")</li>
+                <li>Muat ulang halaman ini</li>
               </ol>
-              <p className="text-[10px] text-gray-400 mt-2 italic">
-                Kalau ini APK ESC Siantan: Pengaturan HP → Aplikasi → ESC Siantan → Izin → Kamera → Izinkan.
-                Di Vivo/Xiaomi kadang tersembunyi di "Izin Tambahan".
+              <p className="text-[10px] text-gray-500 mb-3 italic">
+                Kalau Anda buka via ikon di layar utama (PWA terinstal), <b>URL bar
+                & ikon gembok tersembunyi</b>. Buka lagi lewat aplikasi <b>Chrome biasa</b>
+                (ketik alamatnya), baru ikuti cara A. Atau pakai cara B.
+              </p>
+
+              <p className="font-semibold text-gray-800 mb-1">Cara B — pasti berhasil (reset total):</p>
+              <ol className="list-decimal ml-4 space-y-1 text-[11px]">
+                <li>Buka aplikasi <b>Chrome</b> (bukan ikon ESC Siantan)</li>
+                <li>Ketuk <b>⋮</b> kanan atas → <b>Setelan</b></li>
+                <li>Pilih <b>Setelan situs → Semua situs</b></li>
+                <li>Cari & ketuk <b>escsiantan.my.id</b></li>
+                <li>Ketuk <b>Hapus & setel ulang</b> lalu <b>Setel ulang</b></li>
+                <li>Buka <code>escsiantan.my.id</code> lagi → login → coba scan → prompt kamera akan muncul</li>
+              </ol>
+
+              <p className="text-[10px] text-gray-400 mt-3 italic">
+                Vivo/Xiaomi: pastikan juga <b>Pengaturan HP → Aplikasi → Chrome → Izin → Kamera → Izinkan</b>
+                (level OS di atas level browser).
               </p>
             </>
           ) : (
