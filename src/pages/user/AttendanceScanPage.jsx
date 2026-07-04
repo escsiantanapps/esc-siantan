@@ -23,6 +23,7 @@ export default function AttendanceScanPage() {
   const { t } = useLang()
   const [ready, setReady] = useState(false)
   const [result, setResult] = useState(null)
+  const [errDetail, setErrDetail] = useState('')
   const scannerRef = useRef(null)
   const processingRef = useRef(false)
 
@@ -30,22 +31,53 @@ export default function AttendanceScanPage() {
     let cancelled = false
 
     ;(async () => {
+      // Pra-cek: HTTPS wajib untuk mengakses kamera (kecuali localhost). Chrome
+      // memblokir tanpa error yang jelas kalau situs di-load via HTTP.
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        setErrDetail('Perlu HTTPS. Buka lewat https:// (bukan http://).')
+        setResult({ type: 'error', message: t('scan.cameraError') })
+        return
+      }
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        setErrDetail('Browser tidak mendukung akses kamera (getUserMedia).')
+        setResult({ type: 'error', message: t('scan.cameraError') })
+        return
+      }
+
+      // Minta izin kamera LEBIH DULU lewat getUserMedia. Dua alasan: (1) di iOS
+      // Safari & sebagian Android, enumerateDevices() hanya mengembalikan label
+      // kamera setelah izin diberikan — tanpa langkah ini filter regex kita
+      // sering tak match apa pun; (2) memaksa prompt izin muncul sekali di
+      // awal, bukan setelah html5-qrcode mencoba start dan gagal senyap.
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        })
+        stream.getTracks().forEach(tr => tr.stop())
+      } catch (err) {
+        const name = err?.name || 'Error'
+        let hint = err?.message || ''
+        if (name === 'NotAllowedError') hint = 'Izin kamera ditolak. Aktifkan di pengaturan situs.'
+        else if (name === 'NotFoundError') hint = 'Tidak ada kamera terdeteksi.'
+        else if (name === 'NotReadableError') hint = 'Kamera sedang dipakai aplikasi lain.'
+        setErrDetail(`${name}: ${hint}`)
+        setResult({ type: 'error', message: t('scan.cameraError') })
+        return
+      }
+      if (cancelled) return
+
       const { Html5Qrcode } = await import('html5-qrcode')
       if (cancelled) return
-      const scanner = new Html5Qrcode('qr-reader')
+      const scanner = new Html5Qrcode('qr-reader', { verbose: false })
       scannerRef.current = scanner
 
-      // TANPA qrbox: seluruh frame kamera jadi area pindai (full). QR di mana pun
-      // dalam tampilan langsung terbaca, dan tidak ada kotak kecil di tengah.
-      // (Menyetel qrbox angka tetap juga bisa melempar error saat start di
-      // viewport sempit bila lebih besar dari video — dihindari sekalian.)
+      // TANPA qrbox: seluruh frame kamera jadi area pindai (full).
       const config = { fps: 10 }
 
       // Kandidat kamera, dicoba berurutan sampai ada yang berhasil start.
-      // Pilih kamera belakang UTAMA (1x) lebih dulu — di HP multi-lensa browser
-      // sering memilih lensa ultra-wide (0.5x). Hindari label ultra/tele/macro.
-      // Jika deviceId spesifik gagal dibuka (OverconstrainedError umum di Android),
-      // jatuh ke facingMode 'environment', lalu kamera apa pun sebagai upaya akhir.
+      // Pilih lensa belakang UTAMA (1x) lebih dulu — HP multi-lensa sering
+      // memilih ultra-wide (0.5x). Hindari label ultra/tele/macro.
       const candidates = []
       try {
         const cams = await Html5Qrcode.getCameras()
@@ -55,7 +87,8 @@ export default function AttendanceScanPage() {
           const main = pool.find(c => !/(ultra|0\.5|tele|macro|depth|monochrome|fisheye)/i.test(c.label)) || pool[0]
           if (main?.id) candidates.push({ deviceId: { exact: main.id } })
         }
-      } catch { /* enumerasi gagal (mis. izin belum diberikan) — pakai facingMode */ }
+      } catch { /* enumerasi gagal — fallback facingMode di bawah */ }
+      candidates.push({ facingMode: { ideal: 'environment' } })
       candidates.push({ facingMode: 'environment' })
       candidates.push({ facingMode: 'user' })
       if (cancelled) return
@@ -70,7 +103,6 @@ export default function AttendanceScanPage() {
           break
         } catch (err) {
           lastErr = err
-          // Bersihkan sebelum mencoba kandidat berikutnya (hindari "device in use").
           try { await scanner.stop() } catch { /* belum berjalan */ }
         }
       }
@@ -82,7 +114,10 @@ export default function AttendanceScanPage() {
       if (started) {
         setReady(true)
       } else {
+        const name = lastErr?.name || 'Error'
+        const msg = lastErr?.message || String(lastErr || '')
         console.error('[scan] gagal memulai kamera:', lastErr)
+        setErrDetail(`${name}: ${msg}`)
         setResult({ type: 'error', message: t('scan.cameraError') })
       }
     })()
@@ -214,6 +249,7 @@ export default function AttendanceScanPage() {
 
   function scanAgain() {
     setResult(null)
+    setErrDetail('')
     processingRef.current = false
   }
 
@@ -223,7 +259,11 @@ export default function AttendanceScanPage() {
 
       <div className="px-4 pt-4 space-y-4">
         <Card className={`p-3 overflow-hidden ${result ? 'hidden' : ''}`}>
-          <div id="qr-reader" className="rounded-xl overflow-hidden" />
+          <div
+            id="qr-reader"
+            className="rounded-xl overflow-hidden w-full"
+            style={{ minHeight: 260 }}
+          />
           {!ready && (
             <div className="flex flex-col items-center justify-center py-10 gap-2">
               <Spinner />
@@ -260,6 +300,9 @@ export default function AttendanceScanPage() {
             {result.type === 'duplicate' && <CheckCircle2 size={40} className="text-amber-500" />}
             {result.type === 'error' && <XCircle size={40} className="text-red-500" />}
             <p className="text-sm text-gray-700">{result.message}</p>
+            {result.type === 'error' && errDetail && (
+              <p className="text-[11px] text-gray-400 break-all max-w-full">{errDetail}</p>
+            )}
             <Button onClick={scanAgain}><RotateCcw size={15} /> {t('scan.scanAgain')}</Button>
           </Card>
         )}
