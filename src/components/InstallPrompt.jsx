@@ -5,15 +5,10 @@ import { useLang } from '@/hooks/useLang'
 const DISMISS_KEY = 'pwa-prompt-dismissed'
 
 // Popup ajakan pasang app sebagai PWA lewat Chrome ("Tambahkan ke Layar
-// Utama") saat situs dibuka lewat browser HP. Sengaja BUKAN unduh APK:
-// notifikasi push tidak andal lewat APK TWA (lihat PushToggle), sedangkan
-// lewat PWA Chrome terbukti normal — termasuk notifikasi ke PKS saat
-// anggota komselnya mengisi tugas.
+// Utama") saat situs dibuka lewat browser HP.
 // "Tetap lanjut di website" diingat per sesi browser (sessionStorage).
 function getPromptContext() {
   if (typeof window === 'undefined') return null
-  // Sudah berjalan sebagai app terpasang (APK/TWA lama)
-  if (document.referrer.startsWith('android-app://')) return null
   // Sudah berjalan sebagai PWA terpasang (manifest pakai fullscreen/standalone)
   if (window.matchMedia?.('(display-mode: standalone)')?.matches) return null
   if (window.matchMedia?.('(display-mode: fullscreen)')?.matches) return null

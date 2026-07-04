@@ -306,8 +306,8 @@ export default function AttendanceScanPage() {
 
             {/* Izin kamera ditolak: setelah "Block" tersimpan, browser/OS TIDAK
                 akan menampilkan prompt lagi dari sini — user wajib reset izin
-                secara manual. Instruksi lengkap & sadar-konteks (TWA / PWA
-                terinstal / tab Chrome biasa) ada satu tempat di panel
+                secara manual. Instruksi lengkap & sadar-konteks (PWA terinstal /
+                tab Chrome biasa) ada satu tempat di panel
                 "Izin Kamera" pada Pengaturan (lihat CameraToggle.jsx), supaya
                 tidak ada 2 versi panduan yang bisa berbeda/basi. */}
             {result.type === 'error' && errDetail.includes('NotAllowed') && (

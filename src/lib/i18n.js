@@ -46,7 +46,6 @@ export const translations = {
     'settings.on': 'Aktif',
     'settings.off': 'Nonaktif',
     'settings.notifications': 'Notifikasi',
-    'settings.twaNotifHint': 'Notifikasi tidak masuk di app ini? Pada sebagian HP, coba buka {url} lewat Chrome → menu (⋮) → "Tambahkan ke Layar Utama" sebagai alternatif.',
 
     // Popup ajakan pasang app (PWA via Chrome)
     'install.title': 'Pasang Aplikasi ESC Siantan',
@@ -1075,7 +1074,6 @@ export const translations = {
     'settings.on': 'On',
     'settings.off': 'Off',
     'settings.notifications': 'Notifications',
-    'settings.twaNotifHint': 'Not receiving notifications in this app? On some phones, try opening {url} in Chrome → menu (⋮) → "Add to Home Screen" as an alternative.',
 
     // Install prompt (PWA via Chrome)
     'install.title': 'Install the ESC Siantan App',
