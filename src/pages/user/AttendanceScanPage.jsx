@@ -10,6 +10,13 @@ import { isCardExpired } from '@/components/MembershipCard'
 import { Card, Spinner, GradientHeader, Button, StatusBadge, Avatar } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 
+// Deteksi konteks TWA (APK Play Store) — Chrome membuka halaman dgn referrer
+// android-app:// saat di-load lewat TWA. Panduan reset izin kamera berbeda
+// jauh antara APK & PWA browser (Android Settings vs Chrome site settings).
+function isRunningAsTwa() {
+  return typeof document !== 'undefined' && document.referrer.startsWith('android-app://')
+}
+
 const CLASS_PREFIX = 'ESC-ABSEN:'
 const EVENT_PREFIX = 'ESC-EVENT:'
 const KOMSEL_PREFIX = 'ESC-KOMSEL:'
@@ -303,7 +310,46 @@ export default function AttendanceScanPage() {
             {result.type === 'error' && errDetail && (
               <p className="text-[11px] text-gray-400 break-all max-w-full">{errDetail}</p>
             )}
-            <Button onClick={scanAgain}><RotateCcw size={15} /> {t('scan.scanAgain')}</Button>
+
+            {/* Panduan spesifik saat izin kamera ditolak. Setelah "Block" tersimpan,
+                Chrome tidak akan menampilkan prompt lagi — user WAJIB reset izin
+                secara manual. Cara berbeda antara APK (TWA) & PWA (Chrome). */}
+            {result.type === 'error' && errDetail.includes('NotAllowed') && (
+              <div className="w-full mt-2 text-left">
+                {isRunningAsTwa() ? (
+                  <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+                    <p className="text-xs font-semibold text-amber-900 mb-2">Cara mengaktifkan kamera di APK ESC Siantan:</p>
+                    <ol className="list-decimal ml-4 text-[11px] text-amber-900 space-y-1">
+                      <li>Buka <b>Pengaturan HP → Aplikasi</b></li>
+                      <li>Cari & buka <b>ESC Siantan</b></li>
+                      <li>Ketuk <b>Izin → Kamera</b></li>
+                      <li>Pilih <b>Izinkan</b> (bukan Tanya/Tolak)</li>
+                      <li>Buka lagi aplikasi ESC Siantan</li>
+                    </ol>
+                    <p className="text-[10px] text-amber-800 mt-2 italic">Di Vivo/Xiaomi kadang tersembunyi di "Izin Tambahan" atau "Pengaturan Pribadi".</p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+                    <p className="text-xs font-semibold text-amber-900 mb-2">Cara mengaktifkan kamera di Chrome:</p>
+                    <ol className="list-decimal ml-4 text-[11px] text-amber-900 space-y-1">
+                      <li>Ketuk ikon <b>gembok/i</b> di sebelah alamat situs</li>
+                      <li>Ketuk <b>Izin</b> (atau "Site settings")</li>
+                      <li>Pada <b>Kamera</b>, pilih <b>Izinkan</b></li>
+                      <li>Muat ulang halaman ini</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 flex-wrap justify-center">
+              {result.type === 'error' && (
+                <Button variant="secondary" onClick={() => window.location.reload()}>
+                  Muat ulang halaman
+                </Button>
+              )}
+              <Button onClick={scanAgain}><RotateCcw size={15} /> {t('scan.scanAgain')}</Button>
+            </div>
           </Card>
         )}
       </div>
