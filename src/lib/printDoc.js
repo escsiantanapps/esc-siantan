@@ -53,10 +53,10 @@ export function printArchive({ title, heading, meta = [], sections = [], documen
   table.data th { background: #f3f4f6; width: 38%; font-weight: 600; }
   .para { font-size: 12px; white-space: pre-line; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; }
   .docs { font-size: 12px; padding-left: 18px; }
-  .docs a { color: #0077B6; word-break: break-all; }
+  .docs a { color: #C62F14; word-break: break-all; }
   .note { font-size: 11px; color: #6b7280; }
   .foot { margin-top: 20px; font-size: 11px; color: #9ca3af; }
-  @media print { body { margin: 12mm; } a { color: #0077B6; text-decoration: none; } }
+  @media print { body { margin: 12mm; } a { color: #C62F14; text-decoration: none; } }
 </style></head><body>
   <h1>${esc(title)}</h1>
   <div class="sub">ESC Siantan</div>

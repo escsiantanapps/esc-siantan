@@ -65,7 +65,7 @@ export default function InstallPrompt() {
         <img
           src="/icons/icon-192.png"
           alt="ESC Siantan"
-          className="w-20 h-20 mx-auto rounded-2xl shadow-[0_8px_24px_-8px_rgba(0,150,220,0.5)]"
+          className="w-20 h-20 mx-auto rounded-2xl shadow-[0_8px_24px_-8px_rgba(244,81,30,0.5)]"
         />
         <h2 className="font-display text-lg font-bold text-gray-900 mt-4">{t('install.title')}</h2>
         <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">{t('install.desc')}</p>

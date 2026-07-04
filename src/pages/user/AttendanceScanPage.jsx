@@ -35,33 +35,64 @@ export default function AttendanceScanPage() {
       const scanner = new Html5Qrcode('qr-reader')
       scannerRef.current = scanner
 
-      // Pilih kamera belakang UTAMA (1x). Tanpa ini, di HP multi-lensa browser
+      // TANPA qrbox: seluruh frame kamera jadi area pindai (full). QR di mana pun
+      // dalam tampilan langsung terbaca, dan tidak ada kotak kecil di tengah.
+      // (Menyetel qrbox angka tetap juga bisa melempar error saat start di
+      // viewport sempit bila lebih besar dari video — dihindari sekalian.)
+      const config = { fps: 10 }
+
+      // Kandidat kamera, dicoba berurutan sampai ada yang berhasil start.
+      // Pilih kamera belakang UTAMA (1x) lebih dulu — di HP multi-lensa browser
       // sering memilih lensa ultra-wide (0.5x). Hindari label ultra/tele/macro.
-      let camera = { facingMode: 'environment' }
+      // Jika deviceId spesifik gagal dibuka (OverconstrainedError umum di Android),
+      // jatuh ke facingMode 'environment', lalu kamera apa pun sebagai upaya akhir.
+      const candidates = []
       try {
         const cams = await Html5Qrcode.getCameras()
-        if (!cancelled && cams?.length) {
+        if (cams?.length) {
           const back = cams.filter(c => /back|rear|environment|belakang/i.test(c.label))
           const pool = back.length ? back : cams
           const main = pool.find(c => !/(ultra|0\.5|tele|macro|depth|monochrome|fisheye)/i.test(c.label)) || pool[0]
-          if (main?.id) camera = { deviceId: { exact: main.id } }
+          if (main?.id) candidates.push({ deviceId: { exact: main.id } })
         }
-      } catch { /* fallback ke facingMode environment */ }
+      } catch { /* enumerasi gagal (mis. izin belum diberikan) — pakai facingMode */ }
+      candidates.push({ facingMode: 'environment' })
+      candidates.push({ facingMode: 'user' })
       if (cancelled) return
 
-      scanner.start(
-        camera,
-        { fps: 10, qrbox: 230 },
-        handleScan,
-        () => {}
-      ).then(() => !cancelled && setReady(true))
-        .catch(() => setResult({ type: 'error', message: t('scan.cameraError') }))
+      let started = false
+      let lastErr = null
+      for (const cam of candidates) {
+        if (cancelled) return
+        try {
+          await scanner.start(cam, config, handleScan, () => {})
+          started = true
+          break
+        } catch (err) {
+          lastErr = err
+          // Bersihkan sebelum mencoba kandidat berikutnya (hindari "device in use").
+          try { await scanner.stop() } catch { /* belum berjalan */ }
+        }
+      }
+
+      if (cancelled) {
+        if (started) { try { await scanner.stop() } catch { /* noop */ } }
+        return
+      }
+      if (started) {
+        setReady(true)
+      } else {
+        console.error('[scan] gagal memulai kamera:', lastErr)
+        setResult({ type: 'error', message: t('scan.cameraError') })
+      }
     })()
 
     return () => {
       cancelled = true
       const scanner = scannerRef.current
-      if (scanner) scanner.stop().then(() => scanner.clear()).catch(() => {})
+      if (scanner) {
+        scanner.stop().catch(() => {}).then(() => { try { scanner.clear() } catch { /* noop */ } })
+      }
     }
   }, [])
 

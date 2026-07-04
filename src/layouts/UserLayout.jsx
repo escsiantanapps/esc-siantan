@@ -92,7 +92,7 @@ export default function UserLayout() {
             aria-label="Scan QR Absensi"
             className="flex-1 flex flex-col items-center gap-1 py-2 group"
           >
-            <div className="-mt-9 w-16 h-16 rounded-full gradient-main text-white flex items-center justify-center border-[5px] border-surface shadow-[0_10px_22px_-6px_rgba(0,150,220,0.6)] group-active:scale-95 transition-transform">
+            <div className="-mt-9 w-16 h-16 rounded-full gradient-main text-white flex items-center justify-center border-[5px] border-surface shadow-[0_10px_22px_-6px_rgba(244,81,30,0.6)] group-active:scale-95 transition-transform">
               <ScanLine size={26} strokeWidth={2.2} />
             </div>
             <span className="text-[10px] font-semibold text-brand-500">{t('nav.scan')}</span>

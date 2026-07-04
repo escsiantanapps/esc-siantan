@@ -3,37 +3,38 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #00BFFF;
-  --color-primary-dark: #0094CC;
-  --color-primary-deeper: #0077B6;
+  --color-primary: #F4511E;
+  --color-primary-dark: #E23E17;
+  --color-primary-deeper: #C62F14;
   --color-surface: #ffffff;
-  /* Latar biru-muda lembut ala desain Stitch (surface/background: #f8fdff) */
-  --color-gray-50: #f5fbfe;
+  /* Latar oranye-hangat lembut ala desain Stitch (surface/background hangat) */
+  --color-gray-50: #fefaf7;
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
 
-  /* Skala warna brand (biru langit). Dipakai lewat utility brand-* di seluruh
+  /* Skala warna brand (oranye → merah). Dipakai lewat utility brand-* di seluruh
      app, mis. bg-brand-500, text-brand-700, focus:ring-brand-400. */
-  --color-brand-50:  #e8f8ff;
-  --color-brand-100: #cceeff;
-  --color-brand-200: #a3e1ff;
-  --color-brand-300: #66ccf5;
-  --color-brand-400: #1fb6ef;
-  --color-brand-500: #00BFFF;
-  --color-brand-600: #0098cc;
-  --color-brand-700: #0077B6;
-  --color-brand-800: #005c8e;
-  --color-brand-900: #00415f;
+  --color-brand-50:  #fff4ed;
+  --color-brand-100: #ffe1cc;
+  --color-brand-200: #ffc09b;
+  --color-brand-300: #ff9663;
+  --color-brand-400: #fb6f3a;
+  --color-brand-500: #F4511E;
+  --color-brand-600: #E23E17;
+  --color-brand-700: #C62F14;
+  --color-brand-800: #A11F12;
+  --color-brand-900: #7E1810;
 
   /* Warna gradient brand -- TETAP SAMA di light & dark mode (elemen identitas
      visual, bukan teks), jadi sengaja TIDAK dipakai ulang dari skala brand-*
      di atas (brand-700/800 di-override beda nilainya untuk dark mode --
      lihat blok .dark di bawah -- karena di sana keduanya dipakai sebagai
      warna TEKS, bukan latar gradient; reuse langsung bikin gradient jadi
-     terang/rusak kontrasnya saat dark mode aktif). */
-  --gradient-1: #0098cc;
-  --gradient-2: #0077b6;
-  --gradient-3: #005c8e;
+     terang/rusak kontrasnya saat dark mode aktif).
+     Gradient oranye (kiri) → merah (kanan). */
+  --gradient-1: #F97316;
+  --gradient-2: #EF4E23;
+  --gradient-3: #DC2626;
 
   /* Permukaan netral utk elemen INTERAKTIF (tombol secondary/ghost, tab/segment
      control, chip filter, badge netral) -- token terpisah dari gray-100/200
@@ -116,7 +117,7 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
 input[type="month"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
-  background-color: rgba(0, 119, 182, 0.12);
+  background-color: rgba(244, 81, 30, 0.12);
 }
 
 body {
@@ -163,14 +164,14 @@ h1, h2, h3 {
 
 /* Bayangan lembut beraura biru brand untuk kartu */
 .ambient-shadow {
-  box-shadow: 0 10px 30px -14px rgba(0, 162, 224, 0.25);
+  box-shadow: 0 10px 30px -14px rgba(244, 81, 30, 0.28);
 }
 .dark .ambient-shadow {
   box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.6);
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #00BFFF, #0077B6);
+  background: linear-gradient(135deg, #F97316, #DC2626);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -179,7 +180,7 @@ h1, h2, h3 {
 /* Scrollbar tipis */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #00BFFF; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: #F4511E; border-radius: 2px; }
 
 /* Sembunyikan scrollbar (mis. pada carousel yang digeser) */
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -252,10 +253,10 @@ h1, h2, h3 {
   --color-gray-800: #e8ebee;
   --color-gray-900: #f5f6f8;
 
-  --color-brand-50:  #07232e;
-  --color-brand-100: #0a3344;
-  --color-brand-700: #7fd4ff;
-  --color-brand-800: #b3e5fc;
+  --color-brand-50:  #2a1206;
+  --color-brand-100: #3a1a0b;
+  --color-brand-700: #ffb385;
+  --color-brand-800: #ffd2b0;
 
   --color-red-50:  #2a1414;
   --color-red-100: #3d1d1d;

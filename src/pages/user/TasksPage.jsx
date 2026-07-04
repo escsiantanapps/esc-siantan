@@ -207,7 +207,7 @@ function TaskCard({ tpl, progress, onClick, t }) {
             className="h-full rounded-full transition-all"
             style={{
               width: `${pct}%`,
-              background: complete ? '#22c55e' : 'linear-gradient(90deg, #00BFFF, #0077B6)'
+              background: complete ? '#22c55e' : 'linear-gradient(90deg, #F97316, #DC2626)'
             }}
           />
         </div>

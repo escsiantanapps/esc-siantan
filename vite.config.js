@@ -25,7 +25,7 @@ export default defineConfig({
         dir: 'ltr',
         categories: ['lifestyle', 'social', 'productivity'],
         background_color: '#ffffff',
-        theme_color: '#00BFFF',
+        theme_color: '#F4511E',
         orientation: 'portrait',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
