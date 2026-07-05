@@ -5,7 +5,7 @@ import { newsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
 import { useLang } from '@/hooks/useLang'
-import { formatDate } from '@/lib/utils'
+import { formatDate, waLink } from '@/lib/utils'
 
 export default function InformationDetailPage() {
   const { id } = useParams()
@@ -43,9 +43,9 @@ export default function InformationDetailPage() {
                 <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{news.content}</p>
               )}
               <MediaGallery photos={news.photo_urls} videos={news.video_urls} />
-              {news.contact_wa && (
+              {waLink(news.contact_wa) && (
                 <a
-                  href={`https://wa.me/${news.contact_wa.replace(/\D/g, '')}`}
+                  href={waLink(news.contact_wa)}
                   target="_blank" rel="noopener noreferrer"
                 >
                   <Button variant="outline" className="w-full">

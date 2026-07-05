@@ -46,6 +46,24 @@ export function formatPhone(phone) {
   return '+62' + str
 }
 
+// Normalisasi no. HP ke format internasional untuk link wa.me (62xxxxxxxxxx,
+// tanpa "+" dan tanpa 0 depan). wa.me MENOLAK nomor lokal "08xx" — wajib "628xx".
+export function waNumber(phone) {
+  if (!phone) return ''
+  const s = String(phone).replace(/\D/g, '')
+  if (s.startsWith('62')) return s
+  if (s.startsWith('0')) return '62' + s.slice(1)
+  if (s.startsWith('8')) return '62' + s
+  return s
+}
+
+// URL chat WhatsApp siap pakai (kosong bila nomor tidak ada/invalid).
+export function waLink(phone, text) {
+  const n = waNumber(phone)
+  if (!n) return ''
+  return 'https://wa.me/' + n + (text ? '?text=' + encodeURIComponent(text) : '')
+}
+
 // Truncate teks panjang
 export function truncate(str, n = 80) {
   if (!str) return ''

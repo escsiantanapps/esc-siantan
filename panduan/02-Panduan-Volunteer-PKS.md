@@ -65,13 +65,29 @@ Rekap kehadiran anggota komsel pada pertemuan/ibadah komsel.
 
 ### 4. Tab Ultah (Ulang Tahun)
 
-- Setiap pagi, sistem otomatis memeriksa anggota komsel Anda yang ulang
-  tahun hari itu. Jika ada, tab Ultah menampilkan **tanda merah** dan Anda
-  menerima **notifikasi push**.
+Tab ini terbagi dua bagian: **Hari Ini** dan **Bulan Ini**.
+
+**Ulang Tahun Hari Ini**
+
+- Setiap pagi (±07:00 WIB), sistem otomatis memeriksa anggota komsel Anda
+  yang ulang tahun hari itu. Jika ada, tab Ultah menampilkan **tanda merah**
+  dan Anda menerima **notifikasi push**.
 - Ketuk nama anggota yang berulang tahun untuk menulis **pesan ucapan
   personal**. Pesan terkirim akan muncul sebagai kartu khusus "Pesan dari
   PKS Anda" di Beranda anggota tersebut, dan dapat ditandai sudah dibaca
   oleh penerimanya.
+
+**Ulang Tahun Bulan Ini** (perencanaan)
+
+- Di bawah section Hari Ini muncul daftar **seluruh anggota komsel yang
+  berulang tahun bulan ini**, diurutkan per tanggal.
+- Setiap baris menampilkan tanggal, nama, dan status **"Akan datang"** atau
+  **"Sudah lewat"** (yang sudah lewat ditampilkan sedikit redup). Berguna
+  untuk merencanakan ucapan atau kunjungan lebih awal.
+- Setiap **tanggal 1 tiap bulan**, PKS juga menerima **notifikasi push
+  ringkasan bulanan**: contoh — *"Ulang Tahun Bulan Juli 🎂 — 4 anggota
+  komsel Anda berulang tahun bulan ini: Andi (5), Budi (12), …"*. Notifikasi
+  ini terpisah dari notif harian.
 
 ### 5. Tab Persembahan
 

@@ -8,7 +8,6 @@ import { useLang } from '@/hooks/useLang'
 import { LOCALES } from '@/lib/i18n'
 import { Card, Button, Input, ThemeToggle, GradientHeader } from '@/components/ui'
 import PushToggle from '@/components/PushToggle'
-import PushDiagnosticsCard from '@/components/PushDiagnosticsCard'
 import CameraToggle from '@/components/CameraToggle'
 
 export default function SettingsPage() {
@@ -167,7 +166,6 @@ export default function SettingsPage() {
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">{t('settings.notifications')}</p>
           <PushToggle />
           <CameraToggle />
-          <PushDiagnosticsCard />
         </div>
 
         {/* Legal */}

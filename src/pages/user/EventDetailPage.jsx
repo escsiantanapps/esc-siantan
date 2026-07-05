@@ -6,7 +6,7 @@ import { eventsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState, StatusBadge } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
 import { useLang } from '@/hooks/useLang'
-import { formatDate } from '@/lib/utils'
+import { formatDate, waLink } from '@/lib/utils'
 
 export default function EventDetailPage() {
   const { id } = useParams()
@@ -122,8 +122,8 @@ export default function EventDetailPage() {
               const wa = profile?.gender === 'Perempuan'
                 ? (event.contact_wa_female || event.contact_wa)
                 : (event.contact_wa || event.contact_wa_female)
-              return wa ? (
-                <a href={`https://wa.me/${wa.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+              return waLink(wa) ? (
+                <a href={waLink(wa)} target="_blank" rel="noopener noreferrer">
                   <Button variant="outline" className="w-full">
                     <MessageCircle size={16} /> {t('common.contactWa')}
                   </Button>

@@ -8,7 +8,7 @@ import { classAttendanceService } from '@/services/attendanceService'
 import { Card, Spinner, GradientHeader, EmptyState, StatusBadge, Button } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
 import { useLang } from '@/hooks/useLang'
-import { formatDate } from '@/lib/utils'
+import { formatDate, waLink } from '@/lib/utils'
 
 export default function ClassDetailPage() {
   const { id } = useParams()
@@ -99,8 +99,8 @@ export default function ClassDetailPage() {
                 const wa = profile?.gender === 'Perempuan'
                   ? (cls.contact_wa_female || cls.contact_wa)
                   : (cls.contact_wa || cls.contact_wa_female)
-                return wa ? (
-                  <a href={`https://wa.me/${wa.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+                return waLink(wa) ? (
+                  <a href={waLink(wa)} target="_blank" rel="noopener noreferrer">
                     <Button variant="outline" className="w-full">
                       <MessageCircle size={16} /> {t('common.contactWa')}
                     </Button>

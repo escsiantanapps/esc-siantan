@@ -153,6 +153,22 @@ export default function PKSDashboardPage() {
     })
   }, [members])
 
+  // Ulang tahun bulan ini (di luar hari ini) untuk perencanaan PKS — diurutkan
+  // per tanggal, hari yang sudah lewat ikut ditampilkan sebagai riwayat singkat.
+  const thisMonthsBirthdays = useMemo(() => {
+    const today = new Date()
+    return members
+      .filter(m => {
+        if (!m.birth_date) return false
+        const d = new Date(m.birth_date)
+        if (d.getUTCMonth() !== today.getMonth()) return false
+        // Exclude yang hari ini (sudah di section atas).
+        return d.getUTCDate() !== today.getDate()
+      })
+      .map(m => ({ ...m, _day: new Date(m.birth_date).getUTCDate() }))
+      .sort((a, b) => a._day - b._day)
+  }, [members])
+
   async function handleSendBirthday(member) {
     const message = (birthdayDrafts[member.user_id] || '').trim()
     if (!message) { toast.error(t('pks.birthdayMsgRequired')); return }
@@ -448,39 +464,73 @@ export default function PKSDashboardPage() {
 
             {tab === 'ulangtahun' && (
               <>
-                {todaysBirthdays.length === 0 ? (
-                  <EmptyState icon={Cake} title={t('pks.noBirthdayToday')} description={t('pks.noBirthdayTodayDesc')} />
+                {todaysBirthdays.length === 0 && thisMonthsBirthdays.length === 0 ? (
+                  <EmptyState icon={Cake} title={t('pks.noBirthdayMonth')} description={t('pks.noBirthdayMonthDesc')} />
                 ) : (
-                  <div className="space-y-3">
-                    {todaysBirthdays.map(m => (
-                      <Card key={m.user_id} className="p-3.5 space-y-2.5">
-                        <div className="flex items-center gap-3">
-                          <Avatar name={m.name} src={m.photo_url} size="sm" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                            <p className="text-xs text-gray-400">🎂 {t('pks.birthdayToday')}</p>
-                          </div>
-                        </div>
-                        {birthdaySent[m.user_id] ? (
-                          <p className="text-xs text-green-600 flex items-center gap-1"><Send size={12} /> {t('pks.birthdaySent', { name: m.name })}</p>
-                        ) : (
-                          <>
-                            <Input
-                              placeholder={t('pks.birthdayMsgPh')}
-                              value={birthdayDrafts[m.user_id] || ''}
-                              onChange={e => setBirthdayDrafts(p => ({ ...p, [m.user_id]: e.target.value }))}
-                            />
-                            <Button
-                              size="sm" className="w-full"
-                              loading={birthdaySending === m.user_id}
-                              onClick={() => handleSendBirthday(m)}
-                            >
-                              <Send size={14} /> {t('pks.sendBirthday')}
-                            </Button>
-                          </>
-                        )}
-                      </Card>
-                    ))}
+                  <div className="space-y-4">
+                    {todaysBirthdays.length > 0 && (
+                      <div className="space-y-3">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">{t('pks.birthdayTodayHeader')}</p>
+                        {todaysBirthdays.map(m => (
+                          <Card key={m.user_id} className="p-3.5 space-y-2.5">
+                            <div className="flex items-center gap-3">
+                              <Avatar name={m.name} src={m.photo_url} size="sm" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                                <p className="text-xs text-gray-400">🎂 {t('pks.birthdayToday')}</p>
+                              </div>
+                            </div>
+                            {birthdaySent[m.user_id] ? (
+                              <p className="text-xs text-green-600 flex items-center gap-1"><Send size={12} /> {t('pks.birthdaySent', { name: m.name })}</p>
+                            ) : (
+                              <>
+                                <Input
+                                  placeholder={t('pks.birthdayMsgPh')}
+                                  value={birthdayDrafts[m.user_id] || ''}
+                                  onChange={e => setBirthdayDrafts(p => ({ ...p, [m.user_id]: e.target.value }))}
+                                />
+                                <Button
+                                  size="sm" className="w-full"
+                                  loading={birthdaySending === m.user_id}
+                                  onClick={() => handleSendBirthday(m)}
+                                >
+                                  <Send size={14} /> {t('pks.sendBirthday')}
+                                </Button>
+                              </>
+                            )}
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+
+                    {thisMonthsBirthdays.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">
+                          {t('pks.birthdayMonthHeader', { count: thisMonthsBirthdays.length })}
+                        </p>
+                        <Card className="p-2">
+                          {thisMonthsBirthdays.map(m => {
+                            const today = new Date()
+                            const isPast = m._day < today.getDate()
+                            return (
+                              <div key={m.user_id} className={`flex items-center gap-3 px-2.5 py-2 rounded-lg ${isPast ? 'opacity-50' : ''}`}>
+                                <div className="w-10 text-center flex-shrink-0">
+                                  <p className="text-[10px] text-gray-400 uppercase leading-none">{formatDate(new Date(), 'MMM')}</p>
+                                  <p className="text-lg font-semibold text-gray-900 leading-tight">{m._day}</p>
+                                </div>
+                                <Avatar name={m.name} src={m.photo_url} size="sm" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                                  <p className="text-xs text-gray-400">
+                                    {isPast ? t('pks.birthdayPast') : t('pks.birthdayUpcoming')}
+                                  </p>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </Card>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
