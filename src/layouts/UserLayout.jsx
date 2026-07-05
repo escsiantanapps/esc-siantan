@@ -27,9 +27,9 @@ function NavItem({ to, icon: Icon, labelKey, exact }) {
   return (
     // replace: pindah antar tab utama tidak menumpuk riwayat, sehingga tombol
     // back tidak membawa ke tab yang dibuka sebelumnya (rasa native).
-    <NavLink to={to} replace className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1">
+    <NavLink to={to} replace className="flex-1 flex flex-col items-center gap-0.5 py-2 px-0.5">
       <Icon size={22} className={active ? 'text-brand-500' : 'text-gray-400'} strokeWidth={active ? 2 : 1.5} />
-      <span className={`text-[10px] font-medium ${active ? 'text-brand-500' : 'text-gray-400'}`}>{t(labelKey)}</span>
+      <span className={`text-[10px] font-medium leading-tight whitespace-nowrap ${active ? 'text-brand-500' : 'text-gray-400'}`}>{t(labelKey)}</span>
     </NavLink>
   )
 }

@@ -1485,3 +1485,139 @@ UPDATE users SET marital_status = 'Duda' WHERE marital_status = 'Duda/Janda' AND
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_marital_status_check;
 ALTER TABLE users ADD CONSTRAINT users_marital_status_check
   CHECK (marital_status IS NULL OR marital_status IN ('Single','Menikah','Duda','Janda'));
+
+-- ── Migrasi v31: tutup lubang RLS pada classes, komsel, ministries ──────
+-- Ketiga tabel ini belum ENABLE ROW LEVEL SECURITY. Tanpa RLS, siapa pun yang
+-- punya anon key (yang ikut ter-bundle di aplikasi klien) bisa membaca, menambah,
+-- MENGUBAH, atau MENGHAPUS baris langsung lewat REST API — mem-bypass aplikasi.
+-- Artinya seluruh daftar kelas, komsel, dan ministry bisa dihapus orang luar.
+-- Perbaikan: aktifkan RLS + pola yang sama seperti komsel_categories:
+--   baca = semua user login; tulis (insert/update/delete) = Admin/Super Admin saja.
+-- (Sesuai audit kode: tabel-tabel ini HANYA ditulis dari halaman admin.
+--  Tulisan PKS di dashboard menyasar komsel_sessions, bukan tabel komsel.)
+--
+-- CEK STATUS ASLI DI PRODUCTION DULU (schema.sql bisa drift dari DB nyata):
+--   SELECT relname, relrowsecurity FROM pg_class
+--   WHERE relname IN ('classes','komsel','ministries');
+-- relrowsecurity = false berarti tabel itu memang masih terbuka.
+
+ALTER TABLE classes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "classes_select" ON classes;
+CREATE POLICY "classes_select" ON classes FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "classes_admin_write" ON classes;
+CREATE POLICY "classes_admin_write" ON classes FOR ALL
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+
+ALTER TABLE komsel ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "komsel_select" ON komsel;
+CREATE POLICY "komsel_select" ON komsel FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "komsel_admin_write" ON komsel;
+CREATE POLICY "komsel_admin_write" ON komsel FOR ALL
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+
+ALTER TABLE ministries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "ministries_select" ON ministries;
+CREATE POLICY "ministries_select" ON ministries FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "ministries_admin_write" ON ministries;
+CREATE POLICY "ministries_admin_write" ON ministries FOR ALL
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+
+-- ── Migrasi v32: Audit log perubahan data sensitif oleh admin ──────────
+-- Mencatat SIAPA & KAPAN mengubah/menghapus data penting: role & biodata
+-- jemaat, hak akses admin, rekening/QRIS persembahan, komsel, ministry,
+-- sertifikat. Immutable & hanya Super Admin yang boleh membaca.
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id            BIGSERIAL PRIMARY KEY,
+  actor_user_id TEXT,          -- users.user_id pelaku (NULL = aksi sistem/cron)
+  actor_name    TEXT,
+  actor_role    TEXT,
+  action        TEXT NOT NULL, -- INSERT | UPDATE | DELETE
+  table_name    TEXT NOT NULL,
+  record_id     TEXT,          -- id baris yang terpengaruh
+  changed_fields TEXT[],       -- kolom yang berubah (khusus UPDATE)
+  old_data      JSONB,
+  new_data      JSONB,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_table   ON audit_log(table_name);
+CREATE INDEX IF NOT EXISTS idx_audit_actor   ON audit_log(actor_user_id);
+
+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
+-- Hanya Super Admin boleh baca; tak ada policy tulis → hanya trigger
+-- SECURITY DEFINER di bawah yang bisa mengisi (log tidak bisa dipalsukan/dihapus klien).
+DROP POLICY IF EXISTS "audit_super_read" ON audit_log;
+CREATE POLICY "audit_super_read" ON audit_log FOR SELECT
+  USING (auth_user_role() = 'Super Admin');
+
+-- Kolom "berisik" yang TIDAK perlu dicatat (mis. heartbeat last_seen_at tiap 2 menit,
+-- poin yang naik tiap absen — sudah punya jejak di point_transactions).
+CREATE OR REPLACE FUNCTION record_audit() RETURNS TRIGGER AS $$
+DECLARE
+  noise      TEXT[] := ARRAY['last_seen_at','updated_at','points','created_at'];
+  v_actor_id   TEXT;
+  v_actor_name TEXT;
+  v_actor_role TEXT;
+  v_record_id  TEXT;
+  v_changed    TEXT[];
+  v_old JSONB; v_new JSONB; k TEXT;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    v_old := to_jsonb(OLD); v_new := to_jsonb(NEW);
+    FOR k IN SELECT jsonb_object_keys(v_new) LOOP
+      IF (v_new->k IS DISTINCT FROM v_old->k) AND NOT (k = ANY(noise)) THEN
+        v_changed := array_append(v_changed, k);
+      END IF;
+    END LOOP;
+    -- Tidak ada kolom penting yang berubah → jangan catat (hemat & tanpa spam).
+    IF v_changed IS NULL THEN RETURN NEW; END IF;
+  ELSIF TG_OP = 'DELETE' THEN
+    v_old := to_jsonb(OLD);
+  ELSE
+    v_new := to_jsonb(NEW);
+  END IF;
+
+  v_record_id := coalesce(
+    (COALESCE(v_new, v_old))->>'user_id',
+    (COALESCE(v_new, v_old))->>'komsel_id',
+    (COALESCE(v_new, v_old))->>'ministry_id',
+    (COALESCE(v_new, v_old))->>'certificate_id',
+    (COALESCE(v_new, v_old))->>'id'
+  );
+
+  v_actor_id := auth_user_id();
+  v_actor_role := auth_user_role();
+  SELECT name INTO v_actor_name FROM users WHERE user_id = v_actor_id;
+
+  INSERT INTO audit_log(actor_user_id, actor_name, actor_role, action,
+                        table_name, record_id, changed_fields, old_data, new_data)
+  VALUES (v_actor_id, v_actor_name, v_actor_role, TG_OP,
+          TG_TABLE_NAME, v_record_id, v_changed, v_old, v_new);
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Pasang trigger ke tabel-tabel sensitif (idempotent).
+DROP TRIGGER IF EXISTS audit_users ON users;
+CREATE TRIGGER audit_users AFTER INSERT OR UPDATE OR DELETE ON users
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+DROP TRIGGER IF EXISTS audit_perms ON admin_user_permissions;
+CREATE TRIGGER audit_perms AFTER INSERT OR UPDATE OR DELETE ON admin_user_permissions
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+DROP TRIGGER IF EXISTS audit_payacc ON payment_accounts;
+CREATE TRIGGER audit_payacc AFTER INSERT OR UPDATE OR DELETE ON payment_accounts
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+DROP TRIGGER IF EXISTS audit_komsel ON komsel;
+CREATE TRIGGER audit_komsel AFTER INSERT OR UPDATE OR DELETE ON komsel
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+DROP TRIGGER IF EXISTS audit_ministries ON ministries;
+CREATE TRIGGER audit_ministries AFTER INSERT OR UPDATE OR DELETE ON ministries
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+DROP TRIGGER IF EXISTS audit_certificates ON certificates;
+CREATE TRIGGER audit_certificates AFTER INSERT OR UPDATE OR DELETE ON certificates
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
