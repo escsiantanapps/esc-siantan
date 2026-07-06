@@ -99,6 +99,10 @@ export default function ClassDetailPage() {
 
         {!loading && cls && (
           <>
+            {cls.thumbnail_url && (
+              <img src={cls.thumbnail_url} alt={cls.name} className="w-full aspect-video object-cover rounded-2xl" />
+            )}
+
             <Card className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <h1 className="text-base font-bold text-gray-900">{cls.name}</h1>

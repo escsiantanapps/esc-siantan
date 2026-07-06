@@ -9,6 +9,7 @@ import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Textarea, Select, Checkbox, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
 import MediaListUploader from '@/components/MediaListUploader'
+import Uploader from '@/components/Uploader'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
 import { prerequisiteService } from '@/services/contentService'
@@ -32,6 +33,7 @@ const emptyForm = {
   name: '', description: '', schedule: '', location: '', teacher: '', status: 'Mulai',
   total_sessions: 1, session_names: [''],
   contact_wa: '', contact_wa_female: '', whatsapp_group_url: '',
+  thumbnail_url: '',
   photo_urls: [], video_urls: [],
   prerequisite_enabled: false, prerequisite_fields: [],
 }
@@ -65,6 +67,7 @@ export default function AdminClassesPage() {
   const [attendance, setAttendance] = useState([])
   const [attLoading, setAttLoading] = useState(false)
   const [mediaBusy, setMediaBusy] = useState(false)
+  const [thumbUploading, setThumbUploading] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -213,6 +216,22 @@ export default function AdminClassesPage() {
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
+  async function handleThumbUpload(file) {
+    if (!file) return
+    setThumbUploading(true)
+    try {
+      file = await compressImage(file)
+      validateUpload(file, { maxMB: 5, image: true })
+      const url = await classesService.uploadThumbnail(file)
+      set('thumbnail_url', url)
+      toast.success('Gambar sampul berhasil diunggah.')
+    } catch (err) {
+      toast.error(err.message || 'Gagal mengunggah gambar.')
+    } finally {
+      setThumbUploading(false)
+    }
+  }
+
   async function handleMedia(kind, action) {
     if (action.type === 'remove') {
       const key = kind === 'video' ? 'video_urls' : 'photo_urls'
@@ -261,6 +280,7 @@ export default function AdminClassesPage() {
       contact_wa: cls.contact_wa || '',
       contact_wa_female: cls.contact_wa_female || '',
       whatsapp_group_url: cls.whatsapp_group_url || '',
+      thumbnail_url: cls.thumbnail_url || '',
       photo_urls: cls.photo_urls || [],
       video_urls: cls.video_urls || [],
       prerequisite_enabled: Array.isArray(cls.prerequisite_fields) && cls.prerequisite_fields.length > 0,
@@ -448,6 +468,13 @@ export default function AdminClassesPage() {
             </div>
 
             {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
+
+            <Uploader
+              kind="image" crop aspect={16 / 9} label="Gambar Sampul"
+              hint="Atur bingkai (16:9) agar tidak terpotong · maks 5 MB"
+              value={form.thumbnail_url} uploading={thumbUploading}
+              onFile={handleThumbUpload} onClear={() => set('thumbnail_url', '')}
+            />
 
             <Input label={t('acls.nameLabel')} required value={form.name} onChange={e => set('name', e.target.value)} />
             <Textarea label={t('acls.description')} rows={3} value={form.description} onChange={e => set('description', e.target.value)} />

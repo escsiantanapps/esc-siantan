@@ -271,6 +271,15 @@ export const classesService = {
     if (error) throw error
   },
 
+  async uploadThumbnail(file) {
+    const ext = file.name.split('.').pop()
+    const path = `classes/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('profile-photos').upload(path, file)
+    if (error) throw error
+    const { data } = supabase.storage.from('profile-photos').getPublicUrl(path)
+    return data.publicUrl
+  },
+
   // ── Registrasi kelas (opsional -- absensi via QR tetap bisa tanpa daftar dulu) ──
   async register(classId, userId) {
     const registrationId = `CREG-${Date.now()}`

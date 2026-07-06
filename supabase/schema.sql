@@ -1734,3 +1734,9 @@ CREATE POLICY "event_reg_admin_delete" ON event_registrations FOR DELETE
 -- ulang, kini di 3 slot per hari).
 ALTER TABLE form_templates
   ADD COLUMN IF NOT EXISTS reminder_slots TEXT[] DEFAULT '{}';
+
+-- ── Migrasi v36: Sampul (thumbnail) kelas ──────────────────────────────
+-- ClassesPage sudah merender cls.thumbnail_url sejak lama (fallback ke ikon
+-- BookOpen bila NULL), tapi kolomnya belum ada dan admin belum bisa unggah.
+-- Tambahkan kolom + admin gain upload UI (lihat AdminClassesPage.jsx).
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
