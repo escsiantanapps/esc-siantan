@@ -2,13 +2,17 @@ import {
   Users, Calendar, Newspaper, BookOpen,
   ClipboardList, Droplets, Heart, AlertTriangle, BarChart3,
   Layers, Network, HandCoins, CalendarOff, Baby, Award, Map, Gift, Church, CreditCard,
+  LayoutDashboard,
 } from 'lucide-react'
 
 // Daftar halaman admin yang aksesnya bisa dibatasi untuk role "Admin"
 // lewat halaman Hak Akses (/admin/hak-akses).
-// Dashboard (/admin) selalu bisa diakses semua admin, dan Hak Akses
-// itu sendiri khusus Super Admin — keduanya tidak masuk daftar ini.
+// Hak Akses itu sendiri khusus Super Admin — tidak masuk daftar ini.
+// Dashboard (/admin) MASUK daftar (bisa dicabut Super Admin) — bila
+// akses Dashboard dicabut, admin ybs diarahkan otomatis ke halaman
+// pertama yang diizinkan (lihat AdminLayout).
 export const ADMIN_PAGES = [
+  { to: '/admin',          icon: LayoutDashboard, label: 'Dashboard',        section: 'Utama',       labelKey: 'admin.nav.dashboard',   sectionKey: 'admin.sec.Utama' },
   { to: '/admin/jemaat',   icon: Users,         label: 'Jemaat',             section: 'Utama',       labelKey: 'admin.nav.jemaat',      sectionKey: 'admin.sec.Utama' },
   { to: '/admin/berita',   icon: Newspaper,     label: 'Berita & Info',      section: 'Konten',      labelKey: 'admin.nav.berita',      sectionKey: 'admin.sec.Konten' },
   { to: '/admin/events',   icon: Calendar,      label: 'Events',             section: 'Konten',      labelKey: 'admin.nav.events',      sectionKey: 'admin.sec.Konten' },
@@ -34,6 +38,10 @@ export const ALL_ADMIN_PAGE_PATHS = ADMIN_PAGES.map(p => p.to)
 
 // Cari entri ADMIN_PAGES yang cocok dengan pathname saat ini,
 // termasuk sub-halaman seperti /admin/jemaat/:id atau /admin/tugas/baru.
+// Dashboard '/admin' hanya cocok pada exact match — sub-halaman jatuh ke
+// entry-nya masing-masing, bukan Dashboard.
 export function matchAdminPage(pathname) {
-  return ADMIN_PAGES.find(p => pathname === p.to || pathname.startsWith(p.to + '/'))
+  return ADMIN_PAGES.find(p =>
+    p.to === '/admin' ? pathname === '/admin' : (pathname === p.to || pathname.startsWith(p.to + '/'))
+  )
 }

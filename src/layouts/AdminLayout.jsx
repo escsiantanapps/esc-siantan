@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
-  LayoutDashboard, LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, Tag, HardDrive, ScrollText
+  LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, Tag, HardDrive, ScrollText
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
@@ -13,19 +13,20 @@ import { useExitConfirm } from '@/hooks/useExitConfirm'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 
 function buildMenu(isSuperAdmin, allowedPages) {
-  const items = [
-    { section: 'Utama', sectionKey: 'admin.sec.Utama' },
-    { to: '/admin', icon: LayoutDashboard, labelKey: 'admin.nav.dashboard', exact: true },
-  ]
+  const items = []
 
-  let lastSection = 'Utama'
+  // Dashboard sekarang jadi entri ADMIN_PAGES pertama (bisa dicabut Super
+  // Admin). Filter yang sama berlaku untuknya.
+  let lastSection = null
   for (const page of ADMIN_PAGES) {
     if (!isSuperAdmin && allowedPages && !allowedPages.includes(page.to)) continue
     if (page.section !== lastSection) {
       items.push({ section: page.section, sectionKey: page.sectionKey })
       lastSection = page.section
     }
-    items.push(page)
+    // Dashboard butuh flag `exact` supaya NavLink tidak tetap aktif saat berada
+    // di sub-halaman /admin/*.
+    items.push(page.to === '/admin' ? { ...page, exact: true } : page)
   }
 
   if (isSuperAdmin) {
@@ -47,7 +48,9 @@ export default function AdminLayout() {
   const { t } = useLang()
   const navigate = useNavigate()
   const location = useLocation()
-  // Konfirmasi keluar saat back di dashboard admin (root panel).
+  // Konfirmasi keluar saat back di dashboard admin (root panel). Bila akses
+  // Dashboard dicabut, halaman ini tidak akan pernah tampil untuk admin ybs
+  // (guard di bawah), jadi hook ini tetap aman didaftarkan.
   useExitConfirm(location.pathname === '/admin', () => toast.info(t('app.exitConfirm')))
 
   const isSuperAdmin = profile?.role === 'Super Admin'
@@ -85,16 +88,27 @@ export default function AdminLayout() {
     </div>
   )
 
-  // Halaman khusus Super Admin (Hak Akses, Kategori Tugas)
-  if (['/admin/hak-akses', '/admin/kategori-tugas', '/admin/backup', '/admin/audit'].includes(location.pathname) && !isSuperAdmin) {
-    return <Navigate to="/admin" replace />
+  // Tentukan tujuan fallback ketika Admin mencoba masuk halaman yang tidak
+  // diizinkan. Prioritas: Dashboard jika masih diizinkan, kalau tidak ambil
+  // halaman pertama yang diizinkan. Bila SEMUA dicabut → kembalikan ke root.
+  function fallbackPath() {
+    if (isSuperAdmin) return '/admin'
+    if (!allowedPages || allowedPages.includes('/admin')) return '/admin'
+    const first = ADMIN_PAGES.find(p => allowedPages.includes(p.to))
+    return first ? first.to : '/'
   }
 
-  // Batasi akses Admin ke halaman yang belum diizinkan Super Admin
+  // Halaman khusus Super Admin (Hak Akses, Kategori Tugas)
+  if (['/admin/hak-akses', '/admin/kategori-tugas', '/admin/backup', '/admin/audit'].includes(location.pathname) && !isSuperAdmin) {
+    return <Navigate to={fallbackPath()} replace />
+  }
+
+  // Batasi akses Admin ke halaman yang belum diizinkan Super Admin — termasuk
+  // Dashboard '/admin' itu sendiri (sekarang bagian dari ADMIN_PAGES).
   if (!isSuperAdmin && allowedPages) {
     const page = matchAdminPage(location.pathname)
     if (page && !allowedPages.includes(page.to)) {
-      return <Navigate to="/admin" replace />
+      return <Navigate to={fallbackPath()} replace />
     }
   }
 

@@ -19,8 +19,13 @@ function userHasRole(profile, role) {
 //    bila kategori tugas ini dibatasi ke ministry tertentu, salah satu ministry
 //    user harus cocok. Kategori tanpa batasan (mis. "Umum") meloloskan semua,
 //    sehingga tugas lama yang dibackfill ke kategori "Umum" tidak terdampak.
-export function canAccessTemplate(template, profile) {
-  if (['Admin', 'Super Admin'].includes(profile?.role)) return true
+//
+// Opsi `strict`: menonaktifkan pintasan Admin. Dipakai untuk evaluasi — di
+// sana kita ingin melihat siapa yang BERHAK MENGISI form, bukan siapa yang
+// bisa melihatnya (Admin biasa tidak dievaluasi kecuali punya role_secondary
+// yang lolos gerbang role + ministry).
+export function canAccessTemplate(template, profile, { strict = false } = {}) {
+  if (!strict && ['Admin', 'Super Admin'].includes(profile?.role)) return true
 
   const roles = template?.allowed_roles || []
   if (roles.length > 0 && !roles.some(r => userHasRole(profile, r))) return false

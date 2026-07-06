@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Users, ChevronRight as Arrow, Plus, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Users, ChevronRight as Arrow, Plus, X, Copy } from 'lucide-react'
 import { usersService } from '@/services/usersService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
@@ -38,6 +38,8 @@ export default function AdminMembersPage() {
   const [ministry, setMinistry] = useState('')
   const [komsel, setKomsel] = useState('')
   const [sort, setSort] = useState('name')
+  const [duplicatesOnly, setDuplicatesOnly] = useState(false)
+  const [nameCounts, setNameCounts] = useState({})
   const [ministries, setMinistries] = useState([])
   const [komselList, setKomselList] = useState([])
   const [page, setPage] = useState(1)
@@ -50,14 +52,14 @@ export default function AdminMembersPage() {
   useBackClose(showAddModal, () => setShowAddModal(false))
 
   useEffect(() => {
-    Promise.all([usersService.getAllMinistries(), usersService.getAllKomsel()])
-      .then(([mins, koms]) => { setMinistries(mins); setKomselList(koms) })
+    Promise.all([usersService.getAllMinistries(), usersService.getAllKomsel(), usersService.getNameFrequencyMap()])
+      .then(([mins, koms, counts]) => { setMinistries(mins); setKomselList(koms); setNameCounts(counts) })
       .catch(() => {})
   }, [])
 
   function loadMembers() {
     setLoading(true)
-    return usersService.getAll({ search, role, status, ministry, komsel, page, limit: LIMIT, sort })
+    return usersService.getAll({ search, role, status, ministry, komsel, duplicatesOnly, page, limit: LIMIT, sort })
       .then(({ data, count }) => { setMembers(data); setCount(count) })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -67,7 +69,13 @@ export default function AdminMembersPage() {
     setLoading(true)
     const timer = setTimeout(loadMembers, 300)
     return () => clearTimeout(timer)
-  }, [search, role, status, ministry, komsel, page, sort])
+  }, [search, role, status, ministry, komsel, duplicatesOnly, page, sort])
+
+  // Cek apakah baris ini bernama sama dgn user lain di DB (setelah trim + lowercase).
+  function isDuplicateName(name) {
+    const key = String(name || '').trim().toLowerCase()
+    return !!key && (nameCounts[key] || 0) > 1
+  }
 
   function setAdd(key, val) { setAddForm(p => ({ ...p, [key]: val })) }
 
@@ -144,6 +152,25 @@ export default function AdminMembersPage() {
         </Select>
       </div>
 
+      {/* Toggle deteksi duplikat — tampilkan hanya jemaat dengan nama yg muncul >1x. */}
+      <div className="flex items-center justify-between mb-4">
+        <button
+          type="button"
+          onClick={() => { setDuplicatesOnly(v => !v); setPage(1) }}
+          className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+            duplicatesOnly
+              ? 'bg-amber-100 border-amber-300 text-amber-700'
+              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Copy size={13} />
+          {duplicatesOnly ? 'Menampilkan Nama Duplikat' : 'Cek Nama Duplikat'}
+        </button>
+        {duplicatesOnly && (
+          <span className="text-xs text-gray-500">Klik lagi untuk lihat semua</span>
+        )}
+      </div>
+
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
       {!loading && members.length === 0 && (
@@ -168,6 +195,9 @@ export default function AdminMembersPage() {
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-brand-600 shrink-0">
                     <Sparkles size={10} /> {m.points ?? 0}
                   </span>
+                  {isDuplicateName(m.name) && (
+                    <Badge color="amber" className="text-[10px]! py-0! shrink-0">Duplikat</Badge>
+                  )}
                 </div>
                 <p className="text-xs text-gray-400">{t(`role.${m.role}`)}{m.phone ? ` · ${m.phone}` : ''}</p>
                 {(() => {

@@ -16,12 +16,18 @@ export const evaluationService = {
 
   // baris evaluasi: user x form_template yang relevan untuknya
   async getEvaluation({ startDate, endDate, formId = '', ministryId = '', komselId = '', role = '' }) {
-    let tmplQuery = supabase.from('form_templates').select('*, template_ministries(ministry_id)')
+    // Ikut sertakan task_categories → task_category_ministries agar gerbang
+    // Kategori Tugas (v25) juga divalidasi. Sebelumnya join ini terlewat →
+    // user dgn ministry di luar kategori tetap muncul di baris evaluasi.
+    let tmplQuery = supabase.from('form_templates')
+      .select('*, template_ministries(ministry_id), task_categories(name, task_category_ministries(ministry_id))')
     if (formId) tmplQuery = tmplQuery.eq('form_id', formId)
     const { data: tmplRaw, error: tErr } = await tmplQuery
     if (tErr) throw tErr
     const templates = (tmplRaw || []).map(t => ({
-      ...t, allowed_ministry: (t.template_ministries || []).map(r => r.ministry_id),
+      ...t,
+      allowed_ministry: (t.template_ministries || []).map(r => r.ministry_id),
+      category_ministry_ids: (t.task_categories?.task_category_ministries || []).map(r => r.ministry_id),
     }))
 
     let userQuery = supabase.from('users')
@@ -79,8 +85,12 @@ export const evaluationService = {
     const rows = []
     for (const u of users) {
       for (const t of templates) {
-        // Lewati template yang tidak relevan untuk user ini (batasan role/ministry).
-        if (!canAccessTemplate(t, u)) continue
+        // Lewati template yang tidak relevan untuk user ini (batasan role/
+        // ministry/kategori). `strict: true` menonaktifkan pintasan Admin —
+        // di evaluasi kita ingin melihat kelayakan sebenarnya, bukan "Admin
+        // bisa lihat semua" (mis. Admin dgn role_secondary='Volunteer' tapi
+        // TIDAK di ministry yang dibatasi form → tidak muncul).
+        if (!canAccessTemplate(t, u, { strict: true })) continue
         const filled = responses.filter(r => r.volunteer_id === u.user_id && r.form_id === t.form_id).length
         const periods = this.periodsInRange(start, end, t.period)
         const target = (t.weekly_goal || 1) * periods
