@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, BookOpen, ChevronRight, Clock, MapPin } from 'lucide-react'
+import { Bell, BookOpen, Clock, MapPin } from 'lucide-react'
 import { newsService, classesService } from '@/services/contentService'
-import { Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
+import { Skeleton, EmptyState, GradientHeader, StatusBadge, SectionHeader } from '@/components/ui'
 import Carousel from '@/components/Carousel'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, truncate } from '@/lib/utils'
@@ -27,15 +27,28 @@ export default function InformationPage() {
       <GradientHeader title={t('info.title')} subtitle={t('info.subtitle')} />
 
       <div className="px-4 -mt-2 pt-4 space-y-7">
-        {loading && <div className="flex justify-center py-8"><Spinner /></div>}
+        {loading && (
+          <div className="animate-fade-in space-y-7">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i}>
+                <Skeleton className="h-3.5 w-32 rounded-md mb-3" />
+                <div className="bg-surface border border-gray-100 rounded-3xl overflow-hidden">
+                  <Skeleton className="h-36 rounded-none" />
+                  <div className="p-3.5 space-y-2">
+                    <Skeleton className="h-3.5 w-3/4 rounded-md" />
+                    <Skeleton className="h-3 w-1/2 rounded-md" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {!loading && (
           <>
             {/* Section: Pengumuman */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">{t('info.announcements')}</h3>
-              </div>
+            <section className="animate-fade-in-up">
+              <SectionHeader title={t('info.announcements')} />
               {news.length === 0 ? (
                 <EmptyState icon={Bell} title={t('info.noAnnouncements')} description={t('info.noAnnouncementsDesc')} />
               ) : (
@@ -71,13 +84,8 @@ export default function InformationPage() {
             </section>
 
             {/* Section: Kelas */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">{t('info.classesSection')}</h3>
-                <Link to="/kelas" className="text-xs text-brand-500 flex items-center gap-0.5">
-                  {t('common.all')} <ChevronRight size={13} />
-                </Link>
-              </div>
+            <section className="animate-fade-in-up" style={{ animationDelay: '80ms' }}>
+              <SectionHeader title={t('info.classesSection')} to="/kelas" />
               {classes.length === 0 ? (
                 <EmptyState icon={BookOpen} title={t('info.noClasses')} description={t('info.noClassesDesc')} />
               ) : (

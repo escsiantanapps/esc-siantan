@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, MapPin, Clock, QrCode } from 'lucide-react'
 import { classesService } from '@/services/contentService'
-import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
+import { Card, Skeleton, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 
@@ -44,8 +44,10 @@ export default function ClassesPage() {
             <button
               key={value}
               onClick={() => setTab(value)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition ${
-                tab === value ? 'gradient-main text-white' : 'bg-control text-gray-500'
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all active:scale-95 ${
+                tab === value
+                  ? 'gradient-main text-white shadow-[0_4px_12px_-4px_rgba(244,81,30,0.55)]'
+                  : 'bg-control text-gray-500 hover:bg-control-hover'
               }`}
             >
               {t(key)}
@@ -53,17 +55,29 @@ export default function ClassesPage() {
           ))}
         </div>
 
-        {loading && <div className="flex justify-center py-8"><Spinner /></div>}
+        {loading && (
+          <div className="space-y-3.5 animate-fade-in">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="bg-surface border border-gray-100 rounded-2xl overflow-hidden">
+                <Skeleton className="h-28 rounded-none" />
+                <div className="p-3.5 space-y-2">
+                  <Skeleton className="h-3.5 w-2/3 rounded-md" />
+                  <Skeleton className="h-3 w-1/3 rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {!loading && filtered.length === 0 && (
           <EmptyState icon={BookOpen} title={t('classes.empty')} description={t('classes.emptyDesc')} />
         )}
 
         {/* Kartu kelas dengan cover ala Stitch */}
-        <div className="space-y-3.5">
+        <div className="space-y-3.5 stagger-children">
           {filtered.map(cls => (
             <Link key={cls.class_id} to={`/kelas/${cls.class_id}`} className="block">
-              <Card glass className="overflow-hidden hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
+              <Card glass lift className="overflow-hidden">
                 <div className="relative h-28">
                   {cls.thumbnail_url
                     ? <img src={cls.thumbnail_url} alt={cls.name} className="w-full h-full object-cover" />

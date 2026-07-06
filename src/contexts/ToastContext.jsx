@@ -66,12 +66,14 @@ export function ToastProvider({ children }) {
       {/* Toast container */}
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-sm px-4 flex flex-col items-center gap-2 pointer-events-none">
         {toasts.map(t => {
-          const { icon: Icon, ring } = TOAST_STYLES[t.type] || TOAST_STYLES.info
+          const { icon: Icon, ring, bar } = TOAST_STYLES[t.type] || TOAST_STYLES.info
           return (
             <div
               key={t.id}
-              className="animate-toast-in pointer-events-auto w-full bg-surface border border-gray-100 rounded-xl shadow-lg shadow-black/10 px-4 py-3 flex items-center gap-3"
+              className="animate-toast-in pointer-events-auto w-full bg-surface border border-gray-100 rounded-xl shadow-lg shadow-black/10 pl-5 pr-4 py-3 flex items-center gap-3 relative overflow-hidden"
             >
+              {/* Bar aksen warna sesuai jenis toast */}
+              <span aria-hidden="true" className={`absolute left-0 top-0 bottom-0 w-1.5 ${bar}`} />
               <Icon size={20} className={`shrink-0 ${ring}`} />
               <p className="flex-1 text-sm text-gray-800 font-medium">{t.message}</p>
               <button

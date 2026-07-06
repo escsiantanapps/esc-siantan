@@ -169,15 +169,17 @@ export default function AdminLayout() {
               <NavLink key={to} to={to} end={exact}
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                  `relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200
                   ${isActive
                     ? 'bg-brand-50 text-brand-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:translate-x-0.5'
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
+                    {/* Bar aksen gradient di sisi kiri item aktif */}
+                    {isActive && <span aria-hidden="true" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full gradient-main" />}
                     <Icon size={17} strokeWidth={isActive ? 2 : 1.5} />
                     <span className="flex-1">{labelKey ? t(labelKey) : label}</span>
                     {isActive && <ChevronRight size={14} />}
@@ -212,7 +214,7 @@ export default function AdminLayout() {
       {/* Overlay mobile */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/20 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-30 lg:hidden animate-fade-in"
           onClick={() => setOpen(false)}
         />
       )}
@@ -220,8 +222,8 @@ export default function AdminLayout() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar mobile */}
-        <header className="lg:hidden bg-surface border-b border-gray-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-20">
-          <button onClick={() => setOpen(true)} className="p-1 text-gray-500">
+        <header className="lg:hidden bg-surface/90 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-20">
+          <button onClick={() => setOpen(true)} className="p-1 text-gray-500 active:scale-90 transition-transform">
             <Menu size={22} />
           </button>
           <span className="font-semibold text-gray-900 text-sm flex-1">{t('admin.appShort')}</span>

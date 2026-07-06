@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { evaluationService } from '@/services/evaluationService'
 import { storageService } from '@/services/storageService'
-import { Card, PageHeader, Spinner, StatusBadge } from '@/components/ui'
+import { Card, PageHeader, Spinner, Skeleton, StatusBadge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import MemberStats from '@/components/MemberStats'
 
@@ -112,7 +112,19 @@ export default function AdminDashboardPage() {
     red:   { bar: 'bg-red-500',   text: 'text-red-600',   bg: 'bg-red-50',   icon: 'text-red-500',   msg: t('adash.storageFull') },
   }[storageColor]
 
-  if (loading) return <div className="flex justify-center items-center h-60"><Spinner size="lg" /></div>
+  if (loading) return (
+    <div className="animate-fade-in">
+      <div className="space-y-2 pt-2 mb-6">
+        <Skeleton className="h-6 w-56 rounded-lg" />
+        <Skeleton className="h-3.5 w-40 rounded-md" />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        <Skeleton className="col-span-2 lg:col-span-1 h-32 rounded-2xl" />
+        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+      </div>
+      <Skeleton className="h-44 rounded-2xl" />
+    </div>
+  )
 
   return (
     <div>
@@ -122,16 +134,18 @@ export default function AdminDashboardPage() {
       />
 
       {/* Stats grid — kartu pertama tampil sebagai hero (gaya bento Stitch) */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6 stagger-children">
         {statCards.map(({ label, value, icon: Icon, color, bg, to }, idx) => {
           const hero = idx === 0
           return (
             <Link key={label} to={to} className={hero ? 'col-span-2 lg:col-span-1' : ''}>
-              <Card className={`p-4 h-full transition-colors ${hero ? 'gradient-main border-transparent!' : 'hover:border-gray-200'}`}>
+              <Card lift className={`p-4 h-full relative overflow-hidden ${hero ? 'gradient-main border-transparent!' : 'hover:border-gray-200'}`}>
+                {/* Glow dekoratif kartu hero */}
+                {hero && <div aria-hidden="true" className="pointer-events-none absolute -top-10 -right-8 w-32 h-32 rounded-full bg-white/15 blur-2xl" />}
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${hero ? 'bg-white/20' : bg}`}>
                   <Icon size={20} className={hero ? 'text-white' : color} strokeWidth={1.5} />
                 </div>
-                <p className={`text-2xl font-bold ${hero ? 'text-white' : color}`}>{value}</p>
+                <p className={`font-display text-3xl font-bold tabular-nums tracking-tight ${hero ? 'text-white' : color}`}>{value}</p>
                 <p className={`text-xs mt-0.5 ${hero ? 'text-white/75' : 'text-gray-500'}`}>{label}</p>
               </Card>
             </Link>

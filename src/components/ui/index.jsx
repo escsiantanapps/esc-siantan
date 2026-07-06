@@ -1,4 +1,5 @@
-import { Sun, Moon, ArrowLeft } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Sun, Moon, ArrowLeft, ChevronRight } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import { useLang } from '@/hooks/useLang'
 
@@ -7,7 +8,7 @@ export function Button({ children, variant = 'primary', size = 'md', loading, cl
   const base = 'inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed'
   const sizes = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2.5 text-sm', lg: 'px-6 py-3 text-base' }
   const variants = {
-    primary: 'gradient-main text-white shadow-sm',
+    primary: 'gradient-main text-white shadow-[0_6px_18px_-8px_rgba(244,81,30,0.55)] hover:brightness-105 hover:shadow-[0_8px_22px_-8px_rgba(244,81,30,0.65)]',
     secondary: 'bg-control text-gray-700 hover:bg-control-hover',
     outline: 'border border-gray-200 text-gray-700 hover:bg-control',
     danger: 'bg-red-500 text-white hover:bg-red-600',
@@ -106,15 +107,53 @@ export function Checkbox({ label, className = '', ...props }) {
 }
 
 // ─── Card ────────────────────────────────────────────────
-export function Card({ children, className = '', onClick, glass = false, ...props }) {
+export function Card({ children, className = '', onClick, glass = false, lift = false, ...props }) {
   const surface = glass ? 'glass-card' : 'bg-surface border border-gray-100'
+  const interactive = onClick || lift ? 'card-lift' : 'transition-colors duration-300'
   return (
     <div
-      className={`${surface} rounded-2xl ambient-shadow transition-colors duration-300 ${onClick ? 'cursor-pointer active:scale-[0.99] transition-transform' : ''} ${className}`}
+      className={`${surface} rounded-2xl ambient-shadow ${interactive} ${onClick ? 'cursor-pointer' : ''} ${className}`}
       onClick={onClick}
       {...props}
     >
       {children}
+    </div>
+  )
+}
+
+// ─── Skeleton (placeholder shimmer saat konten dimuat) ──
+export function Skeleton({ className = '' }) {
+  return <div aria-hidden="true" className={`skeleton ${className}`} />
+}
+
+// Kerangka kartu daftar generik: ikon + 2 baris teks. Dipakai halaman list
+// (beranda, events, kelas, informasi) supaya loading terasa "berbentuk".
+export function SkeletonCard({ className = '' }) {
+  return (
+    <div aria-hidden="true" className={`bg-surface border border-gray-100 rounded-2xl p-3.5 flex items-center gap-3 ${className}`}>
+      <Skeleton className="w-11 h-11 rounded-xl shrink-0" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-3.5 w-3/4 rounded-md" />
+        <Skeleton className="h-3 w-1/2 rounded-md" />
+      </div>
+    </div>
+  )
+}
+
+// ─── Section Header (judul seksi + tautan "Semua") ──────
+export function SectionHeader({ title, to, linkText, className = '' }) {
+  const { t } = useLang()
+  return (
+    <div className={`flex items-center justify-between mb-3 ${className}`}>
+      <h3 className="font-display text-sm font-bold text-gray-900 flex items-center gap-2">
+        <span aria-hidden="true" className="inline-block w-1 h-3.5 rounded-full gradient-main" />
+        {title}
+      </h3>
+      {to && (
+        <Link to={to} className="text-xs font-semibold text-brand-500 flex items-center gap-0.5 active:scale-95 transition-transform">
+          {linkText || t('common.all')} <ChevronRight size={13} />
+        </Link>
+      )}
     </div>
   )
 }
@@ -152,9 +191,9 @@ export function Avatar({ name, src, size = 'md' }) {
 // ─── Page Header ─────────────────────────────────────────
 export function PageHeader({ title, subtitle, action, className = '' }) {
   return (
-    <div className={`flex items-start justify-between gap-3 pt-2 mb-5 ${className}`}>
+    <div className={`flex items-start justify-between gap-3 pt-2 mb-5 animate-fade-in-up ${className}`}>
       <div>
-        <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
+        <h1 className="font-display text-xl font-bold text-gray-900 tracking-tight">{title}</h1>
         {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
       </div>
       {action}
@@ -183,10 +222,19 @@ export function StatusBadge({ status }) {
 // ─── Empty State ─────────────────────────────────────────
 export function EmptyState({ icon: Icon, title, description, action }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-      {Icon && <div className="w-14 h-14 rounded-2xl bg-control flex items-center justify-center mb-4"><Icon size={26} className="text-gray-400" /></div>}
+    <div className="flex flex-col items-center justify-center py-16 text-center px-4 animate-fade-in">
+      {Icon && (
+        <div className="relative mb-5">
+          {/* Lingkaran aura konsentris di belakang ikon */}
+          <div aria-hidden="true" className="absolute -inset-4 rounded-full border border-gray-100" />
+          <div aria-hidden="true" className="absolute -inset-8 rounded-full border border-gray-100 opacity-50" />
+          <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-brand-50 to-brand-100 flex items-center justify-center">
+            <Icon size={28} className="text-brand-400" strokeWidth={1.5} />
+          </div>
+        </div>
+      )}
       <p className="text-sm font-semibold text-gray-700 mb-1">{title}</p>
-      {description && <p className="text-xs text-gray-400 mb-4 max-w-xs">{description}</p>}
+      {description && <p className="text-xs text-gray-400 mb-4 max-w-xs leading-relaxed">{description}</p>}
       {action}
     </div>
   )

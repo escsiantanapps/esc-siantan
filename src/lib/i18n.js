@@ -74,6 +74,10 @@ export const translations = {
 
     // Beranda
     'home.welcomeQuote': '"Selamat datang. Kiranya damai sejahtera menyertaimu hari ini."',
+    'home.greet.morning': 'Selamat pagi',
+    'home.greet.afternoon': 'Selamat siang',
+    'home.greet.evening': 'Selamat sore',
+    'home.greet.night': 'Selamat malam',
     'home.birthdayFrom': 'Pesan ulang tahun dari {name} 🎉',
     'onb.title': 'Lengkapi pengaturan akun Anda',
     'onb.completeData': 'Lengkapi data diri',
@@ -1162,6 +1166,10 @@ export const translations = {
 
     // Home
     'home.welcomeQuote': '"Welcome. May peace be with you today."',
+    'home.greet.morning': 'Good morning',
+    'home.greet.afternoon': 'Good afternoon',
+    'home.greet.evening': 'Good evening',
+    'home.greet.night': 'Good evening',
     'home.birthdayFrom': 'Birthday message from {name} 🎉',
     'onb.title': 'Finish setting up your account',
     'onb.completeData': 'Complete your profile',

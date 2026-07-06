@@ -37,12 +37,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10 relative gradient-main">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10 relative overflow-hidden gradient-main">
       {/* Scrim lembut agar kartu kaca tetap terbaca di atas gambar apa pun */}
       <div className="absolute inset-0 bg-black/10" />
 
+      {/* Blob cahaya melayang perlahan — hidup tapi tidak mengganggu */}
+      <div aria-hidden="true" className="pointer-events-none absolute -top-24 -left-16 w-72 h-72 rounded-full bg-white/15 blur-3xl" style={{ animation: 'floatY 9s ease-in-out infinite' }} />
+      <div aria-hidden="true" className="pointer-events-none absolute top-1/3 -right-20 w-80 h-80 rounded-full bg-amber-200/20 blur-3xl" style={{ animation: 'floatX 11s ease-in-out infinite' }} />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 left-1/4 w-72 h-72 rounded-full bg-red-900/25 blur-3xl" style={{ animation: 'floatY 13s ease-in-out infinite' }} />
+
       {/* Kartu kaca */}
-      <div className="relative w-full max-w-sm rounded-[1.75rem] border border-white/40 bg-white/15 backdrop-blur-xl shadow-2xl shadow-black/20 px-7 py-8 text-white">
+      <div className="relative w-full max-w-sm rounded-[1.75rem] border border-white/40 bg-white/15 backdrop-blur-xl shadow-2xl shadow-black/20 px-7 py-8 text-white animate-scale-in">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/80">ESC Siantan</p>
         <h1 className="font-display text-3xl font-bold tracking-tight mt-1">{t('auth.welcome')} 👋</h1>
         <p className="text-sm text-white/85 mt-1.5 mb-7">{t('auth.loginSubtitle')}</p>

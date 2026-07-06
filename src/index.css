@@ -177,10 +177,12 @@ h1, h2, h3 {
   background-clip: text;
 }
 
-/* Scrollbar tipis */
-::-webkit-scrollbar { width: 4px; height: 4px; }
+/* Scrollbar tipis — netral saat idle, brand saat disentuh (lebih kalem
+   dari versi oranye penuh yang lama, terutama di panel admin desktop). */
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #F4511E; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.45); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #F4511E; }
 
 /* Sembunyikan scrollbar (mis. pada carousel yang digeser) */
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -197,6 +199,18 @@ h1, h2, h3 {
   to   { opacity: 1; }
 }
 
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Ikon tab aktif "melompat" halus saat dipilih (rasa native app) */
+@keyframes nav-pop {
+  0%   { transform: translateY(0) scale(1); }
+  45%  { transform: translateY(-3px) scale(1.12); }
+  100% { transform: translateY(0) scale(1); }
+}
+
 .animate-fade-in-up {
   animation: fade-in-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -204,6 +218,72 @@ h1, h2, h3 {
 .animate-fade-in {
   animation: fade-in 0.4s ease-out both;
 }
+
+.animate-scale-in {
+  animation: scale-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-nav-pop {
+  animation: nav-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Stagger: anak-anak elemen muncul berurutan (fade-in-up beruntun).
+   Cukup tempelkan .stagger-children pada kontainer list/grid. */
+.stagger-children > * {
+  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.stagger-children > *:nth-child(1)  { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2)  { animation-delay: 40ms; }
+.stagger-children > *:nth-child(3)  { animation-delay: 80ms; }
+.stagger-children > *:nth-child(4)  { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5)  { animation-delay: 160ms; }
+.stagger-children > *:nth-child(6)  { animation-delay: 200ms; }
+.stagger-children > *:nth-child(7)  { animation-delay: 240ms; }
+.stagger-children > *:nth-child(8)  { animation-delay: 280ms; }
+.stagger-children > *:nth-child(9)  { animation-delay: 320ms; }
+.stagger-children > *:nth-child(10) { animation-delay: 360ms; }
+.stagger-children > *:nth-child(11) { animation-delay: 400ms; }
+.stagger-children > *:nth-child(12) { animation-delay: 440ms; }
+.stagger-children > *:nth-child(n+13) { animation-delay: 480ms; }
+
+/* ─── Skeleton shimmer (pengganti spinner saat konten dimuat) ── */
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.skeleton {
+  border-radius: 0.75rem;
+  background: linear-gradient(100deg,
+    rgba(148, 163, 184, 0.14) 40%,
+    rgba(148, 163, 184, 0.28) 50%,
+    rgba(148, 163, 184, 0.14) 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+.dark .skeleton {
+  background: linear-gradient(100deg,
+    rgba(255, 255, 255, 0.05) 40%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.05) 60%);
+  background-size: 200% 100%;
+}
+
+/* ─── Interaksi kartu ─────────────────────────────────── */
+/* Kartu interaktif: terangkat halus saat hover (desktop), mengecil saat
+   ditekan (mobile). Dipakai Card onClick, quick menu, stat card admin. */
+.card-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+@media (hover: hover) {
+  .card-lift:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 34px -12px rgba(244, 81, 30, 0.32);
+  }
+  .dark .card-lift:hover {
+    box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.7);
+  }
+}
+.card-lift:active { transform: scale(0.975); }
 
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(-12px) scale(0.96); }
@@ -233,8 +313,18 @@ h1, h2, h3 {
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in-up,
   .animate-fade-in,
-  .animate-toast-in {
+  .animate-toast-in,
+  .animate-scale-in,
+  .animate-nav-pop,
+  .stagger-children > *,
+  .skeleton {
     animation: none;
+  }
+  .card-lift,
+  .card-lift:hover,
+  .card-lift:active {
+    transform: none;
+    transition: none;
   }
 }
 

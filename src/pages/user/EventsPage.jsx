@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, MapPin, Clock } from 'lucide-react'
 import { eventsService } from '@/services/contentService'
-import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
+import { Card, Skeleton, SkeletonCard, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { formatDate } from '@/lib/utils'
@@ -45,8 +45,10 @@ export default function EventsPage() {
             <button
               key={value}
               onClick={() => setTab(value)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition ${
-                tab === value ? 'gradient-main text-white' : 'bg-control text-gray-500'
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all active:scale-95 ${
+                tab === value
+                  ? 'gradient-main text-white shadow-[0_4px_12px_-4px_rgba(244,81,30,0.55)]'
+                  : 'bg-control text-gray-500 hover:bg-control-hover'
               }`}
             >
               {t(key)}
@@ -54,7 +56,16 @@ export default function EventsPage() {
           ))}
         </div>
 
-        {loading && <div className="flex justify-center py-8"><Spinner /></div>}
+        {loading && (
+          <div className="animate-fade-in">
+            <Skeleton className="h-56 rounded-3xl mb-5" />
+            <div className="space-y-2.5">
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </div>
+          </div>
+        )}
 
         {!loading && filtered.length === 0 && (
           <EmptyState icon={Calendar} title={t('events.empty')} description={t('events.emptyDesc')} />
@@ -62,8 +73,8 @@ export default function EventsPage() {
 
         {/* Featured event ala Stitch */}
         {featured && (
-          <Link to={`/events/${featured.event_id}`} className="block mb-5">
-            <div className="relative rounded-3xl overflow-hidden ambient-shadow h-56 active:scale-[0.99] transition-transform">
+          <Link to={`/events/${featured.event_id}`} className="block mb-5 animate-fade-in-up">
+            <div className="relative rounded-3xl overflow-hidden ambient-shadow h-56 card-lift">
               {featured.thumbnail_url
                 ? <img src={featured.thumbnail_url} alt={featured.name} className="absolute inset-0 w-full h-full object-cover" />
                 : <div className="absolute inset-0 gradient-main" />}
@@ -86,10 +97,10 @@ export default function EventsPage() {
         )}
 
         {/* Daftar event lain — kartu dengan tile tanggal */}
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 stagger-children">
           {rest.map(ev => (
             <Link key={ev.event_id} to={`/events/${ev.event_id}`} className="block">
-              <Card glass className="p-3 flex items-stretch gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
+              <Card glass lift className="p-3 flex items-stretch gap-3">
                 <div className="w-16 shrink-0 rounded-xl gradient-main text-white flex flex-col items-center justify-center leading-none py-2">
                   <span className="text-[11px] font-semibold uppercase">{formatDate(ev.event_date, 'EEE')}</span>
                   <span className="text-2xl font-bold mt-1">{formatDate(ev.event_date, 'd')}</span>

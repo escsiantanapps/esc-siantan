@@ -4,7 +4,7 @@ import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, M
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { newsService, eventsService, classesService, appSettingsService, registrationService } from '@/services/contentService'
-import { Card, Spinner } from '@/components/ui'
+import { Card, Skeleton, SkeletonCard, SectionHeader } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
 import SopNudgeCard from '@/components/SopNudgeCard'
@@ -12,6 +12,15 @@ import BirthdayMessageCard from '@/components/BirthdayMessageCard'
 import MembershipCard from '@/components/MembershipCard'
 import EventCarousel from '@/components/EventCarousel'
 import { formatDate, spColor } from '@/lib/utils'
+
+// Sapaan sesuai jam lokal perangkat (pagi/siang/sore/malam)
+function greeting(t) {
+  const h = new Date().getHours()
+  if (h >= 4 && h < 11) return `${t('home.greet.morning')} ☀️`
+  if (h >= 11 && h < 15) return `${t('home.greet.afternoon')} 🌤️`
+  if (h >= 15 && h < 18) return `${t('home.greet.evening')} 🌅`
+  return `${t('home.greet.night')} 🌙`
+}
 
 export default function HomePage() {
   const { profile } = useAuth()
@@ -88,8 +97,11 @@ export default function HomePage() {
       <div className="px-4 pt-4">
         {/* Welcome */}
         <section className="mb-5 animate-fade-in-up">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Shalom, <span className="text-brand-500">{profile?.name?.split(' ')[0] || 'Jemaat'}</span> 👋
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-500/80 mb-1">
+            {greeting(t)}
+          </p>
+          <h1 className="font-display text-2xl font-bold text-gray-900 tracking-tight">
+            Shalom, <span className="gradient-text">{profile?.name?.split(' ')[0] || 'Jemaat'}</span> 👋
           </h1>
           <p className="text-sm text-gray-500 mt-1 italic">
             {t('home.welcomeQuote')}
@@ -122,7 +134,25 @@ export default function HomePage() {
           </div>
         )}
 
-        {loading && <div className="flex justify-center py-8"><Spinner /></div>}
+        {/* Skeleton berbentuk konten selama data dimuat */}
+        {loading && (
+          <div className="animate-fade-in">
+            <Skeleton className="h-40 rounded-3xl mb-5" />
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-surface border border-gray-100">
+                  <Skeleton className="w-11 h-11 rounded-full" />
+                  <Skeleton className="h-2.5 w-12 rounded-md" />
+                </div>
+              ))}
+            </div>
+            <Skeleton className="h-3.5 w-32 rounded-md mb-3" />
+            <div className="space-y-2.5">
+              <SkeletonCard />
+              <SkeletonCard />
+            </div>
+          </div>
+        )}
 
         {/* Peringatan gagal memuat (jaringan putus / error server) */}
         {!loading && fetchError && (
@@ -141,25 +171,21 @@ export default function HomePage() {
         {/* Event — carousel yang bisa digeser */}
         {events.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">{t('home.event')}</h3>
-              <Link to="/events" className="text-xs text-brand-500 flex items-center gap-0.5">
-                {t('common.all')} <ChevronRight size={13} />
-              </Link>
-            </div>
+            <SectionHeader title={t('home.event')} to="/events" />
             <EventCarousel events={events.slice(0, 6)} />
           </section>
         )}
 
         {/* Quick actions */}
+        {!loading && (
         <section className="mb-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('home.quickMenu')}</h3>
-          <div className="grid grid-cols-3 gap-3">
+          <SectionHeader title={t('home.quickMenu')} />
+          <div className="grid grid-cols-3 gap-3 stagger-children">
             {quickLinks.map(({ to, icon: Icon, label, color }) => (
               <Link
                 key={to}
                 to={to}
-                className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-surface border border-gray-100 ambient-shadow active:scale-95 transition-transform"
+                className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-surface border border-gray-100 ambient-shadow card-lift"
               >
                 <div className={`w-11 h-11 rounded-full ${color} flex items-center justify-center`}>
                   <Icon size={20} strokeWidth={1.5} />
@@ -169,20 +195,16 @@ export default function HomePage() {
             ))}
           </div>
         </section>
+        )}
 
         {/* Pengumuman */}
         {news.length > 0 && (
           <section className="mb-6 animate-fade-in-up" style={{ animationDelay: '120ms' }}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">{t('home.announcements')}</h3>
-              <Link to="/informasi" className="text-xs text-brand-500 flex items-center gap-0.5">
-                {t('common.all')} <ChevronRight size={13} />
-              </Link>
-            </div>
-            <div className="space-y-2.5">
+            <SectionHeader title={t('home.announcements')} to="/informasi" />
+            <div className="space-y-2.5 stagger-children">
               {news.slice(0, 3).map(item => (
                 <Link key={item.news_id} to={`/informasi/${item.news_id}`} className="block">
-                  <Card glass className="p-3.5 flex items-start gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
+                  <Card glass lift className="p-3.5 flex items-start gap-3">
                     <div className="w-11 h-11 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
                       <Bell size={18} className="text-brand-500" />
                     </div>
@@ -201,16 +223,11 @@ export default function HomePage() {
         {/* Kelas tersedia */}
         {classes.length > 0 && (
           <section className="animate-fade-in-up" style={{ animationDelay: '200ms' }}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">{t('home.availableClasses')}</h3>
-              <Link to="/kelas" className="text-xs text-brand-500 flex items-center gap-0.5">
-                {t('common.all')} <ChevronRight size={13} />
-              </Link>
-            </div>
-            <div className="space-y-2.5">
+            <SectionHeader title={t('home.availableClasses')} to="/kelas" />
+            <div className="space-y-2.5 stagger-children">
               {classes.slice(0, 3).map(cls => (
                 <Link key={cls.class_id} to={`/kelas/${cls.class_id}`} className="block">
-                  <Card glass className="p-3.5 flex items-start gap-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300">
+                  <Card glass lift className="p-3.5 flex items-start gap-3">
                     <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
                       <BookOpen size={18} className="text-blue-500" />
                     </div>
