@@ -18,12 +18,24 @@ export const evaluationService = {
   async getEvaluation({ startDate, endDate, formId = '', ministryId = '', komselId = '', role = '' }) {
     // Pakai tasksService.getTemplates() supaya bentuk allowed_ministry &
     // category_ministry_ids KONSISTEN dgn semua tempat lain (TasksPage, dll).
-    // Sebelumnya evaluationService menulis join sendiri, dan meskipun kelihatan
-    // sama, ada risiko bentuk `task_categories` beda (object vs array) atau
-    // field terlewat — akibatnya user yg mestinya lolos gerbang ministry
-    // (mis. Bryan Lighting) muncul di form ministry lain (CV, Music, dst).
     const allTemplates = await tasksService.getTemplates()
-    const templates = formId ? allTemplates.filter(t => t.form_id === formId) : allTemplates
+    let templates = formId ? allTemplates.filter(t => t.form_id === formId) : allTemplates
+    // Filter form berdasarkan ministry yang dipilih admin — bukan hanya user.
+    // Kalau user (mis. Erwin) di 2 ministry (Parking + Lighting) & admin
+    // filter Ministry=Lighting, form yang KHUSUS Parking harus disembunyikan
+    // walau Erwin qualified via keanggotaan Parking-nya. Form terbuka (tanpa
+    // batasan ministry di allowed_ministry & category) tetap ditampilkan.
+    if (ministryId) {
+      templates = templates.filter(t => {
+        const allowed = t.allowed_ministry || []
+        const catAllowed = t.category_ministry_ids || []
+        const restricted = allowed.length > 0 || catAllowed.length > 0
+        if (!restricted) return true // form terbuka untuk semua ministry
+        const inAllowed = allowed.length === 0 || allowed.map(String).includes(String(ministryId))
+        const inCat = catAllowed.length === 0 || catAllowed.map(String).includes(String(ministryId))
+        return inAllowed && inCat
+      })
+    }
 
     let userQuery = supabase.from('users')
       .select('user_id, name, role, role_secondary, is_pks, komsel_id, photo_url, sp_level, user_ministries(ministry_id)')
