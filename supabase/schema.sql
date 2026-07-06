@@ -1797,43 +1797,81 @@ CREATE POLICY "sunday_att_insert" ON sunday_attendance FOR INSERT WITH CHECK (
 );
 
 -- (c) task-files: KEPUTUSAN OPERATOR (2026-07-06) — bucket dibiarkan
---     PUBLIC. Bukti tugas dinilai tidak sensitif oleh operator, dan
---     mengubahnya ke private akan memutus URL lama tanpa manfaat besar.
---     Policy authenticated-SELECT tetap ditambahkan sebagai defense-in-depth:
---     bila di masa depan bucket dijadikan private, RLS ini akan langsung
---     berlaku tanpa perlu migrasi baru. Untuk bucket public, RLS SELECT
---     ini di-bypass Supabase — jadi effektif tidak mengubah perilaku sekarang.
+--     PUBLIC untuk SELECT. Bukti tugas dinilai tidak sensitif oleh
+--     operator, dan mengubah ke private akan memutus URL lama tanpa
+--     manfaat besar. Namun INSERT/UPDATE tetap perlu dibatasi supaya
+--     jemaat tidak bisa menimpa bukti tugas orang lain.
+--
+--     Pola path yang dipakai kode:
+--       responses/<owner_id>/<Date>_<file>   → jawaban tugas jemaat
+--       leaves/<owner_id>/<Date>_<file>      → bukti izin/sakit jemaat
+--       form-bg/<Date>.<ext>                 → background form (Admin)
+--       classes|events|news/video/<...>      → video (mediaService)
+--
+--     Policy authenticated-SELECT tetap ditambahkan sebagai defense-in-depth
+--     (bila di masa depan bucket dijadikan private, RLS langsung berlaku
+--     tanpa perlu migrasi baru). Untuk bucket public sekarang, RLS SELECT
+--     di-bypass Supabase — jadi tidak mengubah perilaku publik saat ini.
 DROP POLICY IF EXISTS "task_files_read" ON storage.objects;
 CREATE POLICY "task_files_read" ON storage.objects
   FOR SELECT TO authenticated
   USING (bucket_id = 'task-files');
 
--- (d) profile-photos: konten kurasi (news/, events/, qris/, offerings/,
---     class-thumbs/, membership-cards/) hanya boleh di-upload/ubah oleh
---     Admin/Super Admin. Path avatars/ tetap self-owned. Path lain (mis.
---     background form pribadi) tetap boleh authenticated umum.
+DROP POLICY IF EXISTS "task_files_insert" ON storage.objects;
+CREATE POLICY "task_files_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'task-files'
+    AND (
+      -- Jawaban tugas & bukti izin: path[1] wajib user_id sendiri.
+      ((name LIKE 'responses/%' OR name LIKE 'leaves/%')
+        AND split_part(name, '/', 2) = auth_user_id())
+      -- Background form + video kurasi: Admin/Super Admin saja.
+      OR ((name LIKE 'form-bg/%'
+           OR name LIKE 'classes/video/%' OR name LIKE 'classes/%/video/%'
+           OR name LIKE 'events/video/%'  OR name LIKE 'events/%/video/%'
+           OR name LIKE 'news/video/%'    OR name LIKE 'news/%/video/%')
+        AND auth_user_role() IN ('Admin','Super Admin'))
+    )
+  );
+
+DROP POLICY IF EXISTS "task_files_update" ON storage.objects;
+CREATE POLICY "task_files_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'task-files'
+    AND (
+      ((name LIKE 'responses/%' OR name LIKE 'leaves/%')
+        AND split_part(name, '/', 2) = auth_user_id())
+      OR (auth_user_role() IN ('Admin','Super Admin'))
+    )
+  )
+  WITH CHECK (
+    bucket_id = 'task-files'
+  );
+
+-- (d) profile-photos: fail-closed dengan whitelist path.
+--     Pola path yang dipakai kode:
+--       avatars/<owner_id>.<ext>             → foto profil jemaat (owner)
+--       offerings/<owner_id>/<...>           → bukti transfer persembahan (owner)
+--       events/<...>, news/<...>, classes/<...>,
+--       qris/<...>, products/<...>, roadmap/<...>,
+--       membership-cards/<...>               → konten kurasi (Admin only)
 DROP POLICY IF EXISTS "profile_photos_insert" ON storage.objects;
 CREATE POLICY "profile_photos_insert" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (
     bucket_id = 'profile-photos'
     AND (
-      -- avatars/: hanya milik sendiri
-      (name LIKE 'avatars/%' AND name LIKE 'avatars/' || auth_user_id() || '.%')
-      -- konten kurasi: hanya Admin/Super Admin
-      OR (
-        (name LIKE 'news/%' OR name LIKE 'events/%' OR name LIKE 'qris/%'
-         OR name LIKE 'offerings/%' OR name LIKE 'class-thumbs/%'
-         OR name LIKE 'membership-cards/%')
-        AND auth_user_role() IN ('Admin','Super Admin')
-      )
-      -- Sisanya (mis. form-bg/, misc) — authenticated umum boleh.
-      OR (
-        name NOT LIKE 'avatars/%' AND name NOT LIKE 'news/%'
-        AND name NOT LIKE 'events/%' AND name NOT LIKE 'qris/%'
-        AND name NOT LIKE 'offerings/%' AND name NOT LIKE 'class-thumbs/%'
-        AND name NOT LIKE 'membership-cards/%'
-      )
+      -- Owner paths
+      (name LIKE 'avatars/' || auth_user_id() || '.%')
+      OR (name LIKE 'offerings/%'
+          AND split_part(name, '/', 2) = auth_user_id())
+      -- Admin-managed content folders
+      OR ((name LIKE 'news/%' OR name LIKE 'events/%' OR name LIKE 'classes/%'
+           OR name LIKE 'qris/%' OR name LIKE 'products/%'
+           OR name LIKE 'roadmap/%' OR name LIKE 'membership-cards/%')
+        AND auth_user_role() IN ('Admin','Super Admin'))
     )
   );
 
@@ -1843,19 +1881,10 @@ CREATE POLICY "profile_photos_update" ON storage.objects
   USING (
     bucket_id = 'profile-photos'
     AND (
-      (name LIKE 'avatars/%' AND name LIKE 'avatars/' || auth_user_id() || '.%')
-      OR (
-        (name LIKE 'news/%' OR name LIKE 'events/%' OR name LIKE 'qris/%'
-         OR name LIKE 'offerings/%' OR name LIKE 'class-thumbs/%'
-         OR name LIKE 'membership-cards/%')
-        AND auth_user_role() IN ('Admin','Super Admin')
-      )
-      OR (
-        name NOT LIKE 'avatars/%' AND name NOT LIKE 'news/%'
-        AND name NOT LIKE 'events/%' AND name NOT LIKE 'qris/%'
-        AND name NOT LIKE 'offerings/%' AND name NOT LIKE 'class-thumbs/%'
-        AND name NOT LIKE 'membership-cards/%'
-      )
+      (name LIKE 'avatars/' || auth_user_id() || '.%')
+      OR (name LIKE 'offerings/%'
+          AND split_part(name, '/', 2) = auth_user_id())
+      OR (auth_user_role() IN ('Admin','Super Admin'))
     )
   )
   WITH CHECK (

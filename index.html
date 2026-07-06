@@ -18,13 +18,7 @@
       rel="stylesheet"
     />
     <title>ESC Siantan</title>
-    <script>
-      (function () {
-        var stored = localStorage.getItem('esc-theme');
-        var dark = stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (dark) document.documentElement.classList.add('dark');
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

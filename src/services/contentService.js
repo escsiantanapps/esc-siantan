@@ -474,10 +474,14 @@ export const komselService = {
   },
 
   async getMembers(komselId) {
-    const { data, error } = await supabase
-      .from('users').select('*').eq('komsel_id', komselId).eq('status', 'Aktif').order('name')
+    // Pakai RPC get_komsel_members (v38) supaya kolom NIK tidak keluar ke
+    // klien walau pemanggilnya PKS. RPC juga menegakkan otorisasi di server
+    // (Admin/Super Admin atau PKS komsel tsb).
+    const { data, error } = await supabase.rpc('get_komsel_members', { p_komsel_id: komselId })
     if (error) throw error
-    return data
+    // RPC tidak menyaring status di server — filter di klien agar sesuai
+    // perilaku lama (hanya jemaat Aktif).
+    return (data || []).filter(m => m.status === 'Aktif').sort((a, b) => a.name.localeCompare(b.name))
   },
 
   // Tetapkan keanggotaan komsel langsung dari halaman Kelola Komsel, tanpa
