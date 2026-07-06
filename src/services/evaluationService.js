@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { canAccessTemplate } from '@/services/tasksService'
+import { canAccessTemplate, tasksService } from '@/services/tasksService'
 
 export const evaluationService = {
   // jumlah periode (minggu/bulan) dalam rentang tanggal
@@ -16,19 +16,14 @@ export const evaluationService = {
 
   // baris evaluasi: user x form_template yang relevan untuknya
   async getEvaluation({ startDate, endDate, formId = '', ministryId = '', komselId = '', role = '' }) {
-    // Ikut sertakan task_categories → task_category_ministries agar gerbang
-    // Kategori Tugas (v25) juga divalidasi. Sebelumnya join ini terlewat →
-    // user dgn ministry di luar kategori tetap muncul di baris evaluasi.
-    let tmplQuery = supabase.from('form_templates')
-      .select('*, template_ministries(ministry_id), task_categories(name, task_category_ministries(ministry_id))')
-    if (formId) tmplQuery = tmplQuery.eq('form_id', formId)
-    const { data: tmplRaw, error: tErr } = await tmplQuery
-    if (tErr) throw tErr
-    const templates = (tmplRaw || []).map(t => ({
-      ...t,
-      allowed_ministry: (t.template_ministries || []).map(r => r.ministry_id),
-      category_ministry_ids: (t.task_categories?.task_category_ministries || []).map(r => r.ministry_id),
-    }))
+    // Pakai tasksService.getTemplates() supaya bentuk allowed_ministry &
+    // category_ministry_ids KONSISTEN dgn semua tempat lain (TasksPage, dll).
+    // Sebelumnya evaluationService menulis join sendiri, dan meskipun kelihatan
+    // sama, ada risiko bentuk `task_categories` beda (object vs array) atau
+    // field terlewat — akibatnya user yg mestinya lolos gerbang ministry
+    // (mis. Bryan Lighting) muncul di form ministry lain (CV, Music, dst).
+    const allTemplates = await tasksService.getTemplates()
+    const templates = formId ? allTemplates.filter(t => t.form_id === formId) : allTemplates
 
     let userQuery = supabase.from('users')
       .select('user_id, name, role, role_secondary, is_pks, komsel_id, photo_url, sp_level, user_ministries(ministry_id)')
