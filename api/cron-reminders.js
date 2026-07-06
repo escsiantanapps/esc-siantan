@@ -12,11 +12,13 @@ const norm = s => String(s || '').trim().toLowerCase()
 
 export default async function handler(req, res) {
   try {
+    // Fail-closed: CRON_SECRET wajib. Bila belum diset, endpoint DIBLOKIR
+    // (bukan dibuka) supaya lupa konfigurasi tidak berujung terbukanya
+    // pengiriman push massal ke publik.
     const CRON_SECRET = (process.env.CRON_SECRET || '').trim()
-    if (CRON_SECRET) {
-      const auth = req.headers.authorization || ''
-      if (auth !== `Bearer ${CRON_SECRET}`) return res.status(401).json({ error: 'Unauthorized' })
-    }
+    if (!CRON_SECRET) return res.status(500).json({ error: 'CRON_SECRET belum diatur di server.' })
+    const auth = req.headers.authorization || ''
+    if (auth !== `Bearer ${CRON_SECRET}`) return res.status(401).json({ error: 'Unauthorized' })
 
     const webpush = (await import('web-push')).default
     const { createClient } = await import('@supabase/supabase-js')

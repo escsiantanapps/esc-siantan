@@ -1740,3 +1740,188 @@ ALTER TABLE form_templates
 -- BookOpen bila NULL), tapi kolomnya belum ada dan admin belum bisa unggah.
 -- Tambahkan kolom + admin gain upload UI (lihat AdminClassesPage.jsx).
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+
+-- ── Migrasi v37: Kolom Profesi pada biodata ────────────────────────────
+-- Melengkapi bagian Pendidikan di EditProfilePage. "Profesi" berbeda dari
+-- "pekerjaan" (jabatan/status kerja umum): profesi = keahlian spesifik yang
+-- diperoleh dari pendidikan/sertifikasi (mis. Dokter, Guru, Akuntan,
+-- Pengacara, Programmer, Perawat). Boleh kosong.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profesi TEXT;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v38: Hardening keamanan (audit temuan 2026-07-06) ──────────
+-- ══════════════════════════════════════════════════════════════════════
+-- Menutup 6 lubang yang teridentifikasi audit:
+--   (a) Points farming: class_attendance INSERT tanpa validasi kelas aktif
+--       + terdaftar → jemaat bisa INSERT langsung via PostgREST dan panen
+--       poin. Perketat WITH CHECK.
+--   (b) Points farming: sunday_attendance INSERT hanya cek current_date
+--       tanpa validasi hari Minggu → jemaat bisa +1 poin/hari. Batasi ke
+--       Minggu (dow=0) di zona WIB.
+--   (c) task-files bucket publik dengan SELECT tanpa auth → bukti tugas
+--       (bisa berisi PII) terekspos. Batasi SELECT ke authenticated saja
+--       (bucket tetap public agar backwards-compat, tapi dilindungi RLS).
+--   (d) profile-photos INSERT dulu longgar untuk path non-avatars — user
+--       authenticated bisa menimpa news/qris/dsb. Batasi path news/,
+--       events/, qris/, offerings/ ke Admin/Super Admin saja.
+--   (e) PKS bisa baca kolom NIK anggota komsel via PostgREST langsung
+--       (RLS bukan column-level). Sediakan RPC get_komsel_members yang
+--       kembalikan kolom aman tanpa NIK — panduan: klien harus pakai RPC
+--       ini di UI PKS, kebijakan RLS row-level tetap ada sebagai fallback.
+--   (f) documents bucket harus benar-benar privat + policy admin-read
+--       (client baru pakai signed URL).
+
+-- (a) class_attendance: hanya boleh insert bila kelas aktif + terdaftar.
+DROP POLICY IF EXISTS "class_att_insert" ON class_attendance;
+CREATE POLICY "class_att_insert" ON class_attendance FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND EXISTS (
+    SELECT 1 FROM classes c
+    WHERE c.class_id = class_attendance.class_id
+      AND c.status IN ('Mulai','Sedang Berlangsung')
+  )
+  AND EXISTS (
+    SELECT 1 FROM class_registrations r
+    WHERE r.class_id = class_attendance.class_id AND r.user_id = auth_user_id()
+  )
+);
+
+-- (b) sunday_attendance: hanya boleh insert pada hari Minggu (dow=0) WIB.
+--     Kombinasi UNIQUE (user_id, attendance_date) + Sunday-only membatasi
+--     ke +1 poin/minggu — konsisten dengan realita ibadah mingguan.
+DROP POLICY IF EXISTS "sunday_att_insert" ON sunday_attendance;
+CREATE POLICY "sunday_att_insert" ON sunday_attendance FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND attendance_date = (current_timestamp AT TIME ZONE 'Asia/Jakarta')::date
+  AND extract(dow FROM (current_timestamp AT TIME ZONE 'Asia/Jakarta')) = 0
+);
+
+-- (c) task-files: KEPUTUSAN OPERATOR (2026-07-06) — bucket dibiarkan
+--     PUBLIC. Bukti tugas dinilai tidak sensitif oleh operator, dan
+--     mengubahnya ke private akan memutus URL lama tanpa manfaat besar.
+--     Policy authenticated-SELECT tetap ditambahkan sebagai defense-in-depth:
+--     bila di masa depan bucket dijadikan private, RLS ini akan langsung
+--     berlaku tanpa perlu migrasi baru. Untuk bucket public, RLS SELECT
+--     ini di-bypass Supabase — jadi effektif tidak mengubah perilaku sekarang.
+DROP POLICY IF EXISTS "task_files_read" ON storage.objects;
+CREATE POLICY "task_files_read" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (bucket_id = 'task-files');
+
+-- (d) profile-photos: konten kurasi (news/, events/, qris/, offerings/,
+--     class-thumbs/, membership-cards/) hanya boleh di-upload/ubah oleh
+--     Admin/Super Admin. Path avatars/ tetap self-owned. Path lain (mis.
+--     background form pribadi) tetap boleh authenticated umum.
+DROP POLICY IF EXISTS "profile_photos_insert" ON storage.objects;
+CREATE POLICY "profile_photos_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'profile-photos'
+    AND (
+      -- avatars/: hanya milik sendiri
+      (name LIKE 'avatars/%' AND name LIKE 'avatars/' || auth_user_id() || '.%')
+      -- konten kurasi: hanya Admin/Super Admin
+      OR (
+        (name LIKE 'news/%' OR name LIKE 'events/%' OR name LIKE 'qris/%'
+         OR name LIKE 'offerings/%' OR name LIKE 'class-thumbs/%'
+         OR name LIKE 'membership-cards/%')
+        AND auth_user_role() IN ('Admin','Super Admin')
+      )
+      -- Sisanya (mis. form-bg/, misc) — authenticated umum boleh.
+      OR (
+        name NOT LIKE 'avatars/%' AND name NOT LIKE 'news/%'
+        AND name NOT LIKE 'events/%' AND name NOT LIKE 'qris/%'
+        AND name NOT LIKE 'offerings/%' AND name NOT LIKE 'class-thumbs/%'
+        AND name NOT LIKE 'membership-cards/%'
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS "profile_photos_update" ON storage.objects;
+CREATE POLICY "profile_photos_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'profile-photos'
+    AND (
+      (name LIKE 'avatars/%' AND name LIKE 'avatars/' || auth_user_id() || '.%')
+      OR (
+        (name LIKE 'news/%' OR name LIKE 'events/%' OR name LIKE 'qris/%'
+         OR name LIKE 'offerings/%' OR name LIKE 'class-thumbs/%'
+         OR name LIKE 'membership-cards/%')
+        AND auth_user_role() IN ('Admin','Super Admin')
+      )
+      OR (
+        name NOT LIKE 'avatars/%' AND name NOT LIKE 'news/%'
+        AND name NOT LIKE 'events/%' AND name NOT LIKE 'qris/%'
+        AND name NOT LIKE 'offerings/%' AND name NOT LIKE 'class-thumbs/%'
+        AND name NOT LIKE 'membership-cards/%'
+      )
+    )
+  )
+  WITH CHECK (
+    bucket_id = 'profile-photos'
+  );
+
+-- (e) get_komsel_members: RPC untuk PKS lihat anggota TANPA NIK.
+CREATE OR REPLACE FUNCTION get_komsel_members(p_komsel_id TEXT)
+  RETURNS TABLE (
+    user_id TEXT, name TEXT, phone TEXT, email TEXT, gender TEXT,
+    birth_date DATE, birth_place TEXT, address TEXT, blood_type TEXT,
+    marital_status TEXT, photo_url TEXT, points INT, status TEXT,
+    role TEXT, is_pks BOOLEAN
+  )
+  LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public AS $$
+BEGIN
+  -- Otorisasi: pemanggil harus Admin/Super Admin ATAU PKS komsel tsb.
+  IF NOT (
+    auth_user_role() IN ('Admin','Super Admin')
+    OR auth_leads_komsel(p_komsel_id)
+  ) THEN
+    RAISE EXCEPTION 'not_authorized';
+  END IF;
+  RETURN QUERY
+    SELECT u.user_id, u.name, u.phone, u.email, u.gender, u.birth_date,
+           u.birth_place, u.address, u.blood_type, u.marital_status,
+           u.photo_url, COALESCE(u.points, 0), u.status, u.role, COALESCE(u.is_pks, false)
+    FROM users u
+    WHERE u.komsel_id = p_komsel_id;
+END $$;
+REVOKE EXECUTE ON FUNCTION get_komsel_members(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION get_komsel_members(TEXT) TO authenticated;
+
+-- (f) documents bucket: pastikan privat + policy admin-read + owner-read.
+--     Klien baru upload dengan path baptism/{user_id}/... dan panggil
+--     signed URL untuk membacanya. Sisa policy diberikan agar Admin bisa
+--     download semua (untuk verifikasi pendaftaran).
+UPDATE storage.buckets SET public = false WHERE id = 'documents';
+
+DROP POLICY IF EXISTS "documents_owner_insert" ON storage.objects;
+CREATE POLICY "documents_owner_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'documents'
+    AND (
+      -- Owner insert: path harus berformat <folder>/<user_id>/...
+      -- (mis. baptism/USR-xxx/12345_ktp.jpg)
+      split_part(name, '/', 2) = auth_user_id()
+      OR auth_user_role() IN ('Admin','Super Admin')
+    )
+  );
+
+DROP POLICY IF EXISTS "documents_owner_read" ON storage.objects;
+CREATE POLICY "documents_owner_read" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'documents'
+    AND (
+      split_part(name, '/', 2) = auth_user_id()
+      OR auth_user_role() IN ('Admin','Super Admin')
+    )
+  );
+
+DROP POLICY IF EXISTS "documents_admin_delete" ON storage.objects;
+CREATE POLICY "documents_admin_delete" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'documents' AND auth_user_role() IN ('Admin','Super Admin')
+  );

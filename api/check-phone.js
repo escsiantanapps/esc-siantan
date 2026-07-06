@@ -12,7 +12,8 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
     const { checkRateLimit } = await import('./_lib/rate-limit.js')
-    if (checkRateLimit(req, res, { endpoint: 'check-phone' })) return
+    // Rate limit ketat: 5/menit — mempersulit enumeration daftar jemaat.
+    if (checkRateLimit(req, res, { endpoint: 'check-phone', max: 5 })) return
     const { createClient } = await import('@supabase/supabase-js')
     const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
@@ -22,6 +23,11 @@ export default async function handler(req, res) {
     const wanted = core(body.phone)
     if (!wanted) return res.status(400).json({ error: 'Nomor telepon wajib diisi.' })
 
+    // Endpoint ini SENGAJA hanya dipakai saat registrasi (klien sudah pegang
+    // nomor sendiri). Tetap kembalikan status supaya UX registrasi baik,
+    // tapi rate-limit ketat (di atas) menghalangi enumeration massal.
+    // TODO jangka menengah: pindahkan cek ini menjadi unique constraint DB
+    // yang dilempar sebagai error saat submit registrasi, lalu hapus endpoint.
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
     const { data: rows } = await admin.from('users').select('phone').not('phone', 'is', null)
     const taken = (rows || []).some(r => core(r.phone) === wanted)

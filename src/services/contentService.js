@@ -229,11 +229,28 @@ export const registrationService = {
   },
 
   async uploadDocument(folder, file) {
-    const path = `${folder}/${Date.now()}_${file.name}`
-    const { error } = await supabase.storage.from('documents').upload(path, file)
+    // Sanitasi nama file: hilangkan segmen path (../), spasi & karakter
+    // di luar whitelist, plus batasi panjang. Cegah PII bocor ke URL &
+    // path traversal.
+    const rawName = String(file?.name || 'file').split(/[\\/]/).pop() || 'file'
+    const dotIdx = rawName.lastIndexOf('.')
+    const base = dotIdx > 0 ? rawName.slice(0, dotIdx) : rawName
+    const extRaw = dotIdx > 0 ? rawName.slice(dotIdx + 1) : ''
+    const safeBase = base.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || 'file'
+    const safeExt = extRaw.replace(/[^a-zA-Z0-9]+/g, '').slice(0, 8).toLowerCase()
+    const filename = safeExt ? `${Date.now()}_${safeBase}.${safeExt}` : `${Date.now()}_${safeBase}`
+    const path = `${folder}/${filename}`
+
+    const { error } = await supabase.storage.from('documents').upload(path, file, {
+      contentType: file.type || 'application/octet-stream',
+    })
     if (error) throw error
-    const { data } = supabase.storage.from('documents').getPublicUrl(path)
-    return data.publicUrl
+    // Bucket 'documents' privat (v38). Pakai signed URL long-lived (1 tahun)
+    // agar link tetap valid untuk review admin & jemaat tanpa perlu regen.
+    const { data: signed, error: sErr } = await supabase.storage.from('documents')
+      .createSignedUrl(path, 60 * 60 * 24 * 365)
+    if (sErr) throw sErr
+    return signed.signedUrl
   },
 }
 

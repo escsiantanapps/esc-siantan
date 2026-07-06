@@ -5,11 +5,11 @@ export const config = { runtime: 'nodejs' }
 
 export default async function handler(req, res) {
   try {
+    // Fail-closed: CRON_SECRET wajib (lihat cron-reminders.js).
     const CRON_SECRET = (process.env.CRON_SECRET || '').trim()
-    if (CRON_SECRET) {
-      const auth = req.headers.authorization || ''
-      if (auth !== `Bearer ${CRON_SECRET}`) return res.status(401).json({ error: 'Unauthorized' })
-    }
+    if (!CRON_SECRET) return res.status(500).json({ error: 'CRON_SECRET belum diatur di server.' })
+    const auth = req.headers.authorization || ''
+    if (auth !== `Bearer ${CRON_SECRET}`) return res.status(401).json({ error: 'Unauthorized' })
 
     const webpush = (await import('web-push')).default
     const { createClient } = await import('@supabase/supabase-js')

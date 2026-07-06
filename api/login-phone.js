@@ -15,7 +15,8 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
     const { checkRateLimit } = await import('./_lib/rate-limit.js')
-    if (checkRateLimit(req, res, { endpoint: 'login-phone' })) return
+    // Rate limit ketat: 5 attempt/menit — anti brute-force password.
+    if (checkRateLimit(req, res, { endpoint: 'login-phone', max: 5 })) return
 
     const { createClient } = await import('@supabase/supabase-js')
     const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()

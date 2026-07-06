@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Sparkles, X, ChevronRight } from 'lucide-react'
+import { AlertTriangle, X, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { tasksService } from '@/services/tasksService'
-import { Card } from '@/components/ui'
 
 const DISMISS_KEY = 'esc-sop-nudge-dismissed'
 
-// Kartu ramah di Beranda yang mengingatkan jemaat kalau target SOP mingguan
-// belum tercapai. Nada positif — bukan galak. Muncul sekali per sesi browser
-// (guard sessionStorage supaya tidak muncul berulang saat back/forward remount).
+// Alert modal di Beranda: muncul sekali per sesi bila jemaat masih punya tugas
+// yang belum dituntaskan minggu/bulan ini. Nada positif — bukan galak.
+// Overlay + dialog di tengah layar, tombol tutup + link ke tiap tugas.
 export default function SopNudgeCard() {
   const { profile } = useAuth()
   const { t } = useLang()
@@ -36,43 +35,65 @@ export default function SopNudgeCard() {
   if (dismissed || !loaded || incomplete.length === 0) return null
 
   return (
-    <Card className="p-4 mb-5 border-amber-200 bg-amber-50/70 relative animate-fade-in-up">
-      <button
-        onClick={handleDismiss} aria-label={t('sop.nudge.dismiss')}
-        className="absolute top-2.5 right-2.5 text-gray-300 hover:text-gray-500"
+    <div
+      role="dialog" aria-modal="true"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+      onClick={handleDismiss}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-sm bg-surface rounded-2xl shadow-xl border border-amber-100 max-h-[85vh] overflow-y-auto animate-fade-in-up"
       >
-        <X size={15} />
-      </button>
-      <div className="flex items-start gap-3 mb-3">
-        <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-          <Sparkles size={17} className="text-amber-600" />
-        </div>
-        <div className="flex-1 min-w-0 pr-5">
-          <p className="text-sm font-semibold text-gray-900">{t('sop.nudge.title')}</p>
-          <p className="text-xs text-gray-500 mt-0.5">{t('sop.nudge.subtitle')}</p>
-        </div>
-      </div>
-      <div className="space-y-2">
-        {incomplete.slice(0, 3).map(item => (
-          <Link
-            key={item.formId} to={`/tugas/${item.formId}`}
-            className="flex items-center gap-3 bg-surface rounded-xl px-3 py-2.5 hover:shadow-sm transition"
+        <div className="p-5 relative">
+          <button
+            onClick={handleDismiss} aria-label={t('sop.nudge.dismiss')}
+            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500"
           >
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-800 truncate">{item.formTitle}</p>
-              <p className="text-xs text-amber-600 font-medium">
-                {t('sop.nudge.progress', { done: item.completed, target: item.goal })}
-              </p>
+            <X size={16} />
+          </button>
+
+          <div className="flex flex-col items-center text-center mb-4">
+            <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+              <AlertTriangle size={26} className="text-amber-600" />
             </div>
-            <ChevronRight size={16} className="text-gray-300" />
-          </Link>
-        ))}
-        {incomplete.length > 3 && (
-          <Link to="/tugas" className="block text-xs text-center text-brand-500 font-medium pt-1">
-            {t('sop.nudge.viewAll', { n: incomplete.length })}
-          </Link>
-        )}
+            <p className="text-base font-bold text-gray-900">{t('sop.nudge.title')}</p>
+            <p className="text-xs text-gray-500 mt-1 px-2">{t('sop.nudge.subtitle')}</p>
+          </div>
+
+          <div className="space-y-2">
+            {incomplete.slice(0, 5).map(item => (
+              <Link
+                key={item.formId} to={`/tugas/${item.formId}`}
+                onClick={handleDismiss}
+                className="flex items-center gap-3 bg-amber-50/60 border border-amber-100 rounded-xl px-3 py-2.5 hover:bg-amber-50 transition"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{item.formTitle}</p>
+                  <p className="text-xs text-amber-600 font-medium">
+                    {t('sop.nudge.progress', { done: item.completed, target: item.goal })}
+                  </p>
+                </div>
+                <ChevronRight size={16} className="text-amber-400" />
+              </Link>
+            ))}
+            {incomplete.length > 5 && (
+              <Link
+                to="/tugas" onClick={handleDismiss}
+                className="block text-xs text-center text-brand-500 font-medium pt-1"
+              >
+                {t('sop.nudge.viewAll', { n: incomplete.length })}
+              </Link>
+            )}
+          </div>
+
+          <button
+            onClick={handleDismiss}
+            className="w-full mt-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm font-medium text-gray-700 transition"
+          >
+            {t('sop.nudge.later') || 'Nanti saja'}
+          </button>
+        </div>
       </div>
-    </Card>
+    </div>
   )
 }

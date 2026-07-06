@@ -6,8 +6,12 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+    // Rate-limit IP untuk mencegah brute-force OTP lintas email.
+    const { checkRateLimit } = await import('./_lib/rate-limit.js')
+    if (checkRateLimit(req, res, { endpoint: 'wa-reset-verify', max: 20 })) return
+
     const { createClient } = await import('@supabase/supabase-js')
-    const { createHash } = await import('crypto')
+    const { createHash, timingSafeEqual } = await import('crypto')
 
     const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
@@ -58,7 +62,10 @@ export default async function handler(req, res) {
     }
 
     const codeHash = createHash('sha256').update(code + email).digest('hex')
-    if (codeHash !== row.code_hash) {
+    const a = Buffer.from(codeHash, 'hex')
+    const b = Buffer.from(row.code_hash || '', 'hex')
+    const equal = a.length === b.length && timingSafeEqual(a, b)
+    if (!equal) {
       await admin.from('password_reset_otp').update({ attempts: (row.attempts || 0) + 1 }).eq('email', email)
       return res.status(400).json({ error: 'Kode salah.' })
     }

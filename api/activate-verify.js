@@ -13,8 +13,14 @@ function core(p) {
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+    // Rate-limit IP untuk mencegah brute-force OTP lintas nomor. Terpisah
+    // dari 5-attempt limit per baris activation_otp.
+    const { checkRateLimit } = await import('./_lib/rate-limit.js')
+    if (checkRateLimit(req, res, { endpoint: 'activate-verify', max: 20 })) return
+
     const { createClient } = await import('@supabase/supabase-js')
-    const { createHash } = await import('crypto')
+    const { createHash, timingSafeEqual } = await import('crypto')
     const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
     const ANON_KEY = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim()
@@ -71,7 +77,11 @@ export default async function handler(req, res) {
       return res.status(429).json({ error: 'Terlalu banyak percobaan. Minta kode baru.' })
     }
     const codeHash = createHash('sha256').update(codeVal + wanted).digest('hex')
-    if (codeHash !== row.code_hash) {
+    // timingSafeEqual — hindari kebocoran informasi via variasi waktu compare.
+    const a = Buffer.from(codeHash, 'hex')
+    const b = Buffer.from(row.code_hash || '', 'hex')
+    const equal = a.length === b.length && timingSafeEqual(a, b)
+    if (!equal) {
       await admin.from('activation_otp').update({ attempts: (row.attempts || 0) + 1 }).eq('phone', wanted)
       return res.status(400).json({ error: 'Kode salah.' })
     }

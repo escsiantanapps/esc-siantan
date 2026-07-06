@@ -23,7 +23,8 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
     const { checkRateLimit } = await import('./_lib/rate-limit.js')
-    if (checkRateLimit(req, res, { endpoint: 'activate-request' })) return
+    // Rate limit ketat (5/menit) — mempersulit enumeration nomor terdaftar.
+    if (checkRateLimit(req, res, { endpoint: 'activate-request', max: 5 })) return
 
     const { createClient } = await import('@supabase/supabase-js')
     const { createHash, randomInt } = await import('crypto')

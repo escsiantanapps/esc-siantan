@@ -32,6 +32,7 @@ export default function EditProfilePage() {
     pekerjaan_pendapatan: profile?.pekerjaan_pendapatan || '',
     pendidikan_terakhir: profile?.pendidikan_terakhir || '',
     pendidikan_bidang: profile?.pendidikan_bidang || '',
+    profesi: profile?.profesi || '',
   })
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -184,6 +185,7 @@ export default function EditProfilePage() {
               {['SD', 'SMP', 'SMA/SMK', 'D1–D3', 'S1', 'S2', 'S3'].map(p => <option key={p}>{p}</option>)}
             </Select>
             <Input label="Bidang Pendidikan" placeholder="cth: Teknik Informatika" value={form.pendidikan_bidang} onChange={e => set('pendidikan_bidang', e.target.value)} />
+            <Input label="Profesi" placeholder="cth: Dokter / Guru / Akuntan / Programmer" value={form.profesi} onChange={e => set('profesi', e.target.value)} />
           </div>
         </div>
 
