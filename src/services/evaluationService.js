@@ -27,7 +27,17 @@ export const evaluationService = {
     let userQuery = supabase.from('users')
       .select('user_id, name, role, role_secondary, is_pks, komsel_id, photo_url, sp_level, user_ministries(ministry_id)')
       .eq('status', 'Aktif')
-    userQuery = role ? userQuery.eq('role', role) : userQuery.in('role', ['Volunteer', 'Jemaat', 'PKS'])
+    // Kelayakan tugas dihitung dari role UTAMA + role KEDUA + penanda is_pks —
+    // konsisten dgn canAccessTemplate (lihat tasksService.userHasRole).
+    // Sebelumnya query hanya melihat role primer, sehingga Admin dgn
+    // role_secondary='Volunteer' tidak muncul di evaluasi.
+    if (role === 'PKS') {
+      userQuery = userQuery.or('role.eq.PKS,role_secondary.eq.PKS,is_pks.eq.true')
+    } else if (role) {
+      userQuery = userQuery.or(`role.eq.${role},role_secondary.eq.${role}`)
+    } else {
+      userQuery = userQuery.or('role.in.(Volunteer,Jemaat,PKS),role_secondary.in.(Volunteer,Jemaat,PKS),is_pks.eq.true')
+    }
     if (komselId) userQuery = userQuery.eq('komsel_id', komselId)
     if (ministryId) {
       const { data: rows } = await supabase.from('user_ministries').select('user_id').eq('ministry_id', ministryId)

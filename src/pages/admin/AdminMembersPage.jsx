@@ -170,12 +170,23 @@ export default function AdminMembersPage() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-400">{t(`role.${m.role}`)}{m.phone ? ` · ${m.phone}` : ''}</p>
-                {((m.ministry_ids?.length > 0) || m.komsel_id || m.is_pks || m.role === 'PKS') && (
+                {(() => {
+                  // Saat filter Ministry aktif, sembunyikan ministry lain di
+                  // badge — hanya tampilkan ministry yang sedang difilter,
+                  // supaya tidak menyesatkan (mis. anggota Talent yang juga
+                  // di Music tidak lagi terlihat seolah "anggota Music" pada
+                  // hasil filter Talent).
+                  const rowMinistries = ministry
+                    ? (m.ministry_ids || []).filter(id => id === ministry)
+                    : (m.ministry_ids || [])
+                  const showBar = rowMinistries.length > 0 || m.komsel_id || m.is_pks || m.role === 'PKS'
+                  if (!showBar) return null
+                  return (
                   <div className="flex items-center gap-1 mt-1 flex-wrap">
-                    {(m.ministry_ids || []).slice(0, 2).map(id => (
+                    {rowMinistries.slice(0, 2).map(id => (
                       ministryMap[id] && <Badge key={id} color="gray" className="text-[10px]! py-0!">{ministryMap[id]}</Badge>
                     ))}
-                    {m.ministry_ids?.length > 2 && <Badge color="gray" className="text-[10px]! py-0!">+{m.ministry_ids.length - 2}</Badge>}
+                    {rowMinistries.length > 2 && <Badge color="gray" className="text-[10px]! py-0!">+{rowMinistries.length - 2}</Badge>}
                     {m.komsel_id && komselMap[m.komsel_id] && (
                       <Badge color="blue" className="text-[10px]! py-0!">{komselMap[m.komsel_id]}</Badge>
                     )}
@@ -183,7 +194,8 @@ export default function AdminMembersPage() {
                       <Badge color="purple" className="text-[10px]! py-0!">PKS</Badge>
                     )}
                   </div>
-                )}
+                  )
+                })()}
               </div>
               <div className="flex flex-col items-end gap-1">
                 <StatusBadge status={m.status} />
