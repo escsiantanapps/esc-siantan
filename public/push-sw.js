@@ -32,9 +32,23 @@ self.addEventListener('push', function (event) {
   )
 })
 
+// Batasi tujuan navigasi ke path same-origin saja. Payload push berasal dari
+// server yang trusted, tapi ini defense-in-depth: bila endpoint /api/send-push
+// disalahgunakan (mis. admin nakal / kredensial bocor), attacker tidak bisa
+// mengarahkan jemaat ke situs phishing lewat notifikasi push.
+function safeSameOriginPath(raw) {
+  try {
+    const u = new URL(raw || '/', self.location.origin)
+    if (u.origin !== self.location.origin) return '/'
+    return u.pathname + u.search + u.hash
+  } catch {
+    return '/'
+  }
+}
+
 self.addEventListener('notificationclick', function (event) {
   event.notification.close()
-  const url = (event.notification.data && event.notification.data.url) || '/'
+  const url = safeSameOriginPath(event.notification.data && event.notification.data.url)
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {

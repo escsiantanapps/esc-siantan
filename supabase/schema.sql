@@ -1954,3 +1954,173 @@ CREATE POLICY "documents_admin_delete" ON storage.objects
   USING (
     bucket_id = 'documents' AND auth_user_role() IN ('Admin','Super Admin')
   );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v39: Tutup privilege escalation pada users INSERT ─────────
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (pentest 2026-07-06):
+-- Policy "users_insert_own" hanya memeriksa auth.uid() = auth_id — TIDAK
+-- membatasi kolom role/status/is_pks/komsel_id/points saat INSERT. Trigger
+-- guard_user_privilege_cols hanya menjaga UPDATE, tidak INSERT. Artinya
+-- siapa pun yang berhasil auth.signUp bisa langsung memanggil:
+--   supabase.from('users').insert({
+--     auth_id: <own_uid>, name: 'X',
+--     role: 'Super Admin', status: 'Aktif', is_pks: true, points: 999999
+--   })
+-- Halaman Register aplikasi memang mengeset role='Jemaat' — tapi
+-- attacker tidak perlu memakai halaman itu, cukup panggil supabase-js
+-- langsung dari console. Ini eskalasi privilege lengkap → akses penuh
+-- panel admin, hapus jemaat, ubah keuangan, dst.
+--
+-- PERBAIKAN: perketat WITH CHECK — self-insert HANYA boleh dengan default
+-- aman (role='Jemaat', status='Menunggu Persetujuan', semua flag privilege
+-- kosong/nol). Admin path tetap lewat "users_admin_insert" (auth_id NULL).
+DROP POLICY IF EXISTS "users_insert_own" ON users;
+CREATE POLICY "users_insert_own" ON users FOR INSERT WITH CHECK (
+  auth.uid() = auth_id
+  AND role = 'Jemaat'
+  AND role_secondary IS NULL
+  AND status = 'Menunggu Persetujuan'
+  AND COALESCE(is_pks, false) = false
+  AND komsel_id IS NULL
+  AND COALESCE(points, 0) = 0
+  AND COALESCE(biodata_points_awarded, false) = false
+  AND membership_card_url IS NULL
+  AND membership_card_issued_at IS NULL
+  AND sp_level = 'Aman'
+  AND sp_notes IS NULL
+);
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v40: Tutup status-bypass di pendaftaran & persembahan ─────
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (pentest 2026-07-06, lanjutan v39):
+-- Beberapa policy INSERT (dan FOR ALL) tidak membatasi kolom `status` →
+-- jemaat bisa membuat rekaman "Disetujui" langsung dari klien, mem-bypass
+-- alur review admin. Selain itu policy FOR ALL (baptism_own & wedding_own)
+-- juga mengizinkan UPDATE ke status apa pun — jemaat bisa mengubah baris
+-- Menunggu → Disetujui setelah pengiriman.
+--
+-- Dampak: sertifikat baptisan/nikah/penyerahan anak/KTJ tercetak seolah
+-- disetujui, dan rekaman persembahan tampil "Terverifikasi" tanpa admin
+-- pernah menyentuhnya (dampak reputasi + integritas laporan keuangan).
+--
+-- Perbaikan: pisah INSERT (jemaat, status='Menunggu' + kolom admin NULL)
+-- dari UPDATE (Admin/Super Admin saja). Pola sama dgn task_leaves v22.
+
+-- ── (a) offerings: klien HANYA boleh insert status='Menunggu' ──
+DROP POLICY IF EXISTS "ofr_insert_own" ON offerings;
+CREATE POLICY "ofr_insert_own" ON offerings FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND status = 'Menunggu'
+  AND verified_at IS NULL
+  AND verified_by IS NULL
+);
+
+-- ── (b) baptism_registrations: pisah own → self-insert + admin-write ──
+DROP POLICY IF EXISTS "baptism_own" ON baptism_registrations;
+DROP POLICY IF EXISTS "baptism_self_select" ON baptism_registrations;
+CREATE POLICY "baptism_self_select" ON baptism_registrations FOR SELECT USING (
+  user_id = auth_user_id() OR auth_user_role() IN ('Admin','Super Admin')
+);
+DROP POLICY IF EXISTS "baptism_self_insert" ON baptism_registrations;
+CREATE POLICY "baptism_self_insert" ON baptism_registrations FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND status = 'Menunggu'
+  AND scheduled_at IS NULL
+  AND admin_note IS NULL
+);
+DROP POLICY IF EXISTS "baptism_admin_update" ON baptism_registrations;
+CREATE POLICY "baptism_admin_update" ON baptism_registrations FOR UPDATE
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+-- Jemaat boleh batal (DELETE) pengajuan yang MASIH Menunggu.
+DROP POLICY IF EXISTS "baptism_self_delete_pending" ON baptism_registrations;
+CREATE POLICY "baptism_self_delete_pending" ON baptism_registrations FOR DELETE USING (
+  user_id = auth_user_id() AND status = 'Menunggu'
+);
+DROP POLICY IF EXISTS "baptism_admin_delete" ON baptism_registrations;
+CREATE POLICY "baptism_admin_delete" ON baptism_registrations FOR DELETE USING (
+  auth_user_role() IN ('Admin','Super Admin')
+);
+
+-- ── (c) wedding_registrations: pola sama dgn baptism ──
+DROP POLICY IF EXISTS "wedding_own" ON wedding_registrations;
+DROP POLICY IF EXISTS "wedding_self_select" ON wedding_registrations;
+CREATE POLICY "wedding_self_select" ON wedding_registrations FOR SELECT USING (
+  user_id = auth_user_id() OR auth_user_role() IN ('Admin','Super Admin')
+);
+DROP POLICY IF EXISTS "wedding_self_insert" ON wedding_registrations;
+CREATE POLICY "wedding_self_insert" ON wedding_registrations FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND status = 'Menunggu'
+  AND scheduled_at IS NULL
+  AND admin_note IS NULL
+);
+DROP POLICY IF EXISTS "wedding_admin_update" ON wedding_registrations;
+CREATE POLICY "wedding_admin_update" ON wedding_registrations FOR UPDATE
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+DROP POLICY IF EXISTS "wedding_self_delete_pending" ON wedding_registrations;
+CREATE POLICY "wedding_self_delete_pending" ON wedding_registrations FOR DELETE USING (
+  user_id = auth_user_id() AND status = 'Menunggu'
+);
+DROP POLICY IF EXISTS "wedding_admin_delete" ON wedding_registrations;
+CREATE POLICY "wedding_admin_delete" ON wedding_registrations FOR DELETE USING (
+  auth_user_role() IN ('Admin','Super Admin')
+);
+
+-- ── (d) child_dedication_registrations: kunci INSERT ke Menunggu ──
+DROP POLICY IF EXISTS "dedication_insert" ON child_dedication_registrations;
+CREATE POLICY "dedication_insert" ON child_dedication_registrations FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND status = 'Menunggu'
+  AND scheduled_at IS NULL
+  AND admin_note IS NULL
+);
+
+-- ── (e) ktj_registrations: kunci INSERT ke Menunggu ──
+DROP POLICY IF EXISTS "ktj_insert" ON ktj_registrations;
+CREATE POLICY "ktj_insert" ON ktj_registrations FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND status = 'Menunggu'
+  AND scheduled_at IS NULL
+  AND admin_note IS NULL
+);
+
+-- ── (f) registration_prerequisites: kunci INSERT ke Menunggu ──
+DROP POLICY IF EXISTS "preq_insert" ON registration_prerequisites;
+CREATE POLICY "preq_insert" ON registration_prerequisites FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND status = 'Menunggu'
+  AND admin_note IS NULL
+  AND reviewed_at IS NULL
+);
+
+-- ── (g) birthday_messages: batasi update recipient hanya ke read_at ──
+-- Sebelumnya recipient bisa UPDATE seluruh baris (mengubah message,
+-- sender_id, komsel_id) selama recipient_id tidak berubah. Ini bukan
+-- privilege escalation, tapi integritas data terganggu (recipient bisa
+-- me-rewrite pesan yang katanya "dari PKS").
+DROP POLICY IF EXISTS "bday_recipient_mark_read" ON birthday_messages;
+CREATE POLICY "bday_recipient_mark_read" ON birthday_messages FOR UPDATE
+  USING (recipient_id = auth_user_id())
+  WITH CHECK (recipient_id = auth_user_id());
+-- Guard tingkat kolom: recipient hanya boleh mengubah read_at.
+CREATE OR REPLACE FUNCTION guard_bday_recipient_cols() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth_user_role() NOT IN ('Admin','Super Admin') THEN
+    IF NEW.message      IS DISTINCT FROM OLD.message
+       OR NEW.sender_id IS DISTINCT FROM OLD.sender_id
+       OR NEW.komsel_id IS DISTINCT FROM OLD.komsel_id
+       OR NEW.recipient_id IS DISTINCT FROM OLD.recipient_id
+       OR NEW.created_at   IS DISTINCT FROM OLD.created_at THEN
+      RAISE EXCEPTION 'Recipient hanya boleh menandai pesan sebagai dibaca.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_guard_bday_recipient ON birthday_messages;
+CREATE TRIGGER trg_guard_bday_recipient
+  BEFORE UPDATE ON birthday_messages FOR EACH ROW EXECUTE FUNCTION guard_bday_recipient_cols();
