@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { BookOpen, Clock, MapPin, User, QrCode, CheckCircle2, History, ClipboardList, MessageCircle } from 'lucide-react'
+import { BookOpen, Clock, MapPin, User, QrCode, CheckCircle2, History, ClipboardList, MessageCircle, Users } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
-import { classesService } from '@/services/contentService'
+import { classesService, prerequisiteService } from '@/services/contentService'
 import { classAttendanceService } from '@/services/attendanceService'
+import { tasksService } from '@/services/tasksService'
 import { Card, Spinner, GradientHeader, EmptyState, StatusBadge, Button } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
+import PrerequisiteForm from '@/components/PrerequisiteForm'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, waLink } from '@/lib/utils'
 
@@ -21,6 +23,10 @@ export default function ClassDetailPage() {
   const [loading, setLoading] = useState(true)
   const [registration, setRegistration] = useState(null)
   const [registering, setRegistering] = useState(false)
+  const [myPrereq, setMyPrereq] = useState(null)
+  const [prereqForm, setPrereqForm] = useState({})
+  const [uploadingKey, setUploadingKey] = useState(null)
+  const [submittingPrereq, setSubmittingPrereq] = useState(false)
 
   useEffect(() => {
     classesService.getById(id).then(setCls).catch(() => {}).finally(() => setLoading(false))
@@ -30,7 +36,11 @@ export default function ClassDetailPage() {
     if (!profile?.user_id) return
     classAttendanceService.getMyHistory(id, profile.user_id).then(setHistory).catch(() => {})
     classesService.getMyRegistration(id, profile.user_id).then(setRegistration).catch(() => {})
+    prerequisiteService.getMine('class', id, profile.user_id).then(setMyPrereq).catch(() => {})
   }, [id, profile?.user_id])
+
+  const prereqFields = cls?.prerequisite_fields || []
+  const hasPrereq = Array.isArray(prereqFields) && prereqFields.length > 0
 
   async function handleRegister() {
     setRegistering(true)
@@ -42,6 +52,37 @@ export default function ClassDetailPage() {
       toast.error(err.message || t('classDetail.registerFailed'))
     } finally {
       setRegistering(false)
+    }
+  }
+
+  async function handlePrereqFile(key, file) {
+    if (!file) return
+    setUploadingKey(key)
+    try {
+      const url = await tasksService.uploadResponseFile(profile.user_id, file)
+      setPrereqForm(p => ({ ...p, [key]: url }))
+    } catch (err) {
+      toast.error(err.message || t('common.docUploadFailed'))
+    } finally {
+      setUploadingKey(null)
+    }
+  }
+
+  async function handleSubmitPrereq() {
+    for (const f of prereqFields) {
+      if (f.required && !prereqForm[f.key]) { toast.error(t('prereq.fillRequired')); return }
+    }
+    setSubmittingPrereq(true)
+    try {
+      const created = await prerequisiteService.submit({
+        kind: 'class', targetId: id, userId: profile.user_id, data_json: prereqForm,
+      })
+      setMyPrereq(created)
+      toast.success(t('prereq.submitted'))
+    } catch (err) {
+      toast.error(err.message || t('prereq.submitFailed'))
+    } finally {
+      setSubmittingPrereq(false)
     }
   }
 
@@ -81,9 +122,48 @@ export default function ClassDetailPage() {
               </div>
 
               {registration ? (
-                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2.5">
-                  <CheckCircle2 size={16} className="text-green-500 shrink-0" /> {t('classDetail.registered')}
-                </div>
+                <>
+                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2.5">
+                    <CheckCircle2 size={16} className="text-green-500 shrink-0" /> {t('classDetail.registered')}
+                  </div>
+                  {cls.whatsapp_group_url && (
+                    <a href={cls.whatsapp_group_url} target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" className="w-full">
+                        <Users size={16} /> {t('class.joinWaGroup')}
+                      </Button>
+                    </a>
+                  )}
+                </>
+              ) : hasPrereq ? (
+                myPrereq?.status === 'Menunggu' ? (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
+                    <p className="text-sm font-semibold text-amber-700">{t('prereq.pending')}</p>
+                    <p className="text-xs text-amber-600 mt-0.5">{t('prereq.pendingDesc')}</p>
+                  </div>
+                ) : myPrereq?.status === 'Ditolak' ? (
+                  <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+                    <p className="text-sm font-semibold text-red-700">{t('prereq.rejected')}</p>
+                    {myPrereq.admin_note && <p className="text-xs text-red-600 mt-0.5 whitespace-pre-line">{myPrereq.admin_note}</p>}
+                    <p className="text-xs text-red-500 mt-1">{t('prereq.rejectedContact')}</p>
+                  </div>
+                ) : myPrereq?.status === 'Disetujui' ? (
+                  <p className="text-center text-sm text-gray-400">{t('prereq.approvedPending')}</p>
+                ) : (
+                  <div className="space-y-3 border-t border-gray-100 pt-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{t('prereq.title')}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{t('prereq.fillBefore')}</p>
+                    </div>
+                    <PrerequisiteForm
+                      fields={prereqFields} value={prereqForm}
+                      onChange={(k, v) => setPrereqForm(p => ({ ...p, [k]: v }))}
+                      onFileUpload={handlePrereqFile} uploadingKey={uploadingKey}
+                    />
+                    <Button className="w-full" loading={submittingPrereq} onClick={handleSubmitPrereq}>
+                      {t('prereq.submit')}
+                    </Button>
+                  </div>
+                )
               ) : (
                 <Button variant="outline" className="w-full" loading={registering} onClick={handleRegister}>
                   <ClipboardList size={16} /> {t('classDetail.register')}

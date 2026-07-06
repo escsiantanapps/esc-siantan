@@ -1,7 +1,7 @@
 import {
   Users, Calendar, Newspaper, BookOpen,
   ClipboardList, Droplets, Heart, AlertTriangle, BarChart3,
-  Layers, Network, HandCoins, CalendarOff, Baby, Award, Map, Gift, Church,
+  Layers, Network, HandCoins, CalendarOff, Baby, Award, Map, Gift, Church, CreditCard,
 } from 'lucide-react'
 
 // Daftar halaman admin yang aksesnya bisa dibatasi untuk role "Admin"
@@ -24,6 +24,7 @@ export const ADMIN_PAGES = [
   { to: '/admin/nikah',    icon: Heart,         label: 'Pemberkatan Nikah',  section: 'Pelayanan',   labelKey: 'admin.nav.nikah',       sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/penyerahan-anak', icon: Baby,   label: 'Penyerahan Anak',    section: 'Pelayanan',   labelKey: 'admin.nav.dedikasi',    sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/sertifikat', icon: Award,       label: 'Sertifikat',         section: 'Pelayanan',   labelKey: 'admin.nav.sertifikat',  sectionKey: 'admin.sec.Pelayanan' },
+  { to: '/admin/ktj',       icon: CreditCard,   label: 'KTJ (Kartu Jemaat)', section: 'Pelayanan',   labelKey: 'admin.nav.ktj',         sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/sp',       icon: AlertTriangle, label: 'Surat Peringatan',   section: 'Organisasi',  labelKey: 'admin.nav.sp',          sectionKey: 'admin.sec.Organisasi' },
   { to: '/admin/ministry', icon: Layers,        label: 'Ministry',           section: 'Organisasi',  labelKey: 'admin.nav.ministry',    sectionKey: 'admin.sec.Organisasi' },
   { to: '/admin/komsel',   icon: Network,       label: 'Komsel',             section: 'Organisasi',  labelKey: 'admin.nav.komsel',      sectionKey: 'admin.sec.Organisasi' },

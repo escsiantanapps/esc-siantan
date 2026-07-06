@@ -35,11 +35,26 @@ export default async function handler(req, res) {
     // Nama hari ini (zona WIB), mis. "Senin".
     const todayId = norm(new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' }).format(new Date()))
 
+    // Slot (pagi/siang/sore) berasal dari query string vercel.json cron.
+    // Kosong = tes manual → cocokkan semua slot (backward-compat).
+    const slot = norm(req.query?.slot || '')
+    const VALID_SLOTS = ['pagi', 'siang', 'sore']
+
     const { data: templates } = await admin
-      .from('form_templates').select('form_id, title, weekly_goal, period, reminder_enabled, reminder_days, allowed_roles')
+      .from('form_templates').select('form_id, title, weekly_goal, period, reminder_enabled, reminder_days, reminder_slots, allowed_roles')
       .eq('reminder_enabled', true)
-    const due = (templates || []).filter(t => (t.reminder_days || []).some(d => norm(d) === todayId))
-    if (due.length === 0) return res.status(200).json({ ok: true, today: todayId, due: 0 })
+    const due = (templates || []).filter(t => {
+      // 1) Hari harus cocok
+      if (!(t.reminder_days || []).some(d => norm(d) === todayId)) return false
+      // 2) Slot cocok: kalau slot kosong (tes manual) → lolos.
+      //    Kalau template.reminder_slots kosong → lolos SEMUA slot (backward-compat).
+      //    Kalau template.reminder_slots terisi → harus mengandung slot ini.
+      if (!slot) return true
+      const rs = (t.reminder_slots || []).map(norm).filter(s => VALID_SLOTS.includes(s))
+      if (rs.length === 0) return true
+      return rs.includes(slot)
+    })
+    if (due.length === 0) return res.status(200).json({ ok: true, today: todayId, slot: slot || null, due: 0 })
 
     // Pra-ambil langganan push & subset user yang berlangganan.
     const { data: subs } = await admin.from('push_subscriptions').select('*')
@@ -111,7 +126,7 @@ export default async function handler(req, res) {
       report.push({ form: tpl.title, targets: targets.length, sent, errors })
     }
 
-    return res.status(200).json({ ok: true, today: todayId, due: due.length, totalSent, removed, report })
+    return res.status(200).json({ ok: true, today: todayId, slot: slot || null, due: due.length, totalSent, removed, report })
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) })
   }

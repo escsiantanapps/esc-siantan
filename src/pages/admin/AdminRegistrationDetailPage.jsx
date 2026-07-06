@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, FileText, Printer } from 'lucide-react'
 import { registrationService } from '@/services/contentService'
+import { usersService } from '@/services/usersService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { Card, Select, Textarea, Input, Button, Spinner, StatusBadge, EmptyState } from '@/components/ui'
@@ -48,12 +49,21 @@ export default function AdminRegistrationDetailPage() {
   const { toast } = useToast()
   const type = pathname.startsWith('/admin/nikah')
     ? 'wedding'
-    : pathname.startsWith('/admin/penyerahan-anak') ? 'dedication' : 'baptism'
-  const backTo = type === 'wedding' ? '/admin/nikah' : type === 'dedication' ? '/admin/penyerahan-anak' : '/admin/baptisan'
-  const docs = type === 'wedding' ? WEDDING_DOCS : type === 'dedication' ? DEDICATION_DOCS : BAPTISM_DOCS
-  const typeLabel = type === 'wedding' ? 'Pemberkatan Nikah' : type === 'dedication' ? 'Penyerahan Anak' : 'Baptisan'
+    : pathname.startsWith('/admin/penyerahan-anak') ? 'dedication'
+    : pathname.startsWith('/admin/ktj') ? 'ktj'
+    : 'baptism'
+  const backTo = type === 'wedding' ? '/admin/nikah'
+    : type === 'dedication' ? '/admin/penyerahan-anak'
+    : type === 'ktj' ? '/admin/ktj'
+    : '/admin/baptisan'
+  const docs = type === 'wedding' ? WEDDING_DOCS : type === 'dedication' ? DEDICATION_DOCS : type === 'ktj' ? [] : BAPTISM_DOCS
+  const typeLabel = type === 'wedding' ? 'Pemberkatan Nikah'
+    : type === 'dedication' ? 'Penyerahan Anak'
+    : type === 'ktj' ? 'KTJ (Kartu Jemaat)'
+    : 'Baptisan'
 
   const [reg, setReg] = useState(null)
+  const [komselList, setKomselList] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -62,6 +72,12 @@ export default function AdminRegistrationDetailPage() {
   const [form, setForm] = useState({ status: 'Menunggu', admin_note: '', scheduled_at: '' })
 
   useEffect(() => { load() }, [id, type])
+  // Untuk KTJ, ambil daftar komsel supaya bisa tampilkan nama (bukan komsel_id).
+  useEffect(() => {
+    if (type !== 'ktj') return
+    usersService.getAllKomsel().then(setKomselList).catch(() => {})
+  }, [type])
+  const komselName = id => komselList.find(k => k.komsel_id === id)?.name || '-'
 
   async function load() {
     setLoading(true)
@@ -122,7 +138,19 @@ export default function AdminRegistrationDetailPage() {
     if (reg.admin_note) meta.push(['Catatan Admin', reg.admin_note])
 
     let heading, sections
-    if (type === 'baptism') {
+    if (type === 'ktj') {
+      heading = reg.full_name
+      sections = [{
+        title: 'Data Pengajuan KTJ',
+        rows: [
+          ['Nama Lengkap', reg.full_name],
+          ['Tanggal Lahir', reg.birth_date ? `${formatDate(reg.birth_date)} (${hitungUmur(reg.birth_date)})` : '-'],
+          ['Tempat Lahir', reg.birth_place],
+          ['Komsel', komselName(reg.komsel_id)],
+          ['Alamat', reg.address],
+        ],
+      }]
+    } else if (type === 'baptism') {
       heading = reg.full_name
       sections = [{
         title: 'Data Calon Baptis',
@@ -226,7 +254,7 @@ export default function AdminRegistrationDetailPage() {
   return (
     <div className="max-w-2xl">
       <button onClick={() => navigate(backTo)} className="flex items-center gap-1 text-sm text-gray-500 mb-4">
-        <ArrowLeft size={16} /> Kembali ke {type === 'wedding' ? 'Pemberkatan Nikah' : type === 'dedication' ? 'Penyerahan Anak' : 'Pendaftaran Baptisan'}
+        <ArrowLeft size={16} /> Kembali ke {type === 'wedding' ? 'Pemberkatan Nikah' : type === 'dedication' ? 'Penyerahan Anak' : type === 'ktj' ? 'Pengajuan KTJ' : 'Pendaftaran Baptisan'}
       </button>
 
       {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>}
@@ -236,7 +264,7 @@ export default function AdminRegistrationDetailPage() {
       <Card className="p-4 mb-4">
         <div className="flex items-center justify-between mb-2">
           <p className="text-base font-semibold text-gray-900">
-            {type === 'wedding' ? `${reg.groom_name} & ${reg.bride_name}` : type === 'dedication' ? reg.child_name : reg.full_name}
+            {type === 'wedding' ? `${reg.groom_name} & ${reg.bride_name}` : type === 'dedication' ? reg.child_name : type === 'ktj' ? reg.full_name : reg.full_name}
           </p>
           <StatusBadge status={reg.status} />
         </div>
@@ -248,7 +276,21 @@ export default function AdminRegistrationDetailPage() {
         </Button>
       </Card>
 
-      {type === 'baptism' ? (
+      {type === 'ktj' ? (
+        <Card className="p-4 mb-4 space-y-3">
+          <h2 className="text-sm font-semibold text-gray-900">Data Pengajuan KTJ</h2>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <Info label="Nama Lengkap" value={reg.full_name} />
+            <Info label="Tanggal Lahir" value={reg.birth_date ? `${formatDate(reg.birth_date)} (${hitungUmur(reg.birth_date)})` : '-'} />
+            <Info label="Tempat Lahir" value={reg.birth_place} />
+            <Info label="Komsel" value={komselName(reg.komsel_id)} />
+            <div className="col-span-2"><Info label="Alamat" value={reg.address} /></div>
+          </div>
+          <div className="bg-brand-50 border border-brand-100 rounded-xl px-3 py-2.5 text-xs text-brand-700 leading-relaxed">
+            Setelah pengajuan disetujui, terbitkan Kartu Tanda Jemaat lewat halaman <strong>Detail Jemaat</strong> — unggah kartu pada kolom "Kartu Jemaat" di sana. Kartu fisik BUKAN dibuat otomatis dari halaman ini.
+          </div>
+        </Card>
+      ) : type === 'baptism' ? (
         <Card className="p-4 mb-4 space-y-3">
           <h2 className="text-sm font-semibold text-gray-900">Data Calon Baptis</h2>
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -355,20 +397,22 @@ export default function AdminRegistrationDetailPage() {
         </>
       )}
 
-      {/* Dokumen */}
-      <Card className="p-4 mb-4 space-y-2">
-        <h2 className="text-sm font-semibold text-gray-900 mb-1">Dokumen</h2>
-        {docs.every(d => !reg.documents?.[d.key]) ? (
-          <p className="text-sm text-gray-400">Belum ada dokumen yang diunggah.</p>
-        ) : (
-          docs.map(d => reg.documents?.[d.key] && (
-            <a key={d.key} href={reg.documents[d.key]} target="_blank" rel="noreferrer"
-              className="flex items-center gap-2 text-sm text-brand-500 hover:underline">
-              <FileText size={15} /> {d.label}
-            </a>
-          ))
-        )}
-      </Card>
+      {/* Dokumen — sembunyikan untuk KTJ karena tidak butuh dokumen */}
+      {docs.length > 0 && (
+        <Card className="p-4 mb-4 space-y-2">
+          <h2 className="text-sm font-semibold text-gray-900 mb-1">Dokumen</h2>
+          {docs.every(d => !reg.documents?.[d.key]) ? (
+            <p className="text-sm text-gray-400">Belum ada dokumen yang diunggah.</p>
+          ) : (
+            docs.map(d => reg.documents?.[d.key] && (
+              <a key={d.key} href={reg.documents[d.key]} target="_blank" rel="noreferrer"
+                className="flex items-center gap-2 text-sm text-brand-500 hover:underline">
+                <FileText size={15} /> {d.label}
+              </a>
+            ))
+          )}
+        </Card>
+      )}
 
       {/* Status update */}
       <Card className="p-4 mb-4 space-y-4">

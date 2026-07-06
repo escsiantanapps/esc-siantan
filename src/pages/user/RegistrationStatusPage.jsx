@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Droplets, Heart, Baby, Calendar, ClipboardList } from 'lucide-react'
+import { Droplets, Heart, Baby, Calendar, ClipboardList, CreditCard } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { registrationService, eventsService } from '@/services/contentService'
 import { Card, Spinner, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
@@ -13,6 +13,7 @@ export default function RegistrationStatusPage() {
   const [baptism, setBaptism] = useState([])
   const [wedding, setWedding] = useState([])
   const [dedication, setDedication] = useState([])
+  const [ktj, setKtj] = useState([])
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -26,13 +27,14 @@ export default function RegistrationStatusPage() {
         setBaptism(reg.baptism)
         setWedding(reg.wedding)
         setDedication(reg.dedication)
+        setKtj(reg.ktj || [])
         setEvents(evt)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [profile?.user_id])
 
-  const isEmpty = !loading && baptism.length === 0 && wedding.length === 0 && dedication.length === 0 && events.length === 0
+  const isEmpty = !loading && baptism.length === 0 && wedding.length === 0 && dedication.length === 0 && ktj.length === 0 && events.length === 0
 
   return (
     <div className="pb-4">
@@ -98,6 +100,27 @@ export default function RegistrationStatusPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900">{item.child_name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{t('common.submitted')} {formatDate(item.created_at)}</p>
+                    {item.admin_note && <p className="text-xs text-gray-500 mt-1">{t('common.note')}: {item.admin_note}</p>}
+                  </div>
+                  <StatusBadge status={item.status} />
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!loading && ktj.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('regStatus.ktj')}</h2>
+            <div className="space-y-2.5">
+              {ktj.map(item => (
+                <Card key={item.ktj_id} className="p-3.5 flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
+                    <CreditCard size={18} className="text-indigo-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{item.full_name}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{t('common.submitted')} {formatDate(item.created_at)}</p>
                     {item.admin_note && <p className="text-xs text-gray-500 mt-1">{t('common.note')}: {item.admin_note}</p>}
                   </div>

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { Calendar, MapPin, Plus, Pencil, QrCode, Users, X, Download, FileSpreadsheet } from 'lucide-react'
-import { eventsService } from '@/services/contentService'
+import { Calendar, MapPin, Plus, Pencil, QrCode, Users, X, Download, FileSpreadsheet, Trash2 } from 'lucide-react'
+import { eventsService, prerequisiteService } from '@/services/contentService'
 import { eventAttendanceService } from '@/services/attendanceService'
-import { Card, PageHeader, Button, Input, Spinner, EmptyState, StatusBadge, Badge, Avatar } from '@/components/ui'
+import { pushService } from '@/services/pushService'
+import { useToast } from '@/hooks/useToast'
+import { Card, PageHeader, Button, Input, Textarea, Spinner, EmptyState, StatusBadge, Badge, Avatar } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { formatDate } from '@/lib/utils'
@@ -12,6 +14,7 @@ import { downloadXlsx } from '@/lib/exportXlsx'
 
 export default function AdminEventsPage() {
   const { t } = useLang()
+  const { toast, confirm } = useToast()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -22,6 +25,10 @@ export default function AdminEventsPage() {
   const [rekap, setRekap] = useState([])
   const [rekapLoading, setRekapLoading] = useState(false)
   const [rekapDate, setRekapDate] = useState('')
+  const [submissions, setSubmissions] = useState([])
+  const [rejectingId, setRejectingId] = useState(null)
+  const [rejectNote, setRejectNote] = useState('')
+  const [prereqBusy, setPrereqBusy] = useState(null)
   useBackClose(!!qrModal || !!rekapModal, () => { setQrModal(null); setRekapModal(null) })
 
   useEffect(() => {
@@ -39,6 +46,18 @@ export default function AdminEventsPage() {
   // Rekap: gabungkan pendaftar + status hadir, opsional filter tanggal hadir.
   useEffect(() => {
     if (!rekapModal) return
+    loadRekap()
+    // Load submissions kalau event pakai prasyarat.
+    if (Array.isArray(rekapModal.prerequisite_fields) && rekapModal.prerequisite_fields.length > 0) {
+      prerequisiteService.getForTarget('event', rekapModal.event_id)
+        .then(setSubmissions).catch(() => setSubmissions([]))
+    } else {
+      setSubmissions([])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rekapModal, rekapDate])
+
+  function loadRekap() {
     setRekapLoading(true)
     Promise.all([
       eventsService.getRegistrations(rekapModal.event_id),
@@ -47,6 +66,7 @@ export default function AdminEventsPage() {
       .then(([regs, att]) => {
         const attended = new Set((att || []).map(a => a.user_id))
         setRekap((regs || []).map(r => ({
+          ticket_id: r.ticket_id,
           user_id: r.user_id,
           name: r.users?.name || '-',
           role: r.users?.role || '',
@@ -56,7 +76,86 @@ export default function AdminEventsPage() {
       })
       .catch(() => setRekap([]))
       .finally(() => setRekapLoading(false))
-  }, [rekapModal, rekapDate])
+  }
+
+  async function reloadSubmissions() {
+    const list = await prerequisiteService.getForTarget('event', rekapModal.event_id).catch(() => [])
+    setSubmissions(list)
+  }
+
+  async function handleRemoveRegistrant(r) {
+    const ok = await confirm({
+      title: 'Hapus peserta?', message: `Peserta "${r.name}" akan dihapus dari event ini.`,
+      confirmText: 'Hapus', danger: true,
+    })
+    if (!ok) return
+    try {
+      await eventsService.removeRegistration(r.ticket_id)
+      toast.success('Peserta dihapus.')
+      loadRekap()
+    } catch (err) {
+      toast.error(err.message || 'Gagal menghapus peserta.')
+    }
+  }
+
+  async function handleApproveSubmission(s) {
+    setPrereqBusy(s.id)
+    try {
+      await prerequisiteService.approve(s.id, { kind: 'event', targetId: rekapModal.event_id, userId: s.user_id })
+      pushService.broadcast({
+        title: 'Pendaftaran Event Disetujui',
+        body: `Pendaftaran Anda untuk event "${rekapModal.name}" telah disetujui.`,
+        url: `/events/${rekapModal.event_id}`,
+        userIds: [s.user_id],
+      }).catch(() => {})
+      toast.success('Peserta disetujui.')
+      await reloadSubmissions()
+      loadRekap()
+    } catch (err) {
+      toast.error(err.message || 'Gagal menyetujui.')
+    } finally {
+      setPrereqBusy(null)
+    }
+  }
+
+  async function handleRejectSubmission(s) {
+    if (!rejectNote.trim()) { toast.error('Alasan penolakan wajib diisi.'); return }
+    setPrereqBusy(s.id)
+    try {
+      await prerequisiteService.reject(s.id, rejectNote.trim())
+      pushService.broadcast({
+        title: 'Pendaftaran Event Ditolak', body: rejectNote.trim(),
+        url: `/events/${rekapModal.event_id}`, userIds: [s.user_id],
+      }).catch(() => {})
+      toast.success('Peserta ditolak.')
+      setRejectingId(null); setRejectNote('')
+      await reloadSubmissions()
+    } catch (err) {
+      toast.error(err.message || 'Gagal menolak.')
+    } finally {
+      setPrereqBusy(null)
+    }
+  }
+
+  async function handleRemoveSubmission(s) {
+    const ok = await confirm({
+      title: 'Hapus pengajuan?',
+      message: 'Kalau sudah disetujui, pendaftaran peserta ini juga ikut terhapus.',
+      confirmText: 'Hapus', danger: true,
+    })
+    if (!ok) return
+    setPrereqBusy(s.id)
+    try {
+      await prerequisiteService.remove(s.id)
+      toast.success('Pengajuan dihapus.')
+      await reloadSubmissions()
+      loadRekap()
+    } catch (err) {
+      toast.error(err.message || 'Gagal menghapus.')
+    } finally {
+      setPrereqBusy(null)
+    }
+  }
 
   async function exportRekap() {
     await downloadXlsx({
@@ -186,7 +285,7 @@ export default function AdminEventsPage() {
             {!rekapLoading && rekap.length > 0 && (
               <div className="divide-y divide-gray-100">
                 {rekap.map(r => (
-                  <div key={r.user_id} className="py-2.5 flex items-center gap-3">
+                  <div key={r.ticket_id || r.user_id} className="py-2.5 flex items-center gap-3">
                     <Avatar name={r.name} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{r.name}</p>
@@ -195,8 +294,82 @@ export default function AdminEventsPage() {
                     {r.present
                       ? <Badge color="green">{t('aevt.present')}</Badge>
                       : <Badge color="gray">{t('aevt.notYet')}</Badge>}
+                    <button
+                      type="button" onClick={() => handleRemoveRegistrant(r)}
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                      aria-label="Hapus peserta"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* MODE B: submissions prasyarat (kalau event pakai formulir prasyarat) */}
+            {Array.isArray(rekapModal.prerequisite_fields) && rekapModal.prerequisite_fields.length > 0 && (
+              <div className="border-t border-gray-100 pt-3">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Formulir Prasyarat</p>
+                {submissions.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-3">Belum ada pengajuan.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {submissions.map(s => (
+                      <div key={s.id} className="border border-gray-200 rounded-xl p-3 space-y-2 bg-gray-50">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{s.users?.name || '-'}</p>
+                            <p className="text-[10px] text-gray-400">{formatDate(s.created_at, 'd MMM yyyy, HH:mm')}</p>
+                          </div>
+                          <StatusBadge status={s.status} />
+                        </div>
+                        <div className="space-y-1.5">
+                          {(rekapModal.prerequisite_fields || []).map(f => {
+                            const val = s.data_json?.[f.key]
+                            const isFile = f.type === 'file' && typeof val === 'string' && /^https?:\/\//.test(val)
+                            return (
+                              <div key={f.key} className="text-xs">
+                                <p className="text-gray-400">{f.label}</p>
+                                {isFile ? (
+                                  <a href={val} target="_blank" rel="noopener noreferrer" className="text-brand-500 underline break-all">Buka file</a>
+                                ) : (
+                                  <p className="text-gray-700 whitespace-pre-line break-words">{val || '-'}</p>
+                                )}
+                              </div>
+                            )
+                          })}
+                          {s.admin_note && <p className="text-[10px] text-gray-500 italic pt-1">Catatan admin: {s.admin_note}</p>}
+                        </div>
+                        {rejectingId === s.id ? (
+                          <div className="space-y-2">
+                            <Textarea rows={2} placeholder="Alasan penolakan (dikirim ke jemaat)" value={rejectNote} onChange={e => setRejectNote(e.target.value)} />
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setRejectingId(null); setRejectNote('') }}>Batal</Button>
+                              <Button size="sm" variant="danger" className="flex-1" loading={prereqBusy === s.id} onClick={() => handleRejectSubmission(s)}>Kirim Tolak</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            {s.status === 'Menunggu' && (
+                              <>
+                                <Button size="sm" className="flex-1" loading={prereqBusy === s.id} onClick={() => handleApproveSubmission(s)}>Setujui</Button>
+                                <Button size="sm" variant="outline" className="flex-1" onClick={() => { setRejectingId(s.id); setRejectNote('') }}>Tolak</Button>
+                              </>
+                            )}
+                            <button
+                              type="button" onClick={() => handleRemoveSubmission(s)}
+                              disabled={prereqBusy === s.id}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                              aria-label="Hapus pengajuan"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </Card>

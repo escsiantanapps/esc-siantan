@@ -63,6 +63,11 @@ export const eventsService = {
     return data
   },
 
+  async removeRegistration(ticketId) {
+    const { error } = await supabase.from('event_registrations').delete().eq('ticket_id', ticketId)
+    if (error) throw error
+  },
+
   async uploadThumbnail(file) {
     const ext = file.name.split('.').pop()
     const path = `events/${Date.now()}.${ext}`
@@ -124,6 +129,7 @@ const REGISTRATION_TABLES = {
   baptism: { table: 'baptism_registrations', idCol: 'baptism_id' },
   wedding: { table: 'wedding_registrations', idCol: 'wedding_id' },
   dedication: { table: 'child_dedication_registrations', idCol: 'dedication_id' },
+  ktj: { table: 'ktj_registrations', idCol: 'ktj_id' },
 }
 
 export const registrationService = {
@@ -148,16 +154,25 @@ export const registrationService = {
     return result
   },
 
+  async submitKtj(data) {
+    const { data: result, error } = await supabase
+      .from('ktj_registrations').insert(data).select().single()
+    if (error) throw error
+    return result
+  },
+
   async getMyRegistrations(userId) {
-    const [baptism, wedding, dedication] = await Promise.all([
+    const [baptism, wedding, dedication, ktj] = await Promise.all([
       supabase.from('baptism_registrations').select('*').eq('user_id', userId),
       supabase.from('wedding_registrations').select('*').eq('user_id', userId),
       supabase.from('child_dedication_registrations').select('*').eq('user_id', userId),
+      supabase.from('ktj_registrations').select('*').eq('user_id', userId),
     ])
     return {
       baptism: baptism.data || [],
       wedding: wedding.data || [],
       dedication: dedication.data || [],
+      ktj: ktj.data || [],
     }
   },
 
@@ -181,6 +196,15 @@ export const registrationService = {
 
   async getAllDedication({ status = '' } = {}) {
     let query = supabase.from('child_dedication_registrations')
+      .select('*, users(name, phone)').order('created_at', { ascending: false })
+    if (status) query = query.eq('status', status)
+    const { data, error } = await query
+    if (error) throw error
+    return data
+  },
+
+  async getAllKtj({ status = '' } = {}) {
+    let query = supabase.from('ktj_registrations')
       .select('*, users(name, phone)').order('created_at', { ascending: false })
     if (status) query = query.eq('status', status)
     const { data, error } = await query
@@ -268,6 +292,78 @@ export const classesService = {
       .select('*').eq('class_id', classId).eq('user_id', userId).maybeSingle()
     if (error) throw error
     return data
+  },
+
+  async removeRegistration(registrationId) {
+    const { error } = await supabase.from('class_registrations').delete().eq('registration_id', registrationId)
+    if (error) throw error
+  },
+}
+
+// ─── Formulir Prasyarat Event/Kelas ─────────────────────────
+// Opt-in per Event/Kelas (kolom prerequisite_fields JSONB pada masing2 tabel).
+// Bila terisi: user WAJIB submit + admin approve dulu SEBELUM baris registrasi
+// dibuat. Delete row prasyarat men-cascade menghapus baris registrasi terkait.
+const PREREQ_TABLES = {
+  event: { table: 'event_registrations', idCol: 'ticket_id', prefix: 'TKT', fk: 'event_id' },
+  class: { table: 'class_registrations', idCol: 'registration_id', prefix: 'CREG', fk: 'class_id' },
+}
+
+export const prerequisiteService = {
+  async getMine(kind, targetId, userId) {
+    const fk = PREREQ_TABLES[kind].fk
+    const { data, error } = await supabase.from('registration_prerequisites')
+      .select('*').eq(fk, targetId).eq('user_id', userId).maybeSingle()
+    if (error) throw error
+    return data
+  },
+
+  async submit({ kind, targetId, userId, data_json }) {
+    const fk = PREREQ_TABLES[kind].fk
+    const row = { [fk]: targetId, user_id: userId, data_json: data_json || {} }
+    const { data, error } = await supabase.from('registration_prerequisites')
+      .insert(row).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async getForTarget(kind, targetId) {
+    const fk = PREREQ_TABLES[kind].fk
+    const { data, error } = await supabase.from('registration_prerequisites')
+      .select('*, users(name, phone)').eq(fk, targetId).order('created_at', { ascending: false })
+    if (error) throw error
+    return data
+  },
+
+  // Approve: 2 langkah non-atomik (trade-off didokumentasikan di plan).
+  // 1) update status prasyarat → Disetujui
+  // 2) insert baris registrasi terkait dg prerequisite_id agar cascade delete
+  async approve(id, { kind, targetId, userId, admin_note = '' }) {
+    const { error: updErr } = await supabase.from('registration_prerequisites')
+      .update({ status: 'Disetujui', admin_note, reviewed_at: new Date().toISOString() })
+      .eq('id', id)
+    if (updErr) throw updErr
+
+    const cfg = PREREQ_TABLES[kind]
+    const newId = `${cfg.prefix}-${Date.now()}`
+    const regRow = { [cfg.idCol]: newId, [cfg.fk]: targetId, user_id: userId, prerequisite_id: id }
+    const { data, error } = await supabase.from(cfg.table).insert(regRow).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async reject(id, admin_note = '') {
+    const { data, error } = await supabase.from('registration_prerequisites')
+      .update({ status: 'Ditolak', admin_note, reviewed_at: new Date().toISOString() })
+      .eq('id', id).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async remove(id) {
+    // FK ON DELETE CASCADE otomatis menghapus baris event/class_registrations terkait.
+    const { error } = await supabase.from('registration_prerequisites').delete().eq('id', id)
+    if (error) throw error
   },
 }
 

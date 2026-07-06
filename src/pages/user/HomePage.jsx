@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw, Sparkles } from 'lucide-react'
+import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw, Sparkles, CreditCard } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { newsService, eventsService, classesService, appSettingsService } from '@/services/contentService'
+import { newsService, eventsService, classesService, appSettingsService, registrationService } from '@/services/contentService'
 import { Card, Spinner } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
+import SopNudgeCard from '@/components/SopNudgeCard'
 import BirthdayMessageCard from '@/components/BirthdayMessageCard'
 import MembershipCard from '@/components/MembershipCard'
 import EventCarousel from '@/components/EventCarousel'
@@ -21,6 +22,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
   const [baptismOpen, setBaptismOpen] = useState(true)
+  const [hasActiveKtj, setHasActiveKtj] = useState(false)
 
   function loadData() {
     setLoading(true)
@@ -33,13 +35,19 @@ export default function HomePage() {
       eventsService.getAll().then(list => setEvents(ongoing(list))).catch(() => { anyFailed = true }),
       classesService.getAll().then(list => setClasses(ongoing(list))).catch(() => { anyFailed = true }),
       appSettingsService.get('baptism_status').then(s => setBaptismOpen(s !== 'closed')).catch(() => {}),
+      // Cek pengajuan KTJ aktif untuk menyembunyikan quick link "Daftar KTJ".
+      profile?.user_id
+        ? registrationService.getMyRegistrations(profile.user_id)
+            .then(r => setHasActiveKtj((r.ktj || []).some(k => k.status !== 'Ditolak')))
+            .catch(() => {})
+        : Promise.resolve(),
     ]).finally(() => {
       setLoading(false)
       if (anyFailed) setFetchError(true)
     })
   }
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData() }, [profile?.user_id])
 
   const quickLinks = [
     { to: '/persembahan',        icon: HandCoins,     label: t('home.q.offering'), color: 'bg-emerald-100 text-emerald-600' },
@@ -48,6 +56,11 @@ export default function HomePage() {
     ...(baptismOpen ? [{ to: '/baptisan', icon: Droplets, label: t('home.q.baptism'), color: 'bg-teal-100 text-teal-600' }] : []),
     { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-100 text-pink-600' },
     { to: '/penyerahan-anak',    icon: Baby,          label: t('home.q.dedication'), color: 'bg-amber-100 text-amber-600' },
+    // Daftar KTJ: sembunyikan bila jemaat sudah punya kartu, atau punya pengajuan
+    // aktif (Menunggu/Disetujui/Terjadwal/Selesai — apapun kecuali Ditolak).
+    ...(!profile?.membership_card_url && !hasActiveKtj
+      ? [{ to: '/ktj', icon: CreditCard, label: t('home.q.ktj'), color: 'bg-indigo-100 text-indigo-600' }]
+      : []),
     { to: '/status-pendaftaran', icon: Bell,          label: t('home.q.status'),   color: 'bg-purple-100 text-purple-600' },
   ]
 
@@ -95,6 +108,9 @@ export default function HomePage() {
 
         {/* Panduan akun baru: lengkapi data & aktifkan notifikasi */}
         <OnboardingPrompt />
+
+        {/* Pengingat ramah kalau ada SOP yang belum dituntaskan minggu ini */}
+        <SopNudgeCard />
 
         {/* Status SP */}
         {profile?.sp_level && profile.sp_level !== 'Aman' && (

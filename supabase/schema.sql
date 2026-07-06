@@ -1621,3 +1621,116 @@ CREATE TRIGGER audit_ministries AFTER INSERT OR UPDATE OR DELETE ON ministries
 DROP TRIGGER IF EXISTS audit_certificates ON certificates;
 CREATE TRIGGER audit_certificates AFTER INSERT OR UPDATE OR DELETE ON certificates
   FOR EACH ROW EXECUTE FUNCTION record_audit();
+
+-- ── Migrasi v33: KTJ (Kartu Tanda Jemaat) — alur permintaan & tinjauan ──
+-- Pendaftaran KTJ SELALU terbuka (tidak ada toggle admin seperti baptism_status).
+-- Approve HANYA mengubah status — admin tetap menerbitkan kartu fisik secara
+-- terpisah lewat AdminMemberDetailPage (upload membership_card_url yang
+-- sudah ada sejak v28). Tidak ada dokumen/file di form ini.
+CREATE TABLE IF NOT EXISTS ktj_registrations (
+  ktj_id       TEXT PRIMARY KEY DEFAULT 'KTJ-' || extract(epoch from now())::bigint,
+  user_id      TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  full_name    TEXT NOT NULL,
+  birth_date   DATE,
+  birth_place  TEXT,
+  address      TEXT,
+  komsel_id    TEXT REFERENCES komsel(komsel_id) ON DELETE SET NULL,
+  status       TEXT DEFAULT 'Menunggu'
+    CHECK (status IN ('Menunggu','Sedang Ditinjau','Disetujui','Terjadwal','Selesai','Ditolak')),
+  scheduled_at TIMESTAMPTZ,
+  admin_note   TEXT,
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE ktj_registrations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "ktj_select" ON ktj_registrations;
+CREATE POLICY "ktj_select" ON ktj_registrations FOR SELECT USING (
+  auth_user_role() IN ('Admin', 'Super Admin') OR user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "ktj_insert" ON ktj_registrations;
+CREATE POLICY "ktj_insert" ON ktj_registrations FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "ktj_admin_update" ON ktj_registrations;
+CREATE POLICY "ktj_admin_update" ON ktj_registrations FOR UPDATE
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+
+-- ── Migrasi v34: Formulir Prasyarat + link grup WA + fix RLS event_reg ──
+-- Opt-in per Event/Kelas via prerequisite_fields JSONB. NULL/kosong = perilaku
+-- lama tak berubah (daftar langsung tanpa syarat). Bila diaktifkan: user WAJIB
+-- submit + disetujui admin dulu SEBELUM baris registrasi dibuat.
+ALTER TABLE events  ADD COLUMN IF NOT EXISTS prerequisite_fields JSONB;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS prerequisite_fields JSONB;
+
+-- Link grup WhatsApp per Event/Kelas — ditampilkan HANYA bagi jemaat yg sudah
+-- terdaftar (baris di event_registrations/class_registrations ada). Sebelum
+-- terdaftar / saat status Menunggu prasyarat, link tidak dibocorkan.
+ALTER TABLE events  ADD COLUMN IF NOT EXISTS whatsapp_group_url TEXT;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS whatsapp_group_url TEXT;
+
+CREATE TABLE IF NOT EXISTS registration_prerequisites (
+  id          TEXT PRIMARY KEY DEFAULT 'PREQ-' || replace(gen_random_uuid()::text, '-', ''),
+  event_id    TEXT REFERENCES events(event_id)   ON DELETE CASCADE,
+  class_id    TEXT REFERENCES classes(class_id)  ON DELETE CASCADE,
+  user_id     TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  data_json   JSONB DEFAULT '{}',
+  status      TEXT NOT NULL DEFAULT 'Menunggu'
+    CHECK (status IN ('Menunggu','Disetujui','Ditolak')),
+  admin_note  TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  reviewed_at TIMESTAMPTZ,
+  CONSTRAINT preq_exactly_one_target CHECK (
+    (event_id IS NOT NULL AND class_id IS NULL) OR
+    (event_id IS NULL AND class_id IS NOT NULL)
+  )
+);
+CREATE UNIQUE INDEX IF NOT EXISTS preq_event_user_uniq
+  ON registration_prerequisites (event_id, user_id) WHERE event_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS preq_class_user_uniq
+  ON registration_prerequisites (class_id, user_id) WHERE class_id IS NOT NULL;
+
+ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS prerequisite_id
+  TEXT REFERENCES registration_prerequisites(id) ON DELETE CASCADE;
+ALTER TABLE class_registrations ADD COLUMN IF NOT EXISTS prerequisite_id
+  TEXT REFERENCES registration_prerequisites(id) ON DELETE CASCADE;
+
+ALTER TABLE registration_prerequisites ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "preq_select" ON registration_prerequisites;
+CREATE POLICY "preq_select" ON registration_prerequisites FOR SELECT USING (
+  auth_user_role() IN ('Admin', 'Super Admin') OR user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "preq_insert" ON registration_prerequisites;
+CREATE POLICY "preq_insert" ON registration_prerequisites FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "preq_admin_update" ON registration_prerequisites;
+CREATE POLICY "preq_admin_update" ON registration_prerequisites FOR UPDATE
+  USING (auth_user_role() IN ('Admin', 'Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
+DROP POLICY IF EXISTS "preq_admin_delete" ON registration_prerequisites;
+CREATE POLICY "preq_admin_delete" ON registration_prerequisites FOR DELETE
+  USING (auth_user_role() IN ('Admin', 'Super Admin'));
+
+-- FIX PRA-EXISTING: event_registrations sudah ENABLE ROW LEVEL SECURITY sejak
+-- v23 tapi TIDAK PUNYA SATU PUN POLICY di seluruh schema.sql — kemungkinan
+-- besar policy ditambah manual di production (drift). Tutup gap dengan 3
+-- policy setara class_registrations. Idempotent — aman bila sudah ada.
+DROP POLICY IF EXISTS "event_reg_select" ON event_registrations;
+CREATE POLICY "event_reg_select" ON event_registrations FOR SELECT USING (
+  auth_user_role() IN ('Admin', 'Super Admin') OR user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "event_reg_insert" ON event_registrations;
+CREATE POLICY "event_reg_insert" ON event_registrations FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "event_reg_admin_delete" ON event_registrations;
+CREATE POLICY "event_reg_admin_delete" ON event_registrations FOR DELETE
+  USING (auth_user_role() IN ('Admin', 'Super Admin'));
+
+-- ── Migrasi v35: Slot pengingat tugas (Pagi/Siang/Sore) ────────────────
+-- reminder_slots kosong ('{}') = cocok SEMUA slot (backward-compat: tugas
+-- lama dengan reminder_enabled=true tetap terkirim tanpa perlu dikonfigurasi
+-- ulang, kini di 3 slot per hari).
+ALTER TABLE form_templates
+  ADD COLUMN IF NOT EXISTS reminder_slots TEXT[] DEFAULT '{}';

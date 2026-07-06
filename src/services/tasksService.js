@@ -166,6 +166,35 @@ export const tasksService = {
     return data.publicUrl
   },
 
+  // Rangkuman SOP yang belum tuntas untuk 1 user. Dipakai kartu nudge Beranda.
+  // Mengkomposisi ulang logic cron reminder tapi dari sisi klien (anon key + RLS),
+  // reuse canAccessTemplate() + getMyResponses() bawaan file ini — TIDAK
+  // menduplikasi query template_ministries/user_ministries manual (versi cron
+  // pakai service role sehingga harus manual; klien tidak perlu).
+  async getIncompleteSopSummary(profile) {
+    if (!profile?.user_id) return []
+    const templates = await this.getTemplates().catch(() => [])
+    const eligible = templates.filter(t => t.reminder_enabled && canAccessTemplate(t, profile))
+    const now = new Date()
+    const startOfWeekMonday = () => {
+      const d = new Date(now)
+      const day = (d.getDay() + 6) % 7
+      d.setDate(d.getDate() - day); d.setHours(0, 0, 0, 0); return d
+    }
+    const startOfMonth = () => new Date(now.getFullYear(), now.getMonth(), 1)
+    const summary = []
+    for (const tpl of eligible) {
+      const periodStart = tpl.period === 'bulan' ? startOfMonth() : startOfWeekMonday()
+      const resp = await this.getMyResponses(profile.user_id, tpl.form_id, periodStart.toISOString()).catch(() => [])
+      const completed = (resp || []).length
+      const goal = tpl.weekly_goal || 1
+      if (completed < goal) {
+        summary.push({ formId: tpl.form_id, formTitle: tpl.title, completed, goal })
+      }
+    }
+    return summary
+  },
+
   async uploadFormBackground(file) {
     const ext = file.name.split('.').pop()
     const path = `form-bg/${Date.now()}.${ext}`

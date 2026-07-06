@@ -34,6 +34,7 @@ import TaskDetailPage from '@/pages/user/TaskDetailPage'
 import BaptismPage from '@/pages/user/BaptismPage'
 import WeddingPage from '@/pages/user/WeddingPage'
 import PenyerahanAnakPage from '@/pages/user/PenyerahanAnakPage'
+import KTJPage from '@/pages/user/KTJPage'
 import MyCertificatesPage from '@/pages/user/MyCertificatesPage'
 import ClassesPage from '@/pages/user/ClassesPage'
 import ClassDetailPage from '@/pages/user/ClassDetailPage'
@@ -57,6 +58,7 @@ const AdminTaskResponsesPage = lazy(() => import('@/pages/admin/AdminTaskRespons
 const AdminBaptismPage = lazy(() => import('@/pages/admin/AdminBaptismPage'))
 const AdminWeddingPage = lazy(() => import('@/pages/admin/AdminWeddingPage'))
 const AdminChildDedicationPage = lazy(() => import('@/pages/admin/AdminChildDedicationPage'))
+const AdminKtjPage = lazy(() => import('@/pages/admin/AdminKtjPage'))
 const AdminCertificatesPage = lazy(() => import('@/pages/admin/AdminCertificatesPage'))
 const AdminRegistrationDetailPage = lazy(() => import('@/pages/admin/AdminRegistrationDetailPage'))
 const AdminSPPage = lazy(() => import('@/pages/admin/AdminSPPage'))
@@ -174,6 +176,7 @@ export default function App() {
             <Route path="baptisan"             element={<BaptismPage />} />
             <Route path="pemberkatan-nikah"    element={<WeddingPage />} />
             <Route path="penyerahan-anak"      element={<PenyerahanAnakPage />} />
+            <Route path="ktj"                  element={<KTJPage />} />
             <Route path="sertifikat"           element={<MyCertificatesPage />} />
             <Route path="status-pendaftaran"   element={<RegistrationStatusPage />} />
             <Route path="persembahan"          element={<PersembahanPage />} />
@@ -204,6 +207,8 @@ export default function App() {
             <Route path="baptisan/:id"         element={<AdminRegistrationDetailPage />} />
             <Route path="nikah/:id"            element={<AdminRegistrationDetailPage />} />
             <Route path="penyerahan-anak/:id"  element={<AdminRegistrationDetailPage />} />
+            <Route path="ktj"                  element={<AdminKtjPage />} />
+            <Route path="ktj/:id"              element={<AdminRegistrationDetailPage />} />
             <Route path="sp"                   element={<AdminSPPage />} />
             <Route path="ministry"             element={<AdminMinistryPage />} />
             <Route path="komsel"               element={<AdminKomselPage />} />

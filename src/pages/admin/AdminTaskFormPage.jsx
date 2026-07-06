@@ -22,6 +22,13 @@ const FIELD_TYPES = [
 ]
 
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
+// Slot pengingat (paket Vercel Hobby: 1x/hari per cron, presisi ±59 menit).
+// Nama slot HARUS singkron dg query string di vercel.json (pagi/siang/sore).
+const REMINDER_SLOTS = [
+  { value: 'pagi',  label: 'Pagi (~08:00 WIB)' },
+  { value: 'siang', label: 'Siang (~12:00 WIB)' },
+  { value: 'sore',  label: 'Sore (~17:00 WIB)' },
+]
 
 // Role yang bisa dibatasi untuk mengisi tugas (Admin/Super Admin selalu boleh).
 const ROLES = [
@@ -69,7 +76,7 @@ export default function AdminTaskFormPage() {
     active_days: [], open_time: '00:00', close_time: '23:59',
     category_id: '', allowed_roles: [], allowed_ministry: [], fields_json: [],
     bg_type: 'none', bg_value: '',
-    reminder_enabled: false, reminder_days: [],
+    reminder_enabled: false, reminder_days: [], reminder_slots: [],
     once_per_day: false,
   })
 
@@ -95,6 +102,7 @@ export default function AdminTaskFormPage() {
             bg_value: t.bg_value || '',
             reminder_enabled: t.reminder_enabled || false,
             reminder_days: t.reminder_days || [],
+            reminder_slots: t.reminder_slots || [],
             once_per_day: t.once_per_day || false,
           })
         })
@@ -116,6 +124,13 @@ export default function AdminTaskFormPage() {
     setForm(p => ({
       ...p,
       reminder_days: p.reminder_days.includes(day) ? p.reminder_days.filter(d => d !== day) : [...p.reminder_days, day],
+    }))
+  }
+
+  function toggleReminderSlot(slot) {
+    setForm(p => ({
+      ...p,
+      reminder_slots: p.reminder_slots.includes(slot) ? p.reminder_slots.filter(s => s !== slot) : [...p.reminder_slots, slot],
     }))
   }
 
@@ -310,7 +325,19 @@ export default function AdminTaskFormPage() {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-400">Pengingat dikirim otomatis sekitar pukul 08:00 WIB pada hari terpilih.</p>
+            <p className="text-xs text-gray-500 mt-2">Slot waktu pengiriman:</p>
+            <div className="grid grid-cols-3 gap-2">
+              {REMINDER_SLOTS.map(s => (
+                <button
+                  key={s.value} type="button" onClick={() => toggleReminderSlot(s.value)}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors leading-tight
+                    ${form.reminder_slots.includes(s.value) ? 'gradient-main text-white' : 'bg-control text-gray-500'}`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400">Kosongkan = kirim di semua slot. Waktu pengiriman meleset hingga ±59 menit (batasan paket gratis Vercel).</p>
           </>
         )}
       </Card>

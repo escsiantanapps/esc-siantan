@@ -1,13 +1,32 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { eventsService, mediaService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
-import { Card, Input, Textarea, Select, Button, Spinner } from '@/components/ui'
+import { Card, Input, Textarea, Select, Checkbox, Button, Spinner } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import MediaListUploader from '@/components/MediaListUploader'
 import { validateUpload, compressImage } from '@/lib/utils'
+
+// Tipe field prasyarat — sengaja disempit vs field tugas (hanya 3 pilihan).
+const PREREQ_FIELD_TYPES = [
+  { value: 'text', label: 'Teks Singkat' },
+  { value: 'textarea', label: 'Teks Panjang' },
+  { value: 'file', label: 'Upload File' },
+]
+
+function slugifyKey(str) {
+  return String(str || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+}
+function makeUniqueKey(label, fields, idx) {
+  const base = slugifyKey(label) || `field_${idx + 1}`
+  const taken = fields.filter((_, j) => j !== idx).map(f => f.key).filter(Boolean)
+  if (!taken.includes(base)) return base
+  let n = 2
+  while (taken.includes(`${base}_${n}`)) n++
+  return `${base}_${n}`
+}
 
 export default function AdminEventFormPage() {
   const { id } = useParams()
@@ -24,7 +43,13 @@ export default function AdminEventFormPage() {
   const [form, setForm] = useState({
     name: '', description: '', event_date: '', event_time: '', location: '',
     capacity: '', status: 'Mulai', thumbnail_url: '', contact_wa: '', contact_wa_female: '',
+    whatsapp_group_url: '',
     photo_urls: [], video_urls: [],
+    // Formulir prasyarat opsional. Diperlakukan sebagai array editing di UI,
+    // tapi dikirim ke DB sebagai NULL kalau toggle mati agar semantik "tidak
+    // aktif" konsisten dengan kolom NULL di DB.
+    prerequisite_enabled: false,
+    prerequisite_fields: [],
   })
   const [mediaBusy, setMediaBusy] = useState(false)
 
@@ -42,14 +67,43 @@ export default function AdminEventFormPage() {
         thumbnail_url: ev.thumbnail_url || '',
         contact_wa: ev.contact_wa || '',
         contact_wa_female: ev.contact_wa_female || '',
+        whatsapp_group_url: ev.whatsapp_group_url || '',
         photo_urls: ev.photo_urls || [],
         video_urls: ev.video_urls || [],
+        prerequisite_enabled: Array.isArray(ev.prerequisite_fields) && ev.prerequisite_fields.length > 0,
+        prerequisite_fields: ev.prerequisite_fields || [],
       }))
       .catch(err => setError(err.message || 'Gagal memuat event.'))
       .finally(() => setLoading(false))
   }, [id])
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
+
+  // Editor field prasyarat — pola mirip AdminTaskFormPage tapi disederhanakan.
+  function addPrereqField() {
+    setForm(p => ({
+      ...p,
+      prerequisite_fields: [...p.prerequisite_fields, { key: '', label: '', type: 'text', required: false, _isNew: true }],
+    }))
+  }
+  function updatePrereqField(i, patch) {
+    setForm(p => ({
+      ...p,
+      prerequisite_fields: p.prerequisite_fields.map((f, idx) => idx === i ? { ...f, ...patch } : f),
+    }))
+  }
+  function setPrereqLabel(i, label) {
+    setForm(p => ({
+      ...p,
+      prerequisite_fields: p.prerequisite_fields.map((f, idx) => {
+        if (idx !== i) return f
+        return { ...f, label, key: f._isNew ? makeUniqueKey(label, p.prerequisite_fields, idx) : f.key }
+      }),
+    }))
+  }
+  function removePrereqField(i) {
+    setForm(p => ({ ...p, prerequisite_fields: p.prerequisite_fields.filter((_, idx) => idx !== i) }))
+  }
 
   // Kelola galeri foto/video (tambah = unggah lalu simpan URL; hapus = buang URL).
   async function handleMedia(kind, action) {
@@ -99,12 +153,26 @@ export default function AdminEventFormPage() {
     setError('')
     if (!form.name.trim()) { setError('Nama event wajib diisi.'); return }
     if (!form.event_date) { setError('Tanggal event wajib diisi.'); return }
+    if (form.prerequisite_enabled) {
+      if (form.prerequisite_fields.length === 0) {
+        setError('Tambahkan minimal 1 field pada formulir prasyarat, atau matikan togglenya.'); return
+      }
+      for (const f of form.prerequisite_fields) {
+        if (!f.label.trim() || !f.key.trim()) { setError('Setiap field prasyarat harus punya label.'); return }
+      }
+    }
     setSaving(true)
     try {
+      const { prerequisite_enabled, prerequisite_fields, ...rest } = form
       const payload = {
-        ...form,
+        ...rest,
         capacity: form.capacity === '' ? null : Number(form.capacity),
         event_time: form.event_time || null,
+        whatsapp_group_url: form.whatsapp_group_url.trim() || null,
+        // Kirim NULL kalau toggle mati — semantik "tidak aktif" di DB.
+        prerequisite_fields: prerequisite_enabled
+          ? prerequisite_fields.map(({ _isNew, ...f }) => f)
+          : null,
       }
       let eventId = id
       if (isEdit) {
@@ -193,6 +261,59 @@ export default function AdminEventFormPage() {
           <Input label="Kontak WA (Perempuan)" placeholder="08xxxxxxxxxx" value={form.contact_wa_female} onChange={e => set('contact_wa_female', e.target.value)} />
         </div>
         <p className="text-xs text-gray-400 -mt-1">Jemaat laki-laki diarahkan ke kontak laki-laki, perempuan ke kontak perempuan. Kosongkan salah satu untuk memakai satu kontak untuk semua.</p>
+
+        <Input
+          label="Link Grup WhatsApp (opsional)"
+          placeholder="https://chat.whatsapp.com/..."
+          value={form.whatsapp_group_url}
+          onChange={e => set('whatsapp_group_url', e.target.value)}
+        />
+        <p className="text-xs text-gray-400 -mt-1">Ditampilkan HANYA bagi jemaat yang sudah resmi terdaftar di event ini.</p>
+      </Card>
+
+      {/* Formulir Prasyarat (opsional) — user WAJIB isi & disetujui admin dulu */}
+      <Card className="p-4 mb-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Formulir Persyaratan (Opsional)</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Jemaat wajib mengisi formulir + disetujui admin dulu sebelum boleh mendaftar.</p>
+          </div>
+          <button
+            type="button" role="switch" aria-checked={form.prerequisite_enabled}
+            onClick={() => set('prerequisite_enabled', !form.prerequisite_enabled)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${form.prerequisite_enabled ? 'bg-brand-500' : 'bg-control-hover'}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.prerequisite_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+
+        {form.prerequisite_enabled && (
+          <div className="space-y-3 pt-2 border-t border-gray-100">
+            {form.prerequisite_fields.map((f, i) => (
+              <div key={i} className="border border-gray-200 rounded-xl p-3 space-y-2 bg-gray-50">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 space-y-2">
+                    <Input label="Label Field" value={f.label} onChange={e => setPrereqLabel(i, e.target.value)} />
+                    <Select label="Tipe" value={f.type} onChange={e => updatePrereqField(i, { type: e.target.value })}>
+                      {PREREQ_FIELD_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
+                    </Select>
+                    <Checkbox label="Wajib diisi" checked={f.required} onChange={e => updatePrereqField(i, { required: e.target.checked })} />
+                  </div>
+                  <button
+                    type="button" onClick={() => removePrereqField(i)}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                    aria-label="Hapus field"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            <Button variant="outline" className="w-full" onClick={addPrereqField}>
+              <Plus size={16} /> Tambah Field
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* Galeri media (tampil di halaman detail event) */}

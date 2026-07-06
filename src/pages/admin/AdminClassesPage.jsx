@@ -7,12 +7,34 @@ import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
-import { Card, PageHeader, Button, Input, Textarea, Select, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
+import { Card, PageHeader, Button, Input, Textarea, Select, Checkbox, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
 import MediaListUploader from '@/components/MediaListUploader'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
+import { prerequisiteService } from '@/services/contentService'
 
-const emptyForm = { name: '', description: '', schedule: '', location: '', teacher: '', status: 'Mulai', total_sessions: 1, session_names: [''], contact_wa: '', contact_wa_female: '', photo_urls: [], video_urls: [] }
+const PREREQ_FIELD_TYPES = [
+  { value: 'text', label: 'Teks Singkat' },
+  { value: 'textarea', label: 'Teks Panjang' },
+  { value: 'file', label: 'Upload File' },
+]
+function slugifyKey(str) { return String(str || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') }
+function makeUniqueKey(label, fields, idx) {
+  const base = slugifyKey(label) || `field_${idx + 1}`
+  const taken = fields.filter((_, j) => j !== idx).map(f => f.key).filter(Boolean)
+  if (!taken.includes(base)) return base
+  let n = 2
+  while (taken.includes(`${base}_${n}`)) n++
+  return `${base}_${n}`
+}
+
+const emptyForm = {
+  name: '', description: '', schedule: '', location: '', teacher: '', status: 'Mulai',
+  total_sessions: 1, session_names: [''],
+  contact_wa: '', contact_wa_female: '', whatsapp_group_url: '',
+  photo_urls: [], video_urls: [],
+  prerequisite_enabled: false, prerequisite_fields: [],
+}
 
 export default function AdminClassesPage() {
   const { toast, confirm } = useToast()
@@ -30,7 +52,11 @@ export default function AdminClassesPage() {
   const [attModal, setAttModal] = useState(null)
   const [regModal, setRegModal] = useState(null)
   const [registrants, setRegistrants] = useState([])
+  const [submissions, setSubmissions] = useState([])
   const [regLoading, setRegLoading] = useState(false)
+  const [rejectingId, setRejectingId] = useState(null) // id yang sedang input alasan tolak
+  const [rejectNote, setRejectNote] = useState('')
+  const [prereqBusy, setPrereqBusy] = useState(null) // id action-in-flight
   useBackClose(showModal || !!qrModal || !!attModal || !!regModal, () => {
     setShowModal(false); setQrModal(null); setAttModal(null); setRegModal(null)
   })
@@ -61,8 +87,21 @@ export default function AdminClassesPage() {
   }, [attModal, attSession, attDate])
 
   // Rekap pendaftar: gabungkan daftar + jumlah sesi yang sudah dihadiri.
+  // Kalau kelas pakai prasyarat, load juga submissions di tab kedua.
   useEffect(() => {
     if (!regModal) return
+    loadRegistrants()
+    // Selalu load submissions bila kelas pakai prasyarat.
+    if (Array.isArray(regModal.prerequisite_fields) && regModal.prerequisite_fields.length > 0) {
+      prerequisiteService.getForTarget('class', regModal.class_id)
+        .then(setSubmissions).catch(() => setSubmissions([]))
+    } else {
+      setSubmissions([])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regModal])
+
+  function loadRegistrants() {
     setRegLoading(true)
     Promise.all([
       classesService.getRegistrations(regModal.class_id),
@@ -72,6 +111,7 @@ export default function AdminClassesPage() {
         const attendedCount = {}
         for (const a of att || []) attendedCount[a.user_id] = (attendedCount[a.user_id] || 0) + 1
         setRegistrants((regs || []).map(r => ({
+          registration_id: r.registration_id,
           user_id: r.user_id,
           name: r.users?.name || '-',
           role: r.users?.role || '',
@@ -80,7 +120,91 @@ export default function AdminClassesPage() {
       })
       .catch(() => setRegistrants([]))
       .finally(() => setRegLoading(false))
-  }, [regModal])
+  }
+
+  async function reloadSubmissions() {
+    const list = await prerequisiteService.getForTarget('class', regModal.class_id).catch(() => [])
+    setSubmissions(list)
+  }
+
+  async function handleRemoveRegistrant(r) {
+    const ok = await confirm({
+      title: 'Hapus peserta?',
+      message: `Peserta "${r.name}" akan dihapus dari kelas ini.`,
+      confirmText: 'Hapus', danger: true,
+    })
+    if (!ok) return
+    try {
+      await classesService.removeRegistration(r.registration_id)
+      toast.success('Peserta dihapus.')
+      loadRegistrants()
+    } catch (err) {
+      toast.error(err.message || 'Gagal menghapus peserta.')
+    }
+  }
+
+  async function handleApproveSubmission(s) {
+    setPrereqBusy(s.id)
+    try {
+      await prerequisiteService.approve(s.id, {
+        kind: 'class', targetId: regModal.class_id, userId: s.user_id,
+      })
+      pushService.broadcast({
+        title: 'Pendaftaran Kelas Disetujui',
+        body: `Pendaftaran Anda untuk kelas "${regModal.name}" telah disetujui.`,
+        url: `/kelas/${regModal.class_id}`,
+        userIds: [s.user_id],
+      }).catch(() => {})
+      toast.success('Peserta disetujui.')
+      await reloadSubmissions()
+      loadRegistrants()
+    } catch (err) {
+      toast.error(err.message || 'Gagal menyetujui.')
+    } finally {
+      setPrereqBusy(null)
+    }
+  }
+
+  async function handleRejectSubmission(s) {
+    if (!rejectNote.trim()) { toast.error('Alasan penolakan wajib diisi.'); return }
+    setPrereqBusy(s.id)
+    try {
+      await prerequisiteService.reject(s.id, rejectNote.trim())
+      pushService.broadcast({
+        title: 'Pendaftaran Kelas Ditolak',
+        body: rejectNote.trim(),
+        url: `/kelas/${regModal.class_id}`,
+        userIds: [s.user_id],
+      }).catch(() => {})
+      toast.success('Peserta ditolak.')
+      setRejectingId(null); setRejectNote('')
+      await reloadSubmissions()
+    } catch (err) {
+      toast.error(err.message || 'Gagal menolak.')
+    } finally {
+      setPrereqBusy(null)
+    }
+  }
+
+  async function handleRemoveSubmission(s) {
+    const ok = await confirm({
+      title: 'Hapus pengajuan?',
+      message: 'Kalau sudah disetujui, pendaftaran peserta ini juga ikut terhapus.',
+      confirmText: 'Hapus', danger: true,
+    })
+    if (!ok) return
+    setPrereqBusy(s.id)
+    try {
+      await prerequisiteService.remove(s.id)
+      toast.success('Pengajuan dihapus.')
+      await reloadSubmissions()
+      loadRegistrants()
+    } catch (err) {
+      toast.error(err.message || 'Gagal menghapus.')
+    } finally {
+      setPrereqBusy(null)
+    }
+  }
 
   function load() {
     setLoading(true)
@@ -136,19 +260,64 @@ export default function AdminClassesPage() {
       session_names: Array.from({ length: n }, (_, i) => (cls.session_names || [])[i] || ''),
       contact_wa: cls.contact_wa || '',
       contact_wa_female: cls.contact_wa_female || '',
+      whatsapp_group_url: cls.whatsapp_group_url || '',
       photo_urls: cls.photo_urls || [],
       video_urls: cls.video_urls || [],
+      prerequisite_enabled: Array.isArray(cls.prerequisite_fields) && cls.prerequisite_fields.length > 0,
+      prerequisite_fields: cls.prerequisite_fields || [],
     })
     setError('')
     setShowModal(true)
   }
 
+  // Editor field prasyarat.
+  function addPrereqField() {
+    setForm(p => ({
+      ...p,
+      prerequisite_fields: [...p.prerequisite_fields, { key: '', label: '', type: 'text', required: false, _isNew: true }],
+    }))
+  }
+  function updatePrereqField(i, patch) {
+    setForm(p => ({
+      ...p,
+      prerequisite_fields: p.prerequisite_fields.map((f, idx) => idx === i ? { ...f, ...patch } : f),
+    }))
+  }
+  function setPrereqLabel(i, label) {
+    setForm(p => ({
+      ...p,
+      prerequisite_fields: p.prerequisite_fields.map((f, idx) => {
+        if (idx !== i) return f
+        return { ...f, label, key: f._isNew ? makeUniqueKey(label, p.prerequisite_fields, idx) : f.key }
+      }),
+    }))
+  }
+  function removePrereqField(i) {
+    setForm(p => ({ ...p, prerequisite_fields: p.prerequisite_fields.filter((_, idx) => idx !== i) }))
+  }
+
   async function handleSubmit() {
     setError('')
     if (!form.name.trim()) { setError(t('acls.nameRequired')); return }
+    if (form.prerequisite_enabled) {
+      if (form.prerequisite_fields.length === 0) {
+        setError('Tambahkan minimal 1 field pada formulir prasyarat, atau matikan togglenya.'); return
+      }
+      for (const f of form.prerequisite_fields) {
+        if (!f.label.trim() || !f.key.trim()) { setError('Setiap field prasyarat harus punya label.'); return }
+      }
+    }
     setSaving(true)
     try {
-      const payload = { ...form, total_sessions: Number(form.total_sessions) || 1 }
+      const { prerequisite_enabled, prerequisite_fields, ...rest } = form
+      const payload = {
+        ...rest,
+        total_sessions: Number(form.total_sessions) || 1,
+        whatsapp_group_url: form.whatsapp_group_url.trim() || null,
+        prerequisite_fields: prerequisite_enabled
+          ? prerequisite_fields.map(({ _isNew, ...f }) => f)
+          : null,
+      }
       let classId = editing?.class_id
       if (editing) {
         await classesService.update(editing.class_id, payload)
@@ -323,6 +492,63 @@ export default function AdminClassesPage() {
               ))}
             </div>
 
+            {/* Kontak WA & Grup */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <Input label="Kontak WA (L)" placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
+              <Input label="Kontak WA (P)" placeholder="08xxxxxxxxxx" value={form.contact_wa_female} onChange={e => set('contact_wa_female', e.target.value)} />
+            </div>
+            <Input
+              label="Link Grup WhatsApp (opsional)"
+              placeholder="https://chat.whatsapp.com/..."
+              value={form.whatsapp_group_url}
+              onChange={e => set('whatsapp_group_url', e.target.value)}
+            />
+            <p className="text-xs text-gray-400 -mt-2">Ditampilkan HANYA bagi jemaat yang sudah resmi terdaftar di kelas ini.</p>
+
+            {/* Formulir Prasyarat (opsional) */}
+            <div className="border-t border-gray-100 pt-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Formulir Persyaratan (Opsional)</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Wajib disetujui admin sebelum jemaat boleh mendaftar.</p>
+                </div>
+                <button
+                  type="button" role="switch" aria-checked={form.prerequisite_enabled}
+                  onClick={() => set('prerequisite_enabled', !form.prerequisite_enabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${form.prerequisite_enabled ? 'bg-brand-500' : 'bg-control-hover'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.prerequisite_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+              {form.prerequisite_enabled && (
+                <div className="space-y-3 pt-3">
+                  {form.prerequisite_fields.map((f, i) => (
+                    <div key={i} className="border border-gray-200 rounded-xl p-3 space-y-2 bg-gray-50">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 space-y-2">
+                          <Input label="Label" value={f.label} onChange={e => setPrereqLabel(i, e.target.value)} />
+                          <Select label="Tipe" value={f.type} onChange={e => updatePrereqField(i, { type: e.target.value })}>
+                            {PREREQ_FIELD_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
+                          </Select>
+                          <Checkbox label="Wajib diisi" checked={f.required} onChange={e => updatePrereqField(i, { required: e.target.checked })} />
+                        </div>
+                        <button
+                          type="button" onClick={() => removePrereqField(i)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                          aria-label="Hapus field"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <Button variant="outline" className="w-full" onClick={addPrereqField}>
+                    <Plus size={16} /> Tambah Field
+                  </Button>
+                </div>
+              )}
+            </div>
+
             {/* Galeri media */}
             <div className="space-y-3 pt-1">
               <MediaListUploader
@@ -467,17 +693,94 @@ export default function AdminClassesPage() {
               <p className="text-sm text-gray-400 text-center py-6">{t('acls.noRegistrants')}</p>
             )}
 
+            {/* MODE B: submissions prasyarat (kalau kelas pakai formulir prasyarat) */}
+            {Array.isArray(regModal.prerequisite_fields) && regModal.prerequisite_fields.length > 0 && (
+              <div className="border-t border-gray-100 pt-3">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Formulir Prasyarat</p>
+                {submissions.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-3">Belum ada pengajuan.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {submissions.map(s => (
+                      <div key={s.id} className="border border-gray-200 rounded-xl p-3 space-y-2 bg-gray-50">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{s.users?.name || '-'}</p>
+                            <p className="text-[10px] text-gray-400">{formatDate(s.created_at, 'd MMM yyyy, HH:mm')}</p>
+                          </div>
+                          <StatusBadge status={s.status} />
+                        </div>
+                        <div className="space-y-1.5">
+                          {(regModal.prerequisite_fields || []).map(f => {
+                            const val = s.data_json?.[f.key]
+                            const isFile = f.type === 'file' && typeof val === 'string' && /^https?:\/\//.test(val)
+                            return (
+                              <div key={f.key} className="text-xs">
+                                <p className="text-gray-400">{f.label}</p>
+                                {isFile ? (
+                                  <a href={val} target="_blank" rel="noopener noreferrer" className="text-brand-500 underline break-all">Buka file</a>
+                                ) : (
+                                  <p className="text-gray-700 whitespace-pre-line break-words">{val || '-'}</p>
+                                )}
+                              </div>
+                            )
+                          })}
+                          {s.admin_note && <p className="text-[10px] text-gray-500 italic pt-1">Catatan admin: {s.admin_note}</p>}
+                        </div>
+                        {rejectingId === s.id ? (
+                          <div className="space-y-2">
+                            <Textarea rows={2} placeholder="Alasan penolakan (dikirim ke jemaat)" value={rejectNote} onChange={e => setRejectNote(e.target.value)} />
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="ghost" className="flex-1" onClick={() => { setRejectingId(null); setRejectNote('') }}>Batal</Button>
+                              <Button size="sm" variant="danger" className="flex-1" loading={prereqBusy === s.id} onClick={() => handleRejectSubmission(s)}>Kirim Tolak</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            {s.status === 'Menunggu' && (
+                              <>
+                                <Button size="sm" className="flex-1" loading={prereqBusy === s.id} onClick={() => handleApproveSubmission(s)}>Setujui</Button>
+                                <Button size="sm" variant="outline" className="flex-1" onClick={() => { setRejectingId(s.id); setRejectNote('') }}>Tolak</Button>
+                              </>
+                            )}
+                            <button
+                              type="button" onClick={() => handleRemoveSubmission(s)}
+                              disabled={prereqBusy === s.id}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                              aria-label="Hapus pengajuan"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {!regLoading && registrants.length > 0 && (
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-gray-100 border-t border-gray-100 pt-2">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide pb-2">Peserta Terdaftar</p>
                 {registrants.map(r => (
-                  <div key={r.user_id} className="py-2.5 flex items-center justify-between gap-2">
+                  <div key={r.registration_id || r.user_id} className="py-2.5 flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{r.name}</p>
                       <p className="text-xs text-gray-400">{r.role}</p>
                     </div>
-                    <Badge color={r.attended > 0 ? 'green' : 'gray'}>
-                      {t('acls.attendedOf', { attended: r.attended, total: regModal.total_sessions || 1 })}
-                    </Badge>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge color={r.attended > 0 ? 'green' : 'gray'}>
+                        {t('acls.attendedOf', { attended: r.attended, total: regModal.total_sessions || 1 })}
+                      </Badge>
+                      <button
+                        type="button" onClick={() => handleRemoveRegistrant(r)}
+                        className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                        aria-label="Hapus peserta"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -83,6 +83,12 @@ export const translations = {
     'onb.activate': 'Aktifkan',
     'onb.pushOk': 'Notifikasi diaktifkan.',
     'onb.pushFail': 'Gagal mengaktifkan notifikasi.',
+    // SOP Nudge (kartu ramah di Beranda kalau target SOP belum penuh)
+    'sop.nudge.title': 'Yuk lengkapi SOP kamu minggu ini 😊',
+    'sop.nudge.subtitle': 'Sedikit lagi target tercapai — semangat!',
+    'sop.nudge.progress': '{done} dari {target} terisi',
+    'sop.nudge.viewAll': 'Lihat semua ({n})',
+    'sop.nudge.dismiss': 'Tutup',
     'home.spStatus': 'Status Surat Peringatan: {level}. Hubungi admin/PKS untuk informasi lebih lanjut.',
     'home.event': 'Event',
     'home.quickMenu': 'Menu Cepat',
@@ -95,7 +101,19 @@ export const translations = {
     'home.q.baptism': 'Baptisan',
     'home.q.wedding': 'Nikah',
     'home.q.dedication': 'Penyerahan Anak',
+    'home.q.ktj': 'Daftar KTJ',
     'home.q.status': 'Status',
+
+    // KTJ (Kartu Tanda Jemaat) — jemaat
+    'ktj.title': 'Pengajuan KTJ',
+    'ktj.subtitle': 'Ajukan Kartu Tanda Jemaat',
+    'ktj.info': 'Data di bawah akan digunakan untuk mencetak Kartu Tanda Jemaat. Sebagian sudah terisi dari profil Anda — silakan periksa dan lengkapi bila perlu.',
+    'ktj.komselLabel': 'Komsel',
+    'ktj.komselEmpty': 'Belum ada komsel',
+    'ktj.nameRequired': 'Nama lengkap wajib diisi.',
+    'ktj.birthRequired': 'Tanggal lahir wajib diisi.',
+    'ktj.submitted': 'Pengajuan KTJ terkirim. Menunggu tinjauan admin.',
+    'ktj.processing': 'Pengajuan Anda sedang ditinjau admin. Kartu akan diterbitkan setelah disetujui.',
 
     // Profil (lanjutan)
     'profile.switchPanel': 'Beralih Panel',
@@ -298,6 +316,20 @@ export const translations = {
 
     // Bersama
     'common.contactWa': 'Hubungi via WhatsApp',
+    'event.joinWaGroup': 'Gabung Grup WhatsApp',
+    'class.joinWaGroup': 'Gabung Grup WhatsApp',
+    // Formulir Prasyarat (Event/Kelas)
+    'prereq.title': 'Formulir Persyaratan',
+    'prereq.fillBefore': 'Isi formulir berikut untuk dapat mendaftar.',
+    'prereq.submit': 'Kirim Formulir',
+    'prereq.submitted': 'Formulir terkirim. Menunggu persetujuan admin.',
+    'prereq.submitFailed': 'Gagal mengirim formulir.',
+    'prereq.fillRequired': 'Semua field wajib harus diisi.',
+    'prereq.pending': 'Menunggu Persetujuan Admin',
+    'prereq.pendingDesc': 'Formulir Anda sedang ditinjau. Anda akan diberi tahu setelah disetujui.',
+    'prereq.rejected': 'Pendaftaran Ditolak',
+    'prereq.rejectedContact': 'Silakan hubungi admin bila ingin mencoba lagi.',
+    'prereq.approvedPending': 'Menunggu pendaftaran diproses...',
 
     // Detail Info
     'infoDetail.title': 'Detail Informasi',
@@ -360,6 +392,7 @@ export const translations = {
     'regStatus.baptism': 'Baptisan',
     'regStatus.wedding': 'Pemberkatan Nikah',
     'regStatus.dedication': 'Penyerahan Anak',
+    'regStatus.ktj': 'KTJ (Kartu Jemaat)',
     'regStatus.event': 'Event',
 
     // Dashboard PKS
@@ -601,6 +634,7 @@ export const translations = {
     'admin.nav.nikah': 'Pemberkatan Nikah',
     'admin.nav.dedikasi': 'Penyerahan Anak',
     'admin.nav.sertifikat': 'Sertifikat',
+    'admin.nav.ktj': 'KTJ (Kartu Jemaat)',
     'admin.nav.sp': 'Surat Peringatan',
     'admin.nav.ministry': 'Ministry',
     'admin.nav.komsel': 'Komsel',
@@ -881,6 +915,8 @@ export const translations = {
     'abap.empty': 'Belum ada pendaftaran baptisan',
     'aded.title': 'Penyerahan Anak',
     'aded.empty': 'Belum ada pendaftaran penyerahan anak',
+    'aktj.title': 'Pengajuan KTJ',
+    'aktj.empty': 'Belum ada pengajuan KTJ',
 
     // Sertifikat (Admin)
     'acert.title': 'Sertifikat',
@@ -1134,6 +1170,12 @@ export const translations = {
     'onb.activate': 'Enable',
     'onb.pushOk': 'Notifications enabled.',
     'onb.pushFail': 'Failed to enable notifications.',
+    // SOP Nudge (friendly Home card when weekly SOP target not met yet)
+    'sop.nudge.title': "Let's finish your SOPs this week 😊",
+    'sop.nudge.subtitle': 'Almost there — you can do it!',
+    'sop.nudge.progress': '{done} of {target} completed',
+    'sop.nudge.viewAll': 'View all ({n})',
+    'sop.nudge.dismiss': 'Dismiss',
     'home.spStatus': 'Warning Letter Status: {level}. Contact an admin/PKS for more information.',
     'home.event': 'Events',
     'home.quickMenu': 'Quick Menu',
@@ -1146,7 +1188,19 @@ export const translations = {
     'home.q.baptism': 'Baptism',
     'home.q.wedding': 'Wedding',
     'home.q.dedication': 'Child Dedication',
+    'home.q.ktj': 'Apply for Card',
     'home.q.status': 'Status',
+
+    // KTJ (Kartu Tanda Jemaat) — user
+    'ktj.title': 'Membership Card Application',
+    'ktj.subtitle': 'Apply for your Church Membership Card',
+    'ktj.info': 'The data below will be used to print your Membership Card. Some fields are pre-filled from your profile — please review and complete if needed.',
+    'ktj.komselLabel': 'Cell Group',
+    'ktj.komselEmpty': 'No cell group',
+    'ktj.nameRequired': 'Full name is required.',
+    'ktj.birthRequired': 'Birth date is required.',
+    'ktj.submitted': 'Application submitted. Awaiting admin review.',
+    'ktj.processing': 'Your application is being reviewed. The card will be issued once approved.',
 
     // Profile (continued)
     'profile.switchPanel': 'Switch Panel',
@@ -1349,6 +1403,20 @@ export const translations = {
 
     // Shared
     'common.contactWa': 'Contact via WhatsApp',
+    'event.joinWaGroup': 'Join WhatsApp Group',
+    'class.joinWaGroup': 'Join WhatsApp Group',
+    // Prerequisite form (Event/Class)
+    'prereq.title': 'Prerequisite Form',
+    'prereq.fillBefore': 'Fill in the form below to be able to register.',
+    'prereq.submit': 'Submit Form',
+    'prereq.submitted': 'Form submitted. Awaiting admin approval.',
+    'prereq.submitFailed': 'Failed to submit form.',
+    'prereq.fillRequired': 'All required fields must be filled.',
+    'prereq.pending': 'Awaiting Admin Approval',
+    'prereq.pendingDesc': 'Your form is being reviewed. You will be notified once approved.',
+    'prereq.rejected': 'Registration Rejected',
+    'prereq.rejectedContact': 'Please contact the admin if you would like to try again.',
+    'prereq.approvedPending': 'Processing your registration...',
 
     // Info detail
     'infoDetail.title': 'Information Detail',
@@ -1411,6 +1479,7 @@ export const translations = {
     'regStatus.baptism': 'Baptism',
     'regStatus.wedding': 'Wedding Blessing',
     'regStatus.dedication': 'Child Dedication',
+    'regStatus.ktj': 'Membership Card',
     'regStatus.event': 'Events',
 
     // PKS Dashboard
@@ -1652,6 +1721,7 @@ export const translations = {
     'admin.nav.nikah': 'Wedding Blessing',
     'admin.nav.dedikasi': 'Child Dedication',
     'admin.nav.sertifikat': 'Certificates',
+    'admin.nav.ktj': 'Membership Card (KTJ)',
     'admin.nav.sp': 'Warning Letters',
     'admin.nav.ministry': 'Ministry',
     'admin.nav.komsel': 'Cell Groups',
@@ -1931,6 +2001,8 @@ export const translations = {
     'abap.empty': 'No baptism registrations yet',
     'aded.title': 'Child Dedications',
     'aded.empty': 'No child dedication registrations yet',
+    'aktj.title': 'Membership Card Applications',
+    'aktj.empty': 'No membership card applications yet',
 
     // Certificates (Admin)
     'acert.title': 'Certificates',
