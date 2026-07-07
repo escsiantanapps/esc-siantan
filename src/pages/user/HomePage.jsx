@@ -9,6 +9,7 @@ import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
 import SopNudgeCard from '@/components/SopNudgeCard'
 import BirthdayMessageCard from '@/components/BirthdayMessageCard'
+import PastoralMessageCard from '@/components/PastoralMessageCard'
 import MembershipCard from '@/components/MembershipCard'
 import EventCarousel from '@/components/EventCarousel'
 import { formatDate, spColor } from '@/lib/utils'
@@ -107,6 +108,9 @@ export default function HomePage() {
             {t('home.welcomeQuote')}
           </p>
         </section>
+
+        {/* Pesan/pengumuman broadcast dari Gembala, kalau ada yang belum ditutup */}
+        <PastoralMessageCard />
 
         {/* Pesan ulang tahun personal dari PKS, kalau ada yang belum dibaca */}
         <BirthdayMessageCard />

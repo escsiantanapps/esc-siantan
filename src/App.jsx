@@ -44,6 +44,7 @@ import PersembahanPage from '@/pages/user/PersembahanPage'
 import UserLeavePage from '@/pages/user/UserLeavePage'
 import SettingsPage from '@/pages/user/SettingsPage'
 import PointsPage from '@/pages/user/PointsPage'
+import PesanPage from '@/pages/user/PesanPage'
 
 // Halaman berat (QR scanner) — dimuat saat dibutuhkan
 const AttendanceScanPage = lazy(() => import('@/pages/user/AttendanceScanPage'))
@@ -79,6 +80,7 @@ const AdminAuditPage = lazy(() => import('@/pages/admin/AdminAuditPage'))
 const AdminRoadmapPage = lazy(() => import('@/pages/admin/AdminRoadmapPage'))
 const AdminRedeemPage = lazy(() => import('@/pages/admin/AdminRedeemPage'))
 const AdminSundayPage = lazy(() => import('@/pages/admin/AdminSundayPage'))
+const AdminMessagesPage = lazy(() => import('@/pages/admin/AdminMessagesPage'))
 
 // Layouts
 import UserLayout from '@/layouts/UserLayout'
@@ -111,7 +113,7 @@ function AdminRoute({ children }) {
     </div>
   )
   if (!user) return <Navigate to="/login" replace />
-  if (!['Admin', 'Super Admin'].includes(profile?.role)) return <Navigate to="/" replace />
+  if (!['Admin', 'Super Admin', 'Gembala'].includes(profile?.role)) return <Navigate to="/" replace />
   if (profile && profile.status !== 'Aktif') return <AccountStatusPage />
   return children
 }
@@ -181,6 +183,7 @@ export default function App() {
             <Route path="status-pendaftaran"   element={<RegistrationStatusPage />} />
             <Route path="persembahan"          element={<PersembahanPage />} />
             <Route path="poin"                 element={<PointsPage />} />
+            <Route path="pesan"                element={<PesanPage />} />
             <Route path="izin"                 element={<UserLeavePage />} />
             <Route path="pks"                  element={<PKSRoute><PKSDashboardPage /></PKSRoute>} />
           </Route>
@@ -218,6 +221,7 @@ export default function App() {
             <Route path="roadmap"              element={<AdminRoadmapPage />} />
             <Route path="tukar-poin"           element={<AdminRedeemPage />} />
             <Route path="ibadah-minggu"        element={<AdminSundayPage />} />
+            <Route path="pesan"                element={<AdminMessagesPage />} />
             <Route path="hak-akses"            element={<AdminPermissionsPage />} />
             <Route path="kategori-tugas"       element={<AdminTaskCategoriesPage />} />
             <Route path="backup"               element={<AdminBackupPage />} />

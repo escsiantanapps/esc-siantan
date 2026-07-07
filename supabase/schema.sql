@@ -2314,3 +2314,74 @@ END $$;
 DROP TRIGGER IF EXISTS trg_guard_once_per_day ON form_responses;
 CREATE TRIGGER trg_guard_once_per_day
   BEFORE INSERT ON form_responses FOR EACH ROW EXECUTE FUNCTION guard_once_per_day();
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v43: Role "Gembala" + Pesan Gembala (broadcast in-app) ─────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-07): tambah peran ke-6 "Gembala" — mirip Admin
+-- tetapi FOKUS: hanya boleh (a) mengirim pesan/pengumuman broadcast ke semua
+-- jemaat yang punya aplikasi, dan (b) MELIHAT (read-only) data jemaat & laporan.
+-- Gembala TIDAK diberi hak tulis operasional lain (edit jemaat, verifikasi
+-- persembahan, dll.) dan TIDAK boleh melihat NIK (sama seperti Admin — NIK
+-- tetap khusus Super Admin).
+--
+-- Bagaimana pembatasan tulis ditegakkan: policy tulis existing memakai
+-- `auth_user_role() IN ('Admin','Super Admin')`. Karena 'Gembala' TIDAK
+-- dimasukkan ke policy-policy itu, secara DB Gembala otomatis read-only pada
+-- seluruh tabel tersebut — kita TIDAK perlu menyentuh satu pun policy tulis
+-- lama (aman dari drift). Yang ditambah di bawah HANYA: (1) izin BACA tambahan
+-- yang Gembala butuhkan, dan (2) tabel pesan baru beserta policy-nya sendiri.
+
+-- 1. Perluas daftar nilai role yang sah (idempotent: DROP dulu, lalu ADD).
+--    Nama constraint = auto-generated Postgres untuk CHECK kolom inline:
+--    <tabel>_<kolom>_check. Bila di production namanya berbeda (drift),
+--    sesuaikan nama pada DROP di bawah sebelum menjalankan.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check
+  CHECK (role IN ('Jemaat','Volunteer','PKS','Admin','Super Admin','Gembala'));
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_secondary_check;
+ALTER TABLE users ADD CONSTRAINT users_role_secondary_check
+  CHECK (role_secondary IS NULL OR role_secondary IN ('Jemaat','Volunteer','PKS','Admin','Super Admin','Gembala'));
+
+-- 2. Izin BACA tambahan untuk Gembala — DITULIS SEBAGAI POLICY TERPISAH
+--    (additive/permissive, di-OR dengan policy existing) supaya TIDAK menimpa
+--    policy lama yang terbukti bisa drift. Hanya SELECT, tidak ada WITH CHECK.
+--    • users          → lihat direktori & data jemaat (kolom nik tetap
+--                        disembunyikan di UI utk non-Super-Admin, sama spt Admin).
+--    • form_responses → halaman Evaluasi & Laporan (pemenuhan SOP/tugas).
+--    Sengaja TIDAK memberi baca `offerings` (data keuangan) — least-privilege:
+--    Persembahan tidak disodorkan di menu Gembala. Bila kelak Gembala perlu
+--    laporan keuangan, itu penambahan eksplisit (keputusan operator terpisah).
+DROP POLICY IF EXISTS "users_read_gembala" ON users;
+CREATE POLICY "users_read_gembala" ON users FOR SELECT
+  USING (auth_user_role() = 'Gembala');
+
+DROP POLICY IF EXISTS "responses_gembala_read" ON form_responses;
+CREATE POLICY "responses_gembala_read" ON form_responses FOR SELECT
+  USING (auth_user_role() = 'Gembala');
+
+-- 3. Tabel pesan Gembala (broadcast ke SEMUA jemaat — satu baris per pesan,
+--    bukan per penerima). Ditampilkan di dalam app (Beranda + halaman Pesan)
+--    dan opsional dikirim juga sebagai push notification oleh klien.
+CREATE TABLE IF NOT EXISTS pastoral_messages (
+  message_id   TEXT PRIMARY KEY DEFAULT 'MSG-' || replace(gen_random_uuid()::text, '-', ''),
+  title        TEXT NOT NULL,
+  body         TEXT NOT NULL,
+  sender_id    TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  sender_name  TEXT,                         -- denormalisasi: tetap tampil walau pengirim dihapus
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE pastoral_messages ENABLE ROW LEVEL SECURITY;
+
+-- Baca: semua user yang LOGIN (broadcast ke seluruh jemaat).
+DROP POLICY IF EXISTS "pm_select" ON pastoral_messages;
+CREATE POLICY "pm_select" ON pastoral_messages FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+-- Tulis (buat/hapus pengumuman): HANYA Gembala atau Super Admin.
+DROP POLICY IF EXISTS "pm_write" ON pastoral_messages;
+CREATE POLICY "pm_write" ON pastoral_messages FOR ALL
+  USING (auth_user_role() IN ('Gembala','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Gembala','Super Admin'));
+
+CREATE INDEX IF NOT EXISTS idx_pastoral_messages_created ON pastoral_messages (created_at DESC);

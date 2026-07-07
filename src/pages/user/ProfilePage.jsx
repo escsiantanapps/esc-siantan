@@ -11,7 +11,7 @@ import MembershipCard from '@/components/MembershipCard'
 import { formatDate, hitungUmur, formatPhone } from '@/lib/utils'
 
 export default function ProfilePage() {
-  const { profile, logout, isAdmin, isPKS } = useAuth()
+  const { profile, logout, isAdmin, isPKS, isGembala } = useAuth()
   const { confirm } = useToast()
   const { t } = useLang()
   const navigate = useNavigate()
@@ -82,17 +82,17 @@ export default function ProfilePage() {
 
       <div className="px-4 mt-5 space-y-4">
         {/* Ganti panel — bergaya seperti mengganti akun */}
-        {(isAdmin || isPKS) && (
+        {(isAdmin || isGembala || isPKS) && (
           <Card className="p-2">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2.5 pt-2 pb-1">{t('profile.switchPanel')}</p>
-            {isAdmin && (
+            {(isAdmin || isGembala) && (
               <Link to="/admin" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
                 <div className="w-10 h-10 rounded-full gradient-main flex items-center justify-center text-white shrink-0">
                   <ShieldCheck size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{t('profile.adminPanel')}</p>
-                  <p className="text-xs text-gray-400">{t('profile.adminPanelDesc')}</p>
+                  <p className="text-sm font-medium text-gray-900">{isGembala ? t('profile.gembalaPanel') : t('profile.adminPanel')}</p>
+                  <p className="text-xs text-gray-400">{isGembala ? t('profile.gembalaPanelDesc') : t('profile.adminPanelDesc')}</p>
                 </div>
                 <ChevronRight size={18} className="text-gray-300 shrink-0" />
               </Link>

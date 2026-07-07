@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
-  LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, Tag, HardDrive, ScrollText
+  LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, Tag, HardDrive, ScrollText,
+  MessageSquare, Users, BarChart3
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
@@ -12,7 +13,23 @@ import { useBackClose } from '@/hooks/useBackClose'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 
-function buildMenu(isSuperAdmin, allowedPages) {
+// Item menu Pesan Gembala — dipakai Gembala (menu inti) & Super Admin.
+const PESAN_ITEM = { to: '/admin/pesan', icon: MessageSquare, labelKey: 'admin.nav.pesan' }
+
+function buildMenu(isSuperAdmin, isGembala, allowedPages) {
+  // Gembala = peran fokus: menu terkurasi (Pesan + lihat data + laporan),
+  // BUKAN turunan ADMIN_PAGES/Hak Akses. Akses tulis lain sudah diblok di DB.
+  if (isGembala) {
+    return [
+      { section: 'Komunikasi', sectionKey: 'admin.sec.Komunikasi' },
+      PESAN_ITEM,
+      { section: 'Data', sectionKey: 'admin.sec.Data' },
+      { to: '/admin/jemaat', icon: Users, labelKey: 'admin.nav.jemaat' },
+      { section: 'Laporan', sectionKey: 'admin.sec.Laporan' },
+      { to: '/admin/evaluasi', icon: BarChart3, labelKey: 'admin.nav.evaluasi' },
+    ]
+  }
+
   const items = []
 
   // Dashboard sekarang jadi entri ADMIN_PAGES pertama (bisa dicabut Super
@@ -30,6 +47,8 @@ function buildMenu(isSuperAdmin, allowedPages) {
   }
 
   if (isSuperAdmin) {
+    items.push({ section: 'Komunikasi', sectionKey: 'admin.sec.Komunikasi' })
+    items.push(PESAN_ITEM)
     items.push({ section: 'Sistem', sectionKey: 'admin.sec.Sistem' })
     items.push({ to: '/admin/hak-akses', icon: KeyRound, labelKey: 'admin.nav.hakAkses' })
     items.push({ to: '/admin/kategori-tugas', icon: Tag, labelKey: 'admin.nav.kategoriTugas' })
@@ -39,6 +58,9 @@ function buildMenu(isSuperAdmin, allowedPages) {
 
   return items
 }
+
+// Halaman yang boleh diakses Gembala di panel admin (sisanya diarahkan ke Pesan).
+const GEMBALA_ALLOWED = ['/admin/pesan', '/admin/jemaat', '/admin/evaluasi']
 
 export default function AdminLayout() {
   const [open, setOpen] = useState(false)
@@ -54,6 +76,7 @@ export default function AdminLayout() {
   useExitConfirm(location.pathname === '/admin', () => toast.info(t('app.exitConfirm')))
 
   const isSuperAdmin = profile?.role === 'Super Admin'
+  const isGembala = profile?.role === 'Gembala'
   const isAdminOnly = profile?.role === 'Admin'
   const isPKS = profile?.is_pks === true || profile?.role === 'PKS'
   const isVolunteerSecondary = profile?.role_secondary === 'Volunteer'
@@ -98,6 +121,14 @@ export default function AdminLayout() {
     return first ? first.to : '/'
   }
 
+  // Gembala: kunci ke halaman terkurasi saja (Pesan / Jemaat / Evaluasi).
+  // Sisanya (termasuk Dashboard & halaman tulis admin) diarahkan ke Pesan.
+  if (isGembala) {
+    const p = location.pathname
+    const ok = GEMBALA_ALLOWED.some(base => p === base || p.startsWith(base + '/'))
+    if (!ok) return <Navigate to="/admin/pesan" replace />
+  }
+
   // Halaman khusus Super Admin (Hak Akses, Kategori Tugas)
   if (['/admin/hak-akses', '/admin/kategori-tugas', '/admin/backup', '/admin/audit'].includes(location.pathname) && !isSuperAdmin) {
     return <Navigate to={fallbackPath()} replace />
@@ -105,14 +136,15 @@ export default function AdminLayout() {
 
   // Batasi akses Admin ke halaman yang belum diizinkan Super Admin — termasuk
   // Dashboard '/admin' itu sendiri (sekarang bagian dari ADMIN_PAGES).
-  if (!isSuperAdmin && allowedPages) {
+  // Gembala dikecualikan: aksesnya sudah diatur GEMBALA_ALLOWED di atas.
+  if (!isSuperAdmin && !isGembala && allowedPages) {
     const page = matchAdminPage(location.pathname)
     if (page && !allowedPages.includes(page.to)) {
       return <Navigate to={fallbackPath()} replace />
     }
   }
 
-  const MENU = buildMenu(isSuperAdmin, allowedPages)
+  const MENU = buildMenu(isSuperAdmin, isGembala, allowedPages)
 
   return (
     <div className="flex min-h-screen bg-gray-50">

@@ -430,7 +430,7 @@ export default function AdminMemberDetailPage() {
           <>
             <div className="grid grid-cols-2 gap-3">
               <Select label="Role Utama" value={form.role} onChange={e => set('role', e.target.value)}>
-                {['Jemaat', 'Volunteer', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
+                {['Jemaat', 'Volunteer', 'Gembala', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
               </Select>
               <Select label="Role Kedua" value={form.role_secondary} onChange={e => set('role_secondary', e.target.value)}>
                 <option value="">Tidak ada</option>

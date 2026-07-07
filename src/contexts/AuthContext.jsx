@@ -192,13 +192,16 @@ export function AuthProvider({ children }) {
   const isPKS = profile?.is_pks === true || profile?.role === 'PKS'
   // Volunteer via role utama ATAU role kedua (mis. Admin yang juga Volunteer).
   const isVolunteer = profile?.role === 'Volunteer' || profile?.role_secondary === 'Volunteer'
+  // Gembala — peran fokus: broadcast pesan + lihat data (read-only). Sengaja
+  // TERPISAH dari isAdmin agar tidak ikut membuka afordance khusus Admin.
+  const isGembala = profile?.role === 'Gembala'
 
   return (
     <AuthContext.Provider value={{
       user, profile, loading,
       login, register, logout, updateProfile,
       resetPassword, verifyResetOtp, updatePassword,
-      isAdmin, isPKS, isVolunteer,
+      isAdmin, isPKS, isVolunteer, isGembala,
     }}>
       {children}
     </AuthContext.Provider>
