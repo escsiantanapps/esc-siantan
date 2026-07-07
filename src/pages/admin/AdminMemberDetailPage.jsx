@@ -323,7 +323,7 @@ export default function AdminMemberDetailPage() {
       </Card>
 
       {/* Biodata Lengkap (read-only) — status pernikahan, pekerjaan, pendidikan,
-          profesi & sosial media. Ditampilkan untuk semua admin agar profil
+          & sosial media. Ditampilkan untuk semua admin agar profil
           jemaat terlihat utuh (pengubahan biodata tetap khusus Super Admin
           lewat form di kartu Profil di atas). */}
       <Card className="p-4 mb-4">
@@ -356,10 +356,6 @@ export default function AdminMemberDetailPage() {
           <div>
             <p className="text-xs text-gray-400">Pendapatan Tahunan</p>
             <p className="text-gray-700">{member.pekerjaan_pendapatan || '-'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">Profesi</p>
-            <p className="text-gray-700">{member.profesi || '-'}</p>
           </div>
           <div>
             <p className="text-xs text-gray-400">Pendidikan Terakhir</p>
