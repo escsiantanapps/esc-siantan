@@ -27,13 +27,11 @@ export const evaluationService = {
     // batasan ministry di allowed_ministry & category) tetap ditampilkan.
     if (ministryId) {
       templates = templates.filter(t => {
+        // Kategori TIDAK lagi menggerbang akses (lihat canAccessTemplate),
+        // jadi filter ministry admin hanya melihat allowed_ministry form.
         const allowed = t.allowed_ministry || []
-        const catAllowed = t.category_ministry_ids || []
-        const restricted = allowed.length > 0 || catAllowed.length > 0
-        if (!restricted) return true // form terbuka untuk semua ministry
-        const inAllowed = allowed.length === 0 || allowed.map(String).includes(String(ministryId))
-        const inCat = catAllowed.length === 0 || catAllowed.map(String).includes(String(ministryId))
-        return inAllowed && inCat
+        if (allowed.length === 0) return true // form terbuka untuk semua ministry
+        return allowed.map(String).includes(String(ministryId))
       })
     }
 

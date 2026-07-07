@@ -109,16 +109,21 @@ export function AuthProvider({ children }) {
   }
 
   async function register(formData) {
-    // Cek duplikat nomor HP (gagal-aman: lanjut bila endpoint bermasalah).
+    // Cek duplikat nomor HP DAN email sebelum membuat akun (gagal-aman:
+    // lanjut bila endpoint bermasalah — signUp tetap menolak email ganda di
+    // auth.users sebagai jaring pengaman terakhir).
     try {
       const r = await fetch('/api/check-phone', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formData.phone }),
+        body: JSON.stringify({ phone: formData.phone, email: formData.email }),
       })
       const j = await r.json().catch(() => ({}))
-      if (r.ok && j.available === false) throw new Error('PHONE_TAKEN')
+      if (r.ok) {
+        if (j.emailTaken) throw new Error('EMAIL_TAKEN')
+        if (j.phoneTaken || j.available === false) throw new Error('PHONE_TAKEN')
+      }
     } catch (e) {
-      if (e.message === 'PHONE_TAKEN') throw e
+      if (e.message === 'PHONE_TAKEN' || e.message === 'EMAIL_TAKEN') throw e
       // error jaringan endpoint → abaikan, lanjutkan registrasi
     }
 

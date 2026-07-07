@@ -21,17 +21,28 @@ export default async function handler(req, res) {
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const wanted = core(body.phone)
+    const email = String(body.email || '').trim().toLowerCase()
     if (!wanted) return res.status(400).json({ error: 'Nomor telepon wajib diisi.' })
 
     // Endpoint ini SENGAJA hanya dipakai saat registrasi (klien sudah pegang
-    // nomor sendiri). Tetap kembalikan status supaya UX registrasi baik,
+    // nomor & email sendiri). Tetap kembalikan status supaya UX registrasi baik,
     // tapi rate-limit ketat (di atas) menghalangi enumeration massal.
     // TODO jangka menengah: pindahkan cek ini menjadi unique constraint DB
     // yang dilempar sebagai error saat submit registrasi, lalu hapus endpoint.
+    //
+    // Cek DUA-duanya: nomor HP (cocok lintas format via core()) DAN email
+    // (case-insensitive). Email diperiksa terhadap tabel `users` — mencakup
+    // baris ber-auth_id NULL (jemaat impor / tambahan admin) yang TIDAK
+    // terdeteksi supabase.auth.signUp (itu hanya melihat auth.users).
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
-    const { data: rows } = await admin.from('users').select('phone').not('phone', 'is', null)
-    const taken = (rows || []).some(r => core(r.phone) === wanted)
-    return res.status(200).json({ available: !taken })
+    const { data: rows } = await admin.from('users').select('phone, email')
+    const phoneTaken = (rows || []).some(r => r.phone && core(r.phone) === wanted)
+    const emailTaken = email
+      ? (rows || []).some(r => (r.email || '').trim().toLowerCase() === email)
+      : false
+    // `available` dipertahankan (= ketersediaan NOMOR) demi kompatibilitas
+    // pemanggil lama (usersService "Tambah Jemaat"). Flag baru granular.
+    return res.status(200).json({ available: !phoneTaken, phoneTaken, emailTaken })
   } catch (e) {
     return res.status(500).json({ error: 'Terjadi kesalahan: ' + (e?.message || 'unknown') })
   }

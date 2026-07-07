@@ -27,8 +27,12 @@ export default function RegisterPage() {
       await register(form)
       navigate('/')
     } catch (err) {
-      setError(err.message === 'PHONE_TAKEN' ? t('auth.phoneTaken') : (err.message || t('auth.registerFailed')))
-      setStep(1) // kembali ke langkah data agar bisa perbaiki nomor
+      setError(
+        err.message === 'PHONE_TAKEN' ? t('auth.phoneTaken')
+        : err.message === 'EMAIL_TAKEN' ? t('auth.emailTaken')
+        : (err.message || t('auth.registerFailed'))
+      )
+      setStep(1) // kembali ke langkah data agar bisa perbaiki nomor/email
     } finally {
       setLoading(false)
     }

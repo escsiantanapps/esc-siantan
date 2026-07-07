@@ -193,6 +193,7 @@ export const translations = {
     'auth.completeAll': 'Lengkapi semua field.',
     'auth.phoneInvalid': 'Nomor HP tidak valid.',
     'auth.phoneTaken': 'Nomor HP sudah terdaftar. Gunakan nomor lain atau masuk.',
+    'auth.emailTaken': 'Email sudah terdaftar. Gunakan email lain atau masuk.',
 
     // Auth — Lupa kata sandi
     'auth.forgotTitle': 'Lupa Kata Sandi',
@@ -1285,6 +1286,7 @@ export const translations = {
     'auth.completeAll': 'Please complete all fields.',
     'auth.phoneInvalid': 'Invalid phone number.',
     'auth.phoneTaken': 'This phone number is already registered. Use another or sign in.',
+    'auth.emailTaken': 'This email is already registered. Use another or sign in.',
 
     // Auth — Forgot password
     'auth.forgotTitle': 'Forgot Password',

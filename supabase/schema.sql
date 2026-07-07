@@ -2124,3 +2124,151 @@ END $$;
 DROP TRIGGER IF EXISTS trg_guard_bday_recipient ON birthday_messages;
 CREATE TRIGGER trg_guard_bday_recipient
   BEFORE UPDATE ON birthday_messages FOR EACH ROW EXECUTE FUNCTION guard_bday_recipient_cols();
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v41: Helper Hak Akses (dipakai Bagian A & Bagian B) ───────
+-- ══════════════════════════════════════════════════════════════════════
+-- auth_admin_can('/admin/<page>') — apakah pemanggil boleh MENULIS pada area
+-- halaman admin tsb:
+--   • Super Admin            → selalu true.
+--   • Admin, tanpa baris hak-akses → true (default "akses penuh", konsisten UI).
+--   • Admin, dgn allowed_pages→ true HANYA bila page ada di daftar.
+--   • Selain admin (Jemaat/Volunteer/PKS) → false.
+--   • caller_role NULL (SQL Editor / service role) → false juga; pemakai harus
+--     memakai pola `auth_user_role() IS NULL OR auth_admin_can(...)` bila ingin
+--     melewati konteks backend tepercaya (lihat guard is_pks di Bagian A).
+-- Semantik ini meniru AdminPermissionsPage (null=penuh, []=kosong).
+-- DIDEFINISIKAN DI SINI (sebelum guard) karena guard_user_privilege_cols
+-- memanggilnya — check_function_bodies memvalidasi referensi saat CREATE.
+CREATE OR REPLACE FUNCTION auth_admin_can(p_page text) RETURNS boolean
+  LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT CASE
+    WHEN auth_user_role() = 'Super Admin' THEN true
+    WHEN auth_user_role() = 'Admin' THEN COALESCE(
+      (SELECT p_page = ANY(allowed_pages)
+         FROM admin_user_permissions
+        WHERE user_id = auth_user_id()),
+      true  -- tidak ada baris hak-akses = akses penuh (default sekarang)
+    )
+    ELSE false
+  END
+$$;
+REVOKE EXECUTE ON FUNCTION auth_admin_can(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION auth_admin_can(text) TO authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v41 (Bagian A): Batas peran Admin vs Super Admin ──────────
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (pentest 2026-07-07):
+-- guard_user_privilege_cols melewati SEMUA cek bila pemanggil Admin ATAU
+-- Super Admin. Dikombinasikan policy users_admin_update (Admin boleh UPDATE
+-- baris user mana pun), seorang Admin biasa bisa menyetel role='Super Admin'
+-- pada dirinya/orang lain → eskalasi Admin → Super Admin, meruntuhkan
+-- seluruh distinction dua jenjang admin.
+--
+-- KEPUTUSAN OPERATOR: Admin biasa TIDAK boleh mengubah peran.
+-- Perbaikan (guard tingkat kolom, jenjang):
+--   • role, role_secondary          → HANYA Super Admin.
+--   • is_pks                        → HAK KHUSUS: Super Admin ATAU Admin yang
+--                                     diberi akses halaman Komsel (auth_admin_can
+--                                     '/admin/komsel'). Menetapkan PKS = wewenang
+--                                     pengelola Komsel, bukan admin sembarangan.
+--                                     (Keputusan operator 2026-07-07.)
+--   • status, komsel_id             → Admin & Super Admin (seperti sebelumnya).
+--   • sp_level, sp_notes            → Admin & Super Admin saja. Menutup celah
+--                                     BARU: sebelumnya kolom SP tak dijaga guard,
+--                                     sehingga jemaat bisa meng-UPDATE baris
+--                                     sendiri (users_edit_own) untuk menghapus
+--                                     Surat Peringatannya sendiri.
+--   • points/biodata_points, nij,   → tetap seperti sebelumnya (non-admin ditolak,
+--     kartu jemaat                     Admin boleh; poin lewat escape hatch definer).
+--
+-- Catatan UI: selektor "Ubah Role" di halaman Jemaat sebaiknya disembunyikan
+-- untuk Admin biasa agar tidak memicu error DB ini (kosmetik; keamanan sudah
+-- ditegakkan di sini apa pun yang dilakukan klien).
+CREATE OR REPLACE FUNCTION guard_user_privilege_cols() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  caller_role text := auth_user_role();
+BEGIN
+  -- (1) Kolom PERAN (vektor eskalasi): HANYA Super Admin.
+  --     caller_role NULL = konteks backend tepercaya (SQL Editor / service
+  --     role, auth.uid() kosong) → DILEWATI, seperti guard lama (NOT IN
+  --     melewati NULL). Ini penting agar promosi Super Admin via SQL Editor &
+  --     operasi service-role tetap bisa. Attacker yang login SELALU punya
+  --     role non-NULL, jadi tetap terblokir.
+  IF caller_role IS NOT NULL AND caller_role <> 'Super Admin' THEN
+    IF NEW.role IS DISTINCT FROM OLD.role
+       OR NEW.role_secondary IS DISTINCT FROM OLD.role_secondary THEN
+      RAISE EXCEPTION 'Hanya Super Admin yang dapat mengubah role/role_secondary.';
+    END IF;
+  END IF;
+
+  -- (1b) is_pks (penetapan PKS) = HAK KHUSUS akses Komsel. Ditolak untuk siapa
+  --      pun yang login tapi BUKAN Super Admin dan BUKAN Admin ber-akses Komsel.
+  --      caller_role NULL (SQL Editor / service role) dilewati (backend tepercaya).
+  IF COALESCE(NEW.is_pks, false) IS DISTINCT FROM COALESCE(OLD.is_pks, false)
+     AND caller_role IS NOT NULL
+     AND NOT auth_admin_can('/admin/komsel') THEN
+    RAISE EXCEPTION 'Menetapkan/mengubah PKS adalah hak khusus admin dengan akses Komsel.';
+  END IF;
+
+  -- (2) Kolom hak akses & privilege lain: Admin/Super Admin boleh; selain itu ditolak.
+  --     (is_pks TIDAK lagi di sini — sudah ditangani gerbang hak-khusus (1b).)
+  IF caller_role NOT IN ('Admin', 'Super Admin') THEN
+    IF NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.komsel_id IS DISTINCT FROM OLD.komsel_id
+       OR NEW.sp_level IS DISTINCT FROM OLD.sp_level
+       OR NEW.sp_notes IS DISTINCT FROM OLD.sp_notes THEN
+      RAISE EXCEPTION 'Tidak diizinkan mengubah kolom hak akses/status/SP sendiri.';
+    END IF;
+    IF COALESCE(current_setting('app.allow_points_update', true), '') <> '1' THEN
+      IF NEW.points IS DISTINCT FROM OLD.points
+         OR NEW.biodata_points_awarded IS DISTINCT FROM OLD.biodata_points_awarded THEN
+        RAISE EXCEPTION 'Poin tidak dapat diubah langsung.';
+      END IF;
+    END IF;
+    IF NEW.nij IS DISTINCT FROM OLD.nij
+       OR NEW.membership_card_url IS DISTINCT FROM OLD.membership_card_url
+       OR NEW.membership_card_issued_at IS DISTINCT FROM OLD.membership_card_issued_at THEN
+      RAISE EXCEPTION 'Kolom kartu jemaat hanya dapat diubah Admin.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_user_privilege ON users;
+CREATE TRIGGER trg_guard_user_privilege
+  BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION guard_user_privilege_cols();
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v41 (Bagian B): "Hak Akses" jadi keamanan NYATA ───────────
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (pentest 2026-07-07):
+-- admin_user_permissions.allowed_pages hanya menyembunyikan menu di UI.
+-- Tidak ada satu pun policy RLS / serverless yang mengonsultasikannya —
+-- semua gerbang tulis admin memakai auth_user_role() IN ('Admin','Super
+-- Admin'). Akibatnya Admin yang "dibatasi" tetap bisa melakukan operasi
+-- apa pun (hapus jemaat, verifikasi persembahan, dll.) lewat PostgREST/
+-- endpoint langsung. Hak Akses = kosmetik.
+--
+-- KEPUTUSAN OPERATOR: Hak Akses harus jadi batas keamanan nyata,
+-- lingkup "TULIS SAJA" (INSERT/UPDATE/DELETE/verifikasi). READ dibiarkan
+-- untuk semua admin (perubahan lebih sedikit, risiko regresi minimal).
+-- Fondasinya = helper auth_admin_can() yang sudah didefinisikan di ATAS
+-- (sebelum guard_user_privilege_cols).
+--
+-- SLICE PERTAMA yang sudah aman diterapkan sekarang: penetapan PKS.
+-- (komsel_leaders BUKAN tabel yang drift, jadi bisa digerbang tanpa menunggu
+-- inventaris.) Melengkapi gerbang is_pks di guard (Bagian A, blok 1b):
+--   • komsel_leaders (tambah/hapus pemimpin) → hak khusus '/admin/komsel'.
+DROP POLICY IF EXISTS "kl_admin_write" ON komsel_leaders;
+CREATE POLICY "kl_admin_write" ON komsel_leaders FOR ALL
+  USING (auth_admin_can('/admin/komsel'))
+  WITH CHECK (auth_admin_can('/admin/komsel'));
+
+-- SISA sweep TULIS admin (offerings, baptism, ministries, dll.) DITAHAN sampai
+-- inventaris policy production diverifikasi, karena schema.sql terbukti drift
+-- (news & events menulis via klien tetapi tak punya policy tulis di file —
+-- ada policy di DB yang tak tercatat; menimpanya buta bisa membuka celah /
+-- mengunci admin). Query dump policy sudah diberikan ke operator.

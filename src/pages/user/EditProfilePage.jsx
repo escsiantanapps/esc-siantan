@@ -182,7 +182,7 @@ export default function EditProfilePage() {
           <div className="space-y-4">
             <Select label="Pendidikan Terakhir" value={form.pendidikan_terakhir} onChange={e => set('pendidikan_terakhir', e.target.value)}>
               <option value="">Pilih...</option>
-              {['SD', 'SMP', 'SMA/SMK', 'D1–D3', 'S1', 'S2', 'S3'].map(p => <option key={p}>{p}</option>)}
+              {['SD', 'SMP', 'SMA/SMK', 'D1–D3', 'S1', 'Profesi', 'S2', 'S3'].map(p => <option key={p}>{p}</option>)}
             </Select>
             <Input label="Bidang Pendidikan" placeholder="cth: Teknik Informatika" value={form.pendidikan_bidang} onChange={e => set('pendidikan_bidang', e.target.value)} />
             <Input label="Profesi" placeholder="cth: Dokter / Guru / Akuntan / Programmer" value={form.profesi} onChange={e => set('profesi', e.target.value)} />

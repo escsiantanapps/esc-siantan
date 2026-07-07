@@ -322,6 +322,56 @@ export default function AdminMemberDetailPage() {
         )}
       </Card>
 
+      {/* Biodata Lengkap (read-only) — status pernikahan, pekerjaan, pendidikan,
+          profesi & sosial media. Ditampilkan untuk semua admin agar profil
+          jemaat terlihat utuh (pengubahan biodata tetap khusus Super Admin
+          lewat form di kartu Profil di atas). */}
+      <Card className="p-4 mb-4">
+        <h2 className="text-sm font-semibold text-gray-900 mb-3">Biodata Lengkap</h2>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-gray-400">Status Pernikahan</p>
+            <p className="text-gray-700">{member.marital_status || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Sosial Media</p>
+            <p className="text-gray-700 break-words">{member.social_media || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Pekerjaan</p>
+            <p className="text-gray-700">{member.pekerjaan || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Posisi</p>
+            <p className="text-gray-700">{member.pekerjaan_posisi || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Bidang Pekerjaan</p>
+            <p className="text-gray-700">{member.pekerjaan_bidang || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Perusahaan</p>
+            <p className="text-gray-700">{member.pekerjaan_perusahaan || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Pendapatan Tahunan</p>
+            <p className="text-gray-700">{member.pekerjaan_pendapatan || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Profesi</p>
+            <p className="text-gray-700">{member.profesi || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Pendidikan Terakhir</p>
+            <p className="text-gray-700">{member.pendidikan_terakhir || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Bidang Pendidikan</p>
+            <p className="text-gray-700">{member.pendidikan_bidang || '-'}</p>
+          </div>
+        </div>
+      </Card>
+
       {/* Kartu Jemaat (PNG diunggah Super Admin, expired 1 tahun) */}
       <Card className="p-4 mb-4 space-y-3">
         <h2 className="text-sm font-semibold text-gray-900">Kartu Jemaat</h2>

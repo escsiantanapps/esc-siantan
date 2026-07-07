@@ -15,10 +15,13 @@ function userHasRole(profile, role) {
 //  - Admin/Super Admin selalu boleh (mereka mengelola tugas).
 //  - allowed_roles: bila diisi, role user harus termasuk salah satunya.
 //  - allowed_ministry: bila diisi, salah satu ministry user harus cocok.
-//  - category_ministry_ids: gerbang TAMBAHAN dari Kategori Tugas (Super Admin) —
-//    bila kategori tugas ini dibatasi ke ministry tertentu, salah satu ministry
-//    user harus cocok. Kategori tanpa batasan (mis. "Umum") meloloskan semua,
-//    sehingga tugas lama yang dibackfill ke kategori "Umum" tidak terdampak.
+//
+// CATATAN: Kategori Tugas (task_categories + category_ministry_ids) SENGAJA
+// TIDAK lagi menggerbang akses. Kategori kini murni pengelompokan visual
+// (folder di halaman Tugas). Sebuah form yang tidak dibatasi role/ministry
+// harus bisa diisi SEMUA user, meski kategorinya kebetulan punya ministry.
+// Ini juga menyelaraskan klien dengan RLS `templates_read_access` yang
+// memang tidak pernah menggerbang berdasarkan kategori.
 //
 // Opsi `strict`: menonaktifkan pintasan Admin. Dipakai untuk evaluasi — di
 // sana kita ingin melihat siapa yang BERHAK MENGISI form, bukan siapa yang
@@ -34,12 +37,6 @@ export function canAccessTemplate(template, profile, { strict = false } = {}) {
   if (allowed.length > 0) {
     const mine = (profile?.ministry_ids || []).map(String)
     if (!allowed.map(String).some(m => mine.includes(m))) return false
-  }
-
-  const catAllowed = template?.category_ministry_ids || []
-  if (catAllowed.length > 0) {
-    const mine = (profile?.ministry_ids || []).map(String)
-    if (!catAllowed.map(String).some(m => mine.includes(m))) return false
   }
 
   return true

@@ -37,6 +37,18 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
+    // Hak Akses (Migrasi v41-B): hapus jemaat termasuk halaman '/admin/jemaat'.
+    // Super Admin selalu boleh. Admin biasa hanya boleh bila punya izin halaman
+    // itu (baris hak-akses tidak ada = akses penuh, konsisten default UI).
+    if (caller.role === 'Admin') {
+      const { data: perm } = await admin
+        .from('admin_user_permissions').select('allowed_pages').eq('user_id', caller.user_id).maybeSingle()
+      const pages = perm?.allowed_pages
+      if (Array.isArray(pages) && !pages.includes('/admin/jemaat')) {
+        return res.status(403).json({ error: 'Anda tidak memiliki hak akses untuk mengelola Jemaat.' })
+      }
+    }
+
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const { userId } = body
     if (!userId) return res.status(400).json({ error: 'userId wajib diisi.' })
