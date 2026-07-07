@@ -287,6 +287,7 @@ export const translations = {
     'tasks.leaveTitle': 'Berhalangan mengisi SOP Rohani?',
     'tasks.leaveDesc': 'Ajukan izin atau sakit di sini',
     'tasks.done': 'Selesai',
+    'tasks.closedNow': 'Tutup',
     'tasks.progress': '{done} dari {target} target — Berjalan',
     'tasks.uncategorized': 'Lainnya',
     'tasks.folderCount': '{count} tugas',
@@ -374,6 +375,8 @@ export const translations = {
     'taskDetail.submitted': 'Jawaban berhasil dikirim.',
     'taskDetail.submitFailed': 'Gagal mengirim jawaban.',
     'taskDetail.alreadyToday': 'Anda sudah mengisi tugas ini hari ini. Tugas ini hanya dapat diisi 1x per hari — coba lagi besok.',
+    'taskDetail.closedTitle': 'Belum waktunya mengisi',
+    'taskDetail.closedDesc': 'Tugas ini hanya dibuka: {schedule}.',
 
     // Detail Kelas
     'classDetail.title': 'Detail Kelas',
@@ -1380,6 +1383,7 @@ export const translations = {
     'tasks.leaveTitle': 'Unable to do your tasks?',
     'tasks.leaveDesc': 'Request leave or sick here',
     'tasks.done': 'Done',
+    'tasks.closedNow': 'Closed',
     'tasks.progress': '{done} of {target} target — In progress',
     'tasks.uncategorized': 'Other',
     'tasks.folderCount': '{count} tasks',
@@ -1467,6 +1471,8 @@ export const translations = {
     'taskDetail.submitted': 'Answer submitted successfully.',
     'taskDetail.submitFailed': 'Failed to submit answer.',
     'taskDetail.alreadyToday': 'You already filled this task today. It can only be filled once per day — try again tomorrow.',
+    'taskDetail.closedTitle': 'Not open yet',
+    'taskDetail.closedDesc': 'This task is only open: {schedule}.',
 
     // Class detail
     'classDetail.title': 'Class Detail',

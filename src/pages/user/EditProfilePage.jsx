@@ -8,6 +8,22 @@ import { pointsService } from '@/services/pointsService'
 import { Avatar, Button, Input, Select, Textarea, GradientHeader, Spinner } from '@/components/ui'
 import { validateUpload, compressImage } from '@/lib/utils'
 
+// 9 field wajib untuk bonus +5 poin "biodata lengkap". HARUS sama persis dengan
+// pemeriksaan di fungsi DB award_biodata_points(). Dipakai untuk memberi tahu
+// user field mana yang masih kosong bila bonus tidak diberikan — dulu aplikasi
+// DIAM saat 'incomplete' sehingga user merasa sudah lengkap padahal belum.
+const BIODATA_REQUIRED = [
+  ['name', 'Nama'],
+  ['phone', 'No. HP'],
+  ['gender', 'Jenis Kelamin'],
+  ['birth_date', 'Tanggal Lahir'],
+  ['birth_place', 'Tempat Lahir'],
+  ['address', 'Alamat'],
+  ['marital_status', 'Status Pernikahan'],
+  ['pekerjaan', 'Pekerjaan'],
+  ['pendidikan_terakhir', 'Pendidikan Terakhir'],
+]
+
 export default function EditProfilePage() {
   const { profile, updateProfile } = useAuth()
   const { toast } = useToast()
@@ -93,7 +109,20 @@ export default function EditProfilePage() {
       // error, bukan ditelan diam-diam — supaya mudah didiagnosis.
       try {
         const res = await pointsService.claimBiodataPoints()
-        if (res?.awarded) toast.success('🎉 +5 poin — biodata lengkap!')
+        if (res?.awarded) {
+          toast.success('🎉 +5 poin — biodata lengkap!')
+        } else if (res?.reason === 'incomplete') {
+          // Beri tahu field mana yang masih kosong (mirror cek server).
+          const missing = BIODATA_REQUIRED
+            .filter(([k]) => !String(form[k] ?? '').trim())
+            .map(([, label]) => label)
+          toast.info(
+            missing.length
+              ? 'Lengkapi biodata untuk dapat +5 poin. Belum terisi: ' + missing.join(', ')
+              : 'Bonus poin biodata belum masuk — coba muat ulang halaman, atau hubungi admin bila tetap.',
+            7000,
+          )
+        }
       } catch (err) {
         console.error('claimBiodataPoints gagal:', err)
         toast.error('Gagal memproses bonus poin biodata: ' + (err.message || 'unknown'))

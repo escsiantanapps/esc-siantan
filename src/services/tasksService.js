@@ -42,6 +42,43 @@ export function canAccessTemplate(template, profile, { strict = false } = {}) {
   return true
 }
 
+// Jadwal buka form: active_days (nama hari Indonesia; kosong = setiap hari) +
+// open_time/close_time ("HH:MM"; default 00:00–23:59 = sepanjang hari). Semua
+// dihitung di zona WIB (Asia/Jakarta), konsisten dgn cron & once_per_day.
+// Mengembalikan { open, dayOk, timeOk, hasSchedule, label } — `label` = teks
+// jadwal siap tampil (mis. "Senin, Rabu · 08:00–17:00 WIB").
+export function getTemplateSchedule(template) {
+  const days = (template?.active_days || []).filter(Boolean)
+  const openT = template?.open_time || '00:00'
+  const closeT = template?.close_time || '23:59'
+
+  const now = new Date()
+  const todayName = new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' }).format(now)
+  const nowHM = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Jakarta' }).format(now)
+
+  const dayOk = days.length === 0 || days.some(d => String(d).toLowerCase() === todayName.toLowerCase())
+  // 23:59 (dan 24:00) dianggap "sampai akhir hari".
+  const allDay = openT === '00:00' && (closeT === '23:59' || closeT === '24:00')
+  let timeOk = true
+  if (!allDay) {
+    timeOk = openT <= closeT
+      ? (nowHM >= openT && nowHM <= closeT)         // jendela normal
+      : (nowHM >= openT || nowHM <= closeT)          // jendela lintas tengah malam
+  }
+
+  const parts = []
+  if (days.length) parts.push(days.join(', '))
+  if (!allDay) parts.push(`${openT}–${closeT} WIB`)
+
+  return {
+    open: dayOk && timeOk,
+    dayOk,
+    timeOk,
+    hasSchedule: days.length > 0 || !allDay,
+    label: parts.join(' · '),
+  }
+}
+
 // Ratakan relasi template_ministries jadi array allowed_ministry pada template,
 // dan relasi task_categories->task_category_ministries jadi category_ministry_ids.
 function withAllowedMinistry(t) {

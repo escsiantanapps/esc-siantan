@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, CheckCircle, CalendarOff, ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react'
+import { ClipboardList, CheckCircle, CalendarOff, ChevronRight, ChevronDown, Folder, FolderOpen, Clock } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { tasksService, canAccessTemplate } from '@/services/tasksService'
+import { tasksService, canAccessTemplate, getTemplateSchedule } from '@/services/tasksService'
 import { Card, GradientHeader, Spinner, EmptyState } from '@/components/ui'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { startOfWeek } from 'date-fns'
+import { startOfWeek, startOfMonth } from 'date-fns'
 
 // Tema warna folder — diputar berdasarkan urutan kategori supaya tiap
 // folder punya identitas visual sendiri (kelas Tailwind ditulis literal,
@@ -44,12 +44,17 @@ export default function TasksPage() {
       const tmpls = all.filter(t => canAccessTemplate(t, profile))
       setTemplates(tmpls)
 
-      // Cek progress minggu ini
-      const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString()
+      // Cek progress periode berjalan — per template: form bulanan dihitung
+      // sejak awal bulan, mingguan sejak Senin. (Dulu SEMUA form dihitung
+      // sejak awal minggu → progress form bulanan tampil kurang dari semestinya.)
+      const now = new Date()
+      const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+      const monthStart = startOfMonth(now)
       const progressMap = {}
       await Promise.all(
         tmpls.map(async (tpl) => {
-          const responses = await tasksService.getMyResponses(profile.user_id, tpl.form_id, weekStart)
+          const periodStart = (tpl.period === 'bulan' ? monthStart : weekStart).toISOString()
+          const responses = await tasksService.getMyResponses(profile.user_id, tpl.form_id, periodStart)
           progressMap[tpl.form_id] = responses.length
         })
       )
@@ -171,6 +176,7 @@ function TaskCard({ tpl, progress, onClick, t }) {
   const target = tpl.weekly_goal || 1
   const pct = Math.min((done / target) * 100, 100)
   const complete = done >= target
+  const sched = getTemplateSchedule(tpl)
 
   return (
     <Card glass className="p-4 cursor-pointer active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300"
@@ -179,6 +185,11 @@ function TaskCard({ tpl, progress, onClick, t }) {
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-gray-900">{tpl.title}</h2>
           {tpl.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{tpl.description}</p>}
+          {!sched.open && (
+            <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
+              <Clock size={12} /> {t('tasks.closedNow')}{sched.label ? ` · ${sched.label}` : ''}
+            </span>
+          )}
         </div>
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${complete ? 'bg-green-100' : 'bg-brand-100'}`}>
           {complete

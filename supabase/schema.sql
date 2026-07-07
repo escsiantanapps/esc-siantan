@@ -2272,3 +2272,45 @@ CREATE POLICY "kl_admin_write" ON komsel_leaders FOR ALL
 -- (news & events menulis via klien tetapi tak punya policy tulis di file —
 -- ada policy di DB yang tak tercatat; menimpanya buta bisa membuka celah /
 -- mengunci admin). Query dump policy sudah diberikan ke operator.
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v42: Tegakkan "1x per hari" di DATABASE ───────────────────
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (audit form 2026-07-07):
+-- Batas once_per_day form HANYA ditegakkan di klien (TaskDetailPage +
+-- tasksService.submitResponse yang query-lalu-insert). Lewat panggilan
+-- PostgREST langsung, jemaat bisa insert banyak response dalam sehari untuk
+-- form yang seharusnya 1x/hari. RLS `responses_own` cuma cek volunteer_id
+-- = diri sendiri, tidak cek batas harian.
+--
+-- Perbaikan: trigger BEFORE INSERT yang menolak response kedua pada HARI yang
+-- sama (zona WIB, konsisten dgn klien & notify-pks) bila template.once_per_day.
+-- SECURITY DEFINER agar bisa membaca flag template & response lama tanpa
+-- terganjal RLS. Catatan: dua insert yang benar-benar bersamaan (race) masih
+-- bisa lolos tanpa unique constraint — cukup untuk skala jemaat & menutup
+-- bypass API yang disengaja; UNIQUE index harian bisa ditambah bila perlu.
+CREATE OR REPLACE FUNCTION guard_once_per_day() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_once boolean;
+  v_day_start timestamptz;
+BEGIN
+  SELECT once_per_day INTO v_once FROM form_templates WHERE form_id = NEW.form_id;
+  IF COALESCE(v_once, false) THEN
+    -- Awal "hari ini" dalam zona WIB (UTC+7).
+    v_day_start := date_trunc('day', (now() AT TIME ZONE 'Asia/Jakarta')) AT TIME ZONE 'Asia/Jakarta';
+    IF EXISTS (
+      SELECT 1 FROM form_responses
+      WHERE form_id = NEW.form_id
+        AND volunteer_id = NEW.volunteer_id
+        AND submitted_at >= v_day_start
+    ) THEN
+      RAISE EXCEPTION 'Tugas ini hanya dapat diisi 1x per hari.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_once_per_day ON form_responses;
+CREATE TRIGGER trg_guard_once_per_day
+  BEFORE INSERT ON form_responses FOR EACH ROW EXECUTE FUNCTION guard_once_per_day();

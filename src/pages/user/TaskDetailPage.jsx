@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { startOfWeek, startOfMonth, isSameDay } from 'date-fns'
-import { ClipboardList, CheckCircle2, Lock, ArrowLeft } from 'lucide-react'
+import { ClipboardList, CheckCircle2, Lock, ArrowLeft, Clock } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
-import { tasksService, canAccessTemplate } from '@/services/tasksService'
+import { tasksService, canAccessTemplate, getTemplateSchedule } from '@/services/tasksService'
 import { pushService } from '@/services/pushService'
 import { Card, Spinner, EmptyState, GradientHeader, Button, Input, Textarea, Select, Checkbox, Badge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
@@ -87,6 +87,13 @@ export default function TaskDetailPage() {
       setError(t('taskDetail.alreadyToday'))
       return
     }
+    // Tegakkan jendela buka (hari & jam). Dihitung ulang saat submit agar tidak
+    // bisa diakali dengan membiarkan halaman terbuka melewati jam tutup.
+    const sched = getTemplateSchedule(template)
+    if (!sched.open) {
+      setError(sched.label ? t('taskDetail.closedDesc', { schedule: sched.label }) : t('taskDetail.closedTitle'))
+      return
+    }
     const fields = template?.fields_json || []
     for (const field of fields) {
       if (field.required && !form[field.key]) {
@@ -149,6 +156,8 @@ export default function TaskDetailPage() {
   const formBg = resolveFormBg(template.bg_type, template.bg_value)
   const submittedToday = responses.some(r => isSameDay(new Date(r.submitted_at), new Date()))
   const locked = !!template.once_per_day && submittedToday
+  const schedule = getTemplateSchedule(template)
+  const closed = !schedule.open
 
   return (
     <div className="pb-4">
@@ -196,11 +205,23 @@ export default function TaskDetailPage() {
             </div>
           )}
 
-          {!locked && (template.fields_json || []).length === 0 && (
+          {!locked && closed && (
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+              <Clock size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">{t('taskDetail.closedTitle')}</p>
+                {schedule.label && (
+                  <p className="text-sm text-amber-700 mt-0.5">{t('taskDetail.closedDesc', { schedule: schedule.label })}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!locked && !closed && (template.fields_json || []).length === 0 && (
             <p className="text-sm text-gray-400">{t('taskDetail.noForm')}</p>
           )}
 
-          {!locked && (template.fields_json || []).map(field => (
+          {!locked && !closed && (template.fields_json || []).map(field => (
             <div key={field.key}>
               {field.type === 'textarea' && (
                 <Textarea
@@ -267,7 +288,7 @@ export default function TaskDetailPage() {
             </div>
           ))}
 
-          {!locked && (
+          {!locked && !closed && (
             <Button className="w-full" loading={saving} onClick={handleSubmit}>
               {t('taskDetail.submit')}
             </Button>
