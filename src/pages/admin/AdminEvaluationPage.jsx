@@ -84,6 +84,12 @@ export default function AdminEvaluationPage() {
       [t('aev.komsel'), komselId ? (komselMap[komselId] || '-') : t('aev.repAll')],
     ]
 
+    // Saat "Semua Form" (tanpa filter form), satu jemaat muncul di beberapa
+    // baris (satu per form yang relevan). Tanpa kolom Form, baris-baris itu tak
+    // terbedakan. Tampilkan kolom Form HANYA pada mode ini agar jelas tiap baris
+    // untuk form yang mana; saat satu form dipilih, kolom disembunyikan (redundan
+    // dgn judul laporan).
+    const showFormCol = !formId
     const rowsHtml = filteredRows.map((r, i) => {
       const tags = [
         ...(r.user.ministry_ids || []).map(id => ministryMap[id]).filter(Boolean),
@@ -92,6 +98,7 @@ export default function AdminEvaluationPage() {
       return `<tr>
         <td class="c">${i + 1}</td>
         <td>${esc(r.user.name)}</td>
+        ${showFormCol ? `<td>${esc(r.form?.title || '-')}</td>` : ''}
         <td>${esc(tags || '-')}</td>
         <td class="c">${esc(r.filled)}/${esc(r.target)}</td>
         <td class="c">${esc(r.minLulus)}</td>
@@ -131,8 +138,8 @@ export default function AdminEvaluationPage() {
     <div style="color:#dc2626"><b>${summary.KOSONG}</b>${esc(t('aev.empty'))}</div>
   </div>
   <table class="data">
-    <thead><tr><th>#</th><th>${esc(t('aev.repName'))}</th><th>${esc(t('aev.repMinKom'))}</th><th>${esc(t('aev.repFilledTarget'))}</th><th>${esc(t('aev.repMin'))}</th><th>${esc(t('aev.repStatus'))}</th></tr></thead>
-    <tbody>${rowsHtml || `<tr><td colspan="6" class="c">${esc(t('aev.repNoData'))}</td></tr>`}</tbody>
+    <thead><tr><th>#</th><th>${esc(t('aev.repName'))}</th>${showFormCol ? `<th>${esc(t('aev.form'))}</th>` : ''}<th>${esc(t('aev.repMinKom'))}</th><th>${esc(t('aev.repFilledTarget'))}</th><th>${esc(t('aev.repMin'))}</th><th>${esc(t('aev.repStatus'))}</th></tr></thead>
+    <tbody>${rowsHtml || `<tr><td colspan="${showFormCol ? 7 : 6}" class="c">${esc(t('aev.repNoData'))}</td></tr>`}</tbody>
   </table>
   <div class="foot">${esc(t('aev.repPrinted', { date: formatDate(new Date(), 'd MMMM yyyy, HH:mm'), n: filteredRows.length }))}</div>
 </body></html>`

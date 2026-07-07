@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { Users, ClipboardCheck, Save, BarChart3, UserCircle, LogOut, ChevronDown, HandCoins, X, Cake, Send, QrCode, Plus, Download } from 'lucide-react'
+import { Users, ClipboardCheck, Save, BarChart3, UserCircle, LogOut, ChevronDown, HandCoins, X, Cake, Send, QrCode, Plus, Download, UserMinus } from 'lucide-react'
 import { startOfMonth } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
@@ -55,7 +55,31 @@ export default function PKSDashboardPage() {
   const [offeringError, setOfferingError] = useState('')
 
   const [memberDetail, setMemberDetail] = useState(null)
+  const [removingMember, setRemovingMember] = useState(false)
   useBackClose(!!memberDetail, () => setMemberDetail(null))
+
+  // Keluarkan anggota dari komsel terpilih. Otorisasi + aturan ditegakkan di
+  // server (RPC pks_remove_member, Migrasi v45); di sini hanya konfirmasi + UI.
+  async function handleRemoveMember(member) {
+    const ok = await confirm({
+      title: t('pks.removeMemberTitle'),
+      message: t('pks.removeMemberMsg', { name: member.name }),
+      confirmText: t('pks.removeMember'),
+      danger: true,
+    })
+    if (!ok) return
+    setRemovingMember(true)
+    try {
+      await komselService.removeMember(selectedId, member.user_id)
+      setMembers(prev => prev.filter(m => m.user_id !== member.user_id))
+      setMemberDetail(null)
+      toast.success(t('pks.memberRemoved', { name: member.name }))
+    } catch (err) {
+      toast.error(err.message || t('pks.removeMemberFailed'))
+    } finally {
+      setRemovingMember(false)
+    }
+  }
 
   const [birthdayDrafts, setBirthdayDrafts] = useState({}) // user_id -> teks pesan
   const [birthdaySent, setBirthdaySent] = useState({}) // user_id -> true setelah terkirim
@@ -740,6 +764,16 @@ export default function PKSDashboardPage() {
                 <p className="text-xs text-gray-400">{t('pks.detailSocialMedia')}</p>
                 <p className="text-gray-700">{memberDetail.social_media || '-'}</p>
               </div>
+            </div>
+
+            <div className="pt-1 border-t border-gray-100">
+              <Button
+                variant="danger" className="w-full mt-3"
+                loading={removingMember}
+                onClick={() => handleRemoveMember(memberDetail)}
+              >
+                <UserMinus size={15} /> {t('pks.removeMember')}
+              </Button>
             </div>
           </Card>
         </div>

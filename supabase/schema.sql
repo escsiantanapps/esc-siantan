@@ -2385,3 +2385,126 @@ CREATE POLICY "pm_write" ON pastoral_messages FOR ALL
   WITH CHECK (auth_user_role() IN ('Gembala','Super Admin'));
 
 CREATE INDEX IF NOT EXISTS idx_pastoral_messages_created ON pastoral_messages (created_at DESC);
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v44: Lampiran PDF pada Informasi (news.pdf_files) ──────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-07): Informasi/berita boleh melampirkan berkas
+-- PDF (mis. warta jemaat, undangan, jadwal) yang bisa dibuka langsung jemaat.
+--
+-- Bentuk data: array JSONB berisi objek {name, url} — beda dari photo_urls/
+-- video_urls (TEXT[]) karena PDF butuh NAMA tampilan yang ramah, bukan hanya
+-- URL storage. File fisik disimpan di bucket publik `task-files` (sama seperti
+-- video berita), sehingga URL publik bisa dibuka tanpa signed-URL.
+--
+-- RLS: TIDAK ada perubahan policy. `pdf_files` hanya kolom baru pada `news`;
+-- gerbang tulis berita yang sudah ada (Admin/Super Admin) berlaku apa adanya.
+ALTER TABLE news ADD COLUMN IF NOT EXISTS pdf_files JSONB DEFAULT '[]'::jsonb;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v45: PKS boleh mengeluarkan anggota dari komselnya ─────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-07): PKS boleh MENGELUARKAN anggota dari komsel
+-- yang ia pimpin (mis. anggota pindah/tidak aktif). Keanggotaan komsel = kolom
+-- `users.komsel_id`; "keluar" berarti men-set komsel_id = NULL. Menambah anggota
+-- tetap wewenang Admin (halaman Kelola Komsel) — PKS hanya boleh mengeluarkan.
+--
+-- MASALAH: trigger `guard_user_privilege_cols` menolak perubahan `komsel_id`
+-- oleh siapa pun yang login tetapi BUKAN Admin/Super Admin. Karena SECURITY
+-- DEFINER tidak mengubah auth.uid(), di dalam RPC pun `auth_user_role()` tetap
+-- mengembalikan role PKS → update akan tertolak. Solusi: escape-hatch bersegel
+-- transaksi `app.allow_komsel_reassign` (pola SAMA dengan `app.allow_points_update`
+-- untuk poin) yang HANYA di-set di dalam RPC tepercaya `pks_remove_member`.
+--
+-- CATATAN DRIFT: blok ini men-`CREATE OR REPLACE` guard_user_privilege_cols.
+-- Isi di bawah = SALINAN PERSIS versi v41 (Migrasi v41 Bagian A, baris ~2189)
+-- dengan SATU tambahan: cabang bypass untuk komsel_id. Semua cek lain (role,
+-- is_pks, status, sp, points, kartu jemaat) DIPERTAHANKAN tanpa perubahan.
+-- Bila production sudah drift dari versi itu, verifikasi dulu dengan:
+--   SELECT pg_get_functiondef('guard_user_privilege_cols'::regproc);
+-- lalu samakan sebelum menjalankan agar tidak ada cek production yang hilang.
+
+CREATE OR REPLACE FUNCTION guard_user_privilege_cols() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  caller_role text := auth_user_role();
+BEGIN
+  -- (1) Kolom PERAN (vektor eskalasi): HANYA Super Admin.
+  --     caller_role NULL = konteks backend tepercaya (SQL Editor / service
+  --     role, auth.uid() kosong) → DILEWATI. Attacker yang login SELALU punya
+  --     role non-NULL, jadi tetap terblokir.
+  IF caller_role IS NOT NULL AND caller_role <> 'Super Admin' THEN
+    IF NEW.role IS DISTINCT FROM OLD.role
+       OR NEW.role_secondary IS DISTINCT FROM OLD.role_secondary THEN
+      RAISE EXCEPTION 'Hanya Super Admin yang dapat mengubah role/role_secondary.';
+    END IF;
+  END IF;
+
+  -- (1b) is_pks (penetapan PKS) = HAK KHUSUS akses Komsel.
+  IF COALESCE(NEW.is_pks, false) IS DISTINCT FROM COALESCE(OLD.is_pks, false)
+     AND caller_role IS NOT NULL
+     AND NOT auth_admin_can('/admin/komsel') THEN
+    RAISE EXCEPTION 'Menetapkan/mengubah PKS adalah hak khusus admin dengan akses Komsel.';
+  END IF;
+
+  -- (2) Kolom hak akses & privilege lain: Admin/Super Admin boleh; selain itu ditolak.
+  IF caller_role NOT IN ('Admin', 'Super Admin') THEN
+    IF NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.sp_level IS DISTINCT FROM OLD.sp_level
+       OR NEW.sp_notes IS DISTINCT FROM OLD.sp_notes THEN
+      RAISE EXCEPTION 'Tidak diizinkan mengubah kolom hak akses/status/SP sendiri.';
+    END IF;
+    -- komsel_id: Admin/Super Admin bebas; selain itu HANYA lewat RPC tepercaya
+    -- `pks_remove_member` yang men-set escape-hatch di bawah (PKS keluarkan
+    -- anggota komselnya). Tanpa segel itu, perubahan komsel_id tetap ditolak.
+    IF NEW.komsel_id IS DISTINCT FROM OLD.komsel_id
+       AND COALESCE(current_setting('app.allow_komsel_reassign', true), '') <> '1' THEN
+      RAISE EXCEPTION 'Tidak diizinkan mengubah keanggotaan komsel sendiri.';
+    END IF;
+    IF COALESCE(current_setting('app.allow_points_update', true), '') <> '1' THEN
+      IF NEW.points IS DISTINCT FROM OLD.points
+         OR NEW.biodata_points_awarded IS DISTINCT FROM OLD.biodata_points_awarded THEN
+        RAISE EXCEPTION 'Poin tidak dapat diubah langsung.';
+      END IF;
+    END IF;
+    IF NEW.nij IS DISTINCT FROM OLD.nij
+       OR NEW.membership_card_url IS DISTINCT FROM OLD.membership_card_url
+       OR NEW.membership_card_issued_at IS DISTINCT FROM OLD.membership_card_issued_at THEN
+      RAISE EXCEPTION 'Kolom kartu jemaat hanya dapat diubah Admin.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_user_privilege ON users;
+CREATE TRIGGER trg_guard_user_privilege
+  BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION guard_user_privilege_cols();
+
+-- RPC: keluarkan seorang anggota dari komsel. Otorisasi di server: pemanggil
+-- harus PKS komsel tsb (auth_leads_komsel) ATAU Admin/Super Admin. Anggota
+-- WAJIB memang berada di komsel itu (cegah menebak user_id komsel lain).
+CREATE OR REPLACE FUNCTION pks_remove_member(p_komsel_id TEXT, p_user_id TEXT)
+  RETURNS void
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_current TEXT;
+BEGIN
+  IF NOT (
+    auth_user_role() IN ('Admin','Super Admin')
+    OR auth_leads_komsel(p_komsel_id)
+  ) THEN
+    RAISE EXCEPTION 'not_authorized';
+  END IF;
+
+  SELECT komsel_id INTO v_current FROM users WHERE user_id = p_user_id;
+  IF v_current IS NULL OR v_current IS DISTINCT FROM p_komsel_id THEN
+    RAISE EXCEPTION 'member_not_in_komsel';
+  END IF;
+
+  -- Buka segel guard komsel_id HANYA untuk update tepercaya ini (scope: transaksi).
+  PERFORM set_config('app.allow_komsel_reassign', '1', true);
+  UPDATE users SET komsel_id = NULL WHERE user_id = p_user_id;
+  PERFORM set_config('app.allow_komsel_reassign', '', true);
+END $$;
+REVOKE EXECUTE ON FUNCTION pks_remove_member(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION pks_remove_member(TEXT, TEXT) TO authenticated;

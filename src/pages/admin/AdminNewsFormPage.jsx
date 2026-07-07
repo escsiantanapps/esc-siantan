@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, FileText, UploadCloud, X } from 'lucide-react'
 import { newsService, mediaService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
@@ -25,9 +25,11 @@ export default function AdminNewsFormPage() {
 
   const [form, setForm] = useState({
     title: '', content: '', contact_wa: '', thumbnail_url: '',
-    photo_urls: [], video_urls: [],
+    photo_urls: [], video_urls: [], pdf_files: [],
   })
   const [mediaBusy, setMediaBusy] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const pdfInputRef = useRef(null)
 
   useEffect(() => {
     if (!isEdit) return
@@ -39,6 +41,7 @@ export default function AdminNewsFormPage() {
         thumbnail_url: item.thumbnail_url || '',
         photo_urls: item.photo_urls || [],
         video_urls: item.video_urls || [],
+        pdf_files: item.pdf_files || [],
       }))
       .catch(err => setError(err.message || t('anf.loadFailed')))
       .finally(() => setLoading(false))
@@ -70,6 +73,31 @@ export default function AdminNewsFormPage() {
     } finally {
       setMediaBusy(false)
     }
+  }
+
+  // Lampiran PDF (mis. warta jemaat). Disimpan sebagai {name, url} di
+  // form.pdf_files → kolom news.pdf_files (JSONB, Migrasi v44). File fisik di
+  // bucket publik task-files, dibuka langsung jemaat di halaman detail.
+  async function handlePdf(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setPdfBusy(true)
+    try {
+      validateUpload(file, { maxMB: 10 })
+      // Tipe kadang kosong di sebagian perangkat; tolak hanya bila jelas bukan PDF.
+      if (file.type && file.type !== 'application/pdf') throw new Error(t('anf.pdfUploadFailed'))
+      const item = await mediaService.uploadPdf('news', file)
+      set('pdf_files', [...(form.pdf_files || []), item])
+    } catch (err) {
+      toast.error(err.message || t('anf.pdfUploadFailed'))
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
+  function removePdf(i) {
+    set('pdf_files', (form.pdf_files || []).filter((_, idx) => idx !== i))
   }
 
   async function handleUpload(file) {
@@ -195,6 +223,29 @@ export default function AdminNewsFormPage() {
           urls={form.video_urls} uploading={mediaBusy}
           onChange={a => handleMedia('video', a)}
         />
+      </Card>
+
+      {/* Lampiran PDF */}
+      <Card className="p-4 mb-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-900">{t('anf.pdfSection')}</h2>
+        <input ref={pdfInputRef} type="file" accept="application/pdf" className="hidden" onChange={handlePdf} />
+        {(form.pdf_files || []).length > 0 && (
+          <div className="space-y-2">
+            {form.pdf_files.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-xl border border-gray-100 bg-control px-3 py-2">
+                <FileText size={16} className="text-red-500 shrink-0" />
+                <p className="flex-1 min-w-0 text-sm text-gray-700 truncate">{f.name}</p>
+                <button type="button" onClick={() => removePdf(i)} aria-label="Hapus" className="p-1 text-gray-400 hover:text-red-500">
+                  <X size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <Button type="button" variant="outline" className="w-full" loading={pdfBusy} onClick={() => pdfInputRef.current?.click()}>
+          <UploadCloud size={15} /> {t('anf.pdfAdd')}
+        </Button>
+        <p className="text-xs text-gray-400">{t('anf.pdfHint')}</p>
       </Card>
 
       <div className="flex gap-2">

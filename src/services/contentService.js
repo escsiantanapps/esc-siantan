@@ -491,6 +491,19 @@ export const komselService = {
     if (error) throw error
   },
 
+  // Keluarkan anggota dari komsel (set komsel_id NULL). Ditegakkan di server
+  // lewat RPC pks_remove_member (Migrasi v45): otorisasi PKS komsel tsb ATAU
+  // Admin/Super Admin, dan anggota WAJIB memang berada di komsel itu. Klien
+  // TIDAK boleh update users.komsel_id langsung — guard_user_privilege_cols
+  // menolak perubahan komsel_id oleh non-Admin. Menambah anggota tetap lewat
+  // Admin (assignMember).
+  async removeMember(komselId, userId) {
+    const { error } = await supabase.rpc('pks_remove_member', {
+      p_komsel_id: komselId, p_user_id: userId,
+    })
+    if (error) throw error
+  },
+
   // ── PKS (kepemimpinan komsel, many-to-many lewat komsel_leaders) ──
 
   // Daftar PKS sebuah komsel.
@@ -787,5 +800,19 @@ export const mediaService = {
     const { error } = await supabase.storage.from('task-files').upload(path, file)
     if (error) throw error
     return supabase.storage.from('task-files').getPublicUrl(path).data.publicUrl
+  },
+
+  // PDF lampiran (mis. Informasi) → bucket task-files (publik). contentType
+  // di-set eksplisit supaya browser membukanya INLINE sebagai PDF, bukan
+  // mengunduh sebagai octet-stream. Kembalikan {name, url} agar nama berkas
+  // yang ramah tetap tersimpan & ditampilkan ke jemaat.
+  async uploadPdf(folder, file) {
+    const ext = (file.name.split('.').pop() || 'pdf').toLowerCase()
+    const path = `${folder}/pdf/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const { error } = await supabase.storage.from('task-files')
+      .upload(path, file, { contentType: file.type || 'application/pdf' })
+    if (error) throw error
+    const url = supabase.storage.from('task-files').getPublicUrl(path).data.publicUrl
+    return { name: file.name, url }
   },
 }

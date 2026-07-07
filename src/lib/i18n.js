@@ -341,6 +341,8 @@ export const translations = {
     // Detail Info
     'infoDetail.title': 'Detail Informasi',
     'infoDetail.notFound': 'Informasi tidak ditemukan',
+    'infoDetail.attachments': 'Berkas PDF',
+    'infoDetail.openPdf': 'Buka',
 
     // Detail Event
     'eventDetail.title': 'Detail Event',
@@ -428,6 +430,11 @@ export const translations = {
     'pks.detailBirthPlace': 'Tempat Lahir',
     'pks.detailAddress': 'Alamat',
     'pks.detailSocialMedia': 'Media Sosial',
+    'pks.removeMember': 'Keluarkan dari Komsel',
+    'pks.removeMemberTitle': 'Keluarkan anggota?',
+    'pks.removeMemberMsg': '{name} akan dikeluarkan dari komsel ini. Data pribadi & poinnya tidak terhapus, dan Admin bisa menambahkannya kembali.',
+    'pks.memberRemoved': '{name} dikeluarkan dari komsel.',
+    'pks.removeMemberFailed': 'Gagal mengeluarkan anggota.',
     'pks.tabBirthday': 'Ultah',
     'pks.noBirthdayToday': 'Tidak ada yang ulang tahun hari ini',
     'pks.noBirthdayTodayDesc': 'Anggota komsel yang berulang tahun hari ini akan muncul di sini.',
@@ -1105,6 +1112,10 @@ export const translations = {
     'anf.deleted': 'Berita berhasil dihapus.',
     'anf.deleteFailed': 'Gagal menghapus berita.',
     'anf.section': 'Informasi Berita',
+    'anf.pdfSection': 'Berkas PDF',
+    'anf.pdfHint': 'Lampirkan PDF (mis. warta, jadwal, undangan). Jemaat dapat membukanya langsung. Maks 10 MB per berkas.',
+    'anf.pdfAdd': 'Tambah PDF',
+    'anf.pdfUploadFailed': 'Gagal mengunggah PDF.',
     'anf.cover': 'Gambar Sampul',
     'anf.coverHint': 'JPG/PNG, maks 5 MB',
     'anf.titleLabel': 'Judul',
@@ -1479,6 +1490,8 @@ export const translations = {
     // Info detail
     'infoDetail.title': 'Information Detail',
     'infoDetail.notFound': 'Information not found',
+    'infoDetail.attachments': 'PDF Files',
+    'infoDetail.openPdf': 'Open',
 
     // Event detail
     'eventDetail.title': 'Event Detail',
@@ -1566,6 +1579,11 @@ export const translations = {
     'pks.detailBirthPlace': 'Birth Place',
     'pks.detailAddress': 'Address',
     'pks.detailSocialMedia': 'Social Media',
+    'pks.removeMember': 'Remove from Komsel',
+    'pks.removeMemberTitle': 'Remove member?',
+    'pks.removeMemberMsg': '{name} will be removed from this komsel. Their personal data & points are kept, and an Admin can add them back.',
+    'pks.memberRemoved': '{name} removed from komsel.',
+    'pks.removeMemberFailed': 'Failed to remove member.',
     'pks.tabBirthday': 'Birthday',
     'pks.noBirthdayToday': 'No birthdays today',
     'pks.noBirthdayTodayDesc': 'Cell group members with a birthday today will appear here.',
@@ -2242,6 +2260,10 @@ export const translations = {
     'anf.deleted': 'News deleted successfully.',
     'anf.deleteFailed': 'Failed to delete news.',
     'anf.section': 'News Information',
+    'anf.pdfSection': 'PDF Files',
+    'anf.pdfHint': 'Attach PDFs (e.g. bulletin, schedule, invitation). Members can open them directly. Max 10 MB per file.',
+    'anf.pdfAdd': 'Add PDF',
+    'anf.pdfUploadFailed': 'Failed to upload PDF.',
     'anf.cover': 'Cover Image',
     'anf.coverHint': 'JPG/PNG, max 5 MB',
     'anf.titleLabel': 'Title',

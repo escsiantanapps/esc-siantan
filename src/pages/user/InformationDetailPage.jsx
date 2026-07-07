@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, MessageCircle } from 'lucide-react'
+import { Bell, MessageCircle, FileText } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
@@ -43,6 +43,27 @@ export default function InformationDetailPage() {
                 <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{news.content}</p>
               )}
               <MediaGallery photos={news.photo_urls} videos={news.video_urls} />
+
+              {/* Lampiran PDF — dibuka di tab baru; browser/PWA menampilkannya
+                  inline dengan viewer bawaan (bisa zoom, scroll, unduh). */}
+              {Array.isArray(news.pdf_files) && news.pdf_files.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-500">{t('infoDetail.attachments')}</p>
+                  {news.pdf_files.map((f, i) => (
+                    <a
+                      key={i}
+                      href={f.url}
+                      target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-2.5 rounded-xl border border-gray-100 bg-control px-3 py-2.5 hover:border-brand-300 transition-colors"
+                    >
+                      <FileText size={18} className="text-red-500 shrink-0" />
+                      <span className="flex-1 min-w-0 text-sm text-gray-700 truncate">{f.name}</span>
+                      <span className="text-xs font-medium text-brand-500 shrink-0">{t('infoDetail.openPdf')}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+
               {waLink(news.contact_wa) && (
                 <a
                   href={waLink(news.contact_wa)}
