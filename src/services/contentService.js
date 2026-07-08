@@ -573,16 +573,31 @@ export const komselService = {
   // PKS membuat sesi → QR ditampilkan → jemaat scan utk catat kehadirannya
   // sendiri (+1 poin otomatis via trigger DB).
   async createSession(komselId, title, createdBy) {
-    const todayLocal = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
     
-    // Cek apakah sudah ada sesi untuk komsel ini di hari yang sama
+    // Hitung batas awal (Senin) dan akhir (Minggu) minggu ini
+    const d = new Date(todayStr + 'T00:00:00Z')
+    const day = d.getUTCDay()
+    const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1)
+    
+    const monday = new Date(d)
+    monday.setUTCDate(diff)
+    const startOfWeek = monday.toISOString().slice(0, 10)
+    
+    const sunday = new Date(monday)
+    sunday.setUTCDate(monday.getUTCDate() + 6)
+    const endOfWeek = sunday.toISOString().slice(0, 10)
+    
+    // Cek apakah sudah ada sesi untuk komsel ini di MINGGU INI
     const { data: existing, error: findError } = await supabase.from('komsel_sessions')
       .select('*')
       .eq('komsel_id', komselId)
-      .eq('session_date', todayLocal)
+      .gte('session_date', startOfWeek)
+      .lte('session_date', endOfWeek)
+      .order('created_at', { ascending: false })
       
     if (!findError && existing && existing.length > 0) {
-      return existing[0] // kembalikan sesi yang pertama ditemukan (reuse)
+      return existing[0] // kembalikan sesi minggu ini (reuse 1 sesi per minggu)
     }
 
     const { data, error } = await supabase.from('komsel_sessions')
