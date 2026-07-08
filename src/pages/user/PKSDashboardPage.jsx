@@ -459,15 +459,9 @@ export default function PKSDashboardPage() {
                     </div>
                   </div>
                   {!activeSession ? (
-                    <div className="space-y-4">
-                      <p className="text-sm text-gray-600 leading-relaxed">
-                        {t('pks.qrDesc')}
-                      </p>
-                      
-                      <Button onClick={handleCreateSession} loading={creatingSession} className="w-full">
-                        {t('pks.createSession')}
-                      </Button>
-                    </div>
+                    <Button onClick={handleCreateSession} loading={creatingSession} className="w-full">
+                      <Plus size={15} /> Buat Sesi &amp; Tampilkan QR
+                    </Button>
                   ) : null}
                 </Card>
 
