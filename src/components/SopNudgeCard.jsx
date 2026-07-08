@@ -19,20 +19,26 @@ export default function SopNudgeCard() {
   })
   const [loaded, setLoaded] = useState(false)
 
+  // Hanya munculkan pengingat di hari JUMAT & SABTU (menjelang & saat akhir
+  // pekan pelayanan) — di luar itu tidak mengganggu. getDay(): 5=Jumat, 6=Sabtu
+  // (waktu lokal perangkat ≈ WIB untuk jemaat setempat; cukup untuk nudge).
+  const day = new Date().getDay()
+  const isReminderDay = day === 5 || day === 6
+
   useEffect(() => {
-    if (!profile?.user_id || dismissed) return
+    if (!profile?.user_id || dismissed || !isReminderDay) return
     tasksService.getIncompleteSopSummary(profile)
       .then(setIncomplete)
       .catch(() => setIncomplete([]))
       .finally(() => setLoaded(true))
-  }, [profile, dismissed])
+  }, [profile, dismissed, isReminderDay])
 
   function handleDismiss() {
     setDismissed(true)
     try { sessionStorage.setItem(DISMISS_KEY, '1') } catch {}
   }
 
-  if (dismissed || !loaded || incomplete.length === 0) return null
+  if (dismissed || !loaded || !isReminderDay || incomplete.length === 0) return null
 
   return (
     <div

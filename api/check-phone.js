@@ -35,14 +35,22 @@ export default async function handler(req, res) {
     // baris ber-auth_id NULL (jemaat impor / tambahan admin) yang TIDAK
     // terdeteksi supabase.auth.signUp (itu hanya melihat auth.users).
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
-    const { data: rows } = await admin.from('users').select('phone, email')
-    const phoneTaken = (rows || []).some(r => r.phone && core(r.phone) === wanted)
-    const emailTaken = email
-      ? (rows || []).some(r => (r.email || '').trim().toLowerCase() === email)
-      : false
+    const { data: rows } = await admin.from('users').select('phone, email, auth_id')
+    const phoneRow = (rows || []).find(r => r.phone && core(r.phone) === wanted) || null
+    const emailRow = email
+      ? (rows || []).find(r => (r.email || '').trim().toLowerCase() === email) || null
+      : null
+    const phoneTaken = !!phoneRow
+    const emailTaken = !!emailRow
+    // needsActivation: nomor cocok dgn baris jemaat lama yang BELUM punya login
+    // (auth_id NULL) — jemaat impor/tambahan admin. Alur Daftar mengarahkan
+    // mereka ke verifikasi OTP WhatsApp (aktivasi), bukan membuat akun ganda.
+    const needsActivation = !!(phoneRow && !phoneRow.auth_id)
+    // hasLogin: nomor ATAU email sudah tertaut akun login (auth_id) → arahkan ke Masuk.
+    const hasLogin = !!((phoneRow && phoneRow.auth_id) || (emailRow && emailRow.auth_id))
     // `available` dipertahankan (= ketersediaan NOMOR) demi kompatibilitas
     // pemanggil lama (usersService "Tambah Jemaat"). Flag baru granular.
-    return res.status(200).json({ available: !phoneTaken, phoneTaken, emailTaken })
+    return res.status(200).json({ available: !phoneTaken, phoneTaken, emailTaken, needsActivation, hasLogin })
   } catch (e) {
     return res.status(500).json({ error: 'Terjadi kesalahan: ' + (e?.message || 'unknown') })
   }

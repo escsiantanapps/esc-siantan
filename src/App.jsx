@@ -17,7 +17,6 @@ import PrivacyPolicyPage from '@/pages/PrivacyPolicyPage'
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
-import ActivatePage from '@/pages/auth/ActivatePage'
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import AccountStatusPage from '@/pages/auth/AccountStatusPage'
 
@@ -157,7 +156,10 @@ export default function App() {
           <Route path="/login"          element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register"       element={<PublicRoute><RegisterPage /></PublicRoute>} />
           <Route path="/lupa-password"  element={<ForgotPasswordPage />} />
-          <Route path="/aktivasi"       element={<ActivatePage />} />
+          {/* Aktivasi tak lagi jadi halaman terpisah — dilebur ke alur Daftar
+              (jemaat lama yg No.HP-nya cocok akan diverifikasi OTP di sana).
+              Redirect agar bookmark/link lama tetap mengarah ke tempat benar. */}
+          <Route path="/aktivasi"       element={<Navigate to="/register" replace />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           <Route path="/" element={<PrivateRoute><UserLayout /></PrivateRoute>}>

@@ -2508,3 +2508,64 @@ BEGIN
 END $$;
 REVOKE EXECUTE ON FUNCTION pks_remove_member(TEXT, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION pks_remove_member(TEXT, TEXT) TO authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v46: Izinkan unggah PDF berita ke bucket task-files ────────
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (2026-07-07): Fitur lampiran PDF Informasi (Migrasi v44) mengunggah
+-- ke path `news/pdf/<...>` di bucket `task-files`, TAPI policy `task_files_insert`
+-- (di-hardening Migrasi v38) hanya mengizinkan Admin menulis path *video*
+-- (`news/video/%`, dst.) + `form-bg/%`. Path `news/pdf/%` tidak ada di allowlist
+-- → INSERT ditolak: "new row violates row-level security policy".
+--
+-- KEPUTUSAN OPERATOR (2026-07-07): izinkan Admin/Super Admin mengunggah PDF
+-- kurasi berita ke `news/pdf/%` (setara dengan izin video yang sudah ada).
+--
+-- CATATAN DRIFT: blok ini men-`CREATE OR REPLACE` policy storage `task_files_insert`.
+-- Isi di bawah = SALINAN PERSIS versi Migrasi v38 (baris ~1820) DITAMBAH dua pola
+-- `news/pdf/%` & `news/%/pdf/%` pada cabang admin. Cabang jawaban-tugas/izin
+-- (responses/leaves milik sendiri) DIPERTAHANKAN tanpa perubahan. Bila production
+-- sudah drift dari v38, verifikasi dulu:
+--   SELECT pg_get_expr(polwithcheck, polrelid) FROM pg_policy
+--   WHERE polname = 'task_files_insert';
+-- lalu samakan sebelum menjalankan agar tidak ada izin lama yang hilang.
+DROP POLICY IF EXISTS "task_files_insert" ON storage.objects;
+CREATE POLICY "task_files_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'task-files'
+    AND (
+      -- Jawaban tugas & bukti izin: path[1] wajib user_id sendiri.
+      ((name LIKE 'responses/%' OR name LIKE 'leaves/%')
+        AND split_part(name, '/', 2) = auth_user_id())
+      -- Background form + media kurasi (video & PDF): Admin/Super Admin saja.
+      OR ((name LIKE 'form-bg/%'
+           OR name LIKE 'classes/video/%' OR name LIKE 'classes/%/video/%'
+           OR name LIKE 'events/video/%'  OR name LIKE 'events/%/video/%'
+           OR name LIKE 'news/video/%'    OR name LIKE 'news/%/video/%'
+           OR name LIKE 'news/pdf/%'      OR name LIKE 'news/%/pdf/%')
+        AND auth_user_role() IN ('Admin','Super Admin'))
+    )
+  );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v47: Realtime tabel users (panel Admin auto-refresh) ───────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-08): panel Admin (Kelola Jemaat) harus menampilkan
+-- pendaftar baru secara REALTIME tanpa refresh manual. Supabase Realtime hanya
+-- menyiarkan perubahan tabel yang masuk publikasi `supabase_realtime`. Tambahkan
+-- `users` ke publikasi bila belum ada (idempotent lewat cek pg_publication_tables).
+--
+-- RLS tetap ditegakkan pada aliran realtime: subscriber hanya menerima baris yang
+-- boleh ia SELECT. Yang berlangganan hanya halaman Admin (rute admin), dan
+-- Admin/Super Admin/Gembala memang boleh membaca `users`. Tidak ada data bocor
+-- ke jemaat biasa karena mereka tidak membuka panel ini.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'users'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.users;
+  END IF;
+END $$;

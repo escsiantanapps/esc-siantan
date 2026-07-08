@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Users, ChevronRight as Arrow, Plus, X, Copy } from 'lucide-react'
 import { usersService } from '@/services/usersService'
@@ -70,6 +70,21 @@ export default function AdminMembersPage() {
     const timer = setTimeout(loadMembers, 300)
     return () => clearTimeout(timer)
   }, [search, role, status, ministry, komsel, duplicatesOnly, page, sort])
+
+  // Realtime: muat ulang daftar begitu ada perubahan di tabel users (mis.
+  // pendaftar baru) tanpa perlu refresh manual. Pakai ref agar callback selalu
+  // memanggil loadMembers versi terbaru (filter/paging saat ini), bukan closure
+  // basi. Di-debounce ringan agar burst perubahan tidak memicu banyak fetch.
+  const loadRef = useRef(loadMembers)
+  loadRef.current = loadMembers
+  useEffect(() => {
+    let timer
+    const unsub = usersService.subscribeChanges(() => {
+      clearTimeout(timer)
+      timer = setTimeout(() => loadRef.current?.(), 400)
+    })
+    return () => { clearTimeout(timer); unsub?.() }
+  }, [])
 
   // Cek apakah baris ini bernama sama dgn user lain di DB (setelah trim + lowercase).
   function isDuplicateName(name) {

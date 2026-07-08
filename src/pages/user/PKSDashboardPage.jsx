@@ -90,7 +90,8 @@ export default function PKSDashboardPage() {
   const [creatingSession, setCreatingSession] = useState(false)
   const [activeSession, setActiveSession] = useState(null) // { ...session, qr }
   const [sessionAttendance, setSessionAttendance] = useState([])
-  useBackClose(!!activeSession, () => setActiveSession(null))
+  const [sessions, setSessions] = useState([]) // daftar sesi QR komsel (dibagi antar PKS)
+  useBackClose(!!activeSession, () => closeSession())
 
   const userId = profile?.user_id
 
@@ -210,6 +211,36 @@ export default function PKSDashboardPage() {
     }
   }
 
+  // Muat daftar sesi QR komsel + hitung jumlah kehadiran tiap sesi. Dipakai
+  // agar SEMUA PKS komsel ini melihat sesi & record yang sama (bukan hanya
+  // pembuatnya) — sinkron antar PKS. RLS mengizinkan: baca sesi = semua login,
+  // baca kehadiran = PKS komsel tsb.
+  async function loadSessions(kid = selectedId) {
+    if (!kid) { setSessions([]); return }
+    try {
+      const list = await komselService.getSessions(kid)
+      const rows = await komselService.getAttendanceForSessions(list.map(s => s.session_id)).catch(() => [])
+      const counts = {}
+      for (const r of rows) counts[r.session_id] = (counts[r.session_id] || 0) + 1
+      setSessions(list.map(s => ({ ...s, attendeeCount: counts[s.session_id] || 0 })))
+    } catch { setSessions([]) }
+  }
+  useEffect(() => { loadSessions(selectedId) /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [selectedId])
+
+  // Buka sesi yang sudah ada (mis. dibuat PKS lain) → tampilkan QR & pantau
+  // kehadiran yang masuk secara live.
+  async function openSession(session) {
+    const qr = await QRCode.toDataURL(`ESC-KOMSEL:${session.session_id}`, { width: 320, margin: 1 }).catch(() => '')
+    setActiveSession({ ...session, qr })
+    setSessionAttendance([])
+  }
+
+  // Tutup modal sesi + segarkan jumlah kehadiran di daftar sesi.
+  function closeSession() {
+    setActiveSession(null)
+    loadSessions(selectedId)
+  }
+
   // Buat sesi absensi baru → tampilkan QR untuk dipindai anggota.
   async function handleCreateSession() {
     const title = sessionTitle.trim() || `Komsel ${formatDate(new Date())}`
@@ -220,6 +251,7 @@ export default function PKSDashboardPage() {
       setActiveSession({ ...session, qr })
       setSessionAttendance([])
       setSessionTitle('')
+      loadSessions(selectedId)
     } catch (err) {
       toast.error(err.message || t('pks.attendanceSaveFailed'))
     } finally {
@@ -416,6 +448,33 @@ export default function PKSDashboardPage() {
                     <Plus size={15} /> Buat Sesi &amp; Tampilkan QR
                   </Button>
                 </Card>
+
+                {/* Daftar sesi QR komsel — dibagi antar semua PKS komsel ini
+                    (bukan hanya pembuatnya). Tap untuk tampilkan QR &amp; pantau
+                    kehadiran yang masuk. */}
+                {sessions.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold text-gray-500 mb-2">Sesi Absensi QR</p>
+                    <Card className="divide-y divide-gray-100">
+                      {sessions.map(s => (
+                        <button
+                          key={s.session_id}
+                          onClick={() => openSession(s)}
+                          className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+                            <QrCode size={16} className="text-brand-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{s.title}</p>
+                            <p className="text-xs text-gray-400">{formatDate(s.session_date)}</p>
+                          </div>
+                          <Badge color="green">{s.attendeeCount} hadir</Badge>
+                        </button>
+                      ))}
+                    </Card>
+                  </div>
+                )}
 
                 {/* Checklist manual (opsional, tanpa poin) */}
                 <details className="mb-4 group">
@@ -680,7 +739,7 @@ export default function PKSDashboardPage() {
           <Card className="w-full max-w-sm p-5 space-y-4 max-h-[90vh] overflow-y-auto text-center">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-900">Sesi Absensi Aktif</h2>
-              <button onClick={() => setActiveSession(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={closeSession} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
             <p className="text-sm text-gray-600">{activeSession.title}</p>
             {activeSession.qr

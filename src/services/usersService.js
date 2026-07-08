@@ -8,6 +8,19 @@ function withMinistryIds(u) {
 }
 
 export const usersService = {
+  // Realtime: panggil `cb` setiap ada perubahan pada tabel users (INSERT/UPDATE/
+  // DELETE) — dipakai panel Admin agar pendaftar baru langsung muncul tanpa
+  // refresh. Mengembalikan fungsi unsubscribe. Butuh tabel users masuk publikasi
+  // realtime (Migrasi v47) & RLS: hanya baris yang boleh dibaca subscriber yang
+  // terkirim (Admin bisa baca semua).
+  subscribeChanges(cb) {
+    const ch = supabase
+      .channel('admin-users-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, cb)
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  },
+
   async getAll({ search = '', role = '', status = '', ministry = '', komsel = '', duplicatesOnly = false, page = 1, limit = 20, sort = 'name' } = {}) {
     let query = supabase.from('users').select('*, user_ministries(ministry_id)', { count: 'exact' })
     if (search) query = query.ilike('name', `%${search}%`)

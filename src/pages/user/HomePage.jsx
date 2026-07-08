@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw, Sparkles, CreditCard } from 'lucide-react'
+import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw, Sparkles, CreditCard, Star } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { newsService, eventsService, classesService, appSettingsService, registrationService } from '@/services/contentService'
@@ -86,8 +86,8 @@ export default function HomePage() {
             <span className="font-display font-bold text-brand-500 text-base">ESC Siantan</span>
           </div>
           <div className="flex items-center gap-2">
-            <Link to="/poin" className="flex items-center gap-1 bg-brand-50 text-brand-600 rounded-full pl-2 pr-2.5 py-1 active:scale-95 transition-transform">
-              <Sparkles size={14} />
+            <Link to="/poin" className="flex items-center gap-1.5 rounded-full pl-2 pr-3 py-1 bg-gradient-to-r from-amber-300 to-yellow-400 border border-amber-400/60 text-amber-950 active:scale-95 transition-transform">
+              <Star size={14} className="fill-amber-600 text-amber-600" />
               <span className="text-xs font-bold">{profile?.points ?? 0}</span>
             </Link>
             <NotificationBell />

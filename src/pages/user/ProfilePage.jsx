@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight } from 'lucide-react'
+import { LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight, Star } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
@@ -64,10 +64,24 @@ export default function ProfilePage() {
         <SkyTime />
       </div>
       <div className="px-4 -mt-14 relative z-10">
-        <div className="w-24 h-24 rounded-3xl ring-4 ring-surface shadow-lg overflow-hidden shrink-0">
-          {profile.photo_url
-            ? <img src={profile.photo_url} alt={profile.name} className="w-full h-full object-cover" />
-            : <div className="w-full h-full gradient-main flex items-center justify-center text-white text-2xl font-bold">{initials}</div>}
+        <div className="flex items-end justify-between gap-3">
+          <div className="w-24 h-24 rounded-3xl ring-4 ring-surface shadow-lg overflow-hidden shrink-0">
+            {profile.photo_url
+              ? <img src={profile.photo_url} alt={profile.name} className="w-full h-full object-cover" />
+              : <div className="w-full h-full gradient-main flex items-center justify-center text-white text-2xl font-bold">{initials}</div>}
+          </div>
+
+          {/* Poin — kartu emas di ruang kanan header, tap menuju halaman Poin */}
+          <Link
+            to="/poin"
+            className="mb-1 flex items-center gap-2.5 rounded-2xl px-4 py-2.5 bg-gradient-to-br from-amber-300 to-yellow-500 border border-amber-400/60 active:scale-[0.98] transition-transform"
+          >
+            <Star size={22} className="fill-amber-700 text-amber-700 shrink-0" />
+            <div className="leading-tight">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">{t('profile.points')}</p>
+              <p className="text-xl font-bold text-amber-950">{profile.points ?? 0}</p>
+            </div>
+          </Link>
         </div>
 
         <div className="mt-3">
