@@ -760,9 +760,9 @@ export default function AdminClassesPage() {
             )}
 
             {/* MODE B: submissions prasyarat (kalau kelas pakai formulir prasyarat) */}
-            {Array.isArray(regModal.prerequisite_fields) && regModal.prerequisite_fields.length > 0 && (
+            {((Array.isArray(regModal.prerequisite_fields) && regModal.prerequisite_fields.length > 0) || regModal.require_approval) && (
               <div className="border-t border-gray-100 pt-3">
-                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Formulir Prasyarat</p>
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Pengajuan & Verifikasi</p>
                 {submissions.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-3">Belum ada pengajuan.</p>
                 ) : (

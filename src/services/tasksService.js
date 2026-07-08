@@ -218,8 +218,9 @@ export const tasksService = {
   // Hapus satu respon. Digerbang RLS `responses_admin_delete`
   // (auth_admin_can('/admin/respon')) — lihat Migrasi v49.
   async deleteResponse(id) {
-    const { error } = await supabase.from('form_responses').delete().eq('response_id', id)
+    const { error, count } = await supabase.from('form_responses').delete({ count: 'exact' }).eq('response_id', id)
     if (error) throw error
+    if (count === 0) throw new Error("Gagal menghapus di database (mungkin terblokir hak akses).")
   },
 
   async uploadResponseFile(userId, file) {
