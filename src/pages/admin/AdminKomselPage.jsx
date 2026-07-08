@@ -3,6 +3,7 @@ import { Users, Plus, Pencil, Trash2, X, Eye, Crown, Search, UserPlus, Tag, Cale
 import { komselService, komselCategoriesService } from '@/services/contentService'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
+import { useAuth } from '@/hooks/useAuth'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
@@ -12,6 +13,8 @@ const emptyForm = { name: '', max_capacity: '', category_id: '' }
 export default function AdminKomselPage() {
   const { toast, confirm } = useToast()
   const { t } = useLang()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const [komsel, setKomsel] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -404,9 +407,11 @@ export default function AdminKomselPage() {
               <button onClick={() => openEdit(item)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
                 <Pencil size={16} />
               </button>
-              <button onClick={() => handleDelete(item)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
-                <Trash2 size={16} />
-              </button>
+              {!isGembala && (
+                <button onClick={() => handleDelete(item)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
           ))}
         </Card>
@@ -482,7 +487,9 @@ export default function AdminKomselPage() {
                                 <p className="text-xs text-gray-400">{formatDate(s.session_date)} · {s.attendees.length} hadir</p>
                               </div>
                             </button>
-                            <button onClick={() => deleteSession(s)} className="p-1.5 text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
+                            {!isGembala && (
+                              <button onClick={() => deleteSession(s)} className="p-1.5 text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
+                            )}
                           </div>
                           {open && (
                             <div className="px-3 pb-3 border-t border-gray-100 pt-2">
@@ -674,9 +681,11 @@ export default function AdminKomselPage() {
                 {categories.map(c => (
                   <div key={c.category_id} className="flex items-center gap-3 px-1 py-1.5">
                     <p className="flex-1 text-sm text-gray-900">{c.name}</p>
-                    <button onClick={() => handleDeleteCategory(c)} className="p-1.5 text-gray-400 hover:text-red-500">
-                      <Trash2 size={15} />
-                    </button>
+                    {!isGembala && (
+                      <button onClick={() => handleDeleteCategory(c)} className="p-1.5 text-gray-400 hover:text-red-500">
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

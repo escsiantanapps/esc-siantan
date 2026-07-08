@@ -24,6 +24,7 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
       { to: '/admin',          icon: LayoutDashboard, label: 'Dashboard',        section: 'Utama', labelKey: 'admin.nav.dashboard', sectionKey: 'admin.sec.Utama', exact: true },
       { to: '/admin/pesan',    icon: MessageSquare,   label: 'Pesan Gembala', section: 'Utama', labelKey: 'admin.nav.pesan', sectionKey: 'admin.sec.Utama' },
       { to: '/admin/evaluasi', icon: BarChart3,       label: 'Evaluasi & Laporan', section: 'Utama', labelKey: 'admin.nav.evaluasi', sectionKey: 'admin.sec.Utama' },
+      { to: '/admin/komsel',   icon: UsersRound,      label: 'Laporan Komsel', section: 'Utama', labelKey: 'admin.nav.komsel', sectionKey: 'admin.sec.Utama' },
     ]
   }
 
@@ -58,7 +59,7 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
 
 // Halaman yang boleh diakses Gembala di panel admin (sisanya diarahkan ke Dashboard).
 // Khusus untuk Dashboard (/admin), pengecekannya exact match di bawah.
-const GEMBALA_ALLOWED = ['/admin/pesan', '/admin/evaluasi']
+const GEMBALA_ALLOWED = ['/admin/pesan', '/admin/evaluasi', '/admin/komsel']
 
 export default function AdminLayout() {
   const [open, setOpen] = useState(false)
