@@ -95,8 +95,8 @@ export default function AdminClassesPage() {
   useEffect(() => {
     if (!regModal) return
     loadRegistrants()
-    // Selalu load submissions bila kelas pakai prasyarat.
-    if (Array.isArray(regModal.prerequisite_fields) && regModal.prerequisite_fields.length > 0) {
+    // Selalu load submissions bila kelas pakai prasyarat atau wajib verifikasi.
+    if ((Array.isArray(regModal.prerequisite_fields) && regModal.prerequisite_fields.length > 0) || regModal.require_approval) {
       prerequisiteService.getForTarget('class', regModal.class_id)
         .then(setSubmissions).catch(() => setSubmissions([]))
     } else {
