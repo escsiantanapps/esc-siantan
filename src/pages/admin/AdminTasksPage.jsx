@@ -98,9 +98,7 @@ export default function AdminTasksPage() {
               >
                 <Bell size={13} /> {sendingId === t.form_id ? '…' : tr('atask.remind')}
               </button>
-              <Link to={`/admin/respon?form=${t.form_id}`} className="text-xs text-blue-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-blue-50 flex-shrink-0">
-                <BarChart2 size={13} /> {tr('atask.answers')}
-              </Link>
+
               <Link to={`/admin/tugas/${t.form_id}/edit`} className="text-xs text-brand-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-brand-50 flex-shrink-0">
                 {tr('a.edit')} <ChevronRight size={13} />
               </Link>
