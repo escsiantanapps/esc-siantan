@@ -573,6 +573,18 @@ export const komselService = {
   // PKS membuat sesi → QR ditampilkan → jemaat scan utk catat kehadirannya
   // sendiri (+1 poin otomatis via trigger DB).
   async createSession(komselId, title, createdBy) {
+    const todayLocal = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
+    
+    // Cek apakah sudah ada sesi untuk komsel ini di hari yang sama
+    const { data: existing, error: findError } = await supabase.from('komsel_sessions')
+      .select('*')
+      .eq('komsel_id', komselId)
+      .eq('session_date', todayLocal)
+      
+    if (!findError && existing && existing.length > 0) {
+      return existing[0] // kembalikan sesi yang pertama ditemukan (reuse)
+    }
+
     const { data, error } = await supabase.from('komsel_sessions')
       .insert({ komsel_id: komselId, title, created_by: createdBy }).select().single()
     if (error) throw error

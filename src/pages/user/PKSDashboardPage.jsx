@@ -246,21 +246,15 @@ export default function PKSDashboardPage() {
     const title = sessionTitle.trim() || `Komsel ${formatDate(new Date())}`
     setCreatingSession(true)
     try {
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
-      const existing = sessions.find(s => s.session_date === today)
-      if (existing) {
-        toast.info(t('pks.existingSessionUsed', 'Menggunakan sesi yang sudah ada hari ini.'))
-        openSession(existing)
-        setSessionTitle('')
-        return
-      }
-
+      // 1. Service akan membuat sesi baru ATAU mengembalikan sesi yang sudah ada hari ini
+      // Ini mencegah duplikasi jika 2 PKS menekan tombol di waktu berdekatan dengan state yang usang.
       const session = await komselService.createSession(selectedId, title, profile.user_id)
+      
       const qr = await QRCode.toDataURL(`ESC-KOMSEL:${session.session_id}`, { width: 320, margin: 1 }).catch(() => '')
       setActiveSession({ ...session, qr })
-      setSessionAttendance([])
       setSessionTitle('')
       loadSessions(selectedId)
+      refreshSessionAttendance() // Tarik attendance kalau-kalau ini sesi reuse yang sudah ada yang absen
     } catch (err) {
       toast.error(err.message || t('pks.attendanceSaveFailed'))
     } finally {
