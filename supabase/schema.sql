@@ -2569,3 +2569,14 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.users;
   END IF;
 END $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v48: PAS Foto pada pengajuan KTJ (ktj_registrations.photo_url) ─
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-08): pengajuan Kartu Tanda Jemaat (KTJ) perlu
+-- lampiran PAS FOTO untuk pencetakan kartu. Simpan URL (signed) foto di kolom
+-- baru `photo_url`. Berkas fisik diunggah ke bucket privat `documents` pada path
+-- `ktj/<user_id>/...` (pola sama dgn dokumen registrasi lain): owner boleh
+-- menulis, Admin/Super Admin boleh membaca (policy documents v38 sudah ada) —
+-- TIDAK ada perubahan policy storage.
+ALTER TABLE ktj_registrations ADD COLUMN IF NOT EXISTS photo_url TEXT;

@@ -227,9 +227,11 @@ export default function AdminRegistrationDetailPage() {
       ]
     }
 
-    const documents = docs
-      .filter(d => reg.documents?.[d.key])
-      .map(d => ({ label: d.label, url: reg.documents[d.key] }))
+    const documents = type === 'ktj'
+      ? (reg.photo_url ? [{ label: 'Pas Foto', url: reg.photo_url }] : [])
+      : docs
+          .filter(d => reg.documents?.[d.key])
+          .map(d => ({ label: d.label, url: reg.documents[d.key] }))
 
     printArchive({
       title: `Arsip Pendaftaran ${typeLabel}`,
@@ -286,6 +288,14 @@ export default function AdminRegistrationDetailPage() {
             <Info label="Komsel" value={komselName(reg.komsel_id)} />
             <div className="col-span-2"><Info label="Alamat" value={reg.address} /></div>
           </div>
+          {reg.photo_url && (
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Pas Foto</p>
+              <a href={reg.photo_url} target="_blank" rel="noreferrer" className="inline-block">
+                <img src={reg.photo_url} alt="Pas Foto" className="w-32 aspect-[3/4] object-cover rounded-xl border border-gray-100" />
+              </a>
+            </div>
+          )}
           <div className="bg-brand-50 border border-brand-100 rounded-xl px-3 py-2.5 text-xs text-brand-700 leading-relaxed">
             Setelah pengajuan disetujui, terbitkan Kartu Tanda Jemaat lewat halaman <strong>Detail Jemaat</strong> — unggah kartu pada kolom "Kartu Jemaat" di sana. Kartu fisik BUKAN dibuat otomatis dari halaman ini.
           </div>

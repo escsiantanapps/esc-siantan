@@ -6,8 +6,9 @@ import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
 import { usersService } from '@/services/usersService'
 import { Card, Button, Input, Textarea, Select, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
+import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
-import { formatDate } from '@/lib/utils'
+import { formatDate, compressImage, validateUpload } from '@/lib/utils'
 
 export default function KTJPage() {
   const navigate = useNavigate()
@@ -22,8 +23,9 @@ export default function KTJPage() {
   const [error, setError] = useState('')
 
   const [form, setForm] = useState({
-    full_name: '', birth_date: '', birth_place: '', address: '', komsel_id: '',
+    full_name: '', birth_date: '', birth_place: '', address: '', komsel_id: '', photo_url: '',
   })
+  const [photoUploading, setPhotoUploading] = useState(false)
 
   useEffect(() => {
     if (!profile) return
@@ -51,10 +53,29 @@ export default function KTJPage() {
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
+  // Unggah PAS Foto ke bucket privat `documents` (path ktj/<user_id>/...): owner
+  // boleh tulis, admin boleh baca. Dikembalikan sbg signed URL (1 tahun).
+  async function handlePhoto(file) {
+    if (!file) return
+    setPhotoUploading(true)
+    try {
+      file = await compressImage(file, { maxDim: 1000 })
+      validateUpload(file, { maxMB: 5, image: true })
+      const url = await registrationService.uploadDocument(`ktj/${profile.user_id}`, file)
+      set('photo_url', url)
+      toast.success(t('ktj.photoUploaded'))
+    } catch (err) {
+      toast.error(err.message || t('ktj.photoFailed'))
+    } finally {
+      setPhotoUploading(false)
+    }
+  }
+
   async function handleSubmit() {
     setError('')
     if (!form.full_name.trim()) { setError(t('ktj.nameRequired')); return }
     if (!form.birth_date) { setError(t('ktj.birthRequired')); return }
+    if (!form.photo_url) { setError(t('ktj.photoRequired')); return }
     setSaving(true)
     try {
       const result = await registrationService.submitKtj({
@@ -122,6 +143,13 @@ export default function KTJPage() {
             <option value="">{t('ktj.komselEmpty')}</option>
             {komselList.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
           </Select>
+
+          <Uploader
+            kind="image" crop aspect={3 / 4}
+            label={t('ktj.photoLabel')} hint={t('ktj.photoHint')}
+            value={form.photo_url} uploading={photoUploading}
+            onFile={handlePhoto} onClear={() => set('photo_url', '')}
+          />
         </Card>
 
         <Button className="w-full" loading={saving} onClick={handleSubmit}>{t('common.submitRegistration')}</Button>

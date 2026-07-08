@@ -501,22 +501,49 @@ export default function AdminClassesPage() {
             </div>
             <p className="text-xs text-gray-400">{t('acls.sessionsHint')}</p>
 
-            {/* Nama per sesi */}
+            {/* Sesi pertemuan — otomatis bernomor 1..N. Bisa tambah/hapus per
+                sesi (mis. jadwal 20x pertemuan). Nama sesi opsional. */}
             <div className="space-y-2">
-              <p className="text-xs font-medium text-gray-600">Nama Sesi (opsional)</p>
+              <p className="text-xs font-medium text-gray-600">Sesi Pertemuan ({Number(form.total_sessions) || 1}) — nama opsional</p>
               {Array.from({ length: Number(form.total_sessions) || 1 }, (_, i) => (
-                <Input
-                  key={i}
-                  label={`Sesi ${i + 1}`}
-                  placeholder="cth: Doktrin Keselamatan"
-                  value={(form.session_names || [])[i] || ''}
-                  onChange={e => {
-                    const names = [...(form.session_names || Array(Number(form.total_sessions) || 1).fill(''))]
-                    names[i] = e.target.value
-                    set('session_names', names)
-                  }}
-                />
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-gray-400 w-11 shrink-0">Sesi {i + 1}</span>
+                  <Input
+                    className="flex-1"
+                    placeholder="cth: Doktrin Keselamatan"
+                    value={(form.session_names || [])[i] || ''}
+                    onChange={e => {
+                      const names = [...(form.session_names || Array(Number(form.total_sessions) || 1).fill(''))]
+                      names[i] = e.target.value
+                      set('session_names', names)
+                    }}
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Hapus Sesi ${i + 1}`}
+                    disabled={(Number(form.total_sessions) || 1) <= 1}
+                    onClick={() => setForm(p => {
+                      const names = [...(p.session_names || Array(Number(p.total_sessions) || 1).fill(''))]
+                      names.splice(i, 1)
+                      const next = names.length ? names : ['']
+                      return { ...p, session_names: next, total_sessions: next.length }
+                    })}
+                    className="p-2 text-gray-400 hover:text-red-500 disabled:opacity-30 disabled:hover:text-gray-400 shrink-0"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               ))}
+              <button
+                type="button"
+                onClick={() => setForm(p => {
+                  const names = [...(p.session_names || Array(Number(p.total_sessions) || 1).fill('')), '']
+                  return { ...p, session_names: names, total_sessions: names.length }
+                })}
+                className="flex items-center gap-1.5 text-sm text-brand-500 font-medium pt-1"
+              >
+                <Plus size={15} /> Tambah Sesi
+              </button>
             </div>
 
             {/* Kontak WA & Grup */}
