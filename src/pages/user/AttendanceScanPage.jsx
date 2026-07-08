@@ -202,6 +202,16 @@ export default function AttendanceScanPage() {
   async function handleKomsel(sessionId) {
     try {
       const session = await komselService.getSessionById(sessionId)
+      
+      // Proteksi: Pastikan user yang scan benar-benar anggota dari komsel ini
+      if (profile.komsel_id !== session.komsel_id) {
+        setResult({ 
+          type: 'error', 
+          message: `Gagal absen: Sesi ini untuk "${session.komsel?.name || 'Komsel Lain'}", sedangkan Anda terdaftar di komsel yang berbeda. Beri tahu PKS Anda!` 
+        })
+        return
+      }
+
       try {
         await komselService.checkInSession(session, profile.user_id)
         setResult({ type: 'success', message: `Kehadiran komsel "${session.komsel?.name || ''}" tercatat. +1 poin! 🎉` })
