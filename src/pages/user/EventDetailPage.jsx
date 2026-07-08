@@ -45,6 +45,9 @@ export default function EventDetailPage() {
     try {
       const reg = await eventsService.register(id, profile.user_id)
       setRegistration(reg)
+      // Beritahu Admin
+      const { pushService } = await import('@/services/pushService')
+      await pushService.notifyAdmin('new_event', { name: profile.name })
     } catch (err) {
       setError(err.message || t('eventDetail.registerFailed'))
     } finally {

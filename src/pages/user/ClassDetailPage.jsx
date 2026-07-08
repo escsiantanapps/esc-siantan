@@ -48,6 +48,9 @@ export default function ClassDetailPage() {
       const reg = await classesService.register(id, profile.user_id)
       setRegistration(reg)
       toast.success(t('classDetail.registerSuccess'))
+      // Beritahu Admin
+      const { pushService } = await import('@/services/pushService')
+      await pushService.notifyAdmin('new_class', { name: profile.name })
     } catch (err) {
       toast.error(err.message || t('classDetail.registerFailed'))
     } finally {

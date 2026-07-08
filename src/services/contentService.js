@@ -567,7 +567,7 @@ export const komselService = {
   // Cari jemaat aktif untuk dipilih sebagai PKS.
   async searchUsers(query = '') {
     let q = supabase.from('users')
-      .select('user_id, name, photo_url, role, komsel_id')
+      .select('user_id, name, photo_url, role, komsel_id, komsel:komsel_id(name)')
       .eq('status', 'Aktif').order('name').limit(20)
     if (query) q = q.ilike('name', `%${query}%`)
     const { data, error } = await q
@@ -637,6 +637,59 @@ export const komselService = {
       .order('session_date', { ascending: false })
     if (error) throw error
     return data
+  },
+
+  // Admin atau PKS bisa absensi manual atau menghapus absensi.
+  async upsertSessionAttendance(record) {
+    // record: { session_id, komsel_id, user_id, status }
+    // We will check if it exists first
+    const { data: existing } = await supabase
+      .from('komsel_attendance')
+      .select('attendance_id')
+      .eq('session_id', record.session_id)
+      .eq('user_id', record.user_id)
+      .maybeSingle()
+
+    if (existing) {
+      const { data, error } = await supabase
+        .from('komsel_attendance')
+        .update({ status: record.status })
+        .eq('attendance_id', existing.attendance_id)
+        .select()
+      if (error) throw error
+      return data
+    } else {
+      const { data, error } = await supabase
+        .from('komsel_attendance')
+        .insert([record])
+        .select()
+      if (error) throw error
+      return data
+    }
+  },
+
+  async deleteSessionAttendance(sessionId, userId) {
+    // Hapus baris dari komsel_attendance
+    const { data: existing } = await supabase
+      .from('komsel_attendance')
+      .select('attendance_id, status')
+      .eq('session_id', sessionId)
+      .eq('user_id', userId)
+      .maybeSingle()
+      
+    if (!existing) return
+
+    const { error } = await supabase
+      .from('komsel_attendance')
+      .delete()
+      .eq('attendance_id', existing.attendance_id)
+    if (error) throw error
+
+    // Tarik kembali poin jika status sebelumnya adalah Hadir
+    if (existing.status === 'Hadir') {
+      // Kita pakai rpc untuk deduct point
+      await supabase.rpc('deduct_user_point', { p_user_id: userId, amount: 1 }).catch(console.error)
+    }
   },
 
   // Semua kehadiran untuk sekumpulan sesi (dipakai agregasi rekap bulanan).

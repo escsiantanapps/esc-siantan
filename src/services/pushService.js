@@ -75,7 +75,19 @@ export const pushService = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ formId }),
-    })
+    }).catch(console.error)
+  },
+
+  // Beri tahu Admin bahwa ada pendaftaran baru, kelas baru, dsb.
+  async notifyAdmin(type, payload = {}) {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) return
+    await fetch('/api/notify-admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ type, payload }),
+    }).catch(console.error)
   },
 
   // Kirim notifikasi ke semua pelanggan (dipanggil oleh admin). Memanggil

@@ -267,6 +267,49 @@ export default function PKSDashboardPage() {
     try { setSessionAttendance(await komselService.getSessionAttendance(activeSession.session_id)) }
     catch { /* abaikan */ }
   }
+  const [manualLoading, setManualLoading] = useState({})
+  
+  async function handleManualAtt(userId, status) {
+    setManualLoading(p => ({ ...p, [userId]: true }))
+    try {
+      await komselService.upsertSessionAttendance({
+        session_id: activeSession.session_id,
+        komsel_id: selectedId,
+        user_id: userId,
+        status
+      })
+      await refreshSessionAttendance()
+      toast.success(t('pks.attendanceSaved', { status }))
+    } catch (err) {
+      toast.error(err.message || t('pks.attendanceSaveFailed'))
+    } finally {
+      setManualLoading(p => ({ ...p, [userId]: false }))
+    }
+  }
+
+  async function handleDeleteAtt(userId) {
+    const att = sessionAttendance.find(a => a.user_id === userId)
+    if (!att) return
+    const ok = await confirm({
+      title: 'Batalkan Kehadiran',
+      message: 'Apakah Anda yakin ingin menghapus data kehadiran ini? Jika sebelumnya Hadir, poin akan ditarik.',
+      confirmText: 'Batalkan',
+      danger: true
+    })
+    if (!ok) return
+
+    setManualLoading(p => ({ ...p, [userId]: true }))
+    try {
+      await komselService.deleteSessionAttendance(activeSession.session_id, userId)
+      await refreshSessionAttendance()
+      toast.success('Kehadiran dibatalkan')
+    } catch (err) {
+      toast.error(err.message || 'Gagal membatalkan')
+    } finally {
+      setManualLoading(p => ({ ...p, [userId]: false }))
+    }
+  }
+
   useEffect(() => {
     if (!activeSession) return
     refreshSessionAttendance()
@@ -492,54 +535,8 @@ export default function PKSDashboardPage() {
                   </div>
                 )}
 
-                {/* Checklist manual (opsional, tanpa poin) */}
-                <details className="mb-4 group">
-                  <summary className="cursor-pointer text-sm font-medium text-gray-600 flex items-center gap-1.5 py-1">
-                    <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
-                    Absensi Manual (tanpa poin)
-                  </summary>
-                  <div className="pt-3">
-                    {alreadySubmitted ? (
-                      <div className="bg-green-50 border border-green-100 text-green-700 text-sm rounded-xl px-4 py-3">
-                        {t('pks.alreadySubmitted')}
-                      </div>
-                    ) : members.length === 0 ? (
-                      <EmptyState icon={ClipboardCheck} title={t('pks.noMembers')} description={t('pks.addMembersFirst')} />
-                    ) : (
-                      <>
-                        <p className="text-xs text-gray-400 mb-2">{t('pks.attendanceFor', { date: formatDate(new Date()) })}</p>
-                        <div className="space-y-2.5 mb-4">
-                          {members.map(m => (
-                            <Card key={m.user_id} className="p-3 space-y-2">
-                              <div className="flex items-center gap-3">
-                                <Avatar name={m.name} src={m.photo_url} size="sm" />
-                                <p className="text-sm font-medium text-gray-900 flex-1 truncate">{m.name}</p>
-                                <div className="w-36 shrink-0">
-                                  <Select
-                                    value={statuses[m.user_id] || 'Hadir'}
-                                    onChange={e => setStatuses(p => ({ ...p, [m.user_id]: e.target.value }))}
-                                  >
-                                    <option value="Hadir">{t('status.Hadir')}</option>
-                                    <option value="Tidak Hadir">{t('status.Tidak Hadir')}</option>
-                                    <option value="Izin">{t('status.Izin')}</option>
-                                  </Select>
-                                </div>
-                              </div>
-                              <Input
-                                placeholder={t('pks.prayerNote')}
-                                value={notes[m.user_id] || ''}
-                                onChange={e => setNotes(p => ({ ...p, [m.user_id]: e.target.value }))}
-                              />
-                            </Card>
-                          ))}
-                        </div>
-                        <Button className="w-full" loading={saving} onClick={handleSubmit}>
-                          <Save size={15} /> {t('pks.saveAttendance')}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </details>
+                {/* Manual attendance section removed, merged into activeSession modal below. */}
+
 
                 {history.length > 0 && (
                   <div className="mt-6">
@@ -769,17 +766,38 @@ export default function PKSDashboardPage() {
             )}
 
             <div className="text-left pt-2 border-t border-gray-100">
-              <p className="text-xs font-semibold text-gray-700 mb-2">Sudah hadir ({sessionAttendance.length})</p>
-              {sessionAttendance.length === 0 ? (
-                <p className="text-xs text-gray-400">Belum ada yang memindai. Daftar diperbarui otomatis.</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-700">Kehadiran Anggota ({sessionAttendance.length}/{members.length})</p>
+              </div>
+              {members.length === 0 ? (
+                <p className="text-xs text-gray-400">Belum ada anggota di komsel ini.</p>
               ) : (
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {sessionAttendance.map(a => (
-                    <div key={a.attendance_id} className="flex items-center gap-2">
-                      <Avatar name={a.users?.name} src={a.users?.photo_url} size="sm" />
-                      <p className="text-sm text-gray-700 truncate">{a.users?.name || '-'}</p>
-                    </div>
-                  ))}
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                  {members.map(m => {
+                    const att = sessionAttendance.find(a => a.user_id === m.user_id)
+                    const status = att?.status
+                    return (
+                      <div key={m.user_id} className="flex flex-col p-2 bg-gray-50 rounded-lg border border-gray-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <Avatar name={m.name} src={m.photo_url} size="sm" />
+                            <p className="text-sm font-medium text-gray-700 truncate">{m.name}</p>
+                          </div>
+                          {status ? (
+                            <StatusBadge status={status} />
+                          ) : (
+                            <span className="text-xs text-gray-400 shrink-0">Belum hadir</span>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5 justify-end mt-2">
+                          <Button size="sm" variant="outline" className={`text-xs py-1 h-7 px-3 ${status === 'Hadir' ? 'bg-brand-50 text-brand-700 border-brand-200' : ''}`} disabled={manualLoading[m.user_id] || status === 'Hadir'} onClick={() => handleManualAtt(m.user_id, 'Hadir')}>Hadir</Button>
+                          <Button size="sm" variant="outline" className={`text-xs py-1 h-7 px-3 ${status === 'Sakit' ? 'bg-amber-50 text-amber-700 border-amber-200' : ''}`} disabled={manualLoading[m.user_id] || status === 'Sakit'} onClick={() => handleManualAtt(m.user_id, 'Sakit')}>Sakit</Button>
+                          <Button size="sm" variant="outline" className={`text-xs py-1 h-7 px-3 ${status === 'Izin' ? 'bg-blue-50 text-blue-700 border-blue-200' : ''}`} disabled={manualLoading[m.user_id] || status === 'Izin'} onClick={() => handleManualAtt(m.user_id, 'Izin')}>Izin</Button>
+                          {status && <Button size="sm" variant="danger" className="text-xs py-1 h-7 px-3" disabled={manualLoading[m.user_id]} onClick={() => handleDeleteAtt(m.user_id)}>Batal</Button>}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

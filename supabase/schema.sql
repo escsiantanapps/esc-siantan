@@ -1375,6 +1375,19 @@ CREATE TRIGGER trg_point_sunday_att AFTER INSERT ON sunday_attendance FOR EACH R
 DROP TRIGGER IF EXISTS trg_point_komsel_att ON komsel_attendance;
 CREATE TRIGGER trg_point_komsel_att AFTER INSERT ON komsel_attendance FOR EACH ROW EXECUTE FUNCTION award_attendance_point();
 
+CREATE OR REPLACE FUNCTION deduct_user_point(p_user_id TEXT, amount INT)
+RETURNS void AS $$
+BEGIN
+  -- Pengurangan dipicu oleh komselService.deleteSessionAttendance().
+  UPDATE users
+  SET points = GREATEST(points - amount, 0)
+  WHERE user_id = p_user_id;
+
+  INSERT INTO point_history (user_id, points, description)
+  VALUES (p_user_id, -amount, 'Kehadiran dibatalkan/dihapus');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- +5 poin biodata lengkap (sekali seumur akun). Dipanggil klien via RPC;
 -- validasi kelengkapan dilakukan DI SERVER, bukan mempercayai klien.
 CREATE OR REPLACE FUNCTION award_biodata_points() RETURNS jsonb

@@ -75,6 +75,11 @@ export default function RegisterPage() {
         return
       }
       await register(form)
+      
+      // Kirim notifikasi web push ke Admin
+      const { pushService } = await import('@/services/pushService')
+      await pushService.notifyAdmin('new_user', { name: form.name })
+      
       navigate('/') // gate PrivateRoute → AccountStatusPage (menunggu persetujuan)
     } catch (err) {
       setError(

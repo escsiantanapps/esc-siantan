@@ -12,6 +12,7 @@ import { permissionsService } from '@/services/permissionsService'
 import { useBackClose } from '@/hooks/useBackClose'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
+import { notificationService } from '@/services/notificationService'
 
 // Item menu Pesan Gembala — dipakai Gembala (menu inti) & Super Admin.
 const PESAN_ITEM = { to: '/admin/pesan', icon: MessageSquare, labelKey: 'admin.nav.pesan' }
@@ -82,6 +83,17 @@ export default function AdminLayout() {
   const hasSecondaryAccess = isPKS || isVolunteerSecondary
   const [allowedPages, setAllowedPages] = useState(null)
   const [permLoading, setPermLoading] = useState(!isSuperAdmin)
+  const [pendingCounts, setPendingCounts] = useState({
+    pendingUsers: 0, pendingClasses: 0, pendingEvents: 0, pendingEvaluations: 0
+  })
+
+  useEffect(() => {
+    if (profile?.role) {
+      notificationService.getAdminPendingCounts(profile.role)
+        .then(setPendingCounts)
+        .catch(console.error)
+    }
+  }, [profile?.role])
 
   useEffect(() => {
     if (isSuperAdmin || !profile?.user_id) { setPermLoading(false); return }
@@ -196,6 +208,12 @@ export default function AdminLayout() {
               </p>
             )
             const { to, icon: Icon, labelKey, label, exact } = item
+            let badge = 0
+            if (to === '/admin/jemaat') badge = pendingCounts.pendingUsers
+            else if (to === '/admin/kelas') badge = pendingCounts.pendingClasses
+            else if (to === '/admin/events') badge = pendingCounts.pendingEvents
+            else if (to === '/admin/evaluasi') badge = pendingCounts.pendingEvaluations
+
             return (
               <NavLink key={to} to={to} end={exact}
                 onClick={() => setOpen(false)}
@@ -213,7 +231,12 @@ export default function AdminLayout() {
                     {isActive && <span aria-hidden="true" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full gradient-main" />}
                     <Icon size={17} strokeWidth={isActive ? 2 : 1.5} />
                     <span className="flex-1">{labelKey ? t(labelKey) : label}</span>
-                    {isActive && <ChevronRight size={14} />}
+                    {badge > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                        {badge > 99 ? '99+' : badge}
+                      </span>
+                    )}
+                    {isActive && badge === 0 && <ChevronRight size={14} />}
                   </>
                 )}
               </NavLink>

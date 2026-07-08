@@ -574,6 +574,27 @@ export default function AdminKomselPage() {
                       <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
                       <p className="text-xs text-gray-400">{t(`role.${m.role}`)}</p>
                     </div>
+                    <button 
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: 'Keluarkan Anggota',
+                          message: `Apakah Anda yakin ingin mengeluarkan ${m.name} dari komsel ini?`,
+                          confirmText: 'Keluarkan',
+                          danger: true
+                        });
+                        if (!ok) return;
+                        try {
+                          await komselService.removeMember(membersView.komsel_id, m.user_id);
+                          setMembers(prev => prev.filter(x => x.user_id !== m.user_id));
+                          toast.success(`${m.name} dikeluarkan dari komsel.`);
+                        } catch (err) {
+                          toast.error(err.message || 'Gagal mengeluarkan anggota.');
+                        }
+                      }}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -736,7 +757,7 @@ export default function AdminKomselPage() {
                     <Avatar name={u.name} src={u.photo_url} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                      <p className="text-xs text-gray-400">{t(`role.${u.role}`)}{u.komsel_id && !alreadyHere ? ` · ${t('akom.alreadyInOther')}` : ''}</p>
+                      <p className="text-xs text-gray-400">{t(`role.${u.role}`)}{u.komsel_id && !alreadyHere ? ` · Sudah di: ${u.komsel?.name || 'Lain'}` : ''}</p>
                     </div>
                     {alreadyHere
                       ? <Badge color="green">{t('akom.alreadyHere')}</Badge>
