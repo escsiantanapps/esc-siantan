@@ -86,7 +86,6 @@ export default function PKSDashboardPage() {
   const [birthdaySending, setBirthdaySending] = useState('')
 
   // Sesi absensi komsel (QR dipindai anggota).
-  const [sessionTitle, setSessionTitle] = useState('')
   const [creatingSession, setCreatingSession] = useState(false)
   const [activeSession, setActiveSession] = useState(null) // { ...session, qr }
   const [sessionAttendance, setSessionAttendance] = useState([])
@@ -243,16 +242,16 @@ export default function PKSDashboardPage() {
 
   // Buat sesi absensi baru → tampilkan QR untuk dipindai anggota.
   async function handleCreateSession() {
-    const title = sessionTitle.trim() || `Komsel ${formatDate(new Date())}`
     setCreatingSession(true)
     try {
+      const title = `Komsel ${formatDate(new Date())}`
+      
       // 1. Service akan membuat sesi baru ATAU mengembalikan sesi yang sudah ada hari ini
       // Ini mencegah duplikasi jika 2 PKS menekan tombol di waktu berdekatan dengan state yang usang.
       const session = await komselService.createSession(selectedId, title, profile.user_id)
       
       const qr = await QRCode.toDataURL(`ESC-KOMSEL:${session.session_id}`, { width: 320, margin: 1 }).catch(() => '')
       setActiveSession({ ...session, qr })
-      setSessionTitle('')
       loadSessions(selectedId)
       refreshSessionAttendance() // Tarik attendance kalau-kalau ini sesi reuse yang sudah ada yang absen
     } catch (err) {
@@ -311,17 +310,34 @@ export default function PKSDashboardPage() {
     setSaving(true)
     try {
       const today = toDateStr(new Date())
-      const records = members.map(m => ({
-        komsel_id: selectedId,
-        user_id: m.user_id,
-        attendance_date: today,
-        status: statuses[m.user_id] || 'Hadir',
-        notes: notes[m.user_id] || null,
-        recorded_by: profile.user_id,
-      }))
-      await komselService.submitAttendance(records)
+      
+      // Bungkus dalam sesi hari ini agar rapi dan masuk rekap admin
+      const title = `Komsel ${formatDate(new Date())}`
+      const session = await komselService.createSession(selectedId, title, profile.user_id)
+      
+      // Cek siapa saja yang sudah absen (misal lewat QR)
+      const existing = await komselService.getSessionAttendance(session.session_id)
+      const existingIds = new Set(existing.map(e => e.user_id))
+
+      const records = members
+        .filter(m => !existingIds.has(m.user_id))
+        .map(m => ({
+          komsel_id: selectedId,
+          user_id: m.user_id,
+          session_id: session.session_id,
+          attendance_date: today,
+          status: statuses[m.user_id] || 'Hadir',
+          notes: notes[m.user_id] || null,
+          recorded_by: profile.user_id,
+        }))
+        
+      if (records.length > 0) {
+        await komselService.submitAttendance(records)
+      }
+      
       const hist = await komselService.getAttendanceHistory(selectedId)
       setHistory(hist)
+      if (activeSession) refreshSessionAttendance()
       toast.success(t('pks.saveSuccess'))
     } catch (err) {
       setError(err.message || t('pks.saveFailed'))
@@ -442,14 +458,17 @@ export default function PKSDashboardPage() {
                       <p className="text-xs text-gray-400">Anggota memindai QR untuk hadir &amp; dapat 1 poin</p>
                     </div>
                   </div>
-                  <Input
-                    placeholder="Judul sesi (mis. Komsel Rabu, PA Yohanes 3)"
-                    value={sessionTitle}
-                    onChange={e => setSessionTitle(e.target.value)}
-                  />
-                  <Button className="w-full" loading={creatingSession} onClick={handleCreateSession}>
-                    <Plus size={15} /> Buat Sesi &amp; Tampilkan QR
-                  </Button>
+                  {!activeSession ? (
+                    <div className="space-y-4">
+                      <p className="text-sm text-gray-600 leading-relaxed">
+                        {t('pks.qrDesc')}
+                      </p>
+                      
+                      <Button onClick={handleCreateSession} loading={creatingSession} className="w-full">
+                        {t('pks.createSession')}
+                      </Button>
+                    </div>
+                  ) : null}
                 </Card>
 
                 {/* Daftar sesi QR komsel — dibagi antar semua PKS komsel ini
