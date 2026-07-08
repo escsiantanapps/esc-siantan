@@ -64,8 +64,14 @@ export const eventsService = {
   },
 
   async removeRegistration(ticketId) {
-    const { error } = await supabase.from('event_registrations').delete().eq('ticket_id', ticketId)
-    if (error) throw error
+    const { data } = await supabase.from('event_registrations').select('prerequisite_id').eq('ticket_id', ticketId).maybeSingle()
+    if (data?.prerequisite_id) {
+      const { error } = await supabase.from('registration_prerequisites').delete().eq('id', data.prerequisite_id)
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from('event_registrations').delete().eq('ticket_id', ticketId)
+      if (error) throw error
+    }
   },
 
   async uploadThumbnail(file) {
@@ -321,8 +327,14 @@ export const classesService = {
   },
 
   async removeRegistration(registrationId) {
-    const { error } = await supabase.from('class_registrations').delete().eq('registration_id', registrationId)
-    if (error) throw error
+    const { data } = await supabase.from('class_registrations').select('prerequisite_id').eq('registration_id', registrationId).maybeSingle()
+    if (data?.prerequisite_id) {
+      const { error } = await supabase.from('registration_prerequisites').delete().eq('id', data.prerequisite_id)
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from('class_registrations').delete().eq('registration_id', registrationId)
+      if (error) throw error
+    }
   },
 }
 
