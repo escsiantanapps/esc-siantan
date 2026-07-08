@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
   LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, Tag, HardDrive, ScrollText,
-  MessageSquare, Users, BarChart3
+  MessageSquare, Users, BarChart3, LayoutDashboard, MessageSquareText, LayoutList, UsersRound, Droplet
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
