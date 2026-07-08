@@ -40,7 +40,7 @@ export default function ClassDetailPage() {
   }, [id, profile?.user_id])
 
   const prereqFields = cls?.prerequisite_fields || []
-  const hasPrereq = Array.isArray(prereqFields) && prereqFields.length > 0
+  const hasPrereq = (Array.isArray(prereqFields) && prereqFields.length > 0) || cls?.require_approval
 
   async function handleRegister() {
     setRegistering(true)
@@ -154,18 +154,30 @@ export default function ClassDetailPage() {
                   <p className="text-center text-sm text-gray-400">{t('prereq.approvedPending')}</p>
                 ) : (
                   <div className="space-y-3 border-t border-gray-100 pt-3">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{t('prereq.title')}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{t('prereq.fillBefore')}</p>
-                    </div>
-                    <PrerequisiteForm
-                      fields={prereqFields} value={prereqForm}
-                      onChange={(k, v) => setPrereqForm(p => ({ ...p, [k]: v }))}
-                      onFileUpload={handlePrereqFile} uploadingKey={uploadingKey}
-                    />
-                    <Button className="w-full" loading={submittingPrereq} onClick={handleSubmitPrereq}>
-                      {t('prereq.submit')}
-                    </Button>
+                    {cls.require_approval && prereqFields.length === 0 ? (
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Pendaftaran Membutuhkan Persetujuan</p>
+                        <p className="text-xs text-gray-500 mt-0.5 mb-3">Kelas ini memerlukan persetujuan dari admin. Klik ajukan untuk mendaftar.</p>
+                        <Button className="w-full" loading={submittingPrereq} onClick={handleSubmitPrereq}>
+                          Ajukan Pendaftaran
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{t('prereq.title')}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{t('prereq.fillBefore')}</p>
+                        </div>
+                        <PrerequisiteForm
+                          fields={prereqFields} value={prereqForm}
+                          onChange={(k, v) => setPrereqForm(p => ({ ...p, [k]: v }))}
+                          onFileUpload={handlePrereqFile} uploadingKey={uploadingKey}
+                        />
+                        <Button className="w-full" loading={submittingPrereq} onClick={handleSubmitPrereq}>
+                          {t('prereq.submit')}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )
               ) : (

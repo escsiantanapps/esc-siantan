@@ -354,10 +354,6 @@ export default function AdminMemberDetailPage() {
             <p className="text-gray-700">{member.pekerjaan_perusahaan || '-'}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400">Pendapatan Tahunan</p>
-            <p className="text-gray-700">{member.pekerjaan_pendapatan || '-'}</p>
-          </div>
-          <div>
             <p className="text-xs text-gray-400">Pendidikan Terakhir</p>
             <p className="text-gray-700">{member.pendidikan_terakhir || '-'}</p>
           </div>

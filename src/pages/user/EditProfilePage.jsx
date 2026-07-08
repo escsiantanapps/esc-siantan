@@ -45,7 +45,7 @@ export default function EditProfilePage() {
     pekerjaan_posisi: profile?.pekerjaan_posisi || '',
     pekerjaan_bidang: profile?.pekerjaan_bidang || '',
     pekerjaan_perusahaan: profile?.pekerjaan_perusahaan || '',
-    pekerjaan_pendapatan: profile?.pekerjaan_pendapatan || '',
+
     pendidikan_terakhir: profile?.pendidikan_terakhir || '',
     pendidikan_bidang: profile?.pendidikan_bidang || '',
   })
@@ -193,14 +193,6 @@ export default function EditProfilePage() {
               <Input label="Bidang Pekerjaan" placeholder="cth: Retail" value={form.pekerjaan_bidang} onChange={e => set('pekerjaan_bidang', e.target.value)} />
             </div>
             <Input label="Nama Perusahaan" value={form.pekerjaan_perusahaan} onChange={e => set('pekerjaan_perusahaan', e.target.value)} />
-            <Select label="Pendapatan Tahunan" value={form.pekerjaan_pendapatan} onChange={e => set('pekerjaan_pendapatan', e.target.value)}>
-              <option value="">Pilih...</option>
-              <option>&lt; Rp 25 juta</option>
-              <option>Rp 25–60 juta</option>
-              <option>Rp 60–120 juta</option>
-              <option>&gt; Rp 120 juta</option>
-              <option>Tidak ingin mengisi</option>
-            </Select>
           </div>
         </div>
 

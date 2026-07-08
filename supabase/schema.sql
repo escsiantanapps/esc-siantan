@@ -2268,7 +2268,9 @@ CREATE POLICY "kl_admin_write" ON komsel_leaders FOR ALL
   WITH CHECK (auth_admin_can('/admin/komsel'));
 
 -- SISA sweep TULIS admin (offerings, baptism, ministries, dll.) DITAHAN sampai
--- inventaris policy production diverifikasi, karena schema.sql terbukti drift
+-- inventaris policy production diverifikasi, kare-- 10. Tambah field require_approval di classes (v52)
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS require_approval BOOLEAN DEFAULT false;
+sql terbukti drift
 -- (news & events menulis via klien tetapi tak punya policy tulis di file —
 -- ada policy di DB yang tak tercatat; menimpanya buta bisa membuka celah /
 -- mengunci admin). Query dump policy sudah diberikan ke operator.
@@ -2580,3 +2582,21 @@ END $$;
 -- menulis, Admin/Super Admin boleh membaca (policy documents v38 sudah ada) —
 -- TIDAK ada perubahan policy storage.
 ALTER TABLE ktj_registrations ADD COLUMN IF NOT EXISTS photo_url TEXT;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v49: Admin boleh HAPUS respon SOP Rohani (form_responses) ──
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-08): halaman baru "Respon SOP" (/admin/respon)
+-- memusatkan semua jawaban form/SOP Rohani yang masuk, dengan aksi Detail &
+-- Hapus. Sebelumnya admin hanya punya policy SELECT (`responses_admin_read`);
+-- DELETE untuk admin belum ada, sehingga tombol Hapus akan gagal RLS.
+--
+-- TEMUAN: hapus respon = aksi TULIS yang destruktif → wajib digerbang Hak Akses.
+-- Gunakan `auth_admin_can('/admin/respon')` (Super Admin selalu lolos; Admin
+-- biasa lolos bila halaman '/admin/respon' ada di allowed_pages-nya / NULL).
+-- Menghapus form_responses TIDAK menyentuh poin (poin hanya dari kehadiran,
+-- bukan dari pengisian form) — aman, tidak ada saldo yang perlu dikoreksi.
+DROP POLICY IF EXISTS "responses_admin_delete" ON form_responses;
+CREATE POLICY "responses_admin_delete" ON form_responses FOR DELETE
+  USING (auth_admin_can('/admin/respon'));

@@ -35,6 +35,7 @@ const emptyForm = {
   contact_wa: '', contact_wa_female: '', whatsapp_group_url: '',
   thumbnail_url: '',
   photo_urls: [], video_urls: [],
+  require_approval: false,
   prerequisite_enabled: false, prerequisite_fields: [],
 }
 
@@ -275,14 +276,9 @@ export default function AdminClassesPage() {
       location: cls.location || '',
       teacher: cls.teacher || '',
       status: cls.status || 'Mulai',
-      total_sessions: n,
-      session_names: Array.from({ length: n }, (_, i) => (cls.session_names || [])[i] || ''),
-      contact_wa: cls.contact_wa || '',
-      contact_wa_female: cls.contact_wa_female || '',
-      whatsapp_group_url: cls.whatsapp_group_url || '',
-      thumbnail_url: cls.thumbnail_url || '',
-      photo_urls: cls.photo_urls || [],
-      video_urls: cls.video_urls || [],
+      ...cls,
+      session_names: Array.isArray(cls.session_names) && cls.session_names.length > 0 ? cls.session_names : [''],
+      require_approval: !!cls.require_approval,
       prerequisite_enabled: Array.isArray(cls.prerequisite_fields) && cls.prerequisite_fields.length > 0,
       prerequisite_fields: cls.prerequisite_fields || [],
     })
@@ -329,13 +325,13 @@ export default function AdminClassesPage() {
     }
     setSaving(true)
     try {
-      const { prerequisite_enabled, prerequisite_fields, ...rest } = form
+      const { prerequisite_enabled, prerequisite_fields, require_approval, ...rest } = form
       const payload = {
         ...rest,
-        total_sessions: Number(form.total_sessions) || 1,
-        whatsapp_group_url: form.whatsapp_group_url.trim() || null,
+        require_approval,
+        total_sessions: rest.session_names.length,
         prerequisite_fields: prerequisite_enabled
-          ? prerequisite_fields.map(({ _isNew, ...f }) => f)
+          ? prerequisite_fields.map(f => ({ ...f, key: f.key || makeUniqueKey(f.label, prerequisite_fields, prerequisite_fields.indexOf(f)) }))
           : null,
       }
       let classId = editing?.class_id
@@ -559,12 +555,28 @@ export default function AdminClassesPage() {
             />
             <p className="text-xs text-gray-400 -mt-2">Ditampilkan HANYA bagi jemaat yang sudah resmi terdaftar di kelas ini.</p>
 
+            <div className="border-t border-gray-100 pt-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Wajibkan Verifikasi Admin</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Jemaat yang mendaftar harus disetujui admin terlebih dahulu.</p>
+                </div>
+                <button
+                  type="button" role="switch" aria-checked={form.require_approval}
+                  onClick={() => set('require_approval', !form.require_approval)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${form.require_approval ? 'bg-brand-500' : 'bg-control-hover'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.require_approval ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </div>
+
             {/* Formulir Prasyarat (opsional) */}
             <div className="border-t border-gray-100 pt-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">Formulir Persyaratan (Opsional)</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Wajib disetujui admin sebelum jemaat boleh mendaftar.</p>
+                  <p className="text-sm font-semibold text-gray-900">Formulir Persyaratan Tambahan (Opsional)</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Minta jemaat mengisi form sebelum mendaftar.</p>
                 </div>
                 <button
                   type="button" role="switch" aria-checked={form.prerequisite_enabled}

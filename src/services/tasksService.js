@@ -197,6 +197,31 @@ export const tasksService = {
     return { data, count }
   },
 
+  // Respon GLOBAL lintas semua form/SOP — untuk halaman Admin "Respon SOP".
+  // Join form_templates (judul + fields_json utk render detail) dan users (nama).
+  // Kedua relasi punya satu FK saja dari form_responses → tidak ambigu.
+  async getResponsesGlobal({ page = 1, limit = 20, formId = null, startDate = null, endDate = null } = {}) {
+    const from = (page - 1) * limit
+    let query = supabase
+      .from('form_responses')
+      .select('*, users(name, role), form_templates(title, fields_json)', { count: 'exact' })
+    if (formId) query = query.eq('form_id', formId)
+    if (startDate) query = query.gte('submitted_at', startDate)
+    if (endDate) query = query.lte('submitted_at', endDate)
+    const { data, error, count } = await query
+      .order('submitted_at', { ascending: false })
+      .range(from, from + limit - 1)
+    if (error) throw error
+    return { data, count }
+  },
+
+  // Hapus satu respon. Digerbang RLS `responses_admin_delete`
+  // (auth_admin_can('/admin/respon')) — lihat Migrasi v49.
+  async deleteResponse(id) {
+    const { error } = await supabase.from('form_responses').delete().eq('response_id', id)
+    if (error) throw error
+  },
+
   async uploadResponseFile(userId, file) {
     const path = `responses/${userId}/${Date.now()}_${file.name}`
     const { error } = await supabase.storage.from('task-files').upload(path, file)

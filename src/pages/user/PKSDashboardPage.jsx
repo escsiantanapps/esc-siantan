@@ -246,6 +246,15 @@ export default function PKSDashboardPage() {
     const title = sessionTitle.trim() || `Komsel ${formatDate(new Date())}`
     setCreatingSession(true)
     try {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
+      const existing = sessions.find(s => s.session_date === today)
+      if (existing) {
+        toast.info(t('pks.existingSessionUsed', 'Menggunakan sesi yang sudah ada hari ini.'))
+        openSession(existing)
+        setSessionTitle('')
+        return
+      }
+
       const session = await komselService.createSession(selectedId, title, profile.user_id)
       const qr = await QRCode.toDataURL(`ESC-KOMSEL:${session.session_id}`, { width: 320, margin: 1 }).catch(() => '')
       setActiveSession({ ...session, qr })

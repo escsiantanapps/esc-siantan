@@ -70,27 +70,34 @@ export default function ProfilePage() {
               ? <img src={profile.photo_url} alt={profile.name} className="w-full h-full object-cover" />
               : <div className="w-full h-full gradient-main flex items-center justify-center text-white text-2xl font-bold">{initials}</div>}
           </div>
-
-          {/* Poin — kartu emas di ruang kanan header, tap menuju halaman Poin */}
-          <Link
-            to="/poin"
-            className="mb-1 flex items-center gap-2.5 rounded-2xl px-4 py-2.5 bg-gradient-to-br from-amber-300 to-yellow-500 border border-amber-400/60 active:scale-[0.98] transition-transform"
-          >
-            <Star size={22} className="fill-amber-700 text-amber-700 shrink-0" />
-            <div className="leading-tight">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">{t('profile.points')}</p>
-              <p className="text-xl font-bold text-amber-950">{profile.points ?? 0}</p>
-            </div>
-          </Link>
         </div>
 
         <div className="mt-3">
           <h1 className="text-xl font-bold text-gray-900">{profile.name}</h1>
           <p className="text-sm text-gray-500">{profile.username ? `@${profile.username}` : profile.email}</p>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-2 mb-3">
             <Badge color="gray">{profile.role}</Badge>
             <StatusBadge status={profile.status} />
           </div>
+
+          {/* Poin — diturunkan agar tidak mengganggu animasi SkyTime */}
+          <Link
+            to="/poin"
+            className="flex items-center justify-between gap-3 rounded-2xl px-4 py-3 bg-gradient-to-br from-amber-300 to-yellow-500 border border-amber-400/60 active:scale-[0.98] transition-transform"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100/50 flex items-center justify-center shrink-0">
+                <Star size={20} className="fill-amber-700 text-amber-700" />
+              </div>
+              <div className="leading-tight">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">{t('profile.points')}</p>
+                <p className="text-xl font-bold text-amber-950">{profile.points ?? 0}</p>
+              </div>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-amber-100/30 flex items-center justify-center">
+              <ChevronRight size={18} className="text-amber-700" />
+            </div>
+          </Link>
         </div>
       </div>
 

@@ -54,7 +54,7 @@ const AdminMembersPage = lazy(() => import('@/pages/admin/AdminMembersPage'))
 const AdminMemberDetailPage = lazy(() => import('@/pages/admin/AdminMemberDetailPage'))
 const AdminTasksPage = lazy(() => import('@/pages/admin/AdminTasksPage'))
 const AdminTaskFormPage = lazy(() => import('@/pages/admin/AdminTaskFormPage'))
-const AdminTaskResponsesPage = lazy(() => import('@/pages/admin/AdminTaskResponsesPage'))
+const AdminResponsesPage = lazy(() => import('@/pages/admin/AdminResponsesPage'))
 const AdminBaptismPage = lazy(() => import('@/pages/admin/AdminBaptismPage'))
 const AdminWeddingPage = lazy(() => import('@/pages/admin/AdminWeddingPage'))
 const AdminChildDedicationPage = lazy(() => import('@/pages/admin/AdminChildDedicationPage'))
@@ -204,7 +204,7 @@ export default function App() {
             <Route path="tugas"                element={<AdminTasksPage />} />
             <Route path="tugas/baru"           element={<AdminTaskFormPage />} />
             <Route path="tugas/:id/edit"       element={<AdminTaskFormPage />} />
-            <Route path="tugas/:id/jawaban"    element={<AdminTaskResponsesPage />} />
+            <Route path="respon"               element={<AdminResponsesPage />} />
             <Route path="baptisan"             element={<AdminBaptismPage />} />
             <Route path="nikah"                element={<AdminWeddingPage />} />
             <Route path="penyerahan-anak"      element={<AdminChildDedicationPage />} />

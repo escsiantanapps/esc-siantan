@@ -1,132 +1,183 @@
-# ESC Siantan — Konteks Proyek
+# ESC Siantan — Manual Operasi Proyek
 
-Aplikasi manajemen gereja (PWA) untuk **ESC Siantan, Pontianak, Kalimantan Barat**. Dulu bernama "GerejaKu" saat awal dibangun — dokumen ini menggantikan `GEREJAKKU_CONTEXT.md` lama yang sudah jauh ketinggalan (ditulis saat aplikasi baru bootstrap, hampir semua fitur masih placeholder). Dokumen ini menggambarkan kondisi sistem yang **sudah jadi & berjalan di production**.
+Aplikasi manajemen gereja (PWA) untuk **Evangelical Sion Church Siantan, Pontianak** — **SUDAH PRODUCTION** di `https://escsiantan.my.id` dengan data jemaat sungguhan (±200 akun, NIK, alamat, keuangan persembahan). Setiap perubahan yang kamu push akan dipakai orang betulan hari itu juga. Bekerjalah dengan standar itu.
 
-## Tech Stack
+Bahasa kerja proyek ini **Bahasa Indonesia**: komentar kode, pesan commit, teks UI, dokumen — semuanya Indonesia (UI juga punya locale `en`).
 
-- **Frontend**: React 18 + Vite 5 + Tailwind CSS v4 (`@theme` CSS-based config, tidak ada `tailwind.config.js`) + React Router 6
-- **Backend**: Supabase (Postgres + Auth + Storage + Row Level Security)
-- **Serverless**: Vercel Functions (folder `api/`, Node runtime untuk yang butuh service-role key)
-- **Deploy**: Vercel, auto-deploy dari branch **`master`** (push ke `main` akan membuat preview URL yang membingungkan — selalu push ke `master`)
-- **PWA**: vite-plugin-pwa (`generateSW`), juga di-wrap jadi APK Android lewat Bubblewrap/TWA (lihat memory `twa-rebuild-toolchain`)
-- **i18n**: `src/lib/i18n.js` — flat key-value, 2 locale (`id`/`en`), interpolasi `{param}` via `t(key, {param})`
-- **Export Excel**: ExcelJS (`src/lib/exportXlsx.js`) — bukan `xlsx`/SheetJS (ada 2 CVE HIGH belum dipatch)
+## 0. Sumber kebenaran (urutannya penting)
 
-## Model Peran (Role)
+1. **Kode & schema.sql yang ada sekarang** — bukan dokumen. Dokumen (termasuk file ini, `PROJECT_HANDOFF.md`, memory) adalah potret masa lalu dan **terbukti pernah basi** (file ini pernah bilang migrasi terakhir v28 padahal sudah v42).
+2. **Database production bisa berbeda dari `schema.sql`** — drift TERBUKTI terjadi (news/events punya policy tulis di production yang tidak tercatat di file). Untuk pekerjaan RLS/policy, verifikasi ke production dulu (lihat skill `audit-rls`).
+3. **Nomor migrasi terbaru**: JANGAN percaya angka di dokumen mana pun. Selalu cek dengan `grep "── Migrasi v" supabase/schema.sql` dan ambil angka tertinggi.
+4. Status "migrasi vNN sudah dijalankan user atau belum" hanya user yang tahu — kalau relevan dan tidak tercatat, **tanya**.
 
-5 role di kolom `users.role`: **Jemaat, Volunteer, PKS, Admin, Super Admin**. Sejak Migrasi v25, **Admin & Super Admin juga boleh merangkap PKS** (lewat flag `users.is_pks` + tabel `komsel_leaders`, bukan exclusive lagi).
+## 1. Tech stack
 
-- **Jemaat** — anggota biasa, akses app utama (`/`)
-- **Volunteer** — Jemaat + akses Tugas/Form, bisa ajukan Izin/Sakit
-- **PKS** (Pemimpin Komsel) — ditandai `users.is_pks = true` ATAU `role/role_secondary = 'PKS'`, dapat akses tambahan `/pks` (Dashboard PKS, lihat komsel yang dipimpin)
-- **Admin** — akses panel `/admin`, dibatasi halaman mana yang boleh diakses lewat **Hak Akses** (Super Admin yang atur, tabel `admin_user_permissions`)
-- **Super Admin** — akses penuh semua halaman admin + bisa ubah biodata jemaat lain + bisa ubah role + akses **Hak Akses** & **Kategori Tugas**
+- **Frontend**: React 18 + Vite 5 + Tailwind CSS v4 (`@theme` di `src/index.css`, TIDAK ADA `tailwind.config.js`) + React Router 6
+- **Backend**: Supabase (Postgres + Auth + Storage + RLS), project sendiri, tanpa migration runner
+- **Serverless**: Vercel Functions (folder `api/`, Node runtime, untuk yang butuh service-role key)
+- **Deploy**: Vercel auto-deploy dari branch **`master`** (production project bernama `gerejaku`)
+- **PWA**: vite-plugin-pwa (`generateSW`); distribusi resmi = **PWA via Chrome**, BUKAN APK
+- **i18n**: `src/lib/i18n.js` — flat key-value, locale `id`/`en`, interpolasi `{param}` via `t(key, {param})`
+- **Excel**: ExcelJS via `src/lib/exportXlsx.js` (`downloadXlsx({filename, titleLines, headers, rows})`)
+- **QR**: `html5-qrcode` (scan) + `qrcode` (generate); ikon `lucide-react`
+- **Tes otomatis: TIDAK ADA.** Gerbang verifikasi satu-satunya = `npx vite build` sukses + baca-ulang logika.
 
-User juga bisa punya `role_secondary` (peran kedua, mis. Admin yang juga Volunteer) supaya tetap dapat akses tugas/notifikasi sesuai peran itu.
+## 2. Kesalahan bernama — dan aturan yang mencegahnya
 
-### Aturan privasi yang sengaja ditegakkan
-- **NIK** hanya bisa dilihat/diubah Super Admin (di UI maupun lewat trigger DB `guard_biodata_admin_edit`)
-- **Biodata jemaat lain** (nama, kontak, alamat, tgl lahir, dll) hanya bisa diubah Super Admin — Admin biasa hanya boleh ubah status/role/komsel/ministry/SP, BUKAN biodata pribadi
-- PKS bisa lihat detail kontak & profil dasar anggota komselnya, **tanpa NIK**
+Daftar ini adalah kesalahan yang *pasti* dilakukan model yang tidak hati-hati di repo ini. Tiap butir: **Nama kesalahan** → aturan.
 
-## Alur Akun (penting, sering disalahpahami)
+1. **Dokumen Basi** — mempercayai nomor migrasi / daftar rute / daftar tabel dari dokumen. → Grep kode/schema dulu sebelum menyatakan fakta tentang kondisi sistem.
+2. **Drift Schema** — men-`DROP POLICY`/menimpa policy berdasarkan isi `schema.sql` saja. → Sebelum mengubah policy pada tabel yang tidak baru kamu buat sendiri, minta user jalankan query dump policy production (ada di skill `audit-rls`) dan cocokkan. Menimpa buta bisa MEMBUKA celah atau MENGUNCI admin.
+3. **Salah Branch** — push ke `main`. → Hanya `git push origin master`. Push ke `main` membuat preview URL Vercel yang membingungkan user.
+4. **Commit Tanpa Izin** — langsung commit/push setelah selesai coding. → SELALU tunjukkan ringkasan perubahan + usulan pesan commit, tunggu konfirmasi user, baru commit. Tanpa kecuali, walau build sudah hijau.
+5. **`git add .`** — menyeret file kerja untracked (pptx, `PROJECT_HANDOFF.md`, `task.md`, `rn-preview/`, dll yang sengaja tidak di-commit). → Stage per-path eksplisit, jangan pernah `git add .`/`-A`.
+6. **Ring & Shadow Hantu** — memakai `ring-*` atau `shadow-md`. → Di build ini keduanya TIDAK menghasilkan CSS (spesifik konfigurasi `@theme` proyek ini; sudah diverifikasi). Pakai `outline`/`border` CSS biasa. Arbitrary value (`grid-rows-[1fr]`) aman.
+7. **Kelas Tailwind Rakitan** — `` `bg-${color}-100` ``. → JIT scanner butuh string literal utuh. Kalau perlu warna per-index, buat array string kelas lengkap (contoh: `FOLDER_THEMES` di `TasksPage.jsx`).
+8. **Insting `dark:`** — mengubah warna dark mode pakai prefix `dark:` atau `bg-gray-100` untuk elemen interaktif. → Dark mode di sini = remap CSS variable di blok `.dark {}` di `src/index.css`. Elemen interaktif (tombol secondary, chip, tab) pakai token `--color-control`/`--color-control-hover` (utility `bg-control`), karena gray-100/200 nyaris identik dengan background card saat dark.
+9. **Update Poin Langsung** — `.update({ points })` dari klien. → Trigger `guard_user_privilege_cols` menolaknya. Saldo `users.points` hanya ditulis fungsi `SECURITY DEFINER` (trigger kehadiran, RPC `award_biodata_points`/`redeem_ticket`). Semua akses poin lewat `src/services/pointsService.js`.
+10. **Reinvent Helper RLS** — menulis ulang subquery role di policy baru. → Wajib pakai helper yang ada: `auth_user_role()`, `auth_user_id()`, `auth_user_role_secondary()`, `auth_leads_komsel(komsel_id)`, `auth_admin_can('/admin/<page>')` — semua `SECURITY DEFINER`.
+11. **Migrasi Tidak Idempotent / Mengedit Blok Lama** — → `schema.sql` append-only: blok baru di AKHIR file, nomor berikutnya, dan setiap statement aman dijalankan ulang (`IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `DROP POLICY IF EXISTS` sebelum `CREATE POLICY`, `CREATE OR REPLACE`). Blok lama tidak boleh diubah.
+12. **UTC Midnight** — kolom Postgres `DATE` di-parse JS sebagai UTC midnight. → `getUTC*()` untuk tanggal yang DISIMPAN, `get*()` biasa untuk "hari ini" lokal (asimetri di `cron-birthdays.js` & `PKSDashboardPage.jsx` itu disengaja). Batas "hari" di sisi server/DB = zona **WIB / Asia/Jakarta** (lihat `guard_once_per_day`).
+13. **Join Ambigu PostgREST** — tabel dengan 2+ FK ke tabel yang sama (mis. `birthday_messages.recipient_id` & `sender_id` → `users`). → Wajib hint `tabel!nama_kolom(fields)`, bukan nama constraint.
+14. **String Tanpa i18n** — hardcode teks UI. → Setiap string yang dilihat user masuk `i18n.js` dengan kunci `id` DAN `en`, dipakai via `t()`.
+15. **Refleks SheetJS** — `import * as XLSX from 'xlsx'`. → Dilarang (2 CVE HIGH belum dipatch). Semua export Excel lewat `downloadXlsx` (ExcelJS).
+16. **"Migrasi Otomatis Jalan"** — mengira schema berubah begitu file diedit. → Tidak ada runner. Laporan akhir WAJIB menyebut "jalankan Migrasi vNN di Supabase SQL Editor" bila ada blok baru.
+17. **Melonggarkan Privasi** — menampilkan NIK ke Admin/PKS, atau membolehkan Admin biasa mengedit biodata. → NIK hanya Super Admin (UI + trigger `guard_biodata_admin_edit`). Biodata pribadi jemaat lain hanya Super Admin. `role`/`role_secondary` hanya Super Admin (v41-A). `is_pks` = hak khusus admin ber-akses `/admin/komsel`. PKS lihat kontak anggota komselnya TANPA NIK. Jangan pernah melonggarkan tanpa keputusan eksplisit user.
+18. **Menyarankan APK** — menambah tombol unduh APK / mengarahkan user ke Play Store. → Push notification TIDAK andal lewat APK TWA (bug `DelegationService`). Keputusan produk final: distribusi resmi = PWA via Chrome (`InstallPrompt.jsx`).
+19. **"Sudah Dites"** — mengklaim fitur teruji. → Tidak ada kredensial login untuk browser dev & tidak ada test. Yang jujur: "build sukses, logika sudah dibaca ulang; yang perlu kamu tes manual setelah deploy: …".
+20. **Halaman Admin Setengah Jadi** — menambah rute admin tanpa wiring lengkap. → Halaman admin baru = rute di `App.jsx` + entri `config/adminPages.js` (agar bisa dibatasi Hak Akses) + kunci i18n `admin.nav.*`/`admin.sec.*` + pertimbangan gerbang tulis `auth_admin_can()`. Halaman khusus Super Admin (Hak Akses, Kategori Tugas, Backup, Audit) TIDAK masuk `adminPages.js` — di-hardcode di `AdminLayout.jsx`.
+21. **Validasi Klien Saja** — menegakkan aturan bisnis hanya di React. → Ini temuan pentest berulang di proyek ini (once_per_day, jadwal form, privilege cols). Setiap aturan yang bisa di-bypass lewat PostgREST langsung harus ditegakkan juga di DB (trigger/policy/RPC) ATAU dilaporkan eksplisit ke user sebagai "masih client-only".
+22. **Endpoint Telanjang** — menambah file `api/` tanpa pengaman standar. → Pola wajib: cek method → rate limit (`api/_lib/rate-limit.js`) untuk endpoint publik → env var di-trim & dicek → jangan bocorkan detail internal di error. Cron diproteksi header `CRON_SECRET`. CORS & security headers diatur di `vercel.json`.
 
-Ada 3 cara sebuah baris `users` mendapat akun login (`auth_id` terisi):
-1. **Self-register** (`/register`) — `supabase.auth.signUp()` lalu insert profil dengan `status: 'Menunggu Persetujuan'`, Admin harus approve dulu.
-2. **Admin tambah jemaat langsung** (`/admin/jemaat` → tombol Tambah Jemaat) — insert profil dengan `auth_id: NULL`, `status: 'Aktif'` langsung (RLS policy `users_admin_insert`, Migrasi v26). Jemaat **belum punya password**.
-3. **Aktivasi akun** (`/aktivasi`) — untuk baris `users` yang `auth_id IS NULL` (dari cara #2 atau data impor lama): jemaat masukkan no. HP, dapat OTP via WhatsApp (Fonnte), set password baru. Endpoint `api/activate-verify.js` (service role) yang baru benar-benar membuat baris `auth.users` dan menghubungkannya.
+## 3. Konvensi
 
-Login juga bisa pakai nomor HP (`api/login-phone.js` mencari email berdasarkan `users.phone` lalu sign-in pakai anon key).
+### Kode
+- Service = satu file per domain di `src/services/` (`contentService.js` menampung banyak domain kecil: events/news/classes/komsel/registrations/certificates). Pola method: query supabase → `if (error) throw error` → return data. Halaman TIDAK memanggil `supabase` langsung — lewat service.
+- Komponen UI dari `src/components/ui/index.jsx`: `Button, Input, Textarea, Select, Checkbox, Card, Badge, StatusBadge, Avatar, PageHeader, GradientHeader, SectionHeader, EmptyState, Skeleton, SkeletonCard, Spinner`. Jangan bikin tombol/input polos baru kalau komponen ini cukup.
+- Warna lewat token brand (`bg-brand-500` dst.) & gradient `--gradient-1..3` (identitas oranye→merah, sengaja SAMA di light/dark).
+- Komentar kode bahasa Indonesia, menjelaskan KENAPA (constraint), bukan apa.
+- `app_settings`: key-value global (kolom `value` bertipe **text** — JSON di-stringify manual).
 
-## Struktur Folder
+### Commit
+Format: `feat|fix|refactor|chore|docs|clean: deskripsi singkat bahasa Indonesia` (lihat `git log`). Satu commit bisa memuat beberapa perubahan terkait. **Selalu konfirmasi dulu.**
 
-```
-src/
-  pages/
-    auth/          — Login, Register, ForgotPassword, Activate, ResetPassword
-    user/           — semua halaman jemaat (lihat daftar rute di bawah)
-    admin/          — semua halaman admin (lihat daftar rute di bawah)
-  layouts/
-    UserLayout.jsx  — bottom nav 5 tab
-    AdminLayout.jsx — sidebar desktop + drawer mobile, menu dibangun dari config/adminPages.js
-  config/
-    adminPages.js   — daftar menu admin yang BISA dibatasi lewat Hak Akses (halaman Super-Admin-only seperti Hak Akses & Kategori Tugas TIDAK masuk daftar ini — di-hardcode terpisah di AdminLayout.jsx)
-  services/         — satu file per domain (contentService.js menampung banyak domain kecil: events, news, classes, komsel, registrationService generik utk baptisan/nikah/penyerahan anak, dst.)
-  contexts/         — AuthContext (login/register/logout), ThemeContext, LanguageContext, ToastContext
-  lib/
-    supabase.js, utils.js (formatDate, formatRupiah, formatPhone, hitungUmur, compressImage, validateUpload, dll), i18n.js, exportXlsx.js, printDoc.js (cetak arsip PDF via window.print)
-api/                — Vercel serverless functions (lihat daftar di bawah)
-supabase/schema.sql — SATU file berisi seluruh schema + riwayat migrasi bernomor (lihat konvensi di bawah)
-```
+### Migrasi database (ringkas — detail di skill `migrasi-db`)
+- `supabase/schema.sql` = satu file akumulatif, append-only, header blok: `-- ── Migrasi vNN: <deskripsi> ──`
+- Dijalankan MANUAL oleh user di Supabase SQL Editor.
+- ID generik: `'PREFIX-' || replace(gen_random_uuid()::text, '-', '')` (atau epoch).
+- Tabel baru → langsung `ENABLE ROW LEVEL SECURITY` + policy (baca=login, tulis=admin, kecuali ada alasan) — 3 tabel pernah ketahuan hidup TANPA RLS (v31).
+- Blok yang lahir dari temuan keamanan ditulis dengan pola komentar `TEMUAN:` / `KEPUTUSAN OPERATOR:` / perbaikan — pertahankan gaya ini.
 
-## Konvensi Migrasi Database
+### Model peran
+5 role di `users.role`: **Jemaat, Volunteer, PKS, Admin, Super Admin** (+ `role_secondary` opsional; Admin/Super Admin boleh merangkap PKS via `users.is_pks` + `komsel_leaders`).
+- **Jemaat** — app utama (`/`)
+- **Volunteer** — + SOP Rohani (Tugas/Form) + Izin/Sakit
+- **PKS** — `is_pks = true` ATAU role/role_secondary 'PKS' → `/pks` (6 tab: Anggota, Absensi, Ulang Tahun, Persembahan Komsel, Evaluasi, Profil)
+- **Admin** — `/admin`, dibatasi per-halaman via Hak Akses (`admin_user_permissions.allowed_pages`; NULL = akses penuh, `[]` = kosong). Sejak v41-B, Hak Akses = batas keamanan NYATA lingkup **TULIS** (READ bebas untuk semua admin) — ditegakkan bertahap via `auth_admin_can()`.
+- **Super Admin** — semua + Hak Akses, Kategori Tugas, Backup, Audit Log, ubah role & biodata.
 
-`supabase/schema.sql` adalah satu file akumulatif. Setiap perubahan skema ditambahkan sebagai blok baru di akhir file dengan header `-- ── Migrasi vNN: <deskripsi> ──`, lalu **dijalankan manual** oleh user di Supabase SQL Editor (tidak ada migration runner otomatis). Migrasi terbaru: **v28** (sistem poin, NIJ, kartu jemaat, sesi komsel QR, status 3-fase, media foto/video, biodata tambahan). v27 = nama sesi kelas + spesifikasi tugas di izin.
+### Alur akun (sering disalahpahami)
+Tiga jalan baris `users` mendapat login:
+1. **Self-register** `/register` — `auth.signUp()` + profil `status: 'Menunggu Persetujuan'` → Admin approve. Duplikat email+HP dicek via `api/check-phone.js`.
+2. **Admin Tambah Jemaat** — profil `auth_id: NULL`, `status: 'Aktif'`; jemaat belum punya password.
+3. **Aktivasi** `/aktivasi` — untuk `auth_id IS NULL`: HP → OTP WhatsApp (Fonnte) → `api/activate-verify.js` (service role) membuat `auth.users` & menautkan.
 
-### Sistem Poin (v28) — penting
-Saldo `users.points` **hanya** ditulis oleh fungsi Postgres `SECURITY DEFINER` (`apply_points`, dipanggil trigger kehadiran + RPC `award_biodata_points`/`redeem_ticket`). Klien TIDAK PERNAH meng-`update` kolom `points` langsung — trigger `guard_user_privilege_cols` menolaknya (escape hatch: `current_setting('app.allow_points_update')`). Semua akses poin dari klien lewat `src/services/pointsService.js` (RPC). +1 poin otomatis saat insert ke `class_attendance`/`event_attendance`/`sunday_attendance`/`komsel_attendance` (komsel HANYA yang punya `session_id`, yaitu hasil scan QR sesi — checklist manual PKS tidak memberi poin).
+Login bisa pakai nomor HP (`api/login-phone.js`).
 
-### Status Kelas & Event (v28)
-Nilai status kini **`Mulai` → `Sedang Berlangsung` → `Selesai`** (bukan `Aktif`/`Nonaktif` lagi). Migrasi v28 memetakan data lama (`Aktif`→`Mulai`, kelas `Nonaktif`→`Selesai`). Beranda & Informasi menampilkan yang `Mulai`/`Sedang Berlangsung`; tab riwayat = `Selesai`. Event masih boleh `Dibatalkan`.
+### Sistem poin & QR
++1 poin otomatis (trigger DB) saat insert `class_attendance` / `event_attendance` / `sunday_attendance` / `komsel_attendance` (komsel HANYA yang ber-`session_id` = hasil scan QR; checklist manual PKS tidak memberi poin). +5 poin biodata lengkap via RPC. Penukaran via `redeem_ticket`.
+Prefix QR (semua ditangani `AttendanceScanPage.jsx`): `ESC-ABSEN:<classId>:<sesi>` · `ESC-EVENT:<eventId>` · `ESC-KOMSEL:<sessionId>` · `ESC-SUNDAY:<YYYY-MM-DD>` · `ESC-REDEEM:<ticketId>`.
 
-### QR prefixes (menu Scan)
-`ESC-ABSEN:<classId>:<sesi>` (kelas), `ESC-EVENT:<eventId>` (event), `ESC-KOMSEL:<sessionId>` (sesi komsel PKS), `ESC-SUNDAY:<YYYY-MM-DD>` (ibadah minggu, QR dari admin), `ESC-REDEEM:<ticketId>` (tukar poin). Semua ditangani di `AttendanceScanPage.jsx`.
+### Status Kelas & Event
+`Mulai` → `Sedang Berlangsung` → `Selesai` (event juga boleh `Dibatalkan`). Beranda/daftar menampilkan Mulai + Sedang Berlangsung; `Selesai` = tab riwayat.
 
-Pola wajib di tiap blok migrasi (supaya aman dijalankan ulang / idempotent):
-- `CREATE TABLE IF NOT EXISTS ...`
-- `ALTER TABLE x ADD COLUMN IF NOT EXISTS ...`
-- `DROP POLICY IF EXISTS "nama" ON table;` SEBELUM setiap `CREATE POLICY`
-- ID generik: `'PREFIX-' || extract(epoch from now())::bigint` atau `'PREFIX-' || replace(gen_random_uuid()::text, '-', '')`
+### Storage
+`documents` (privat; dokumen sakramen/sertifikat via `registrationService.uploadDocument`) · `profile-photos` (publik; avatar + gambar produk) · `task-files` (lampiran jawaban & background form). Bucket dibuat manual di Dashboard.
 
-Helper RLS yang sudah ada & wajib dipakai ulang (jangan re-implement): `auth_user_role()`, `auth_user_id()`, `auth_user_role_secondary()`, `auth_leads_komsel(komsel_id)` — semua `SECURITY DEFINER`.
+## 4. Standar kualitas per deliverable (checklist, bukan kata sifat)
 
-## Quirks teknis penting (jangan ulangi kesalahan ini)
+### Semua perubahan kode
+- [ ] `npx vite build` exit 0, tanpa error baru.
+- [ ] Tidak ada string UI baru di luar `i18n.js`; kunci `id` + `en` keduanya terisi.
+- [ ] Laporan akhir memuat: file yang diubah, migrasi yang harus dijalankan (kalau ada), dan daftar tes manual untuk user.
 
-- **Tailwind v4 di build ini**: utility `ring-*` dan `shadow-md` TIDAK menghasilkan CSS fungsional (entah kenapa, spesifik ke konfigurasi `@theme` proyek ini). Pakai border/outline CSS biasa untuk efek fokus, jangan pakai `ring-*`/`shadow-md`. Arbitrary value seperti `grid-rows-[1fr]` aman dipakai.
-- **Kelas Tailwind dinamis**: JANGAN bangun nama kelas lewat template literal (`bg-${color}-100`) — JIT scanner butuh string literal utuh. Kalau perlu warna per-index, buat array objek berisi string kelas lengkap lalu index ke situ (lihat `FOLDER_THEMES` di `TasksPage.jsx` atau `FORM_BG_PRESETS`).
-- **Tanggal**: kolom Postgres `DATE` di-parse JS sebagai UTC midnight → pakai `getUTC*()` untuk tanggal yang DISIMPAN, `get*()` biasa untuk "hari ini" lokal (perbandingan tanggal lahir vs hari ini di `cron-birthdays.js` & `PKSDashboardPage.jsx` sengaja asimetris begini).
-- **Storage bucket `documents`**: dibuat manual di Supabase Dashboard (privat), dipakai utk dokumen baptisan/nikah/penyerahan-anak/sertifikat lewat `registrationService.uploadDocument(folder, file)`. Bucket `profile-photos` terpisah & publik (avatar). Bucket `task-files` untuk lampiran jawaban tugas & background form.
-- **PostgREST join ambigu**: kalau satu tabel punya 2+ FK ke tabel yang sama (mis. `birthday_messages.recipient_id` & `sender_id` keduanya ke `users`), wajib pakai hint `table!column_name(fields)`, bukan nama constraint.
+### Perubahan UI
+- [ ] Memakai komponen `ui/index.jsx` bila ada padanannya.
+- [ ] Tidak ada `ring-*`/`shadow-md`; tidak ada kelas Tailwind hasil interpolasi.
+- [ ] Dark mode dicek: warna via token/`.dark` override; permukaan interaktif pakai `bg-control`.
+- [ ] Layout diperiksa untuk lebar HP (±380px) — ini app bottom-nav mobile-first.
 
-## Daftar Rute (per Juni 2026)
+### Migrasi database
+- [ ] Blok baru di akhir file, header `-- ── Migrasi vNN: … ──` dengan NN = hasil grep + 1.
+- [ ] Setiap statement idempotent (bisa dijalankan 2× tanpa error/efek ganda).
+- [ ] Helper RLS existing dipakai, tidak ada subquery role tulisan tangan.
+- [ ] Tabel baru: RLS enabled + policy lengkap, PK pakai pola prefix-ID.
+- [ ] Tidak ada `DROP POLICY` pada policy yang belum diverifikasi ada di production (drift!).
+- [ ] Layanan klien (`src/services/`) diperbarui mengikuti kolom/tabel baru.
+- [ ] Instruksi run untuk user tertulis di laporan akhir.
 
-### User (`/`, layout `UserLayout`)
-`profil`, `profil/edit`, `pengaturan`, `informasi`, `informasi/:id`, `events`, `events/:id`, `kelas`, `kelas/:id`, `kelas/absen` (scan QR), `scan`, `tugas`, `tugas/:id`, `baptisan`, `pemberkatan-nikah`, `penyerahan-anak`, `sertifikat`, `status-pendaftaran`, `persembahan`, `izin`, `pks` (khusus PKS)
+### Endpoint `api/` baru/diubah
+- [ ] Cek `req.method`; 405 untuk selainnya.
+- [ ] Rate limit dipasang bila endpoint publik/tanpa auth.
+- [ ] Tidak ada secret di response/error; env var dicek keberadaannya.
+- [ ] Cron baru: masuk `vercel.json` `crons` + validasi `CRON_SECRET`.
 
-### Admin (`/admin`, layout `AdminLayout`, akses dibatasi `AdminRoute`)
-`jemaat`, `jemaat/:id`, `events`, `events/baru`, `events/:id/edit`, `berita`, `berita/baru`, `berita/:id/edit`, `kelas`, `tugas`, `tugas/baru`, `tugas/:id/edit`, `tugas/:id/jawaban`, `baptisan`, `nikah`, `penyerahan-anak`, `sertifikat`, `baptisan/:id` & `nikah/:id` & `penyerahan-anak/:id` (satu komponen `AdminRegistrationDetailPage`, deteksi jenis dari pathname), `sp`, `ministry`, `komsel`, `evaluasi`, `persembahan`, `izin`, `hak-akses` (Super Admin saja), `kategori-tugas` (Super Admin saja)
+### Perubahan keamanan/RLS
+- [ ] Ground truth production diverifikasi dulu (dump policy) bila menyentuh policy lama.
+- [ ] Ditegakkan di DB, bukan cuma disembunyikan di UI (UI menyusul sebagai kosmetik).
+- [ ] Blok migrasi memuat komentar TEMUAN/KEPUTUSAN.
+- [ ] Dipastikan alur sah tidak ikut terkunci: service role/SQL Editor (`caller_role NULL`) tetap lewat bila memang dibutuhkan backend.
+- [ ] Tidak menyapu lebih luas dari keputusan user (contoh: Hak Akses = lingkup TULIS saja, READ dibiarkan).
 
-## Tabel Database (utama)
+### Laporan akhir tugas (selalu)
+- [ ] Kalimat pertama = hasil. Lalu: yang berubah, migrasi yang harus dijalankan, tes manual, dan risiko/sisa pekerjaan yang diketahui.
 
-`users`, `ministries`, `user_ministries`, `komsel`, `komsel_categories`, `komsel_leaders`, `komsel_attendance`, `komsel_offerings`, `news`, `events`, `event_registrations`, `event_attendance`, `classes`, `class_attendance`, `class_registrations`, `form_templates`, `template_ministries`, `form_responses`, `task_categories`, `task_category_ministries`, `task_leaves`, `baptism_registrations`, `wedding_registrations`, `child_dedication_registrations`, `certificates`, `birthday_messages`, `offerings`, `payment_accounts`, `push_subscriptions`, `admin_user_permissions`, `app_settings`, `password_reset_otp`, `activation_otp`.
+## 5. Kapan BERHENTI dan tanya user
 
-## Serverless Functions (`api/`)
+**Wajib berhenti & tanya sebelum:**
+- `git commit` / `git push` apa pun.
+- Menjalankan/menyuruh jalankan SQL yang destruktif (DROP TABLE, DELETE massal, UPDATE data production).
+- `DROP`/mengganti policy atau trigger yang tidak bisa kamu konfirmasi wujud production-nya.
+- Melonggarkan aturan privasi/keamanan apa pun (NIK, biodata, role, Hak Akses, poin).
+- Mengubah perilaku alur auth (register/aktivasi/login-phone/OTP) yang berdampak ke akun existing.
+- Menambah layanan pihak ketiga / dependensi berbayar / apa pun yang mengirim data jemaat keluar (contoh: Sentry sudah pernah ditawarkan — user BELUM memutuskan).
+- Keputusan produk (perilaku fitur yang bisa dua arah) — user proyek ini terbiasa mengambil "keputusan operator" eksplisit; sodorkan opsi + rekomendasi, jangan putuskan sendiri.
 
+**Jangan tanya (kerjakan saja):** pilihan gaya kode, helper mana yang dipakai, menambah kunci i18n, refactor kecil yang perilakunya identik, menjalankan `npx vite build`, membaca file mana pun.
+
+## 6. Peta referensi (per Juli 2026 — verifikasi ulang bila ragu)
+
+### Rute user (`/`, `UserLayout`)
+`profil`, `profil/edit`, `pengaturan`, `informasi(/:id)`, `events(/:id)`, `kelas(/:id)`, `kelas/absen`, `scan`, `tugas(/:id)` (label UI: **SOP Rohani**), `baptisan`, `pemberkatan-nikah`, `penyerahan-anak`, `ktj`, `sertifikat`, `status-pendaftaran`, `persembahan`, `poin`, `izin`, `pks`. Di luar layout: `/onboarding`, `/kebijakan-privasi`, `/login`, `/register`, `/lupa-password`, `/aktivasi`, `/reset-password`.
+
+### Rute admin (`/admin`, `AdminLayout`)
+`jemaat(/:id)`, `berita(/baru|/:id/edit)`, `events(/baru|/:id/edit)`, `kelas`, `roadmap`, `tugas(/baru|/:id/edit|/:id/jawaban)`, `evaluasi`, `izin`, `baptisan(/:id)`, `nikah(/:id)`, `penyerahan-anak(/:id)` (tiga terakhir satu komponen `AdminRegistrationDetailPage`, deteksi jenis dari pathname), `sertifikat`, `ktj(/:id)`, `sp`, `ministry`, `komsel`, `persembahan`, `ibadah-minggu`, `tukar-poin`, dan **Super Admin only**: `hak-akses`, `kategori-tugas`, `backup`, `audit`.
+
+### Tabel
+`users`, `ministries`, `user_ministries`, `komsel`, `komsel_categories`, `komsel_leaders`, `komsel_sessions`, `komsel_attendance`, `komsel_offerings`, `news`, `events`, `event_registrations`, `event_attendance`, `classes`, `class_registrations`, `class_attendance`, `form_templates`, `template_ministries`, `form_responses`, `task_categories`, `task_category_ministries`, `task_leaves`, `baptism_registrations`, `wedding_registrations`, `child_dedication_registrations`, `ktj_registrations`, `registration_prerequisites`, `certificates`, `birthday_messages`, `offerings`, `payment_accounts`, `push_subscriptions`, `admin_user_permissions`, `app_settings`, `audit_log`, `redeemable_products`, `point_transactions`, `redemption_tickets`, `sunday_attendance`, `password_reset_otp`, `activation_otp`.
+
+### Serverless (`api/`)
 | File | Fungsi |
 |---|---|
-| `check-phone.js` | Cek duplikat no. HP saat registrasi/tambah jemaat |
-| `activate-request.js` / `activate-verify.js` | Aktivasi akun lama (HP + OTP WA) → buat `auth.users` & link |
-| `login-phone.js` | Login pakai no. HP (cari email lewat service role, lalu sign-in anon) |
+| `check-phone.js` | Cek duplikat HP + email saat registrasi (rate-limited ketat) |
+| `activate-request.js` / `activate-verify.js` | Aktivasi akun: OTP WA → buat & tautkan `auth.users` |
+| `login-phone.js` | Login via nomor HP |
 | `wa-reset-request.js` / `wa-reset-verify.js` | Lupa password via OTP WhatsApp |
-| `delete-user.js` | Hapus akun permanen (Admin/Super Admin saja, service role) |
-| `notify-pks.js` | Push ke PKS saat anggota komselnya isi tugas (dipanggil klien, public tapi divalidasi) |
+| `delete-user.js` | Hapus akun permanen (menegakkan `auth_admin_can('/admin/jemaat')`) |
+| `notify-pks.js` | Push ke PKS saat anggota isi tugas (publik tapi divalidasi) |
 | `send-push.js` | Kirim web-push (VAPID) |
-| `cron-reminders.js` | Cron harian — ingatkan jemaat yang belum penuhi target tugas |
-| `cron-birthdays.js` | Cron harian — beri tahu PKS anggota komselnya ulang tahun hari ini |
+| `cron-reminders.js` | Cron 3×/hari (slot pagi/siang/sore, jadwal di `vercel.json`) — pengingat SOP |
+| `cron-birthdays.js` | Cron harian — ulang tahun anggota komsel ke PKS |
 | `ping.js` | Health check |
+| `_lib/rate-limit.js` | Rate limiter in-memory per-IP, dipakai endpoint publik |
 
-Cron diatur di `vercel.json` (`crons` array), diproteksi header `CRON_SECRET`.
+### Services (`src/services/`)
+`usersService`, `contentService` (events/news/classes/komsel/registrations/certificates), `tasksService`, `evaluationService`, `leavesService`, `offeringsService`, `attendanceService`, `pointsService`, `birthdayService`, `pushService`, `permissionsService`, `auditService`, `storageService`.
 
-## Inventaris Fitur (ringkas per peran)
+## 7. Skills proyek
 
-**Jemaat**: Beranda (berita, event, pesan ulang tahun dari PKS), Profil, Pengaturan (password, bahasa, dark mode, notifikasi push), Informasi, Events (lihat & daftar), Kelas (lihat, daftar, absen QR), Tugas (dikelompokkan sbg folder per Kategori Tugas, isi form, progress), Izin/Sakit (Volunteer), Baptisan/Pemberkatan Nikah/Penyerahan Anak (formulir multi-step + dokumen), Status Pendaftaran (gabungan semua status), Sertifikat Saya, Persembahan (QRIS/rekening + catat + riwayat).
-
-**PKS**: semua di atas + Dashboard PKS (`/pks`) 6 tab — Anggota (detail kontak tanpa NIK), Absensi, Ulang Tahun (kirim pesan personal), Persembahan Komsel (input + riwayat), Evaluasi, Profil.
-
-**Admin**: Dashboard (statistik), Jemaat (CRUD, approve pendaftaran, **Tambah Jemaat baru**), Berita, Events (+ pendaftar + rekap kehadiran + filter tanggal + export Excel), Kelas (+ pendaftar + rekap kehadiran + filter + export Excel), Tugas & Form (builder field dinamis, kategori wajib, batasan role/ministry), Evaluasi & Laporan (rekap lintas tugas, cetak), Izin/Sakit (approve), Persembahan (tab Rekap + Komsel + Rekening, export `.xlsx` berjudul), Baptisan/Nikah/Penyerahan Anak (review status + cetak arsip), Sertifikat (terbitkan manual), Surat Peringatan, Ministry, Komsel (+ Kategori Komsel + shortcut filter kategori + Tambah Anggota Cepat), Hak Akses (Super Admin), Kategori Tugas (Super Admin).
-
-## Verifikasi & Workflow
-
-Tidak ada kredensial Admin/PKS/Jemaat tersimpan untuk login otomatis di browser saat development — verifikasi perubahan dengan `npx vite build` (harus sukses, 0 error) dan baca-ulang logic RLS/komponen yang diubah. Untuk fitur yang butuh interaksi nyata (export Excel, push notification, alur multi-role), laporkan eksplisit ke user apa yang perlu mereka tes manual setelah deploy + jalankan migrasi SQL terbaru.
-
-Commit & push: **selalu konfirmasi ke user dulu** sebelum `git commit`/`git push`, walau perubahan sudah di-build & diverifikasi. Push ke `master` saja.
+Ada 3 skill khusus repo ini di `.claude/skills/` — pakai bila tugasnya cocok, jangan kerjakan manual:
+- **`migrasi-db`** — menulis blok migrasi baru di `schema.sql` dengan semua rel pengaman.
+- **`rilis`** — ritual commit→push→deploy lengkap, termasuk penanganan webhook Vercel macet.
+- **`audit-rls`** — audit keamanan RLS/policy khas proyek ini (drift-aware, per jenjang role).
