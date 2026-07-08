@@ -17,16 +17,15 @@ import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 const PESAN_ITEM = { to: '/admin/pesan', icon: MessageSquare, labelKey: 'admin.nav.pesan' }
 
 function buildMenu(isSuperAdmin, isGembala, allowedPages) {
-  // Gembala = peran fokus: menu terkurasi (Pesan + lihat data + laporan),
-  // BUKAN turunan ADMIN_PAGES/Hak Akses. Akses tulis lain sudah diblok di DB.
+  // Gembala = peran fokus: menu terkurasi (Dashboard + Pesan + laporan),
+  // tanpa akses ke konfigurasi sistem/master data.
   if (isGembala) {
     return [
-      { section: 'Komunikasi', sectionKey: 'admin.sec.Komunikasi' },
-      PESAN_ITEM,
-      { section: 'Data', sectionKey: 'admin.sec.Data' },
-      { to: '/admin/jemaat', icon: Users, labelKey: 'admin.nav.jemaat' },
-      { section: 'Laporan', sectionKey: 'admin.sec.Laporan' },
-      { to: '/admin/evaluasi', icon: BarChart3, labelKey: 'admin.nav.evaluasi' },
+      { to: '/admin',          icon: LayoutDashboard, label: 'Dashboard',        section: 'Utama', labelKey: 'admin.nav.dashboard', sectionKey: 'admin.sec.Utama', exact: true },
+      { to: '/admin/pesan',    icon: MessageSquareText, label: 'Pesan Gembala', section: 'Utama', labelKey: 'admin.nav.pesan', sectionKey: 'admin.sec.Utama' },
+      { to: '/admin/evaluasi', icon: LayoutList,        label: 'Evaluasi Mingguan', section: 'Utama', labelKey: 'admin.nav.eval', sectionKey: 'admin.sec.Utama' },
+      { to: '/admin/komsel',   icon: UsersRound,        label: 'Laporan Komsel', section: 'Utama', labelKey: 'admin.nav.komsel', sectionKey: 'admin.sec.Utama' },
+      { to: '/admin/baptis',   icon: Droplet,           label: 'Registrasi Baptis', section: 'Jemaat', labelKey: 'admin.nav.baptism', sectionKey: 'admin.sec.Jemaat' },
     ]
   }
 
@@ -59,8 +58,9 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
   return items
 }
 
-// Halaman yang boleh diakses Gembala di panel admin (sisanya diarahkan ke Pesan).
-const GEMBALA_ALLOWED = ['/admin/pesan', '/admin/jemaat', '/admin/evaluasi']
+// Halaman yang boleh diakses Gembala di panel admin (sisanya diarahkan ke Dashboard).
+// Khusus untuk Dashboard (/admin), pengecekannya exact match di bawah.
+const GEMBALA_ALLOWED = ['/admin/pesan', '/admin/evaluasi', '/admin/komsel', '/admin/baptis']
 
 export default function AdminLayout() {
   const [open, setOpen] = useState(false)
@@ -121,12 +121,12 @@ export default function AdminLayout() {
     return first ? first.to : '/'
   }
 
-  // Gembala: kunci ke halaman terkurasi saja (Pesan / Jemaat / Evaluasi).
-  // Sisanya (termasuk Dashboard & halaman tulis admin) diarahkan ke Pesan.
+  // Gembala: kunci ke halaman terkurasi saja.
+  // Sisanya diarahkan ke Dashboard (karena Gembala sekarang punya Dashboard).
   if (isGembala) {
     const p = location.pathname
-    const ok = GEMBALA_ALLOWED.some(base => p === base || p.startsWith(base + '/'))
-    if (!ok) return <Navigate to="/admin/pesan" replace />
+    const ok = p === '/admin' || GEMBALA_ALLOWED.some(base => p === base || p.startsWith(base + '/'))
+    if (!ok) return <Navigate to="/admin" replace />
   }
 
   // Halaman khusus Super Admin (Hak Akses, Kategori Tugas)
