@@ -15,9 +15,12 @@ export default async function handler(req, res) {
     
     // Lazy load firebase-admin to avoid errors if not configured yet
     let firebaseAdmin = null;
+    let getMessaging = null;
     try {
       const adminModule = await import('firebase-admin');
       firebaseAdmin = adminModule.default || adminModule;
+      const messagingModule = await import('firebase-admin/messaging');
+      getMessaging = messagingModule.getMessaging || messagingModule.default?.getMessaging;
     } catch (e) {
       console.warn('[send-push] firebase-admin not installed or failed to load:', e.message);
     }
@@ -119,9 +122,9 @@ export default async function handler(req, res) {
           const isFcmToken = s.endpoint && !s.endpoint.startsWith('http') && !s.endpoint.includes('{');
           
           if (isFcmToken) {
-            if (!firebaseAdmin?.apps?.length) throw new Error('Firebase Admin not configured');
+            if (!firebaseAdmin?.apps?.length || !getMessaging) throw new Error('Firebase Admin not configured');
             // Send FCM Notification
-            await firebaseAdmin.messaging().send({
+            await getMessaging().send({
               token: s.endpoint, // We save FCM token in endpoint column
               notification: {
                 title: title,
