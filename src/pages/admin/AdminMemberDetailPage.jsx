@@ -106,12 +106,12 @@ export default function AdminMemberDetailPage() {
         gender: gender || null, birth_date: birth_date || null, birth_place: birth_place || null,
         address: address || null, blood_type: blood_type || null, nik: nik || null,
         social_media: social_media || null,
-        membership_card_url: membership_card_url || null,
-        membership_card_issued_at: membership_card_issued_at || null,
       } : {}
       const updated = await usersService.update(id, {
         ...rest,
         ...biodata,
+        membership_card_url: membership_card_url || null,
+        membership_card_issued_at: membership_card_issued_at || null,
         is_pks: rest.is_pks,
         role_secondary: rest.role_secondary || null,
         komsel_id: rest.komsel_id || null,

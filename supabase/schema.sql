@@ -2630,3 +2630,26 @@ ALTER TABLE ktj_registrations ADD COLUMN IF NOT EXISTS photo_url TEXT;
 DROP POLICY IF EXISTS "responses_admin_delete" ON form_responses;
 CREATE POLICY "responses_admin_delete" ON form_responses FOR DELETE
   USING (auth_admin_can('/admin/respon'));
+
+-- ── Migrasi v50: Buka akses upload KTJ untuk Admin biasa ──────────────────
+CREATE OR REPLACE FUNCTION guard_biodata_admin_edit() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS DISTINCT FROM OLD.auth_id AND auth_user_role() = 'Admin' THEN
+    IF NEW.name IS DISTINCT FROM OLD.name
+       OR NEW.phone IS DISTINCT FROM OLD.phone
+       OR NEW.email IS DISTINCT FROM OLD.email
+       OR NEW.gender IS DISTINCT FROM OLD.gender
+       OR NEW.birth_date IS DISTINCT FROM OLD.birth_date
+       OR NEW.birth_place IS DISTINCT FROM OLD.birth_place
+       OR NEW.address IS DISTINCT FROM OLD.address
+       OR NEW.blood_type IS DISTINCT FROM OLD.blood_type
+       OR NEW.nik IS DISTINCT FROM OLD.nik
+       OR NEW.social_media IS DISTINCT FROM OLD.social_media
+       OR NEW.photo_url IS DISTINCT FROM OLD.photo_url
+       OR NEW.nij IS DISTINCT FROM OLD.nij THEN
+      RAISE EXCEPTION 'Hanya Super Admin yang dapat mengubah biodata jemaat lain.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
