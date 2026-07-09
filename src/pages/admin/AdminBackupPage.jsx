@@ -234,7 +234,7 @@ export default function AdminBackupPage() {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
             {t('backup.includedData')}
           </p>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {BACKUP_TABLES.map(({ table, sheet }) => (
               <div key={table} className="flex items-center gap-2 text-xs text-gray-600 py-1">
                 <div className="w-1.5 h-1.5 rounded-full bg-brand-400" />

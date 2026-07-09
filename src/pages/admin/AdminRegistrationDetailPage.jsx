@@ -281,7 +281,7 @@ export default function AdminRegistrationDetailPage() {
       {type === 'ktj' ? (
         <Card className="p-4 mb-4 space-y-3">
           <h2 className="text-sm font-semibold text-gray-900">Data Pengajuan KTJ</h2>
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <Info label="Nama Lengkap" value={reg.full_name} />
             <Info label="Tanggal Lahir" value={reg.birth_date ? `${formatDate(reg.birth_date)} (${hitungUmur(reg.birth_date)})` : '-'} />
             <Info label="Tempat Lahir" value={reg.birth_place} />
@@ -303,7 +303,7 @@ export default function AdminRegistrationDetailPage() {
       ) : type === 'baptism' ? (
         <Card className="p-4 mb-4 space-y-3">
           <h2 className="text-sm font-semibold text-gray-900">Data Calon Baptis</h2>
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <Info label="Nama Lengkap" value={reg.full_name} />
             <Info label="Tanggal Lahir" value={reg.birth_date ? `${formatDate(reg.birth_date)} (${hitungUmur(reg.birth_date)})` : '-'} />
             <Info label="Tempat Lahir" value={reg.birth_place} />
@@ -324,7 +324,7 @@ export default function AdminRegistrationDetailPage() {
       ) : type === 'dedication' ? (
         <Card className="p-4 mb-4 space-y-3">
           <h2 className="text-sm font-semibold text-gray-900">Data Anak & Orang Tua</h2>
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <Info label="Nama Anak" value={reg.child_name} />
             <Info label="Tanggal Lahir" value={reg.child_birth_date ? `${formatDate(reg.child_birth_date)} (${hitungUmur(reg.child_birth_date)})` : '-'} />
             <Info label="Tempat Lahir" value={reg.child_birth_place} />
@@ -344,7 +344,7 @@ export default function AdminRegistrationDetailPage() {
         <>
           <Card className="p-4 mb-4 space-y-3">
             <h2 className="text-sm font-semibold text-gray-900">Mempelai Pria</h2>
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <Info label="Nama Lengkap" value={reg.groom_name} />
               <Info label="Tempat Lahir" value={reg.groom_birth_place} />
               <Info label="Tanggal Lahir" value={reg.groom_birth_date ? formatDate(reg.groom_birth_date) : '-'} />
@@ -368,7 +368,7 @@ export default function AdminRegistrationDetailPage() {
           </Card>
           <Card className="p-4 mb-4 space-y-3">
             <h2 className="text-sm font-semibold text-gray-900">Mempelai Wanita</h2>
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <Info label="Nama Lengkap" value={reg.bride_name} />
               <Info label="Tempat Lahir" value={reg.bride_birth_place} />
               <Info label="Tanggal Lahir" value={reg.bride_birth_date ? formatDate(reg.bride_birth_date) : '-'} />
@@ -392,7 +392,7 @@ export default function AdminRegistrationDetailPage() {
           </Card>
           <Card className="p-4 mb-4 space-y-3">
             <h2 className="text-sm font-semibold text-gray-900">Detail Acara</h2>
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <Info label="Rencana Tanggal" value={reg.planned_date ? formatDate(reg.planned_date) : '-'} />
               <Info label="Estimasi Tamu" value={reg.estimated_guests || '-'} />
               <Info label="Pendeta Diharapkan" value={reg.preferred_pastor} />
@@ -427,7 +427,7 @@ export default function AdminRegistrationDetailPage() {
       {/* Status update */}
       <Card className="p-4 mb-4 space-y-4">
         <h2 className="text-sm font-semibold text-gray-900">Tinjau Pendaftaran</h2>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
           </Select>

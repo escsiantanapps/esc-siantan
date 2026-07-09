@@ -6,7 +6,7 @@ import { eventsService, prerequisiteService } from '@/services/contentService'
 import { eventAttendanceService } from '@/services/attendanceService'
 import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
-import { Card, PageHeader, Button, Input, Textarea, Spinner, EmptyState, StatusBadge, Badge, Avatar } from '@/components/ui'
+import { Card, PageHeader, Button, Input, Textarea, Spinner, EmptyState, StatusBadge, Badge, Avatar, ActionMenu, ActionItem } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { formatDate } from '@/lib/utils'
@@ -202,15 +202,11 @@ export default function AdminEventsPage() {
                 )}
               </div>
               <StatusBadge status={ev.status} />
-              <button onClick={() => { setRekapDate(''); setRekapModal(ev) }} title={t('aevt.rekap')} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
-                <Users size={16} />
-              </button>
-              <button onClick={() => setQrModal(ev)} title={t('a.qrAttendance')} className="p-2 text-gray-400 hover:text-green-500 shrink-0">
-                <QrCode size={16} />
-              </button>
-              <Link to={`/admin/events/${ev.event_id}/edit`} title={t('a.edit')} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
-                <Pencil size={16} />
-              </Link>
+              <ActionMenu>
+                <ActionItem icon={Users} label={t('aevt.rekap')} onClick={() => { setRekapDate(''); setRekapModal(ev) }} />
+                <ActionItem icon={QrCode} label={t('a.qrAttendance')} onClick={() => setQrModal(ev)} />
+                <ActionItem icon={Pencil} label={t('a.edit')} onClick={(e) => { e.preventDefault(); window.location.href = `/admin/events/${ev.event_id}/edit` }} />
+              </ActionMenu>
             </div>
           ))}
         </Card>

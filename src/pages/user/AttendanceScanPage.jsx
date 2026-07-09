@@ -174,7 +174,11 @@ export default function AttendanceScanPage() {
         await classAttendanceService.checkIn(classId, profile.user_id, sessionNo)
         setResult({ type: 'success', message: t('scan.classSuccess', { label }) })
       } catch (err) {
-        setResult({ type: 'duplicate', message: err.message || t('scan.classDuplicate', { label }) })
+        if (err.message === 'not_registered') {
+          setResult({ type: 'error', message: `Anda belum mendaftar di kelas ini.` })
+        } else {
+          setResult({ type: 'duplicate', message: err.message || t('scan.classDuplicate', { label }) })
+        }
       }
     } catch {
       setResult({ type: 'error', message: t('scan.classInvalid') })

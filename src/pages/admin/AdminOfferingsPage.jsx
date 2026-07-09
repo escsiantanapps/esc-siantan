@@ -227,7 +227,7 @@ export default function AdminOfferingsPage() {
 
       {tab === 'rekap' && (
         <>
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <Card className="p-4">
               <p className="text-xs text-gray-400">{t('aoff.verified')}</p>
               <p className="text-lg font-bold text-green-600">{formatRupiah(totals.verifiedSum)}</p>
@@ -241,11 +241,11 @@ export default function AdminOfferingsPage() {
           </div>
 
           <Card className="p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label={t('aoff.from')} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
               <Input label={t('aoff.to')} type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Select label={t('aoff.category')} value={category} onChange={e => setCategory(e.target.value)}>
                 <option value="">{t('aoff.all')}</option>
                 {OFFERING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}

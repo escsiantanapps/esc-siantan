@@ -118,7 +118,7 @@ export default function AdminDashboardPage() {
         <Skeleton className="h-6 w-56 rounded-lg" />
         <Skeleton className="h-3.5 w-40 rounded-md" />
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <Skeleton className="col-span-2 lg:col-span-1 h-32 rounded-2xl" />
         {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
       </div>
@@ -134,7 +134,7 @@ export default function AdminDashboardPage() {
       />
 
       {/* Stats grid — kartu pertama tampil sebagai hero (gaya bento Stitch) */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6 stagger-children">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 sm:grid-cols-3 gap-3 mb-6 stagger-children">
         {statCards.map(({ label, value, icon: Icon, color, bg, to }, idx) => {
           const hero = idx === 0
           return (
@@ -201,7 +201,7 @@ export default function AdminDashboardPage() {
         {monthBirthdays.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">{t('adash.noBirthdays')}</p>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-1 sm:grid-cols-2 gap-3">
             {monthBirthdays.map(m => (
               <Link key={m.user_id} to={`/admin/jemaat/${m.user_id}`} className="flex items-center gap-3 group">
                 <div className="w-9 h-9 rounded-full overflow-hidden bg-pink-100 flex items-center justify-center text-pink-600 text-xs font-bold shrink-0">
@@ -230,7 +230,7 @@ export default function AdminDashboardPage() {
         {evalLoading ? (
           <div className="flex justify-center py-4"><Spinner /></div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="text-center">
               <div className="w-9 h-9 mx-auto rounded-xl bg-green-50 flex items-center justify-center mb-2">
                 <CheckCircle2 size={18} className="text-green-500" />
@@ -256,7 +256,7 @@ export default function AdminDashboardPage() {
         )}
       </Card>
 
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid lg:grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Jemaat terbaru */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-4">

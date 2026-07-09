@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
-import { Sun, Moon, ArrowLeft, ChevronRight } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Sun, Moon, ArrowLeft, ChevronRight, MoreVertical } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import { useLang } from '@/hooks/useLang'
 
@@ -292,6 +293,50 @@ export function ThemeToggle({ className = '' }) {
       className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 ${className || 'bg-control text-gray-600 hover:bg-control-hover'}`}
     >
       {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
+  )
+}
+
+// ─── Action Menu (Kebab Dropdown) ────────────────────────
+export function ActionMenu({ children }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button 
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open) }} 
+        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+      >
+        <MoreVertical size={20} />
+      </button>
+      {open && (
+        <div className="absolute right-2 mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 animate-in fade-in zoom-in duration-150">
+          <div onClick={() => setOpen(false)}>{children}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function ActionItem({ icon: Icon, label, onClick, danger }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(e); }}
+      className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors ${danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-50 hover:text-brand-600'}`}
+    >
+      {Icon && <Icon size={16} />} 
+      <span className="flex-1 truncate">{label}</span>
     </button>
   )
 }

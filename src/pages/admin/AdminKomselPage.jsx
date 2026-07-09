@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { useAuth } from '@/hooks/useAuth'
 import { useBackClose } from '@/hooks/useBackClose'
-import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
+import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, Avatar, Badge, ActionMenu, ActionItem } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
 const emptyForm = { name: '', max_capacity: '', category_id: '' }
@@ -395,23 +395,15 @@ export default function AdminKomselPage() {
                 </p>
                 {item.max_capacity && <p className="text-xs text-gray-400 mt-0.5">{t('akom.capacity', { n: item.max_capacity })}</p>}
               </div>
-              <button onClick={() => openAssign(item)} title={t('akom.addMember')} className="p-2 text-gray-400 hover:text-green-500 shrink-0">
-                <UserPlus size={16} />
-              </button>
-              <button onClick={() => openPks(item)} title={t('akom.managePks')} className="p-2 text-gray-400 hover:text-amber-500 shrink-0">
-                <Crown size={16} />
-              </button>
-              <button onClick={() => viewMembers(item)} title={t('akom.membersBtn')} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
-                <Eye size={16} />
-              </button>
-              <button onClick={() => openEdit(item)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
-                <Pencil size={16} />
-              </button>
-              {!isGembala && (
-                <button onClick={() => handleDelete(item)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
-                  <Trash2 size={16} />
-                </button>
-              )}
+              <ActionMenu>
+                <ActionItem icon={UserPlus} label={t('akom.addMember')} onClick={() => openAssign(item)} />
+                <ActionItem icon={Crown} label={t('akom.managePks')} onClick={() => openPks(item)} />
+                <ActionItem icon={Eye} label={t('akom.membersBtn')} onClick={() => viewMembers(item)} />
+                <ActionItem icon={Pencil} label="Edit" onClick={() => openEdit(item)} />
+                {!isGembala && (
+                  <ActionItem icon={Trash2} label="Hapus" onClick={() => handleDelete(item)} danger />
+                )}
+              </ActionMenu>
             </div>
           ))}
         </Card>
@@ -426,7 +418,7 @@ export default function AdminKomselPage() {
           <p className="text-xs text-gray-400 mb-3">Kehadiran anggota dari sesi absensi QR yang dibuat PKS, dirangkum per bulan.</p>
 
           <Card className="p-4 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Select label="Komsel" value={recapKomselId} onChange={e => setRecapKomselId(e.target.value)}>
                 {komsel.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
               </Select>
@@ -442,7 +434,7 @@ export default function AdminKomselPage() {
             {!recapLoading && recap && recap.sessions.length > 0 && (
               <>
                 {/* Ringkasan */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="rounded-xl bg-teal-50 p-3 text-center">
                     <p className="text-2xl font-bold text-teal-600">{recap.sessions.length}</p>
                     <p className="text-[11px] text-gray-500">sesi bulan ini</p>

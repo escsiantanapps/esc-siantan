@@ -284,11 +284,11 @@ export default function AdminMemberDetailPage() {
               Biodata jemaat hanya dapat diubah oleh Super Admin.
             </p>
             <Input label="Nama Lengkap" value={form.name} onChange={e => set('name', e.target.value)} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="No. HP / WhatsApp" type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} />
               <Input label="Email" type="email" value={form.email} onChange={e => set('email', e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Select label="Jenis Kelamin" value={form.gender} onChange={e => set('gender', e.target.value)}>
                 <option value="">Pilih...</option>
                 <option>Laki-laki</option>
@@ -299,7 +299,7 @@ export default function AdminMemberDetailPage() {
                 {['A', 'B', 'AB', 'O', '-'].map(b => <option key={b}>{b}</option>)}
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Tanggal Lahir" type="date" value={form.birth_date} onChange={e => set('birth_date', e.target.value)} />
               <Input label="Tempat Lahir" value={form.birth_place} onChange={e => set('birth_place', e.target.value)} />
             </div>
@@ -309,7 +309,7 @@ export default function AdminMemberDetailPage() {
             <p className="text-xs text-gray-400">Terdaftar: {formatDate(member.created_at)}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 text-sm">
             <div>
               <p className="text-xs text-gray-400">Tanggal Lahir</p>
               <p className="text-gray-700">{member.birth_date ? `${formatDate(member.birth_date)} (${hitungUmur(member.birth_date)})` : '-'}</p>
@@ -349,7 +349,7 @@ export default function AdminMemberDetailPage() {
           lewat form di kartu Profil di atas). */}
       <Card className="p-4 mb-4">
         <h2 className="text-sm font-semibold text-gray-900 mb-3">Biodata Lengkap</h2>
-        <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-xs text-gray-400">Status Pernikahan</p>
             <p className="text-gray-700">{member.marital_status || '-'}</p>
@@ -445,7 +445,7 @@ export default function AdminMemberDetailPage() {
         <h2 className="text-sm font-semibold text-gray-900">Pengaturan Akun</h2>
         {canEditRole ? (
           <>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Select label="Role Utama" value={form.role} onChange={e => set('role', e.target.value)}>
                 {['Jemaat', 'Volunteer', 'Gembala', 'Admin', 'Super Admin'].map(r => <option key={r} value={r}>{r}</option>)}
               </Select>
@@ -506,7 +506,7 @@ export default function AdminMemberDetailPage() {
         {ministries.length === 0 ? (
           <p className="text-sm text-gray-400">Belum ada data ministry.</p>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-2">
+          <div className="grid sm:grid-cols-1 sm:grid-cols-2 gap-2">
             {ministries.map(m => (
               <Checkbox
                 key={m.ministry_id}

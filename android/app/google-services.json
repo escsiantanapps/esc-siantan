@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "352631249725",
+    "project_id": "esc-siantan-pwa",
+    "storage_bucket": "esc-siantan-pwa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:352631249725:android:291457b07330d195024354",
+        "android_client_info": {
+          "package_name": "com.escsiantan.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDXjW9OcaHHT6Opmnpk5mF604YYgZZDhBI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

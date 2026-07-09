@@ -239,14 +239,14 @@ export default function AdminEventFormPage() {
         <Input label="Nama Event" required value={form.name} onChange={e => set('name', e.target.value)} />
         <Textarea label="Deskripsi" rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Tanggal" type="date" required value={form.event_date} onChange={e => set('event_date', e.target.value)} />
           <Input label="Jam" type="time" value={form.event_time} onChange={e => set('event_time', e.target.value)} />
         </div>
 
         <Input label="Lokasi" value={form.location} onChange={e => set('location', e.target.value)} />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Kapasitas" type="number" min="0" value={form.capacity} onChange={e => set('capacity', e.target.value)} />
           <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
             <option value="Mulai">Belum Mulai</option>
@@ -256,7 +256,7 @@ export default function AdminEventFormPage() {
           </Select>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Kontak WA (Laki-laki)" placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
           <Input label="Kontak WA (Perempuan)" placeholder="08xxxxxxxxxx" value={form.contact_wa_female} onChange={e => set('contact_wa_female', e.target.value)} />
         </div>

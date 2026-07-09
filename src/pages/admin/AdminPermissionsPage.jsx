@@ -177,7 +177,7 @@ export default function AdminPermissionsPage() {
             {SECTIONS.map(section => (
               <div key={section} className="space-y-2">
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t(`admin.sec.${section}`)}</h3>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {ADMIN_PAGES.filter(p => p.section === section).map(page => (
                     <Checkbox key={page.to} label={t(page.labelKey)}
                       checked={editPages.includes(page.to)} onChange={() => toggle(page.to)} />

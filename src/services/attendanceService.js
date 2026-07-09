@@ -4,6 +4,15 @@ import { supabase } from '@/lib/supabase'
 export const classAttendanceService = {
   // Catat kehadiran untuk sesi tertentu (UNIQUE class_id+user_id+session_no).
   async checkIn(classId, userId, sessionNo = null) {
+    // Check registration first
+    const { data: reg } = await supabase
+      .from('class_registrations')
+      .select('registration_id')
+      .eq('class_id', classId)
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (!reg) throw new Error('not_registered')
+
     const { data, error } = await supabase
       .from('class_attendance')
       .insert({ class_id: classId, user_id: userId, session_no: sessionNo })

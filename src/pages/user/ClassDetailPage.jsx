@@ -140,6 +140,9 @@ export default function ClassDetailPage() {
                       </Button>
                     </a>
                   )}
+                  <Button variant="outline" className="w-full" onClick={() => navigate('/kelas/absen')}>
+                    <QrCode size={16} /> {t('classDetail.attendNow')}
+                  </Button>
                 </>
               ) : hasPrereq ? (
                 myPrereq?.status === 'Menunggu' ? (
@@ -188,10 +191,6 @@ export default function ClassDetailPage() {
                   <ClipboardList size={16} /> {t('classDetail.register')}
                 </Button>
               )}
-
-              <Button className="w-full" onClick={() => navigate('/kelas/absen')}>
-                <QrCode size={16} /> {t('classDetail.attendNow')}
-              </Button>
 
               {/* Kontak WA admin sesuai gender jemaat */}
               {(() => {

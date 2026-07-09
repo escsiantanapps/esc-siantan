@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Download, MoreVertical, Share } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
+import { Capacitor } from '@capacitor/core'
 
 const DISMISS_KEY = 'pwa-prompt-dismissed'
 
@@ -9,6 +10,7 @@ const DISMISS_KEY = 'pwa-prompt-dismissed'
 // "Tetap lanjut di website" diingat per sesi browser (sessionStorage).
 function getPromptContext() {
   if (typeof window === 'undefined') return null
+  if (Capacitor.isNativePlatform()) return null // Jangan munculkan di APK asli
   // Sudah berjalan sebagai PWA terpasang (manifest pakai fullscreen/standalone)
   if (window.matchMedia?.('(display-mode: standalone)')?.matches) return null
   if (window.matchMedia?.('(display-mode: fullscreen)')?.matches) return null

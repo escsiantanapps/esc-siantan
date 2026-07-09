@@ -46,7 +46,7 @@ export default function AdminSPPage() {
       </div>
 
       {!loading && tab === '' && (
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           {Object.entries(counts).map(([level, count]) => (
             <Card key={level} className="p-4 text-center">
               <p className="text-2xl font-bold text-gray-900">{count}</p>

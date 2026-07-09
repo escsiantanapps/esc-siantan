@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import OfflineBanner from '@/components/OfflineBanner'
 import InstallPrompt from '@/components/InstallPrompt'
+import HardwareBackButton from '@/components/HardwareBackButton'
 
 // Onboarding
 import OnboardingPage from '@/pages/OnboardingPage'
@@ -141,6 +142,7 @@ export default function App() {
     <ThemeProvider>
     <LanguageProvider>
     <BrowserRouter>
+      <HardwareBackButton />
       <AuthProvider>
         <ToastProvider>
         <OfflineBanner />

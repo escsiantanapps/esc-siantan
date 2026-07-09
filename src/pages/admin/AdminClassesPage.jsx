@@ -7,7 +7,7 @@ import { pushService } from '@/services/pushService'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
-import { Card, PageHeader, Button, Input, Textarea, Select, Checkbox, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
+import { Card, PageHeader, Button, Input, Textarea, Select, Checkbox, Spinner, EmptyState, StatusBadge, Badge, ActionMenu, ActionItem } from '@/components/ui'
 import MediaListUploader from '@/components/MediaListUploader'
 import Uploader from '@/components/Uploader'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
@@ -433,21 +433,13 @@ export default function AdminClassesPage() {
                 {cls.teacher && <p className="text-xs text-gray-400 mt-0.5 truncate">{t('acls.teacherLabel', { name: cls.teacher })}</p>}
               </div>
               <StatusBadge status={cls.status} />
-              <button onClick={() => setRegModal(cls)} title={t('acls.registrants')} className="p-2 text-gray-400 hover:text-purple-500 shrink-0">
-                <Users size={16} />
-              </button>
-              <button onClick={() => openQr(cls)} title={t('a.qrAttendance')} className="p-2 text-gray-400 hover:text-blue-500 shrink-0">
-                <QrCode size={16} />
-              </button>
-              <button onClick={() => openAttendance(cls)} title={t('a.attendanceList')} className="p-2 text-gray-400 hover:text-green-500 shrink-0">
-                <ClipboardCheck size={16} />
-              </button>
-              <button onClick={() => openEdit(cls)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
-                <Pencil size={16} />
-              </button>
-              <button onClick={() => handleDelete(cls)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
-                <Trash2 size={16} />
-              </button>
+              <ActionMenu>
+                <ActionItem icon={Users} label={t('acls.registrants')} onClick={() => setRegModal(cls)} />
+                <ActionItem icon={QrCode} label={t('a.qrAttendance')} onClick={() => openQr(cls)} />
+                <ActionItem icon={ClipboardCheck} label={t('a.attendanceList')} onClick={() => openAttendance(cls)} />
+                <ActionItem icon={Pencil} label="Edit" onClick={() => openEdit(cls)} />
+                <ActionItem icon={Trash2} label="Hapus" onClick={() => handleDelete(cls)} danger />
+              </ActionMenu>
             </div>
           ))}
         </Card>
@@ -477,7 +469,7 @@ export default function AdminClassesPage() {
             <Input label={t('acls.schedule')} placeholder={t('acls.schedulePh')} value={form.schedule} onChange={e => set('schedule', e.target.value)} />
             <Input label={t('acls.location')} value={form.location} onChange={e => set('location', e.target.value)} />
             <Input label={t('acls.teacher')} value={form.teacher} onChange={e => set('teacher', e.target.value)} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input
                 label={t('acls.totalSessions')} type="number" min="1" value={form.total_sessions}
                 onChange={e => {
@@ -543,7 +535,7 @@ export default function AdminClassesPage() {
             </div>
 
             {/* Kontak WA & Grup */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <Input label="Kontak WA (L)" placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
               <Input label="Kontak WA (P)" placeholder="08xxxxxxxxxx" value={form.contact_wa_female} onChange={e => set('contact_wa_female', e.target.value)} />
             </div>
@@ -698,7 +690,7 @@ export default function AdminClassesPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Select value={attSession} onChange={e => setAttSession(e.target.value)}>
                 <option value="">{t('a.allSessions')}</option>
                 {Array.from({ length: attModal.total_sessions || 1 }, (_, i) => i + 1).map(n => {

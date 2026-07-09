@@ -91,8 +91,8 @@ function AuditRow({ entry }) {
       </button>
 
       {open && canExpand && (
-        <div className="px-3 pb-3 pt-1 border-t border-gray-100">
-          <table className="w-full text-xs">
+        <div className="px-3 pb-3 pt-1 border-t border-gray-100 overflow-x-auto">
+          <table className="w-full text-xs min-w-[300px]">
             <thead>
               <tr className="text-gray-400 text-left">
                 <th className="font-medium py-1 pr-2">Kolom</th>

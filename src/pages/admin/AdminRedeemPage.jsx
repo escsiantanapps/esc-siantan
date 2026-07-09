@@ -194,7 +194,7 @@ export default function AdminRedeemPage() {
             <Uploader kind="image" label="Gambar Produk" hint="Opsional, maks 5 MB"
               value={form.image_url} uploading={uploading} onFile={handleImage} onClear={() => setF('image_url', '')} />
             <Input label="Nama Produk" required value={form.name} onChange={e => setF('name', e.target.value)} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Harga (poin)" type="number" min="1" required value={form.points_cost} onChange={e => setF('points_cost', e.target.value)} />
               <Input label="Stok" type="number" min="0" value={form.stock} onChange={e => setF('stock', e.target.value)} />
             </div>

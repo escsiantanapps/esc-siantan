@@ -245,7 +245,7 @@ export default function AdminTaskFormPage() {
         <h2 className="text-sm font-semibold text-gray-900">Informasi Tugas</h2>
         <Input label="Judul Tugas" required value={form.title} onChange={e => set('title', e.target.value)} />
         <Textarea label="Deskripsi" rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Target Pengisian" type="number" min="1" value={form.weekly_goal} onChange={e => set('weekly_goal', e.target.value)} />
           <Select label="Periode" value={form.period} onChange={e => set('period', e.target.value)}>
             <option value="minggu">Per Minggu</option>
@@ -263,7 +263,7 @@ export default function AdminTaskFormPage() {
 
       <Card className="p-4 mb-4 space-y-3">
         <h2 className="text-sm font-semibold text-gray-900">Hari & Jam Aktif</h2>
-        <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 sm:grid-cols-7 gap-2">
           {DAYS.map(day => (
             <button
               key={day}
@@ -277,7 +277,7 @@ export default function AdminTaskFormPage() {
           ))}
         </div>
         <p className="text-xs text-gray-400">Kosongkan jika berlaku setiap hari.</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Jam Buka" type="time" value={form.open_time} onChange={e => set('open_time', e.target.value)} />
           <Input label="Jam Tutup" type="time" value={form.close_time} onChange={e => set('close_time', e.target.value)} />
         </div>
@@ -314,7 +314,7 @@ export default function AdminTaskFormPage() {
         {form.reminder_enabled && (
           <>
             <p className="text-xs text-gray-500">Pilih hari pengiriman pengingat:</p>
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 sm:grid-cols-7 gap-2">
               {DAYS.map(day => (
                 <button
                   key={day} type="button" onClick={() => toggleReminderDay(day)}
@@ -326,7 +326,7 @@ export default function AdminTaskFormPage() {
               ))}
             </div>
             <p className="text-xs text-gray-500 mt-2">Slot waktu pengiriman:</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {REMINDER_SLOTS.map(s => (
                 <button
                   key={s.value} type="button" onClick={() => toggleReminderSlot(s.value)}
@@ -344,7 +344,7 @@ export default function AdminTaskFormPage() {
 
       <Card className="p-4 mb-4 space-y-3">
         <h2 className="text-sm font-semibold text-gray-900">Role yang Dapat Mengisi</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-1 sm:grid-cols-3 gap-2">
           {ROLES.map(r => (
             <Checkbox key={r.value} label={r.label} checked={form.allowed_roles.includes(r.value)} onChange={() => toggleRole(r.value)} />
           ))}
@@ -357,7 +357,7 @@ export default function AdminTaskFormPage() {
         {ministries.length === 0 ? (
           <p className="text-sm text-gray-400">Belum ada data ministry — tugas berlaku untuk semua jemaat.</p>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-2">
+          <div className="grid sm:grid-cols-1 sm:grid-cols-2 gap-2">
             {ministries.map(m => (
               <Checkbox key={m.ministry_id} label={m.name} checked={form.allowed_ministry.includes(m.ministry_id)} onChange={() => toggleMinistry(m.ministry_id)} />
             ))}
@@ -384,7 +384,7 @@ export default function AdminTaskFormPage() {
           ))}
         </div>
         {form.bg_type === 'preset' && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {FORM_BG_PRESETS.map(p => {
               const active = form.bg_value === p.id
               return (

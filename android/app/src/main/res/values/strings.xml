@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ESC Siantan</string>
+    <string name="title_activity_main">ESC Siantan</string>
+    <string name="package_name">com.escsiantan.app</string>
+    <string name="custom_url_scheme">com.escsiantan.app</string>
+</resources>

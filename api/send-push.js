@@ -12,6 +12,15 @@ export default async function handler(req, res) {
     // Import dinamis agar kegagalan load modul muncul sebagai JSON, bukan crash.
     const webpush = (await import('web-push')).default
     const { createClient } = await import('@supabase/supabase-js')
+    
+    // Lazy load firebase-admin to avoid errors if not configured yet
+    let firebaseAdmin = null;
+    try {
+      const adminModule = await import('firebase-admin');
+      firebaseAdmin = adminModule.default || adminModule;
+    } catch (e) {
+      console.warn('[send-push] firebase-admin not installed or failed to load:', e.message);
+    }
 
     const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
@@ -23,6 +32,26 @@ export default async function handler(req, res) {
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !VAPID_PUBLIC || !VAPID_PRIVATE) {
       console.error('[send-push] Missing env vars:', { SUPABASE_URL: !SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: !SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY: !VAPID_PUBLIC, VAPID_PRIVATE_KEY: !VAPID_PRIVATE })
       return res.status(500).json({ error: 'Konfigurasi server belum lengkap.' })
+    }
+
+    // Initialize Firebase Admin if environment variables exist
+    const fbProjectId = process.env.FIREBASE_PROJECT_ID
+    const fbClientEmail = process.env.FIREBASE_CLIENT_EMAIL
+    // Fix private key formatting for Vercel env vars
+    const fbPrivateKey = process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : null
+    
+    if (firebaseAdmin && fbProjectId && fbClientEmail && fbPrivateKey) {
+      if (!firebaseAdmin.apps.length) {
+        firebaseAdmin.initializeApp({
+          credential: firebaseAdmin.credential.cert({
+            projectId: fbProjectId,
+            clientEmail: fbClientEmail,
+            privateKey: fbPrivateKey,
+          })
+        });
+      }
+    } else {
+      console.warn('[send-push] Firebase credentials missing, FCM tokens will fail.');
     }
 
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
@@ -79,19 +108,45 @@ export default async function handler(req, res) {
     await Promise.all(
       (subs || []).map(async s => {
         try {
-          await webpush.sendNotification(
-            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-            payload
-          )
+          // Check if token is FCM token (plain string without URL structure or JSON)
+          // WebPush tokens are always URLs in the endpoint field
+          const isFcmToken = s.endpoint && !s.endpoint.startsWith('http') && !s.endpoint.includes('{');
+          
+          if (isFcmToken) {
+            if (!firebaseAdmin?.apps?.length) throw new Error('Firebase Admin not configured');
+            // Send FCM Notification
+            await firebaseAdmin.messaging().send({
+              token: s.endpoint, // We save FCM token in endpoint column
+              notification: {
+                title: title,
+                body: message || ''
+              },
+              data: {
+                url: url || '/'
+              },
+              android: {
+                priority: 'high'
+              }
+            });
+          } else {
+            // Send WebPush Notification
+            await webpush.sendNotification(
+              { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+              payload
+            )
+          }
           sent++
         } catch (err) {
-          if (err.statusCode === 404 || err.statusCode === 410) {
+          const isNotFound = err.statusCode === 404 || err.statusCode === 410 || 
+                            (err.code === 'messaging/registration-token-not-registered') ||
+                            (err.code === 'messaging/invalid-registration-token');
+          if (isNotFound) {
             await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint)
             removed++
           } else {
             errors.push({
               user_id: s.user_id,
-              statusCode: err.statusCode || null,
+              statusCode: err.statusCode || err.code || null,
               detail: String(err.body || err.message || err).slice(0, 300),
             })
           }

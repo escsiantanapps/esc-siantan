@@ -131,7 +131,7 @@ export default function AdminMembersPage() {
         action={<Button size="sm" onClick={openAddModal}><Plus size={15} /> {t('amem.addBtn')}</Button>}
       />
 
-      <div className="grid sm:grid-cols-3 gap-3 mb-4">
+      <div className="grid sm:grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <div className="sm:col-span-1">
           <Input
             placeholder={t('amem.searchName')}
@@ -152,7 +152,7 @@ export default function AdminMembersPage() {
       </div>
 
       {/* Filter organisasi */}
-      <div className="grid sm:grid-cols-3 gap-3 mb-4">
+      <div className="grid sm:grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <Select value={ministry} onChange={e => { setMinistry(e.target.value); setPage(1) }}>
           <option value="">{t('amem.allMinistry')}</option>
           {ministries.map(m => <option key={m.ministry_id} value={m.ministry_id}>{m.name}</option>)}
@@ -288,11 +288,11 @@ export default function AdminMembersPage() {
             <p className="text-xs text-gray-400 -mt-2">{t('amem.addHint')}</p>
 
             <Input label={t('auth.fullName')} required value={addForm.name} onChange={e => setAdd('name', e.target.value)} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label={t('auth.phone')} type="tel" required placeholder="08xxxxxxxxxx" value={addForm.phone} onChange={e => setAdd('phone', e.target.value)} />
               <Input label={t('auth.email')} type="email" value={addForm.email} onChange={e => setAdd('email', e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Select label={t('auth.gender')} value={addForm.gender} onChange={e => setAdd('gender', e.target.value)}>
                 <option value="">{t('auth.choose')}</option>
                 <option value="Laki-laki">{t('gender.male')}</option>
@@ -303,7 +303,7 @@ export default function AdminMembersPage() {
                 {['A', 'B', 'AB', 'O', '-'].map(b => <option key={b}>{b}</option>)}
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label={t('auth.birthDate')} type="date" value={addForm.birth_date} onChange={e => setAdd('birth_date', e.target.value)} />
               <Input label={t('auth.birthPlace')} value={addForm.birth_place} onChange={e => setAdd('birth_place', e.target.value)} />
             </div>
