@@ -16,7 +16,7 @@ export default function AdminMemberDetailPage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
-  const canEditRole = profile?.role === 'Super Admin'
+  const canEditRole = ['Admin', 'Super Admin'].includes(profile?.role)
 
   const [member, setMember] = useState(null)
   const [ministries, setMinistries] = useState([])
@@ -409,7 +409,7 @@ export default function AdminMemberDetailPage() {
         ) : (
           <>
             <MembershipCard profile={member} placeholder />
-            <p className="text-xs text-gray-400">Hanya Super Admin yang dapat mengunggah/mengubah kartu jemaat.</p>
+            <p className="text-xs text-gray-400">Hanya Admin atau Super Admin yang dapat mengunggah/mengubah kartu jemaat.</p>
           </>
         )}
       </Card>
