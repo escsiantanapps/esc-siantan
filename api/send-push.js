@@ -41,14 +41,20 @@ export default async function handler(req, res) {
     const fbPrivateKey = process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : null
     
     if (firebaseAdmin && fbProjectId && fbClientEmail && fbPrivateKey) {
-      if (!firebaseAdmin.apps.length) {
-        firebaseAdmin.initializeApp({
-          credential: firebaseAdmin.credential.cert({
-            projectId: fbProjectId,
-            clientEmail: fbClientEmail,
-            privateKey: fbPrivateKey,
-          })
-        });
+      try {
+        if (!firebaseAdmin.apps.length) {
+          // Strip surrounding quotes if accidentally included from Vercel env
+          const cleanedKey = fbPrivateKey.replace(/^"|"$/g, '').trim();
+          firebaseAdmin.initializeApp({
+            credential: firebaseAdmin.credential.cert({
+              projectId: fbProjectId,
+              clientEmail: fbClientEmail,
+              privateKey: cleanedKey,
+            })
+          });
+        }
+      } catch (fbInitErr) {
+        console.error('[send-push] Failed to initialize Firebase Admin:', fbInitErr);
       }
     } else {
       console.warn('[send-push] Firebase credentials missing, FCM tokens will fail.');
