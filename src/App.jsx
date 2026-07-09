@@ -9,6 +9,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import OfflineBanner from '@/components/OfflineBanner'
 import InstallPrompt from '@/components/InstallPrompt'
 import HardwareBackButton from '@/components/HardwareBackButton'
+import DeepLinkHandler from '@/components/DeepLinkHandler'
 
 // Onboarding
 import OnboardingPage from '@/pages/OnboardingPage'
@@ -143,6 +144,7 @@ export default function App() {
     <LanguageProvider>
     <BrowserRouter>
       <HardwareBackButton />
+      <DeepLinkHandler />
       <AuthProvider>
         <ToastProvider>
         <OfflineBanner />
