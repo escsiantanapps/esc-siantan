@@ -250,7 +250,7 @@ export function Spinner({ size = 'md' }) {
 // ─── GradientHeader ──────────────────────────────────────
 export function GradientHeader({ title, subtitle, back, children, wave = true }) {
   return (
-    <div className={`gradient-main relative overflow-hidden px-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] ${wave ? 'pb-9' : 'pb-4'}`}>
+    <div className={`gradient-main relative overflow-hidden px-4 ${wave ? 'pb-9' : 'pb-4'}`} style={{paddingTop: 'calc(var(--safe-top, 28px) + 1.5rem)'}}>
       {/* Glow dekoratif ala Stitch */}
       <div className="pointer-events-none absolute -top-16 -right-12 w-52 h-52 rounded-full bg-white/15 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-black/10 blur-2xl" />

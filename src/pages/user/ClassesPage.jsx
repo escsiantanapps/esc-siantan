@@ -27,7 +27,7 @@ export default function ClassesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const filtered = useMemo(() => classes.filter(c => c.status === tab), [classes, tab])
+  const filtered = useMemo(() => (Array.isArray(classes) ? classes : []).filter(c => c.status === tab), [classes, tab])
 
   return (
     <div className="pb-4">

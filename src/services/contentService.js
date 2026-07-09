@@ -762,10 +762,20 @@ export const komselService = {
 // Persembahan kolektif komsel (dicatat PKS saat pertemuan, diverifikasi Admin) --
 // berbeda dari `offerings` yang per-individu jemaat.
 export const komselOfferingsService = {
-  async create({ komselId, category, amount, note, recordedBy }) {
+  async create({ komsel_id, komselId, category, amount, note, proof_url, proofUrl, recorded_by, recordedBy }) {
+    const kid = komsel_id || komselId
+    const purl = proof_url || proofUrl
+    const recby = recorded_by || recordedBy
     const { data, error } = await supabase
       .from('komsel_offerings')
-      .insert({ komsel_id: komselId, category, amount, note: note || null, recorded_by: recordedBy })
+      .insert({ 
+        komsel_id: kid, 
+        category, 
+        amount, 
+        note: note || null, 
+        proof_url: purl || null, 
+        recorded_by: recby || null 
+      })
       .select().single()
     if (error) throw error
     return data

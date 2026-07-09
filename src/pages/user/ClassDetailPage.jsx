@@ -153,7 +153,7 @@ export default function ClassDetailPage() {
                 ) : myPrereq?.status === 'Ditolak' ? (
                   <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
                     <p className="text-sm font-semibold text-red-700">{t('prereq.rejected')}</p>
-                    {myPrereq.admin_note && <p className="text-xs text-red-600 mt-0.5 whitespace-pre-line">{myPrereq.admin_note}</p>}
+                    {myPrereq?.admin_note && <p className="text-xs text-red-600 mt-0.5 whitespace-pre-line">{myPrereq?.admin_note}</p>}
                     <p className="text-xs text-red-500 mt-1">{t('prereq.rejectedContact')}</p>
                   </div>
                 ) : myPrereq?.status === 'Disetujui' ? (

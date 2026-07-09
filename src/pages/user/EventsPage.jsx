@@ -29,7 +29,7 @@ export default function EventsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const filtered = useMemo(() => events.filter(ev => ev.status === tab), [events, tab])
+  const filtered = useMemo(() => (Array.isArray(events) ? events : []).filter(ev => ev.status === tab), [events, tab])
 
   const featured = filtered[0]
   const rest = filtered.slice(1)

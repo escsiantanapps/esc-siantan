@@ -16,7 +16,7 @@ import { useBackClose } from '@/hooks/useBackClose'
 import { formatDate, formatRupiah, formatPhone, hitungUmur, validateUpload, compressImage } from '@/lib/utils'
 
 // Urutan tampil rincian SOP: yang terpenuhi dulu, lalu proses, lalu kosong.
-const STATUS_RANK = { TERPENUHI: 0, PROSES: 1, KOSONG: 2 }
+const STATUS_RANK = { TERPENUHI: 0, PROSES: 1, KOSONG: 2, IZIN: 3 }
 
 function getMonday(date) {
   const d = new Date(date)
@@ -55,6 +55,7 @@ export default function PKSDashboardPage() {
   const [offeringSaving, setOfferingSaving] = useState(false)
   const [offeringUploading, setOfferingUploading] = useState(false)
   const [offeringError, setOfferingError] = useState('')
+  const [komselOfferings, setKomselOfferings] = useState([])
 
   const [memberDetail, setMemberDetail] = useState(null)
   const [removingMember, setRemovingMember] = useState(false)
@@ -139,10 +140,20 @@ export default function PKSDashboardPage() {
       .finally(() => setEvalLoading(false))
   }, [selectedId])
 
+  const loadOfferingHistory = async (id) => {
+    try {
+      const data = await komselOfferingsService.getByKomsel(id)
+      setKomselOfferings(data)
+    } catch (err) {
+      console.error('Failed to load offering history:', err)
+    }
+  }
+
   // Riwayat persembahan komsel untuk komsel terpilih.
   useEffect(() => {
     if (!selectedId) return
-    komselOfferingsService.getByKomsel(selectedId).then(setKomselOfferings).catch(() => {})
+    loadOfferingHistory(selectedId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
 
   async function handleSubmitOffering() {
@@ -165,6 +176,7 @@ export default function PKSDashboardPage() {
         amount,
         note: offeringForm.note,
         proof_url: offeringForm.proof_url,
+        recorded_by: userId,
       })
       toast.success(t('pks.offeringSaved'))
       setOfferingForm({ category: OFFERING_CATEGORIES[0], amount: '', note: '', proof_url: '' })
@@ -350,8 +362,10 @@ export default function PKSDashboardPage() {
   const evalByUser = useMemo(() => {
     const map = {}
     evalRows.forEach(r => {
-      if (!map[r.user.user_id]) map[r.user.user_id] = []
-      map[r.user.user_id].push(r)
+      if (r.user?.user_id) {
+        if (!map[r.user.user_id]) map[r.user.user_id] = []
+        map[r.user.user_id].push(r)
+      }
     })
     return map
   }, [evalRows])
@@ -673,10 +687,10 @@ export default function PKSDashboardPage() {
                   <div className="pt-2">
                     <p className="text-sm font-medium text-gray-700 mb-2">Bukti Transfer (Wajib) <span className="text-red-500">*</span></p>
                     <Uploader
-                      onUpload={handleProof}
-                      loading={offeringUploading}
-                      previewUrl={offeringForm.proof_url}
-                      onRemove={() => setOfferingForm(p => ({ ...p, proof_url: '' }))}
+                      onFile={handleProof}
+                      uploading={offeringUploading}
+                      value={offeringForm.proof_url}
+                      onClear={() => setOfferingForm(p => ({ ...p, proof_url: '' }))}
                       label="Upload Bukti (Maks 8MB)"
                     />
                   </div>
@@ -719,7 +733,7 @@ export default function PKSDashboardPage() {
                     <Card className="divide-y divide-gray-100">
                       {members.map(m => {
                         const rows = [...(evalByUser[m.user_id] || [])].sort(
-                          (a, b) => (STATUS_RANK[a.status] - STATUS_RANK[b.status]) || a.form.title.localeCompare(b.form.title)
+                          (a, b) => (STATUS_RANK[a.status] - STATUS_RANK[b.status]) || (a.form?.title || '').localeCompare(b.form?.title || '')
                         )
                         const done = rows.filter(r => r.status === 'TERPENUHI').length
                         const total = rows.length

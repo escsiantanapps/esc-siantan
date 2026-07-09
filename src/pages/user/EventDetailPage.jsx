@@ -171,7 +171,7 @@ export default function EventDetailPage() {
               ) : myPrereq?.status === 'Ditolak' ? (
                 <Card className="p-4 bg-red-50 border-red-100 space-y-1">
                   <p className="text-sm font-semibold text-red-700">{t('prereq.rejected')}</p>
-                  {myPrereq.admin_note && <p className="text-xs text-red-600 whitespace-pre-line">{myPrereq.admin_note}</p>}
+                  {myPrereq?.admin_note && <p className="text-xs text-red-600 whitespace-pre-line">{myPrereq?.admin_note}</p>}
                   <p className="text-xs text-red-500 mt-1">{t('prereq.rejectedContact')}</p>
                 </Card>
               ) : myPrereq?.status === 'Disetujui' ? (
