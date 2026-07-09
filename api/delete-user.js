@@ -14,13 +14,8 @@ export default async function handler(req, res) {
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-      return res.status(500).json({
-        error: 'Environment variable belum lengkap.',
-        missing: {
-          SUPABASE_URL: !SUPABASE_URL,
-          SUPABASE_SERVICE_ROLE_KEY: !SERVICE_ROLE_KEY,
-        },
-      })
+      console.error('[delete-user] Missing env vars:', { SUPABASE_URL: !SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: !SERVICE_ROLE_KEY })
+      return res.status(500).json({ error: 'Konfigurasi server belum lengkap.' })
     }
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
@@ -52,6 +47,7 @@ export default async function handler(req, res) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const { userId } = body
     if (!userId) return res.status(400).json({ error: 'userId wajib diisi.' })
+    if (!/^[0-9]+$/.test(String(userId))) return res.status(400).json({ error: 'Format userId tidak valid.' })
 
     // Ambil target.
     const { data: target, error: tErr } = await admin
@@ -73,7 +69,7 @@ export default async function handler(req, res) {
       const { error: aErr } = await admin.auth.admin.deleteUser(target.auth_id)
       // Abaikan bila user auth memang sudah tidak ada.
       if (aErr && !/not found/i.test(aErr.message || '')) {
-        return res.status(500).json({ error: 'Gagal menghapus akun auth: ' + aErr.message })
+        return res.status(500).json({ error: 'Gagal menghapus akun auth. Coba lagi atau hubungi administrator.' })
       }
     }
 
@@ -82,7 +78,7 @@ export default async function handler(req, res) {
     const { error: dErr } = await admin.from('users').delete().eq('user_id', userId)
     if (dErr) {
       return res.status(500).json({
-        error: 'Akun login sudah dihapus, tetapi data profil tidak dapat dihapus karena masih terkait data lain (' + dErr.message + ').',
+        error: 'Akun login sudah dihapus, tetapi data profil tidak dapat dihapus karena masih terkait data lain.',
         partial: true,
       })
     }

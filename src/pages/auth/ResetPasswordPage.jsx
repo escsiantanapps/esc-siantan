@@ -17,7 +17,7 @@ export default function ResetPasswordPage() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    if (password.length < 6) { setError(t('auth.pwMin6')); return }
+    if (password.length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) { setError(t('auth.pwMin8')); return }
     if (password !== confirmPassword) { setError(t('auth.pwMismatch6')); return }
     setLoading(true)
     try {

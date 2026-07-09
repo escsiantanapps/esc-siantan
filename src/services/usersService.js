@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { sanitizeFilename } from '@/lib/utils'
 
 // Ratakan relasi user_ministries jadi array ministry_ids di objek user
 // (agar UI yang sudah ada tetap membaca .ministry_ids tanpa perubahan).
@@ -186,7 +187,8 @@ export const usersService = {
   },
 
   async uploadAvatar(userId, file) {
-    const ext = file.name.split('.').pop()
+    const safeName = sanitizeFilename(file.name)
+    const ext = safeName.split('.').pop() || 'jpg'
     const path = `avatars/${userId}.${ext}`
     const { error: uploadError } = await supabase.storage
       .from('profile-photos').upload(path, file, { upsert: true })

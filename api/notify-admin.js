@@ -29,6 +29,9 @@ export default async function handler(req, res) {
     const { data: userData, error: uErr } = await admin.auth.getUser(token)
     if (uErr || !userData?.user) return res.status(401).json({ error: 'Unauthorized' })
 
+    const { checkRateLimit } = await import('./_lib/rate-limit.js')
+    if (checkRateLimit(req, res, { endpoint: 'notify-admin', max: 10 })) return
+
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const { type, payload } = body
     if (!type) return res.status(400).json({ error: 'Tipe notifikasi (type) wajib diisi.' })
@@ -89,7 +92,6 @@ export default async function handler(req, res) {
             removed++
           } else {
             errors.push({
-              user_id: s.user_id,
               statusCode: err.statusCode || null,
               detail: String(err.body || err.message || err).slice(0, 300),
             })
@@ -100,6 +102,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, admins: adminIds.length, sent, removed, errors })
   } catch (err) {
-    return res.status(500).json({ error: String(err?.message || err) })
+    console.error('[notify-admin]', err)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

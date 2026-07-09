@@ -40,10 +40,17 @@ export default async function handler(req, res) {
     const wanted = core(body.phone)
     if (!wanted) return res.status(400).json({ error: 'Nomor telepon wajib diisi.' })
 
-    const { data: rows } = await admin.from('users').select('user_id, phone, auth_id, email').not('phone', 'is', null)
-    const match = (rows || []).find(r => core(r.phone) === wanted)
-    if (!match) return res.status(404).json({ error: 'Nomor tidak terdaftar. Hubungi admin gereja.' })
-    if (match.auth_id) return res.status(400).json({ error: 'Akun sudah aktif. Silakan masuk, atau pakai Lupa Password.' })
+    const { data: match } = await admin.from('users').select('user_id, phone, auth_id, email').eq('phone', waTarget(wanted)).maybeSingle()
+    // Fallback: scan semua format nomor (lintas format lama)
+    let matchRow = match
+    if (!matchRow) {
+      const { data: rows } = await admin.from('users').select('user_id, phone, auth_id, email').not('phone', 'is', null)
+      matchRow = (rows || []).find(r => core(r.phone) === wanted)
+    }
+    // Pesan generik: jangan bocorkan apakah nomor terdaftar/status aktivasi.
+    if (!matchRow || matchRow.auth_id) {
+      return res.status(200).json({ ok: true, message: 'Jika nomor terdaftar dan belum aktif, kode verifikasi akan dikirim.' })
+    }
 
     // Cooldown 60 detik (berlaku untuk jalur WA; jalur email dikendalikan Supabase).
     const { data: ex } = await admin.from('activation_otp').select('created_at').eq('phone', wanted).maybeSingle()
@@ -52,14 +59,14 @@ export default async function handler(req, res) {
     }
 
     // ── Jalur email (utama) ───────────────────────────────────────────────────
-    if (hasRealEmail(match.email) && ANON_KEY) {
+    if (hasRealEmail(matchRow.email) && ANON_KEY) {
       const anon = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } })
       const { error: otpErr } = await anon.auth.signInWithOtp({
-        email: match.email,
+        email: matchRow.email,
         options: { shouldCreateUser: true },
       })
       if (!otpErr) {
-        return res.status(200).json({ ok: true, method: 'email', masked: maskEmail(match.email) })
+        return res.status(200).json({ ok: true, method: 'email', masked: maskEmail(matchRow.email) })
       }
       // Email gagal → lanjut ke fallback WA
       console.error('Email OTP gagal, fallback ke WA:', otpErr.message)
@@ -87,6 +94,7 @@ export default async function handler(req, res) {
     const t = waTarget(wanted)
     return res.status(200).json({ ok: true, method: 'whatsapp', masked: t.slice(0, 4) + '****' + t.slice(-4) })
   } catch (e) {
-    return res.status(500).json({ error: 'Terjadi kesalahan: ' + (e?.message || 'unknown') })
+    console.error('[activate-request]', e)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

@@ -34,12 +34,21 @@ export default async function handler(req, res) {
     const method = String(body.method || 'whatsapp')
     if (!wanted || !codeVal) return res.status(400).json({ error: 'Nomor dan kode wajib diisi.' })
     if (password.length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password))
-      return res.status(400).json({ error: 'Password minimal 8 karakter, harus ada huruf dan angka.' })
+      return res.status(400).json({ error: 'Password minimal 8 karakter dan harus mengandung huruf (a-z) serta angka (0-9). Contoh: Gereja2025' })
 
     // ── Jalur email (Supabase Auth OTP) ───────────────────────────────────────
     if (method === 'email') {
-      const { data: rows } = await admin.from('users').select('user_id, phone, auth_id, email').not('phone', 'is', null)
-      const match = (rows || []).find(r => core(r.phone) === wanted)
+      // Try targeted query first
+      const { data: matchDirect } = await admin.from('users').select('user_id, phone, auth_id, email').eq('phone', '0' + wanted).maybeSingle()
+      let match = matchDirect
+      if (!match) {
+        const { data: matchIntl } = await admin.from('users').select('user_id, phone, auth_id, email').eq('phone', '+62' + wanted).maybeSingle()
+        match = matchIntl
+      }
+      if (!match) {
+        const { data: rows } = await admin.from('users').select('user_id, phone, auth_id, email').not('phone', 'is', null)
+        match = (rows || []).find(r => core(r.phone) === wanted)
+      }
       if (!match) return res.status(404).json({ error: 'Akun tidak ditemukan.' })
       if (match.auth_id) return res.status(400).json({ error: 'Akun sudah aktif. Silakan masuk.' })
 
@@ -51,12 +60,11 @@ export default async function handler(req, res) {
       })
       if (vErr || !v?.user) return res.status(400).json({ error: 'Kode salah atau sudah kedaluwarsa.' })
 
-      const { error: uErr } = await admin.from('users').update({ auth_id: v.user.id, email: match.email }).eq('user_id', match.user_id)
-      if (uErr) return res.status(500).json({ error: 'Gagal menghubungkan akun: ' + uErr.message })
+      if (uErr) return res.status(500).json({ error: 'Gagal menghubungkan akun. Coba lagi.' })
 
-      const { error: pwErr } = await admin.auth.admin.updateUserById(v.user.id, { password })
-      if (pwErr) return res.status(500).json({ error: 'Gagal menyetel password: ' + pwErr.message })
+      if (pwErr) return res.status(500).json({ error: 'Gagal menyetel password. Coba lagi.' })
 
+      res.setHeader('Cache-Control', 'no-store')
       const { data: si } = await anon.auth.signInWithPassword({ email: match.email, password })
       return res.status(200).json({
         ok: true,
@@ -86,20 +94,30 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Kode salah.' })
     }
 
-    const { data: rows } = await admin.from('users').select('user_id, phone, auth_id, email').not('phone', 'is', null)
-    const match = (rows || []).find(r => core(r.phone) === wanted)
-    if (!match) return res.status(404).json({ error: 'Akun tidak ditemukan.' })
-    if (match.auth_id) return res.status(400).json({ error: 'Akun sudah aktif. Silakan masuk.' })
+    // Try targeted query first
+    const { data: matchDirect2 } = await admin.from('users').select('user_id, phone, auth_id, email').eq('phone', '0' + wanted).maybeSingle()
+    let match2 = matchDirect2
+    if (!match2) {
+      const { data: matchIntl2 } = await admin.from('users').select('user_id, phone, auth_id, email').eq('phone', '+62' + wanted).maybeSingle()
+      match2 = matchIntl2
+    }
+    if (!match2) {
+      const { data: rows } = await admin.from('users').select('user_id, phone, auth_id, email').not('phone', 'is', null)
+      match2 = (rows || []).find(r => core(r.phone) === wanted)
+    }
+    if (!match2) return res.status(404).json({ error: 'Akun tidak ditemukan.' })
+    if (match2.auth_id) return res.status(400).json({ error: 'Akun sudah aktif. Silakan masuk.' })
 
-    const email = match.email || `${wanted}@wa.esc-siantan.app`
+    const email = match2.email || `${wanted}@wa.esc-siantan.app`
     const { data: created, error: cErr } = await admin.auth.admin.createUser({ email, password, email_confirm: true })
-    if (cErr || !created?.user) return res.status(500).json({ error: 'Gagal membuat akun: ' + (cErr?.message || '') })
+    if (cErr || !created?.user) return res.status(500).json({ error: 'Gagal membuat akun. Coba lagi.' })
 
-    const { error: uErr } = await admin.from('users').update({ auth_id: created.user.id, email }).eq('user_id', match.user_id)
-    if (uErr) return res.status(500).json({ error: 'Gagal menghubungkan akun: ' + uErr.message })
+    const { error: uErr } = await admin.from('users').update({ auth_id: created.user.id, email }).eq('user_id', match2.user_id)
+    if (uErr) return res.status(500).json({ error: 'Gagal menghubungkan akun. Coba lagi.' })
     await admin.from('activation_otp').delete().eq('phone', wanted)
 
     const anon = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } })
+    res.setHeader('Cache-Control', 'no-store')
     const { data: si } = await anon.auth.signInWithPassword({ email, password })
     return res.status(200).json({
       ok: true,
@@ -107,6 +125,7 @@ export default async function handler(req, res) {
       refresh_token: si?.session?.refresh_token || null,
     })
   } catch (e) {
-    return res.status(500).json({ error: 'Terjadi kesalahan: ' + (e?.message || 'unknown') })
+    console.error('[activate-verify]', e)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

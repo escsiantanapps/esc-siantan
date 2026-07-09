@@ -37,6 +37,9 @@ export default async function handler(req, res) {
     const { data: userData, error: uErr } = await admin.auth.getUser(token)
     if (uErr || !userData?.user) return res.status(401).json({ error: 'Unauthorized' })
 
+    const { checkRateLimit } = await import('./_lib/rate-limit.js')
+    if (checkRateLimit(req, res, { endpoint: 'notify-pks', max: 10 })) return
+
     const { data: member } = await admin
       .from('users').select('user_id, name, komsel_id').eq('auth_id', userData.user.id).single()
     if (!member) return res.status(403).json({ error: 'Forbidden' })
@@ -99,7 +102,6 @@ export default async function handler(req, res) {
             removed++
           } else {
             errors.push({
-              user_id: s.user_id,
               statusCode: err.statusCode || null,
               detail: String(err.body || err.message || err).slice(0, 300),
             })
@@ -110,6 +112,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, leaders: leaderIds.length, sent, removed, errors })
   } catch (err) {
-    return res.status(500).json({ error: String(err?.message || err) })
+    console.error('[notify-pks]', err)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

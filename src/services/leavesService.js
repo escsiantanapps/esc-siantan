@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { sanitizeFilename } from '@/lib/utils'
 
 // Jenis izin tugas. "Sakit" untuk kondisi kesehatan; "Izin" untuk halangan lain.
 export const LEAVE_TYPES = ['Sakit', 'Izin']
@@ -34,7 +35,8 @@ export const leavesService = {
   },
 
   async uploadProof(userId, file) {
-    const path = `leaves/${userId}/${Date.now()}_${file.name}`
+    const safeName = sanitizeFilename(file.name)
+    const path = `leaves/${userId}/${Date.now()}_${safeName}`
     const { error } = await supabase.storage.from('task-files').upload(path, file)
     if (error) throw error
     return supabase.storage.from('task-files').getPublicUrl(path).data.publicUrl

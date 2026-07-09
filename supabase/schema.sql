@@ -181,6 +181,7 @@ CREATE TABLE form_responses (
   data_json     JSONB DEFAULT '{}',
   submitted_at  TIMESTAMPTZ DEFAULT now()
 );
+CREATE UNIQUE INDEX unique_daily_response ON form_responses (form_id, volunteer_id, (submitted_at::date));
 
 -- 1.14 RELASI MINISTRY (normalisasi array → tabel) — lihat migrasi v15
 CREATE TABLE user_ministries (
@@ -407,9 +408,11 @@ CREATE POLICY "users_read_pks"   ON users FOR SELECT USING (
 CREATE POLICY "users_edit_own"   ON users FOR UPDATE USING (auth.uid() = auth_id);
 CREATE POLICY "users_insert_own" ON users FOR INSERT WITH CHECK (auth.uid() = auth_id);
 
--- ── News & Events: semua bisa baca ──
+-- ── News & Events: semua bisa baca, admin tulis ──
 CREATE POLICY "news_read_all"   ON news   FOR SELECT USING (true);
+CREATE POLICY "news_admin_write" ON news FOR ALL USING (auth_user_role() IN ('Admin', 'Super Admin')) WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
 CREATE POLICY "events_read_all" ON events FOR SELECT USING (true);
+CREATE POLICY "events_admin_write" ON events FOR ALL USING (auth_user_role() IN ('Admin', 'Super Admin')) WITH CHECK (auth_user_role() IN ('Admin', 'Super Admin'));
 
 -- ── event_attendance ──
 CREATE POLICY "event_att_select" ON event_attendance FOR SELECT USING (
@@ -813,6 +816,17 @@ CREATE POLICY "profile_photos_update" ON storage.objects
     )
   )
   WITH CHECK (
+    bucket_id = 'profile-photos'
+    AND (
+      NOT (name LIKE 'avatars/%')
+      OR name LIKE 'avatars/' || auth_user_id() || '.%'
+    )
+  );
+
+DROP POLICY IF EXISTS "profile_photos_delete" ON storage.objects;
+CREATE POLICY "profile_photos_delete" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
     bucket_id = 'profile-photos'
     AND (
       NOT (name LIKE 'avatars/%')
@@ -1375,18 +1389,21 @@ CREATE TRIGGER trg_point_sunday_att AFTER INSERT ON sunday_attendance FOR EACH R
 DROP TRIGGER IF EXISTS trg_point_komsel_att ON komsel_attendance;
 CREATE TRIGGER trg_point_komsel_att AFTER INSERT ON komsel_attendance FOR EACH ROW EXECUTE FUNCTION award_attendance_point();
 
-CREATE OR REPLACE FUNCTION deduct_user_point(p_user_id TEXT, amount INT)
+CREATE OR REPLACE FUNCTION deduct_user_point(p_user_id TEXT, p_amount INT)
 RETURNS void AS $$
 BEGIN
   -- Pengurangan dipicu oleh komselService.deleteSessionAttendance().
   UPDATE users
-  SET points = GREATEST(points - amount, 0)
+  SET points = GREATEST(COALESCE(points, 0) - p_amount, 0)
   WHERE user_id = p_user_id;
 
-  INSERT INTO point_history (user_id, points, description)
-  VALUES (p_user_id, -amount, 'Kehadiran dibatalkan/dihapus');
+  INSERT INTO point_transactions (user_id, amount, description)
+  VALUES (p_user_id, -p_amount, 'Kehadiran dibatalkan/dihapus');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+REVOKE EXECUTE ON FUNCTION deduct_user_point FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION deduct_user_point TO service_role;
 
 -- +5 poin biodata lengkap (sekali seumur akun). Dipanggil klien via RPC;
 -- validasi kelengkapan dilakukan DI SERVER, bukan mempercayai klien.

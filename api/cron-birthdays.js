@@ -9,7 +9,17 @@ export default async function handler(req, res) {
     const CRON_SECRET = (process.env.CRON_SECRET || '').trim()
     if (!CRON_SECRET) return res.status(500).json({ error: 'CRON_SECRET belum diatur di server.' })
     const auth = req.headers.authorization || ''
-    if (auth !== `Bearer ${CRON_SECRET}`) return res.status(401).json({ error: 'Unauthorized' })
+    const { timingSafeEqual } = await import('crypto')
+    const secretBuf = Buffer.from(CRON_SECRET)
+    const authVal = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+    const authBuf = Buffer.from(authVal)
+    if (secretBuf.length !== authBuf.length || !timingSafeEqual(secretBuf, authBuf)) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+
+    if (req.method !== 'GET' && req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' })
+    }
 
     const webpush = (await import('web-push')).default
     const { createClient } = await import('@supabase/supabase-js')
@@ -134,6 +144,7 @@ export default async function handler(req, res) {
       removed,
     })
   } catch (e) {
-    return res.status(500).json({ error: String(e?.message || e) })
+    console.error('[cron-birthdays]', e)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

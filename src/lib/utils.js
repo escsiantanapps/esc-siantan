@@ -85,14 +85,36 @@ export function avatarColor(name) {
   return colors[idx]
 }
 
+// Ekstensi file yang diizinkan per konteks
+const ALLOWED_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+const ALLOWED_DOC_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf', 'doc', 'docx']
+
+// Sanitasi nama file: hilangkan path, karakter khusus, batasi panjang.
+// Mencegah PII bocor ke URL publik & path traversal.
+export function sanitizeFilename(filename) {
+  const raw = String(filename || 'file').split(/[\\/]/).pop() || 'file'
+  const dotIdx = raw.lastIndexOf('.')
+  const base = dotIdx > 0 ? raw.slice(0, dotIdx) : raw
+  const extRaw = dotIdx > 0 ? raw.slice(dotIdx + 1) : ''
+  const safeBase = base.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || 'file'
+  const safeExt = extRaw.replace(/[^a-zA-Z0-9]+/g, '').slice(0, 8).toLowerCase()
+  return safeExt ? `${safeBase}.${safeExt}` : safeBase
+}
+
 // Validasi file upload (ukuran & tipe). Lempar Error bila tidak valid.
-export function validateUpload(file, { maxMB = 5, image = false } = {}) {
+export function validateUpload(file, { maxMB = 5, image = false, allowedExts = null } = {}) {
   if (!file) return
   if (file.size > maxMB * 1024 * 1024) {
     throw new Error(`Ukuran file terlalu besar (maksimal ${maxMB} MB).`)
   }
   if (image && !file.type.startsWith('image/')) {
     throw new Error('File harus berupa gambar (JPG/PNG).')
+  }
+  // Validasi ekstensi file
+  const ext = (file.name || '').split('.').pop()?.toLowerCase() || ''
+  const allowed = allowedExts || (image ? ALLOWED_IMAGE_EXTS : null)
+  if (allowed && !allowed.includes(ext)) {
+    throw new Error(`Tipe file tidak diizinkan. Gunakan: ${allowed.join(', ').toUpperCase()}`)
   }
 }
 

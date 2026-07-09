@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { sanitizeFilename } from '@/lib/utils'
 
 export const OFFERING_CATEGORIES = [
   'Perpuluhan',
@@ -38,8 +39,8 @@ export const offeringsService = {
   },
 
   async uploadQris(file) {
-    const ext = file.name.split('.').pop()
-    const path = `qris/${Date.now()}.${ext}`
+    const safeName = sanitizeFilename(file.name)
+    const path = `qris/${Date.now()}_${safeName}`
     const { error } = await supabase.storage.from('profile-photos').upload(path, file, { upsert: true })
     if (error) throw error
     return supabase.storage.from('profile-photos').getPublicUrl(path).data.publicUrl
@@ -91,7 +92,8 @@ export const offeringsService = {
   },
 
   async uploadProof(userId, file) {
-    const path = `offerings/${userId}/${Date.now()}_${file.name}`
+    const safeName = sanitizeFilename(file.name)
+    const path = `offerings/${userId}/${Date.now()}_${safeName}`
     const { error } = await supabase.storage.from('profile-photos').upload(path, file)
     if (error) throw error
     return supabase.storage.from('profile-photos').getPublicUrl(path).data.publicUrl

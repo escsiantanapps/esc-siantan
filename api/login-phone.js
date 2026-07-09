@@ -44,11 +44,13 @@ export default async function handler(req, res) {
     const { data, error } = await anon.auth.signInWithPassword({ email: match.email, password })
     if (error || !data?.session) return res.status(401).json({ error: 'Nomor telepon atau kata sandi salah.' })
 
+    res.setHeader('Cache-Control', 'no-store')
     return res.status(200).json({
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
     })
   } catch (e) {
-    return res.status(500).json({ error: 'Terjadi kesalahan: ' + (e?.message || 'unknown') })
+    console.error('[login-phone]', e)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

@@ -43,7 +43,8 @@ export default async function handler(req, res) {
     const { data: user } = await admin
       .from('users').select('user_id, phone, auth_id').ilike('email', email).maybeSingle()
     if (!user || !user.auth_id) {
-      return res.status(404).json({ error: 'Akun dengan email tersebut tidak ditemukan.' })
+      // Pesan generik: jangan bocorkan apakah email terdaftar.
+      return res.status(200).json({ ok: true, method: 'unknown', message: 'Jika akun dengan email tersebut ada, kode reset akan dikirim.' })
     }
     const target = waTarget(user.phone)
 
@@ -96,6 +97,7 @@ export default async function handler(req, res) {
     const masked = target.slice(0, 4) + '****' + target.slice(-4)
     return res.status(200).json({ ok: true, method: 'whatsapp', masked })
   } catch (e) {
-    return res.status(500).json({ error: 'Terjadi kesalahan: ' + (e?.message || 'unknown') })
+    console.error('[wa-reset-request]', e)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

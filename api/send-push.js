@@ -21,15 +21,8 @@ export default async function handler(req, res) {
     if (!/^(mailto:|https?:\/\/)/i.test(VAPID_SUBJECT)) VAPID_SUBJECT = 'mailto:' + VAPID_SUBJECT
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !VAPID_PUBLIC || !VAPID_PRIVATE) {
-      return res.status(500).json({
-        error: 'Environment variable belum lengkap.',
-        missing: {
-          SUPABASE_URL: !SUPABASE_URL,
-          SUPABASE_SERVICE_ROLE_KEY: !SERVICE_ROLE_KEY,
-          VAPID_PUBLIC_KEY: !VAPID_PUBLIC,
-          VAPID_PRIVATE_KEY: !VAPID_PRIVATE,
-        },
-      })
+      console.error('[send-push] Missing env vars:', { SUPABASE_URL: !SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: !SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY: !VAPID_PUBLIC, VAPID_PRIVATE_KEY: !VAPID_PRIVATE })
+      return res.status(500).json({ error: 'Konfigurasi server belum lengkap.' })
     }
 
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
@@ -64,7 +57,7 @@ export default async function handler(req, res) {
     let query = admin.from('push_subscriptions').select('*')
     if (Array.isArray(userIds) && userIds.length) query = query.in('user_id', userIds)
     const { data: subs, error: sErr } = await query
-    if (sErr) return res.status(500).json({ error: sErr.message })
+    if (sErr) return res.status(500).json({ error: 'Gagal mengambil data notifikasi.' })
 
     // Bila tidak ada subscription untuk target user, cek apakah ada subscription
     // aktif di sistem sama sekali — supaya pemanggil (UI admin) bisa membedakan
@@ -112,10 +105,7 @@ export default async function handler(req, res) {
       totalSystemWide,
     })
   } catch (err) {
-    // Apa pun yang gagal → JSON yang terbaca (termasuk error load modul).
-    return res.status(500).json({
-      error: String(err?.message || err),
-      stack: String(err?.stack || '').split('\n').slice(0, 4),
-    })
+    console.error('[send-push] Fatal:', err)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

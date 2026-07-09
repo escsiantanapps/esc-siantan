@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const method = String(body.method || 'whatsapp')
     if (!email || !code) return res.status(400).json({ error: 'Email dan kode wajib diisi.' })
     if (newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/\d/.test(newPassword))
-      return res.status(400).json({ error: 'Password minimal 8 karakter, harus ada huruf dan angka.' })
+      return res.status(400).json({ error: 'Password minimal 8 karakter dan harus mengandung huruf (a-z) serta angka (0-9). Contoh: Gereja2025' })
 
     // ── Jalur email (Supabase Auth OTP) ───────────────────────────────────────
     if (method === 'email') {
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
       if (!user?.auth_id) return res.status(404).json({ error: 'Akun tidak ditemukan.' })
 
       const { error: upErr } = await admin.auth.admin.updateUserById(user.auth_id, { password: newPassword })
-      if (upErr) return res.status(500).json({ error: 'Gagal menyetel password: ' + upErr.message })
+      if (upErr) return res.status(500).json({ error: 'Gagal menyetel password. Coba lagi.' })
 
       return res.status(200).json({ ok: true })
     }
@@ -75,11 +75,12 @@ export default async function handler(req, res) {
     if (!user?.auth_id) return res.status(404).json({ error: 'Akun tidak ditemukan.' })
 
     const { error: upErr } = await admin.auth.admin.updateUserById(user.auth_id, { password: newPassword })
-    if (upErr) return res.status(500).json({ error: 'Gagal menyetel password: ' + upErr.message })
+    if (upErr) return res.status(500).json({ error: 'Gagal menyetel password. Coba lagi.' })
 
     await admin.from('password_reset_otp').delete().eq('email', email)
     return res.status(200).json({ ok: true })
   } catch (e) {
-    return res.status(500).json({ error: 'Terjadi kesalahan: ' + (e?.message || 'unknown') })
+    console.error('[wa-reset-verify]', e)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

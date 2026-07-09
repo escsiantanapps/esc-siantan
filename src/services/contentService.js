@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { sanitizeFilename } from '@/lib/utils'
 
 // ─── Events ──────────────────────────────────────────────
 export const eventsService = {
@@ -35,7 +36,7 @@ export const eventsService = {
   },
 
   async register(eventId, userId) {
-    const ticketId = `TKT-${Date.now()}`
+    const ticketId = `TKT-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const { data, error } = await supabase.from('event_registrations')
       .insert({ ticket_id: ticketId, event_id: eventId, user_id: userId }).select().single()
     if (error) throw error
@@ -75,8 +76,8 @@ export const eventsService = {
   },
 
   async uploadThumbnail(file) {
-    const ext = file.name.split('.').pop()
-    const path = `events/${Date.now()}.${ext}`
+    const safeName = sanitizeFilename(file.name)
+    const path = `events/${Date.now()}_${safeName}`
     const { error } = await supabase.storage.from('profile-photos').upload(path, file)
     if (error) throw error
     const { data } = supabase.storage.from('profile-photos').getPublicUrl(path)
@@ -251,10 +252,9 @@ export const registrationService = {
       contentType: file.type || 'application/octet-stream',
     })
     if (error) throw error
-    // Bucket 'documents' privat (v38). Pakai signed URL long-lived (1 tahun)
-    // agar link tetap valid untuk review admin & jemaat tanpa perlu regen.
+    // Bucket 'documents' privat (v38). Pakai signed URL on-demand.
     const { data: signed, error: sErr } = await supabase.storage.from('documents')
-      .createSignedUrl(path, 60 * 60 * 24 * 365)
+      .createSignedUrl(path, 60 * 60 * 4) // 4 jam — generate ulang on-demand
     if (sErr) throw sErr
     return signed.signedUrl
   },
@@ -295,8 +295,8 @@ export const classesService = {
   },
 
   async uploadThumbnail(file) {
-    const ext = file.name.split('.').pop()
-    const path = `classes/${Date.now()}.${ext}`
+    const safeName = sanitizeFilename(file.name)
+    const path = `classes/${Date.now()}_${safeName}`
     const { error } = await supabase.storage.from('profile-photos').upload(path, file)
     if (error) throw error
     const { data } = supabase.storage.from('profile-photos').getPublicUrl(path)
@@ -305,7 +305,7 @@ export const classesService = {
 
   // ── Registrasi kelas (opsional -- absensi via QR tetap bisa tanpa daftar dulu) ──
   async register(classId, userId) {
-    const registrationId = `CREG-${Date.now()}`
+    const registrationId = `CREG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const { data, error } = await supabase.from('class_registrations')
       .insert({ registration_id: registrationId, class_id: classId, user_id: userId }).select().single()
     if (error) throw error
@@ -383,7 +383,7 @@ export const prerequisiteService = {
     if (updErr) throw updErr
 
     const cfg = PREREQ_TABLES[kind]
-    const newId = `${cfg.prefix}-${Date.now()}`
+    const newId = `${cfg.prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const regRow = { [cfg.idCol]: newId, [cfg.fk]: targetId, user_id: userId, prerequisite_id: id }
     const { data, error } = await supabase.from(cfg.table).insert(regRow).select().single()
     if (error) throw error

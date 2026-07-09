@@ -52,6 +52,7 @@ export default async function handler(req, res) {
     // pemanggil lama (usersService "Tambah Jemaat"). Flag baru granular.
     return res.status(200).json({ available: !phoneTaken, phoneTaken, emailTaken, needsActivation, hasLogin })
   } catch (e) {
-    return res.status(500).json({ error: 'Terjadi kesalahan: ' + (e?.message || 'unknown') })
+    console.error('[check-phone]', e)
+    return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }

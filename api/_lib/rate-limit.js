@@ -8,6 +8,8 @@ const store = new Map() // 'ip:endpoint' → { count, resetAt }
  */
 export function checkRateLimit(req, res, { max = 10, windowMs = 60_000, endpoint = '' } = {}) {
   const ip = (
+    req.headers['x-real-ip'] ||
+    req.headers['x-vercel-forwarded-for']?.split(',')[0]?.trim() ||
     req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
     req.socket?.remoteAddress ||
     'unknown'

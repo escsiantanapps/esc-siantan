@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { sanitizeFilename } from '@/lib/utils'
 
 // Cek apakah role user cocok dengan salah satu role target. User dapat punya
 // role utama (role) dan role kedua (role_secondary) — keduanya dipertimbangkan.
@@ -224,7 +225,8 @@ export const tasksService = {
   },
 
   async uploadResponseFile(userId, file) {
-    const path = `responses/${userId}/${Date.now()}_${file.name}`
+    const safeName = sanitizeFilename(file.name)
+    const path = `responses/${userId}/${Date.now()}_${safeName}`
     const { error } = await supabase.storage.from('task-files').upload(path, file)
     if (error) throw error
     const { data } = supabase.storage.from('task-files').getPublicUrl(path)
@@ -261,8 +263,8 @@ export const tasksService = {
   },
 
   async uploadFormBackground(file) {
-    const ext = file.name.split('.').pop()
-    const path = `form-bg/${Date.now()}.${ext}`
+    const safeName = sanitizeFilename(file.name)
+    const path = `form-bg/${Date.now()}_${safeName}`
     const { error } = await supabase.storage.from('task-files').upload(path, file, { upsert: true })
     if (error) throw error
     return supabase.storage.from('task-files').getPublicUrl(path).data.publicUrl

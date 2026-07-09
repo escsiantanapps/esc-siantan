@@ -128,12 +128,33 @@ export default function AdminMemberDetailPage() {
   }
 
   async function handleApproval(status) {
+    if (status === 'Ditolak') {
+      const ok = await confirm({
+        title: 'Tolak Pendaftaran?',
+        message: `Pendaftaran akun "${member.name}" akan ditolak dan data registrasinya akan dihapus permanen dari sistem. Lanjutkan?`,
+        confirmText: 'Tolak & Hapus',
+        danger: true,
+      })
+      if (!ok) return
+      setError(''); setSuccess(''); setSaving(true)
+      try {
+        await usersService.deleteAccount(id)
+        toast.success('Pendaftaran ditolak & data dihapus.')
+        navigate('/admin/jemaat')
+      } catch (err) {
+        setError(err.message || 'Gagal menghapus data pendaftaran.')
+        toast.error(err.message || 'Gagal menghapus data pendaftaran.')
+        setSaving(false)
+      }
+      return
+    }
+
     setError(''); setSuccess(''); setSaving(true)
     try {
       const updated = await usersService.update(id, { status })
       setMember(updated)
       set('status', status)
-      const msg = status === 'Aktif' ? 'Pendaftaran disetujui.' : 'Pendaftaran ditolak.'
+      const msg = 'Pendaftaran disetujui.'
       setSuccess(msg)
       toast.success(msg)
     } catch (err) {
@@ -237,7 +258,7 @@ export default function AdminMemberDetailPage() {
             <p className="text-xs text-brand-600">Setujui agar jemaat ini bisa mengakses akunnya.</p>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="danger" loading={saving} onClick={() => handleApproval('Nonaktif')}>Tolak</Button>
+            <Button size="sm" variant="danger" loading={saving} onClick={() => handleApproval('Ditolak')}>Tolak</Button>
             <Button size="sm" loading={saving} onClick={() => handleApproval('Aktif')}>Setujui</Button>
           </div>
         </Card>
