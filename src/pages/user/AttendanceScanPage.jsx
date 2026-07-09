@@ -173,6 +173,7 @@ export default function AttendanceScanPage() {
       try {
         await classAttendanceService.checkIn(classId, profile.user_id, sessionNo)
         setResult({ type: 'success', message: t('scan.classSuccess', { label }) })
+        if (refreshProfile) refreshProfile()
       } catch (err) {
         if (err.message === 'not_registered') {
           setResult({ type: 'error', message: `Anda belum mendaftar di kelas ini.` })
@@ -188,14 +189,16 @@ export default function AttendanceScanPage() {
   async function handleEvent(eventId) {
     try {
       const ev = await eventsService.getById(eventId)
+      const label = ev.name
       try {
         await eventAttendanceService.checkIn(eventId, profile.user_id)
-        setResult({ type: 'success', message: t('scan.eventSuccess', { name: ev.name }) })
+        setResult({ type: 'success', message: t('scan.eventSuccess', { label }) })
+        if (refreshProfile) refreshProfile()
       } catch (err) {
         if (err.message === 'not_registered') {
-          setResult({ type: 'error', message: t('scan.eventNotRegistered', { name: ev.name }) })
+          setResult({ type: 'error', message: t('scan.eventNotRegistered', { name: label }) })
         } else {
-          setResult({ type: 'duplicate', message: err.message || t('scan.eventDuplicate', { name: ev.name }) })
+          setResult({ type: 'duplicate', message: err.message || t('scan.eventDuplicate', { name: label }) })
         }
       }
     } catch {

@@ -188,6 +188,10 @@ export function AuthProvider({ children }) {
     setProfile(prev => ({ ...prev, ...updates }))
   }
 
+  async function refreshProfile() {
+    if (user) await fetchProfile(user)
+  }
+
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const isPKS = profile?.is_pks === true || profile?.role === 'PKS'
   // Volunteer via role utama ATAU role kedua (mis. Admin yang juga Volunteer).
@@ -199,7 +203,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading,
-      login, register, logout, updateProfile,
+      login, register, logout, updateProfile, refreshProfile,
       resetPassword, verifyResetOtp, updatePassword,
       isAdmin, isPKS, isVolunteer, isGembala,
     }}>
