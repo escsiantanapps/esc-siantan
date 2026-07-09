@@ -50,7 +50,7 @@ export default function PKSDashboardPage() {
   const [evalLoading, setEvalLoading] = useState(true)
   const [openEval, setOpenEval] = useState({}) // user_id -> bool (rincian SOP terbuka)
 
-  const [tab, setTab] = useState('anggota') // 'anggota', 'sesi', 'persembahan', 'evaluasi', 'profil'
+
   const [offeringForm, setOfferingForm] = useState({ category: OFFERING_CATEGORIES[0], amount: '', note: '', proof_url: '' })
   const [offeringSaving, setOfferingSaving] = useState(false)
   const [offeringUploading, setOfferingUploading] = useState(false)
