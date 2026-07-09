@@ -167,7 +167,7 @@ export default function AdminLayout() {
         lg:translate-x-0 lg:static lg:flex
       `}>
         {/* Logo */}
-        <div className="p-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] border-b border-gray-100">
+        <div className="p-4 border-b border-gray-100" style={{paddingTop: 'calc(var(--safe-top, 28px) + 1rem)'}}>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl gradient-main flex items-center justify-center">
               <span className="text-white text-sm font-bold">ES</span>
@@ -185,11 +185,11 @@ export default function AdminLayout() {
           <div className="p-3 border-b border-gray-100">
             <div className="flex items-center gap-1 p-1 bg-control rounded-xl">
               <NavLink
-                to={isAdminOnly && isPKS ? '/pks' : '/'}
+                to="/"
                 className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
               >
                 <Smartphone size={14} strokeWidth={1.5} />
-                {isAdminOnly && isPKS ? t('admin.switchPks') : t('admin.switchApp')}
+                {t('admin.switchApp')}
               </NavLink>
               <span className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold bg-surface text-brand-600 shadow-sm">
                 <ShieldCheck size={14} strokeWidth={2} />
@@ -276,7 +276,7 @@ export default function AdminLayout() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar mobile */}
-        <header className="lg:hidden bg-surface/90 backdrop-blur-md border-b border-gray-100 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-3 flex items-center gap-3 sticky top-0 z-20">
+        <header className="lg:hidden bg-surface/90 backdrop-blur-md border-b border-gray-100 px-4 pb-3 flex items-center gap-3 sticky top-0 z-20" style={{paddingTop: 'calc(var(--safe-top, 28px) + 0.75rem)'}}>
           <button onClick={() => setOpen(true)} className="p-1 text-gray-500 active:scale-90 transition-transform">
             <Menu size={22} />
           </button>
