@@ -7,12 +7,12 @@
       "presentationOptions": ["badge", "sound", "alert"]
     },
     "SplashScreen": {
-      "launchShowDuration": 2000,
-      "backgroundColor": "#ffffff",
-      "androidSplashResourceName": "splash",
-      "androidScaleType": "FIT_CENTER",
+      "launchShowDuration": 500,
+      "backgroundColor": "#F4511E",
+      "androidScaleType": "CENTER",
       "splashFullScreen": true,
-      "splashImmersive": true
+      "splashImmersive": true,
+      "useDialog": false
     }
   }
 }

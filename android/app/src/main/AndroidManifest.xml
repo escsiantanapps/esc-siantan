@@ -18,7 +18,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            
+
             <!-- Deep Linking for esc-siantan.com -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
