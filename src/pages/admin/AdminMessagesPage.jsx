@@ -96,7 +96,7 @@ export default function AdminMessagesPage() {
             value={form.title}
             onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
             placeholder={t('amsg.msgTitlePh')}
-            maxLength={120}
+            maxLength={500}
           />
           <Textarea
             label={t('amsg.msgBody')}
