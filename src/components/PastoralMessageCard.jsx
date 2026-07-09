@@ -26,7 +26,11 @@ export default function PastoralMessageCard() {
     messagesService.getRecent(5)
       .then(rows => {
         const dismissed = readDismissed()
-        setMessages(rows.filter(m => !dismissed.includes(m.message_id)))
+        const threeDaysAgo = Date.now() - (3 * 24 * 60 * 60 * 1000)
+        setMessages(rows.filter(m => {
+          const isOld = new Date(m.created_at).getTime() < threeDaysAgo
+          return !isOld && !dismissed.includes(m.message_id)
+        }))
       })
       .catch(() => {})
   }, [])
@@ -39,9 +43,9 @@ export default function PastoralMessageCard() {
   }
 
   return (
-    <div className="space-y-2.5 mb-5">
+    <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 mb-5 pb-2 -mx-4 px-4 scrollbar-hide">
       {messages.map(msg => (
-        <Card key={msg.message_id} className="p-4 border-brand-200 bg-brand-50/60 relative animate-fade-in-up">
+        <Card key={msg.message_id} className="w-[85vw] max-w-[320px] shrink-0 snap-center p-4 border-brand-200 bg-brand-50/60 relative animate-fade-in-up">
           <button
             onClick={() => dismiss(msg)}
             aria-label={t('common.close')}

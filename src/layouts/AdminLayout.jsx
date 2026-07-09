@@ -167,7 +167,7 @@ export default function AdminLayout() {
         lg:translate-x-0 lg:static lg:flex
       `}>
         {/* Logo */}
-        <div className="p-4 border-b border-gray-100">
+        <div className="p-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl gradient-main flex items-center justify-center">
               <span className="text-white text-sm font-bold">ES</span>
@@ -276,7 +276,7 @@ export default function AdminLayout() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar mobile */}
-        <header className="lg:hidden bg-surface/90 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-20">
+        <header className="lg:hidden bg-surface/90 backdrop-blur-md border-b border-gray-100 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-3 flex items-center gap-3 sticky top-0 z-20">
           <button onClick={() => setOpen(true)} className="p-1 text-gray-500 active:scale-90 transition-transform">
             <Menu size={22} />
           </button>
