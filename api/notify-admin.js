@@ -9,6 +9,14 @@ export default async function handler(req, res) {
     const webpush = (await import('web-push')).default
     const { createClient } = await import('@supabase/supabase-js')
 
+    let firebaseAdmin = null;
+    try {
+      const adminModule = await import('firebase-admin');
+      firebaseAdmin = adminModule.default || adminModule;
+    } catch (e) {
+      console.warn('[notify-admin] firebase-admin not installed or failed to load:', e.message);
+    }
+
     const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
     const VAPID_PUBLIC = (process.env.VAPID_PUBLIC_KEY || '').trim()
@@ -18,6 +26,22 @@ export default async function handler(req, res) {
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !VAPID_PUBLIC || !VAPID_PRIVATE) {
       return res.status(500).json({ error: 'Environment variable belum lengkap.' })
+    }
+
+    const fbProjectId = process.env.FIREBASE_PROJECT_ID
+    const fbClientEmail = process.env.FIREBASE_CLIENT_EMAIL
+    const fbPrivateKey = process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : null
+    
+    if (firebaseAdmin && fbProjectId && fbClientEmail && fbPrivateKey) {
+      if (!firebaseAdmin.apps.length) {
+        firebaseAdmin.initializeApp({
+          credential: firebaseAdmin.credential.cert({
+            projectId: fbProjectId,
+            clientEmail: fbClientEmail,
+            privateKey: fbPrivateKey,
+          })
+        });
+      }
     }
 
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
@@ -81,13 +105,27 @@ export default async function handler(req, res) {
     await Promise.all(
       (subs || []).map(async s => {
         try {
-          await webpush.sendNotification(
-            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-            pushPayload
-          )
+          const isFcmToken = s.endpoint && !s.endpoint.startsWith('http') && !s.endpoint.includes('{');
+          if (isFcmToken) {
+            if (!firebaseAdmin?.apps?.length) throw new Error('Firebase Admin not configured');
+            await firebaseAdmin.messaging().send({
+              token: s.endpoint,
+              notification: { title: title, body: message || '' },
+              data: { url: url || '/' },
+              android: { priority: 'high' }
+            });
+          } else {
+            await webpush.sendNotification(
+              { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+              pushPayload
+            )
+          }
           sent++
         } catch (err) {
-          if (err.statusCode === 404 || err.statusCode === 410) {
+          const isNotFound = err.statusCode === 404 || err.statusCode === 410 || 
+                            (err.code === 'messaging/registration-token-not-registered') ||
+                            (err.code === 'messaging/invalid-registration-token');
+          if (isNotFound) {
             await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint)
             removed++
           } else {
