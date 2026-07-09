@@ -967,7 +967,7 @@ CREATE POLICY "class_reg_select" ON class_registrations FOR SELECT USING (
 );
 DROP POLICY IF EXISTS "class_reg_insert" ON class_registrations;
 CREATE POLICY "class_reg_insert" ON class_registrations FOR INSERT WITH CHECK (
-  user_id = auth_user_id()
+  user_id = auth_user_id() OR auth_user_role() IN ('Admin', 'Super Admin')
 );
 DROP POLICY IF EXISTS "class_reg_admin_delete" ON class_registrations;
 CREATE POLICY "class_reg_admin_delete" ON class_registrations FOR DELETE USING (
@@ -1752,7 +1752,7 @@ CREATE POLICY "event_reg_select" ON event_registrations FOR SELECT USING (
 );
 DROP POLICY IF EXISTS "event_reg_insert" ON event_registrations;
 CREATE POLICY "event_reg_insert" ON event_registrations FOR INSERT WITH CHECK (
-  user_id = auth_user_id()
+  user_id = auth_user_id() OR auth_user_role() IN ('Admin', 'Super Admin')
 );
 DROP POLICY IF EXISTS "event_reg_admin_delete" ON event_registrations;
 CREATE POLICY "event_reg_admin_delete" ON event_registrations FOR DELETE
