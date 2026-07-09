@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const { userId } = body
     if (!userId) return res.status(400).json({ error: 'userId wajib diisi.' })
-    if (!/^[0-9]+$/.test(String(userId))) return res.status(400).json({ error: 'Format userId tidak valid.' })
+    if (!/^[0-9a-fA-F-]+$/.test(String(userId))) return res.status(400).json({ error: 'Format userId tidak valid.' })
 
     // Ambil target.
     const { data: target, error: tErr } = await admin
