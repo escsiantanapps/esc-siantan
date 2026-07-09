@@ -642,6 +642,8 @@ export const komselService = {
   // Admin atau PKS bisa absensi manual atau menghapus absensi.
   async upsertSessionAttendance(record) {
     // record: { session_id, komsel_id, user_id, status }
+    const today = new Date().toISOString().split('T')[0]
+    
     // We will check if it exists first
     const { data: existing } = await supabase
       .from('komsel_attendance')
@@ -653,7 +655,7 @@ export const komselService = {
     if (existing) {
       const { data, error } = await supabase
         .from('komsel_attendance')
-        .update({ status: record.status })
+        .update({ status: record.status, attendance_date: today })
         .eq('attendance_id', existing.attendance_id)
         .select()
       if (error) throw error
@@ -661,7 +663,7 @@ export const komselService = {
     } else {
       const { data, error } = await supabase
         .from('komsel_attendance')
-        .insert([record])
+        .insert([{ ...record, attendance_date: today }])
         .select()
       if (error) throw error
       return data

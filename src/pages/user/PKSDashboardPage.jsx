@@ -6,13 +6,14 @@ import { startOfMonth } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { komselService, komselOfferingsService } from '@/services/contentService'
-import { OFFERING_CATEGORIES } from '@/services/offeringsService'
+import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsService'
 import { birthdayService } from '@/services/birthdayService'
 import { evaluationService } from '@/services/evaluationService'
 import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, Select, Input, Button } from '@/components/ui'
+import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
-import { formatDate, formatRupiah, formatPhone, hitungUmur } from '@/lib/utils'
+import { formatDate, formatRupiah, formatPhone, hitungUmur, validateUpload, compressImage } from '@/lib/utils'
 
 // Urutan tampil rincian SOP: yang terpenuhi dulu, lalu proses, lalu kosong.
 const STATUS_RANK = { TERPENUHI: 0, PROSES: 1, KOSONG: 2 }
@@ -49,9 +50,10 @@ export default function PKSDashboardPage() {
   const [evalLoading, setEvalLoading] = useState(true)
   const [openEval, setOpenEval] = useState({}) // user_id -> bool (rincian SOP terbuka)
 
-  const [komselOfferings, setKomselOfferings] = useState([])
-  const [offeringForm, setOfferingForm] = useState({ category: OFFERING_CATEGORIES[0], amount: '', note: '' })
+  const [tab, setTab] = useState('anggota') // 'anggota', 'sesi', 'persembahan', 'evaluasi', 'profil'
+  const [offeringForm, setOfferingForm] = useState({ category: OFFERING_CATEGORIES[0], amount: '', note: '', proof_url: '' })
   const [offeringSaving, setOfferingSaving] = useState(false)
+  const [offeringUploading, setOfferingUploading] = useState(false)
   const [offeringError, setOfferingError] = useState('')
 
   const [memberDetail, setMemberDetail] = useState(null)
@@ -146,19 +148,27 @@ export default function PKSDashboardPage() {
   async function handleSubmitOffering() {
     setOfferingError('')
     const amount = Number(String(offeringForm.amount).replace(/\D/g, ''))
-    if (!amount || amount <= 0) { setOfferingError(t('offering.amountRequired')); return }
+    if (!amount || amount <= 0) {
+      setOfferingError(t('offering.amountRequired'))
+      return
+    }
+    if (!offeringForm.proof_url) {
+      setOfferingError('Bukti transfer/pembayaran wajib dilampirkan.')
+      return
+    }
+
     setOfferingSaving(true)
     try {
       await komselOfferingsService.create({
-        komselId: selectedId,
+        komsel_id: selectedId,
         category: offeringForm.category,
         amount,
         note: offeringForm.note,
-        recordedBy: profile.user_id,
+        proof_url: offeringForm.proof_url,
       })
-      setOfferingForm({ category: OFFERING_CATEGORIES[0], amount: '', note: '' })
-      setKomselOfferings(await komselOfferingsService.getByKomsel(selectedId))
       toast.success(t('pks.offeringSaved'))
+      setOfferingForm({ category: OFFERING_CATEGORIES[0], amount: '', note: '', proof_url: '' })
+      loadOfferingHistory(selectedId)
     } catch (err) {
       setOfferingError(err.message || t('pks.offeringSaveFailed'))
       toast.error(err.message || t('pks.offeringSaveFailed'))
@@ -168,6 +178,23 @@ export default function PKSDashboardPage() {
   }
 
   // Anggota komsel terpilih yang berulang tahun hari ini (cocokkan bulan+tanggal, abaikan tahun).
+  async function handleProof(file) {
+    setOfferingUploading(true)
+    setOfferingError('')
+    try {
+      file = await compressImage(file, { maxDim: 1600 })
+      validateUpload(file, { maxMB: 8 })
+      const url = await offeringsService.uploadProof(profile.user_id, file)
+      setOfferingForm(p => ({ ...p, proof_url: url }))
+      toast.success('Bukti persembahan berhasil diunggah')
+    } catch (err) {
+      setOfferingError(err.message || 'Gagal mengunggah bukti')
+      toast.error(err.message || 'Gagal mengunggah bukti')
+    } finally {
+      setOfferingUploading(false)
+    }
+  }
+
   const todaysBirthdays = useMemo(() => {
     const today = new Date()
     return members.filter(m => {
@@ -642,7 +669,19 @@ export default function PKSDashboardPage() {
                   </Select>
                   <Input label={t('offering.amount')} type="number" min="0" placeholder="0" value={offeringForm.amount} onChange={e => setOfferingForm(p => ({ ...p, amount: e.target.value }))} />
                   <Input label={t('offering.noteOptional')} value={offeringForm.note} onChange={e => setOfferingForm(p => ({ ...p, note: e.target.value }))} />
-                  <Button className="w-full" loading={offeringSaving} onClick={handleSubmitOffering}>
+                  
+                  <div className="pt-2">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Bukti Transfer (Wajib) <span className="text-red-500">*</span></p>
+                    <Uploader
+                      onUpload={handleProof}
+                      loading={offeringUploading}
+                      previewUrl={offeringForm.proof_url}
+                      onRemove={() => setOfferingForm(p => ({ ...p, proof_url: '' }))}
+                      label="Upload Bukti (Maks 8MB)"
+                    />
+                  </div>
+
+                  <Button className="w-full mt-2" loading={offeringSaving || offeringUploading} onClick={handleSubmitOffering}>
                     <Save size={15} /> {t('pks.saveOffering')}
                   </Button>
                 </Card>

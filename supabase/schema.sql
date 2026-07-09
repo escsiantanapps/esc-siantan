@@ -137,7 +137,7 @@ CREATE TABLE komsel_attendance (
   komsel_id       TEXT REFERENCES komsel(komsel_id) ON DELETE CASCADE,
   user_id         TEXT REFERENCES users(user_id)    ON DELETE CASCADE,
   attendance_date DATE DEFAULT current_date,
-  status          TEXT DEFAULT 'Hadir' CHECK (status IN ('Hadir','Tidak Hadir','Izin')),
+  status          TEXT DEFAULT 'Hadir' CHECK (status IN ('Hadir','Tidak Hadir','Izin','Sakit')),
   notes           TEXT,
   recorded_by     TEXT,
   created_at      TIMESTAMPTZ DEFAULT now()
@@ -905,6 +905,7 @@ CREATE TABLE IF NOT EXISTS komsel_offerings (
   category    TEXT NOT NULL,
   amount      BIGINT NOT NULL CHECK (amount > 0),
   note        TEXT,
+  proof_url   TEXT,
   status      TEXT NOT NULL DEFAULT 'Menunggu' CHECK (status IN ('Menunggu', 'Terverifikasi', 'Ditolak')),
   recorded_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
   verified_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,

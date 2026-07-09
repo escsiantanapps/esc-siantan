@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { RefreshCcw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
@@ -5,11 +7,24 @@ import { useLang } from '@/hooks/useLang'
 import { Button } from '@/components/ui'
 
 export default function AccountStatusPage() {
-  const { profile, logout } = useAuth()
-  const { confirm } = useToast()
+  const { profile, logout, refreshProfile } = useAuth()
+  const { confirm, toast } = useToast()
   const { t } = useLang()
   const navigate = useNavigate()
+  const [refreshing, setRefreshing] = useState(false)
   const isPending = profile?.status === 'Menunggu Persetujuan'
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      await refreshProfile()
+      toast.success('Status diperbarui')
+    } catch {
+      toast.error('Gagal memperbarui status')
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   async function handleLogout() {
     const ok = await confirm({
@@ -37,7 +52,14 @@ export default function AccountStatusPage() {
             ? t('account.pendingDesc', { name: profile?.name ? `"${profile.name}" ` : '' })
             : t('account.disabledDesc')}
         </p>
-        <Button variant="outline" className="w-full" onClick={handleLogout}>{t('account.logout')}</Button>
+        <div className="space-y-3">
+          {isPending && (
+            <Button className="w-full" onClick={handleRefresh} loading={refreshing}>
+              <RefreshCcw size={15} /> Refresh Status
+            </Button>
+          )}
+          <Button variant="outline" className="w-full" onClick={handleLogout}>{t('account.logout')}</Button>
+        </div>
       </div>
     </div>
   )
