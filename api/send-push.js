@@ -46,7 +46,7 @@ export default async function handler(req, res) {
           // Strip surrounding quotes if accidentally included from Vercel env
           const cleanedKey = fbPrivateKey.replace(/^"|"$/g, '').trim();
           firebaseAdmin.initializeApp({
-            credential: firebaseAdmin.credential.cert({
+            credential: firebaseAdmin.cert({
               projectId: fbProjectId,
               clientEmail: fbClientEmail,
               privateKey: cleanedKey,
