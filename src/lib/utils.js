@@ -17,10 +17,19 @@ export function hitungUmur(tanggalLahir) {
 // Umur dalam angka (atau null bila tanggal lahir kosong/invalid)
 export function umurTahun(tanggalLahir) {
   if (!tanggalLahir) return null
-  const d = typeof tanggalLahir === 'string' ? parseISO(tanggalLahir) : tanggalLahir
-  if (isNaN(d?.getTime?.())) return null
-  const umur = differenceInYears(new Date(), d)
-  return umur >= 0 && umur < 130 ? umur : null
+  const tgl = new Date(tanggalLahir)
+  if (isNaN(tgl.getTime())) return null
+  const now = new Date()
+  let umur = now.getFullYear() - tgl.getFullYear()
+  const m = now.getMonth() - tgl.getMonth()
+  if (m < 0 || (m === 0 && now.getDate() < tgl.getDate())) umur--
+  return umur
+}
+
+// Helper untuk fetch ke Vercel API backend (mendukung APK)
+export async function fetchApi(path, options = {}) {
+  const API_BASE = import.meta.env.VITE_API_URL || ''
+  return fetch(`${API_BASE}${path}`, options)
 }
 
 // Konversi serial Excel ke tanggal (dari database lama)

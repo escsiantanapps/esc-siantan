@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useLang } from '@/hooks/useLang'
 import { supabase } from '@/lib/supabase'
+import { fetchApi } from '@/lib/utils'
 import { Button, Input } from '@/components/ui'
 
 async function postJson(url, payload) {
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const res = await fetchApi(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Terjadi kesalahan.')
   return data

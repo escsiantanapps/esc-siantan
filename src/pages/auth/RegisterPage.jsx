@@ -3,10 +3,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { supabase } from '@/lib/supabase'
+import { fetchApi } from '@/lib/utils'
 import { Button, Input, Select, GradientHeader } from '@/components/ui'
 
 async function postJson(url, payload) {
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const res = await fetchApi(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Terjadi kesalahan.')
   return data

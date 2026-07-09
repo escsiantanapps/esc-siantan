@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { sanitizeFilename } from '@/lib/utils'
+import { sanitizeFilename, fetchApi } from '@/lib/utils'
 
 // Ratakan relasi user_ministries jadi array ministry_ids di objek user
 // (agar UI yang sudah ada tetap membaca .ministry_ids tanpa perubahan).
@@ -86,7 +86,7 @@ export const usersService = {
     const phone = (form.phone || '').trim()
     if (phone) {
       try {
-        const r = await fetch('/api/check-phone', {
+        const r = await fetchApi('/api/check-phone', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone }),
         })
@@ -172,11 +172,10 @@ export const usersService = {
   // role. Hanya Admin/Super Admin yang diizinkan (diverifikasi di server).
   async deleteAccount(userId) {
     const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token
-    if (!token) throw new Error('Sesi tidak ditemukan.')
-    const res = await fetch('/api/delete-user', {
+    if (!session) throw new Error('Sesi tidak ditemukan.')
+    const res = await fetchApi('/api/delete-user', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ userId }),
     })
     if (!res.ok) {

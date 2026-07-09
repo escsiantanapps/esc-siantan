@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Capacitor } from '@capacitor/core'
 import { PushNotifications } from '@capacitor/push-notifications'
+import { fetchApi } from '@/lib/utils'
 
 // Kunci publik VAPID — wajib diset via env VITE_VAPID_PUBLIC_KEY.
 // Dicek saat subscribe() dipanggil (bukan saat modul di-import) agar
@@ -136,8 +137,7 @@ export const pushService = {
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token
     if (!token) return
-    const API_BASE = import.meta.env.VITE_API_URL || ''
-    await fetch(`${API_BASE}/api/notify-pks`, {
+    await fetchApi('/api/notify-pks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ formId }),
@@ -149,8 +149,7 @@ export const pushService = {
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token
     if (!token) return
-    const API_BASE = import.meta.env.VITE_API_URL || ''
-    await fetch(`${API_BASE}/api/notify-admin`, {
+    await fetchApi('/api/notify-admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ type, payload }),
@@ -163,8 +162,7 @@ export const pushService = {
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token
     if (!token) throw new Error('Sesi tidak ditemukan.')
-    const API_BASE = import.meta.env.VITE_API_URL || ''
-    const res = await fetch(`${API_BASE}/api/send-push`, {
+    const res = await fetchApi('/api/send-push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ title, body, url, userIds }),

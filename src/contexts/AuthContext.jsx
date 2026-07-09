@@ -1,5 +1,6 @@
 import { createContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchApi } from '@/lib/utils'
 
 export const AuthContext = createContext(null)
 
@@ -95,8 +96,9 @@ export function AuthProvider({ children }) {
       if (error) throw error
       return data
     }
-    const res = await fetch('/api/login-phone', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const res = await fetchApi('/api/login-phone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone: id, password }),
     })
     const data = await res.json().catch(() => ({}))
@@ -113,7 +115,7 @@ export function AuthProvider({ children }) {
     // lanjut bila endpoint bermasalah — signUp tetap menolak email ganda di
     // auth.users sebagai jaring pengaman terakhir).
     try {
-      const r = await fetch('/api/check-phone', {
+      const r = await fetchApi('/api/check-phone', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: formData.phone, email: formData.email }),
       })
