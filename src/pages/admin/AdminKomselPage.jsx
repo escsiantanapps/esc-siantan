@@ -757,7 +757,7 @@ export default function AdminKomselPage() {
                     <Avatar name={u.name} src={u.photo_url} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                      <p className="text-xs text-gray-400">{t(`role.${u.role}`)}{u.komsel_id && !alreadyHere ? ` · Sudah di: ${u.komsel?.name || 'Lain'}` : ''}</p>
+                      <p className="text-xs text-gray-400">{t(`role.${u.role}`)}{u.komsel_id && !alreadyHere ? ` · Sudah di: ${komsel.find(k => k.komsel_id === u.komsel_id)?.name || 'Lain'}` : ''}</p>
                     </div>
                     {alreadyHere
                       ? <Badge color="green">{t('akom.alreadyHere')}</Badge>

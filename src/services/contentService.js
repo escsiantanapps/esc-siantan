@@ -564,10 +564,10 @@ export const komselService = {
     return map
   },
 
-  // Cari jemaat aktif untuk dipilih sebagai PKS.
+  // Cari jemaat aktif untuk dipilih sebagai PKS atau penugasan anggota.
   async searchUsers(query = '') {
     let q = supabase.from('users')
-      .select('user_id, name, photo_url, role, komsel_id, komsel:komsel_id(name)')
+      .select('user_id, name, photo_url, role, komsel_id')
       .eq('status', 'Aktif').order('name').limit(20)
     if (query) q = q.ilike('name', `%${query}%`)
     const { data, error } = await q
