@@ -78,12 +78,11 @@ Format: `feat|fix|refactor|chore|docs|clean: deskripsi singkat bahasa Indonesia`
 - **Super Admin** — semua + Hak Akses, Kategori Tugas, Backup, Audit Log, ubah role & biodata.
 
 ### Alur akun (sering disalahpahami)
-Tiga jalan baris `users` mendapat login:
-1. **Self-register** `/register` — `auth.signUp()` + profil `status: 'Menunggu Persetujuan'` → Admin approve. Duplikat email+HP dicek via `api/check-phone.js`.
-2. **Admin Tambah Jemaat** — profil `auth_id: NULL`, `status: 'Aktif'`; jemaat belum punya password.
-3. **Aktivasi** `/aktivasi` — untuk `auth_id IS NULL`: HP → OTP WhatsApp (Fonnte) → `api/activate-verify.js` (service role) membuat `auth.users` & menautkan.
+Dua jalan baris `users` mendapat login:
+1. **Self-register** `/register` — `auth.signUp()` + profil `status: 'Menunggu Persetujuan'` → Admin approve. Duplikat email+HP dicek via `api/check-phone.js`; kalau nomor/email sudah dipakai baris `users` manapun (termasuk baris `auth_id: NULL` hasil "Admin Tambah Jemaat"), pendaftaran ditolak dengan pesan "sudah terdaftar, gunakan nomor lain atau masuk" — **KEPUTUSAN OPERATOR**: fitur aktivasi mandiri via OTP untuk baris `auth_id: NULL` sengaja dihapus (dulu ada di `/aktivasi`, dilebur ke Daftar, lalu dihapus total); jemaat begini kalau mau login harus ditangani manual oleh admin (di luar alur in-app).
+2. **Admin Tambah Jemaat** — profil `auth_id: NULL`, `status: 'Aktif'`; jemaat belum punya password dan (lihat poin 1) tidak ada jalur self-service lagi untuk mereka dapat login.
 
-Login bisa pakai nomor HP (`api/login-phone.js`).
+Login bisa pakai nomor HP (`api/login-phone.js`) — hanya untuk baris yang sudah punya `auth_id`.
 
 ### Sistem poin & QR
 +1 poin otomatis (trigger DB) saat insert `class_attendance` / `event_attendance` / `sunday_attendance` / `komsel_attendance` (komsel HANYA yang ber-`session_id` = hasil scan QR; checklist manual PKS tidak memberi poin). +5 poin biodata lengkap via RPC. Penukaran via `redeem_ticket`.
@@ -161,7 +160,6 @@ Prefix QR (semua ditangani `AttendanceScanPage.jsx`): `ESC-ABSEN:<classId>:<sesi
 | File | Fungsi |
 |---|---|
 | `check-phone.js` | Cek duplikat HP + email saat registrasi (rate-limited ketat) |
-| `activate-request.js` / `activate-verify.js` | Aktivasi akun: OTP WA → buat & tautkan `auth.users` |
 | `login-phone.js` | Login via nomor HP |
 | `wa-reset-request.js` / `wa-reset-verify.js` | Lupa password via OTP WhatsApp |
 | `delete-user.js` | Hapus akun permanen (menegakkan `auth_admin_can('/admin/jemaat')`) |

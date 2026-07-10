@@ -10,3 +10,4 @@ dist
 .vercel
 scripts/
 nul
+scratch/firebase-service-account.json

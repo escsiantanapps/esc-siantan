@@ -168,9 +168,9 @@ export default function App() {
           <Route path="/login"          element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register"       element={<PublicRoute><RegisterPage /></PublicRoute>} />
           <Route path="/lupa-password"  element={<ForgotPasswordPage />} />
-          {/* Aktivasi tak lagi jadi halaman terpisah — dilebur ke alur Daftar
-              (jemaat lama yg No.HP-nya cocok akan diverifikasi OTP di sana).
-              Redirect agar bookmark/link lama tetap mengarah ke tempat benar. */}
+          {/* KEPUTUSAN OPERATOR: fitur aktivasi OTP dihapus (jemaat lama tanpa
+              login diminta Daftar akun baru, atau Masuk bila sudah punya).
+              Redirect ini cuma menjaga bookmark/link /aktivasi lama tidak 404. */}
           <Route path="/aktivasi"       element={<Navigate to="/register" replace />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
