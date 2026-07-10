@@ -27,6 +27,7 @@ export const ADMIN_PAGES = [
   { to: '/admin/pelayanan', icon: CalendarClock, label: 'Absen Pelayanan',   section: 'Pelayanan',   labelKey: 'admin.nav.pelayanan',  sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/tukar-poin',  icon: Gift,       label: 'Tukar Poin',         section: 'Organisasi',  labelKey: 'admin.nav.tukarPoin',  sectionKey: 'admin.sec.Organisasi' },
   { to: '/admin/distribusi-poin', icon: Coins,  label: 'Distribusi Poin',    section: 'Organisasi',  labelKey: 'admin.nav.distribusiPoin', sectionKey: 'admin.sec.Organisasi' },
+  { to: '/admin/baca',        icon: BookOpen,   label: 'Buku',               section: 'Konten',      labelKey: 'admin.nav.baca',       sectionKey: 'admin.sec.Konten' },
   { to: '/admin/baptisan', icon: Droplets,      label: 'Baptisan',           section: 'Pelayanan',   labelKey: 'admin.nav.baptisan',    sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/nikah',    icon: Heart,         label: 'Pemberkatan Nikah',  section: 'Pelayanan',   labelKey: 'admin.nav.nikah',       sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/penyerahan-anak', icon: Baby,   label: 'Penyerahan Anak',    section: 'Pelayanan',   labelKey: 'admin.nav.dedikasi',    sectionKey: 'admin.sec.Pelayanan' },

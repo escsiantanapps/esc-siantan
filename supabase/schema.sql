@@ -3265,3 +3265,63 @@ BEGIN
 END $$;
 REVOKE EXECUTE ON FUNCTION admin_revoke_point_transaction(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION admin_revoke_point_transaction(TEXT) TO authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v62: Disiplin Baca Buku — buku program & catatan poin bacaan ─
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-11): program disiplin membaca. Admin membuat
+-- daftar buku (judul + total halaman). Anggota mencatat progres membaca dengan
+-- mengumpulkan "poin bacaan" = PESAN/pelajaran yang didapat (bukan poin
+-- gamifikasi) beserta halaman yang dicapai saat itu. Kumpulan catatan ini
+-- menjadi bukti sekaligus bahan rekap admin. Progres halaman = halaman
+-- tertinggi dari catatan anggota pada buku itu.
+CREATE TABLE IF NOT EXISTS books (
+  book_id     TEXT PRIMARY KEY DEFAULT 'BOOK-' || replace(gen_random_uuid()::text, '-', ''),
+  title       TEXT NOT NULL,
+  author      TEXT,
+  total_pages INT,
+  description TEXT,
+  cover_url   TEXT,
+  pdf_url     TEXT,                    -- file PDF buku (bucket publik task-files, path books/pdf/..)
+  is_active   BOOLEAN NOT NULL DEFAULT true,
+  created_by  TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE books ENABLE ROW LEVEL SECURITY;
+-- Baca: semua user login (jemaat perlu melihat daftar buku program).
+DROP POLICY IF EXISTS "books_read" ON books;
+CREATE POLICY "books_read" ON books FOR SELECT USING (auth.uid() IS NOT NULL);
+-- Tulis: Admin ber-Hak-Akses /admin/baca (Super Admin selalu lolos).
+DROP POLICY IF EXISTS "books_write" ON books;
+CREATE POLICY "books_write" ON books FOR ALL
+  USING (auth_admin_can('/admin/baca'))
+  WITH CHECK (auth_admin_can('/admin/baca'));
+
+-- Catatan poin bacaan (koleksi). Satu baris = satu setoran poin/pesan pada
+-- halaman tertentu. Anggota hanya boleh menulis untuk DIRINYA (user_id).
+CREATE TABLE IF NOT EXISTS reading_notes (
+  note_id    TEXT PRIMARY KEY DEFAULT 'RDN-' || replace(gen_random_uuid()::text, '-', ''),
+  book_id    TEXT NOT NULL REFERENCES books(book_id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  page       INT NOT NULL DEFAULT 0,
+  content    TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reading_notes_book ON reading_notes (book_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_reading_notes_user ON reading_notes (user_id, created_at DESC);
+ALTER TABLE reading_notes ENABLE ROW LEVEL SECURITY;
+-- Baca: pemilik catatan, ATAU Admin/Super Admin (untuk rekap).
+DROP POLICY IF EXISTS "rdn_select" ON reading_notes;
+CREATE POLICY "rdn_select" ON reading_notes FOR SELECT USING (
+  user_id = auth_user_id() OR auth_user_role() IN ('Admin', 'Super Admin')
+);
+-- Tulis (insert/update/delete): hanya pemilik. Admin boleh hapus (koreksi rekap).
+DROP POLICY IF EXISTS "rdn_insert" ON reading_notes;
+CREATE POLICY "rdn_insert" ON reading_notes FOR INSERT WITH CHECK (user_id = auth_user_id());
+DROP POLICY IF EXISTS "rdn_update" ON reading_notes;
+CREATE POLICY "rdn_update" ON reading_notes FOR UPDATE
+  USING (user_id = auth_user_id()) WITH CHECK (user_id = auth_user_id());
+DROP POLICY IF EXISTS "rdn_delete" ON reading_notes;
+CREATE POLICY "rdn_delete" ON reading_notes FOR DELETE USING (
+  user_id = auth_user_id() OR auth_user_role() IN ('Admin', 'Super Admin')
+);

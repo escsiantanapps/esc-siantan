@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw, Sparkles, CreditCard, Star } from 'lucide-react'
+import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw, Sparkles, CreditCard, Star, Library } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { newsService, eventsService, classesService, appSettingsService, registrationService } from '@/services/contentService'
@@ -64,6 +64,7 @@ export default function HomePage() {
     { to: '/persembahan',        icon: HandCoins,     label: t('home.q.offering'), color: 'bg-emerald-100 text-emerald-600' },
     { to: '/events',             icon: Calendar,      label: t('home.q.events'),   color: 'bg-red-100 text-red-600' },
     { to: '/kelas',              icon: BookOpen,      label: t('home.q.classes'),  color: 'bg-blue-100 text-blue-600' },
+    { to: '/baca',               icon: Library,       label: t('home.q.book'),     color: 'bg-orange-100 text-orange-600' },
     ...(baptismOpen ? [{ to: '/baptisan', icon: Droplets, label: t('home.q.baptism'), color: 'bg-teal-100 text-teal-600' }] : []),
     { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-100 text-pink-600' },
     { to: '/penyerahan-anak',    icon: Baby,          label: t('home.q.dedication'), color: 'bg-amber-100 text-amber-600' },
