@@ -16,7 +16,7 @@ export default function ClassDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
-  const { toast } = useToast()
+  const { toast, confirm } = useToast()
   const { t } = useLang()
   const [cls, setCls] = useState(null)
   const [history, setHistory] = useState([])
@@ -43,6 +43,13 @@ export default function ClassDetailPage() {
   const hasPrereq = (Array.isArray(prereqFields) && prereqFields.length > 0) || cls?.require_approval
 
   async function handleRegister() {
+    // Konfirmasi dulu supaya jemaat tidak salah pencet daftar.
+    const ok = await confirm({
+      title: t('classDetail.confirmTitle'),
+      message: t('classDetail.confirmMsg', { name: cls?.name || '' }),
+      confirmText: t('classDetail.confirmYes'),
+    })
+    if (!ok) return
     setRegistering(true)
     try {
       const reg = await classesService.register(id, profile.user_id)

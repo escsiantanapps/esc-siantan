@@ -164,7 +164,7 @@ export default function AdminLayout() {
         fixed inset-y-0 left-0 z-40 w-60 bg-surface border-r border-gray-100
         flex flex-col transition-transform duration-200
         ${open ? 'translate-x-0' : '-translate-x-full'}
-        lg:translate-x-0 lg:static lg:flex
+        lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen lg:flex
       `}>
         {/* Logo */}
         <div className="p-4 border-b border-gray-100" style={{paddingTop: 'calc(var(--safe-top, 28px) + 1rem)'}}>

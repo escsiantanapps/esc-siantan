@@ -348,6 +348,9 @@ export const translations = {
     'eventDetail.registered': 'Kamu sudah terdaftar',
     'eventDetail.ticket': 'Tiket',
     'eventDetail.register': 'Daftar Sekarang',
+    'eventDetail.confirmTitle': 'Daftar event ini?',
+    'eventDetail.confirmMsg': 'Anda akan mendaftar ke event "{name}". Lanjutkan?',
+    'eventDetail.confirmYes': 'Ya, Daftar',
     'eventDetail.closed': 'Pendaftaran untuk event ini sudah ditutup.',
     'eventDetail.registerFailed': 'Gagal mendaftar event.',
 
@@ -381,6 +384,9 @@ export const translations = {
     // Detail Kelas
     'classDetail.title': 'Detail Kelas',
     'classDetail.register': 'Daftar Kelas Ini',
+    'classDetail.confirmTitle': 'Daftar kelas ini?',
+    'classDetail.confirmMsg': 'Anda akan mendaftar ke kelas "{name}". Lanjutkan?',
+    'classDetail.confirmYes': 'Ya, Daftar',
     'classDetail.registered': 'Kamu sudah terdaftar di kelas ini',
     'classDetail.registerSuccess': 'Berhasil mendaftar kelas.',
     'classDetail.registerFailed': 'Gagal mendaftar kelas.',
@@ -1585,6 +1591,9 @@ export const translations = {
     'eventDetail.registered': 'You are registered',
     'eventDetail.ticket': 'Ticket',
     'eventDetail.register': 'Register Now',
+    'eventDetail.confirmTitle': 'Register for this event?',
+    'eventDetail.confirmMsg': 'You are about to register for the event "{name}". Continue?',
+    'eventDetail.confirmYes': 'Yes, Register',
     'eventDetail.closed': 'Registration for this event is closed.',
     'eventDetail.registerFailed': 'Failed to register for the event.',
 
@@ -1618,6 +1627,9 @@ export const translations = {
     // Class detail
     'classDetail.title': 'Class Detail',
     'classDetail.register': 'Register for This Class',
+    'classDetail.confirmTitle': 'Register for this class?',
+    'classDetail.confirmMsg': 'You are about to register for the class "{name}". Continue?',
+    'classDetail.confirmYes': 'Yes, Register',
     'classDetail.registered': 'You are registered for this class',
     'classDetail.registerSuccess': 'Successfully registered.',
     'classDetail.registerFailed': 'Failed to register.',

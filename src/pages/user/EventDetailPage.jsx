@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Calendar, MapPin, Clock, MessageCircle, CheckCircle2, ScanLine, Users } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useToast } from '@/hooks/useToast'
 import { eventsService, prerequisiteService } from '@/services/contentService'
 import { tasksService } from '@/services/tasksService'
 import { Card, Spinner, GradientHeader, Button, EmptyState, StatusBadge } from '@/components/ui'
@@ -14,6 +15,7 @@ export default function EventDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const { confirm } = useToast()
   const { t } = useLang()
   const [event, setEvent] = useState(null)
   const [registration, setRegistration] = useState(null)
@@ -40,6 +42,13 @@ export default function EventDetailPage() {
   const hasPrereq = Array.isArray(prereqFields) && prereqFields.length > 0
 
   async function handleRegister() {
+    // Konfirmasi dulu supaya jemaat tidak salah pencet daftar.
+    const ok = await confirm({
+      title: t('eventDetail.confirmTitle'),
+      message: t('eventDetail.confirmMsg', { name: event?.name || '' }),
+      confirmText: t('eventDetail.confirmYes'),
+    })
+    if (!ok) return
     setError('')
     setRegistering(true)
     try {
