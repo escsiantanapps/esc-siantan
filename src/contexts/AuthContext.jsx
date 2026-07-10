@@ -137,8 +137,13 @@ export function AuthProvider({ children }) {
 
     const orNull = v => (v === '' || v === undefined ? null : v)
 
-    // Simpan data profil ke tabel users, termasuk data diri dari step 2
-    const { error: profileError } = await supabase.from('users').insert({
+    // Simpan data profil ke tabel users, termasuk data diri dari step 2.
+    // UPSERT (bukan INSERT) pada auth_id: signUp memicu onAuthStateChange →
+    // fetchProfile yang, bila baris belum ada, membuat profil MINIMAL (nama dari
+    // email) sebagai jaring pengaman. Kalau auto-create itu menang balapan,
+    // INSERT biasa di sini akan gagal (auth_id UNIQUE) dan biodata step-2 HILANG.
+    // Dengan upsert, biodata lengkap tetap tertulis (menimpa baris minimal itu).
+    const { error: profileError } = await supabase.from('users').upsert({
       auth_id: data.user.id,
       name: formData.name,
       email: formData.email,
@@ -152,7 +157,7 @@ export function AuthProvider({ children }) {
       address: orNull(formData.address),
       blood_type: orNull(formData.blood_type),
       social_media: orNull(formData.social_media),
-    })
+    }, { onConflict: 'auth_id' })
     if (profileError) throw profileError
     return data
   }
