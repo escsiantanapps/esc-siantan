@@ -76,6 +76,12 @@ export default function AdminKomselPage() {
   }
 
   async function assignMember(user) {
+    // Keanggotaan komsel tunggal: kalau jemaat masih di komsel lain, tolak di
+    // klien dengan pesan jelas (DB juga menegakkan via guard_komsel_single_membership).
+    if (user.komsel_id && user.komsel_id !== assignView.komsel_id) {
+      toast.error(t('akom.mustRemoveFirst'))
+      return
+    }
     setAssignBusy(true)
     try {
       await komselService.assignMember(assignView.komsel_id, user.user_id)
@@ -739,20 +745,23 @@ export default function AdminKomselPage() {
                 <p className="text-xs text-gray-400 px-1 py-2">{t('akom.typeToSearch')}</p>
               ) : assignResults.map(u => {
                 const alreadyHere = u.komsel_id === assignView.komsel_id
+                const inOther = u.komsel_id && !alreadyHere
                 return (
                   <button
                     key={u.user_id}
                     onClick={() => assignMember(u)}
-                    disabled={alreadyHere || assignBusy}
+                    disabled={alreadyHere || inOther || assignBusy}
                     className="w-full flex items-center gap-3 px-1 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-left"
                   >
                     <Avatar name={u.name} src={u.photo_url} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                      <p className="text-xs text-gray-400">{t(`role.${u.role}`)}{u.komsel_id && !alreadyHere ? ` · Sudah di: ${komsel.find(k => k.komsel_id === u.komsel_id)?.name || 'Lain'}` : ''}</p>
+                      <p className="text-xs text-gray-400">{t(`role.${u.role}`)}{inOther ? ` · ${t('akom.currentlyIn', { name: komsel.find(k => k.komsel_id === u.komsel_id)?.name || t('akom.otherKomsel') })}` : ''}</p>
                     </div>
                     {alreadyHere
                       ? <Badge color="green">{t('akom.alreadyHere')}</Badge>
+                      : inOther
+                      ? <Badge color="gray">{t('akom.inOtherKomsel')}</Badge>
                       : <UserPlus size={16} className="text-brand-500 shrink-0" />}
                   </button>
                 )

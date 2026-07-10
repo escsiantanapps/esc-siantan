@@ -3073,3 +3073,55 @@ CREATE TRIGGER trg_point_ministry_att
 DROP POLICY IF EXISTS "ktj_admin_delete" ON ktj_registrations;
 CREATE POLICY "ktj_admin_delete" ON ktj_registrations FOR DELETE
   USING (auth_admin_can('/admin/ktj'));
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v57: Keanggotaan komsel tunggal (tak boleh dobel) ─────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-10): seorang jemaat hanya boleh berada di SATU
+-- komsel. Keanggotaan = kolom tunggal users.komsel_id, TAPI Admin (assignMember)
+-- selama ini bisa menimpa komsel_id lama dengan komsel baru secara langsung
+-- tanpa mengeluarkan dulu — anggota "pindah diam-diam", jejak keluar hilang,
+-- dan PKS komsel lama masih mengira dia anggotanya. Aturan baru: perpindahan
+-- WAJIB dua langkah — keluarkan dulu (komsel_id -> NULL) baru tambah ke komsel
+-- baru (NULL -> komsel). Perpindahan langsung A -> B ditolak.
+--
+-- TEMUAN: aturan ini tak boleh cuma di UI — PostgREST langsung / klien nakal
+-- bisa .update({komsel_id}) menembusnya. Ditegakkan di DB untuk SEMUA pemanggil
+-- yang login (termasuk Admin/Super Admin lewat app). Konteks backend tepercaya
+-- (SQL Editor / service role, auth.uid() NULL) DILEWATI agar koreksi manual
+-- massal tetap bisa. Dibuat sebagai trigger TERPISAH dari
+-- guard_user_privilege_cols supaya tidak menyentuh fungsi yang rawan drift (v45).
+CREATE OR REPLACE FUNCTION guard_komsel_single_membership() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  -- Hanya jaga transisi non-NULL -> non-NULL yang BERBEDA (pindah langsung).
+  -- NULL -> komsel (tambah) & komsel -> NULL (keluar) tetap bebas.
+  IF auth.uid() IS NOT NULL
+     AND NEW.komsel_id IS NOT NULL
+     AND OLD.komsel_id IS NOT NULL
+     AND NEW.komsel_id IS DISTINCT FROM OLD.komsel_id THEN
+    RAISE EXCEPTION 'Jemaat masih terdaftar di komsel lain — keluarkan dulu dari komsel sebelumnya.';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_komsel_single ON users;
+CREATE TRIGGER trg_guard_komsel_single
+  BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION guard_komsel_single_membership();
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v58: Absen Pelayanan berbasis SESI berlabel (lepas ministry) ─
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-10): model Absen Pelayanan (v55) diubah. Dulu tiap
+-- sesi terikat SATU ministry (QR per ministry, roster = anggota ministry itu).
+-- Sekarang unit = SESI mingguan berlabel (mis. "Minggu 1", "Minggu 2") dengan
+-- tanggal + jam mulai; Admin memasukkan nama siapa saja yang melayani (roster
+-- lintas ministry), dan setiap sesi punya SATU QR. Hanya nama di roster yang
+-- bisa scan (sudah ditegakkan RLS matt_self_insert dari v55 — tidak berubah).
+--
+-- Perubahan schema minimal & aman: v55 sudah dijalankan di production TAPI belum
+-- ada data jadwal (konfirmasi operator), jadi cukup TAMBAH kolom `label`. Kolom
+-- `ministry_id` dibiarkan (sudah nullable sejak v55) — alur baru mengisinya NULL,
+-- tidak dihapus agar tidak ada DROP destruktif. Policy msch_*/msa_*/matt_* v55
+-- tetap valid (semua berbasis schedule_id, bukan ministry) — TIDAK diubah.
+ALTER TABLE ministry_schedules ADD COLUMN IF NOT EXISTS label TEXT;
