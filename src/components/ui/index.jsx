@@ -320,7 +320,7 @@ export function ActionMenu({ children }) {
         <MoreVertical size={20} />
       </button>
       {open && (
-        <div className="absolute right-2 mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 animate-in fade-in zoom-in duration-150">
+        <div className="absolute right-2 mt-1 w-48 bg-surface rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 animate-in fade-in zoom-in duration-150">
           <div onClick={() => setOpen(false)}>{children}</div>
         </div>
       )}

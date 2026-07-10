@@ -46,7 +46,7 @@ export default function AdminRegistrationDetailPage() {
   const { id } = useParams()
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const { toast, confirm } = useToast()
   const type = pathname.startsWith('/admin/nikah')
     ? 'wedding'
     : pathname.startsWith('/admin/penyerahan-anak') ? 'dedication'
@@ -99,6 +99,36 @@ export default function AdminRegistrationDetailPage() {
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
   async function handleSave() {
+    // KTJ yang ditolak dihapus permanen (keputusan operator: jangan dibiarkan
+    // menumpuk). Konfirmasi dulu karena tidak bisa dibatalkan.
+    if (type === 'ktj' && form.status === 'Ditolak') {
+      const ok = await confirm({
+        title: 'Tolak & Hapus Pengajuan KTJ',
+        message: 'Pengajuan KTJ ini akan DITOLAK dan DIHAPUS permanen. Jemaat bisa mengajukan ulang. Lanjutkan?',
+        confirmText: 'Tolak & Hapus',
+        danger: true,
+      })
+      if (!ok) return
+      setError(''); setSuccess(''); setSaving(true)
+      try {
+        if (reg.user_id) {
+          pushService.broadcast({
+            title: `Status ${typeLabel}: Ditolak`,
+            body: form.admin_note || `Pengajuan ${typeLabel} Anda ditolak. Anda dapat mengajukan ulang.`,
+            url: '/status-pendaftaran',
+            userIds: [reg.user_id],
+          }).catch(() => {})
+        }
+        await registrationService.remove(type, id)
+        toast.success('Pengajuan KTJ ditolak & dihapus.')
+        navigate(backTo)
+      } catch (err) {
+        setError(err.message || 'Gagal menghapus pengajuan.')
+        toast.error(err.message || 'Gagal menghapus pengajuan.')
+        setSaving(false)
+      }
+      return
+    }
     setError(''); setSuccess(''); setSaving(true)
     try {
       await registrationService.updateStatus(type, id, {

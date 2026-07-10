@@ -2823,3 +2823,15 @@ END $$;
 -- UPDATE otomatis di sini — lihat catatan rilis untuk verifikasi manual bila
 -- diperlukan (window kerentanan v51→v52 diasumsikan belum sempat dieksploitasi
 -- karena migrasi belum dijalankan production saat temuan ini ditulis).
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v56: Admin boleh HAPUS pengajuan KTJ (yang ditolak) ───────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-10): pengajuan KTJ yang DITOLAK admin harus
+-- dihapus, tidak dibiarkan menumpuk. ktj_registrations belum punya policy
+-- DELETE (hanya select/insert/update) — tambah gerbang DELETE untuk Admin
+-- ber-Hak-Akses `/admin/ktj` (Super Admin selalu lolos). Klien memanggil
+-- delete ini saat admin menolak (lihat AdminRegistrationDetailPage).
+DROP POLICY IF EXISTS "ktj_admin_delete" ON ktj_registrations;
+CREATE POLICY "ktj_admin_delete" ON ktj_registrations FOR DELETE
+  USING (auth_admin_can('/admin/ktj'));

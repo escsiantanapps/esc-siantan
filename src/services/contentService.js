@@ -254,6 +254,14 @@ export const registrationService = {
     return data
   },
 
+  // Hapus permanen satu pengajuan. Dipakai untuk KTJ yang ditolak (keputusan
+  // operator: tidak dibiarkan menumpuk). RLS `ktj_admin_delete` menegakkan izin.
+  async remove(type, id) {
+    const { table, idCol } = REGISTRATION_TABLES[type]
+    const { error } = await supabase.from(table).delete().eq(idCol, id)
+    if (error) throw error
+  },
+
   async updateStatus(type, id, updates) {
     const { table, idCol } = REGISTRATION_TABLES[type]
     const { data, error } = await supabase
