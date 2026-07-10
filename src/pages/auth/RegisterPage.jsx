@@ -13,7 +13,7 @@ async function postJson(url, payload) {
 }
 
 export default function RegisterPage() {
-  const { register } = useAuth()
+  const { register, refreshProfile } = useAuth()
   const { t } = useLang()
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
@@ -49,6 +49,12 @@ export default function RegisterPage() {
       }
 
       await register(form)
+
+      // Muat ulang profil (kini baris users pending sudah ada) supaya gate
+      // menampilkan status "menunggu persetujuan" yang benar — bukan layar
+      // nonaktif akibat race fetchProfile saat signUp. Gagal-aman: gate tetap
+      // fail-closed walau ini gagal.
+      await refreshProfile().catch(() => {})
 
       // Kirim notifikasi web push ke Admin
       const { pushService } = await import('@/services/pushService')

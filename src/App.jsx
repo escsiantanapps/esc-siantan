@@ -101,7 +101,13 @@ function PrivateRoute({ children }) {
   if (profile?.role === 'Admin' && !hasSecondaryAccess) {
     return <Navigate to="/admin" replace />
   }
-  if (profile && profile.status !== 'Aktif') return <AccountStatusPage />
+  // Fail-closed: sesi login yang profilnya BELUM terkonfirmasi Aktif tidak boleh
+  // masuk app. Termasuk profile === null — bisa terjadi tepat setelah registrasi
+  // (race fetchProfile vs insert profil) atau fetch profil gagal; dulu celah ini
+  // membuat pendaftar baru "langsung masuk" sekejap. AccountStatusPage punya
+  // tombol Refresh + Logout, jadi user Aktif yang profilnya gagal termuat tetap
+  // bisa memuat ulang / keluar (tidak terjebak).
+  if (!profile || profile.status !== 'Aktif') return <AccountStatusPage />
   return children
 }
 
