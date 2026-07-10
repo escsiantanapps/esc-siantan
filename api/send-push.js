@@ -12,18 +12,6 @@ export default async function handler(req, res) {
     // Import dinamis agar kegagalan load modul muncul sebagai JSON, bukan crash.
     const webpush = (await import('web-push')).default
     const { createClient } = await import('@supabase/supabase-js')
-    
-    // Lazy load firebase-admin to avoid errors if not configured yet
-    let firebaseAdmin = null;
-    let getMessaging = null;
-    try {
-      const adminModule = await import('firebase-admin');
-      firebaseAdmin = adminModule.default || adminModule;
-      const messagingModule = await import('firebase-admin/messaging');
-      getMessaging = messagingModule.getMessaging || messagingModule.default?.getMessaging;
-    } catch (e) {
-      console.warn('[send-push] firebase-admin not installed or failed to load:', e.message);
-    }
 
     const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
@@ -35,32 +23,6 @@ export default async function handler(req, res) {
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !VAPID_PUBLIC || !VAPID_PRIVATE) {
       console.error('[send-push] Missing env vars:', { SUPABASE_URL: !SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: !SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY: !VAPID_PUBLIC, VAPID_PRIVATE_KEY: !VAPID_PRIVATE })
       return res.status(500).json({ error: 'Konfigurasi server belum lengkap.' })
-    }
-
-    // Initialize Firebase Admin if environment variables exist
-    const fbProjectId = process.env.FIREBASE_PROJECT_ID
-    const fbClientEmail = process.env.FIREBASE_CLIENT_EMAIL
-    // Fix private key formatting for Vercel env vars
-    const fbPrivateKey = process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : null
-    
-    if (firebaseAdmin && fbProjectId && fbClientEmail && fbPrivateKey) {
-      try {
-        if (!firebaseAdmin.apps.length) {
-          // Strip surrounding quotes if accidentally included from Vercel env
-          const cleanedKey = fbPrivateKey.replace(/^"|"$/g, '').trim();
-          firebaseAdmin.initializeApp({
-            credential: firebaseAdmin.cert({
-              projectId: fbProjectId,
-              clientEmail: fbClientEmail,
-              privateKey: cleanedKey,
-            })
-          });
-        }
-      } catch (fbInitErr) {
-        console.error('[send-push] Failed to initialize Firebase Admin:', fbInitErr);
-      }
-    } else {
-      console.warn('[send-push] Firebase credentials missing, FCM tokens will fail.');
     }
 
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
@@ -117,45 +79,20 @@ export default async function handler(req, res) {
     await Promise.all(
       (subs || []).map(async s => {
         try {
-          // Check if token is FCM token (plain string without URL structure or JSON)
-          // WebPush tokens are always URLs in the endpoint field
-          const isFcmToken = s.endpoint && !s.endpoint.startsWith('http') && !s.endpoint.includes('{');
-          
-          if (isFcmToken) {
-            if (!firebaseAdmin?.apps?.length || !getMessaging) throw new Error('Firebase Admin not configured');
-            // Send FCM Notification
-            await getMessaging().send({
-              token: s.endpoint, // We save FCM token in endpoint column
-              notification: {
-                title: title,
-                body: message || ''
-              },
-              data: {
-                url: url || '/'
-              },
-              android: {
-                priority: 'high'
-              }
-            });
-          } else {
-            // Send WebPush Notification
-            await webpush.sendNotification(
-              { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-              payload
-            )
-          }
+          await webpush.sendNotification(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            payload
+          )
           sent++
         } catch (err) {
-          const isNotFound = err.statusCode === 404 || err.statusCode === 410 || 
-                            (err.code === 'messaging/registration-token-not-registered') ||
-                            (err.code === 'messaging/invalid-registration-token');
+          const isNotFound = err.statusCode === 404 || err.statusCode === 410
           if (isNotFound) {
             await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint)
             removed++
           } else {
             errors.push({
               user_id: s.user_id,
-              statusCode: err.statusCode || err.code || null,
+              statusCode: err.statusCode || null,
               detail: String(err.body || err.message || err).slice(0, 300),
             })
           }

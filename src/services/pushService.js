@@ -1,6 +1,4 @@
 import { supabase } from '@/lib/supabase'
-import { Capacitor } from '@capacitor/core'
-import { PushNotifications } from '@capacitor/push-notifications'
 import { fetchApi } from '@/lib/utils'
 
 // Kunci publik VAPID — wajib diset via env VITE_VAPID_PUBLIC_KEY.
@@ -15,9 +13,10 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
 }
 
+// Distribusi resmi = PWA via Chrome (web-push VAPID). Tidak ada jalur native
+// (Capacitor/FCM) — keputusan produk final, lihat CLAUDE.md.
 export const pushService = {
   supported() {
-    if (Capacitor.isNativePlatform()) return true
     return (
       typeof navigator !== 'undefined' &&
       'serviceWorker' in navigator &&
@@ -31,10 +30,6 @@ export const pushService = {
   },
 
   async isSubscribed() {
-    if (Capacitor.isNativePlatform()) {
-      const { receive } = await PushNotifications.checkPermissions()
-      return receive === 'granted'
-    }
     if (!this.supported()) return false
     const reg = await navigator.serviceWorker.ready
     const sub = await reg.pushManager.getSubscription()
@@ -42,64 +37,6 @@ export const pushService = {
   },
 
   async subscribe(userId) {
-    if (Capacitor.isNativePlatform()) {
-      let permStatus = await PushNotifications.checkPermissions();
-      if (permStatus.receive === 'prompt') {
-        permStatus = await PushNotifications.requestPermissions();
-      }
-      if (permStatus.receive !== 'granted') {
-        throw new Error('Izin notifikasi tidak diberikan.');
-      }
-      
-      // Register with Apple / Google to receive push via APNS/FCM
-      await PushNotifications.register();
-      
-      // Buat channel untuk Android (wajib di Android 8.0+)
-      try {
-        await PushNotifications.createChannel({
-          id: 'fcm_default_channel',
-          name: 'Notifikasi Umum',
-          description: 'Notifikasi penting dari ESC Siantan',
-          importance: 5,
-          visibility: 1,
-          vibration: true,
-        });
-      } catch (e) {
-        console.warn('Gagal membuat channel notifikasi', e);
-      }
-      
-      // Listener saat notifikasi ditekan (membuka app)
-      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-        console.log('Push action performed: ', notification);
-      });
-      
-      return new Promise((resolve, reject) => {
-        // Handle successful registration
-        PushNotifications.addListener('registration', async (token) => {
-          try {
-            const { error } = await supabase.from('push_subscriptions').upsert(
-              {
-                endpoint: token.value, // Save FCM token as endpoint
-                p256dh: '', // string kosong untuk melewati NOT NULL constraint DB
-                auth: '',
-                user_id: userId,
-              },
-              { onConflict: 'endpoint' }
-            )
-            if (error) throw error;
-            resolve(true);
-          } catch (e) {
-            reject(e);
-          }
-        });
-        
-        PushNotifications.addListener('registrationError', (error) => {
-          reject(new Error('Gagal mendaftarkan notifikasi: ' + JSON.stringify(error)));
-        });
-      });
-    }
-
-    // WebPush Flow
     if (!this.supported()) throw new Error('Browser ini tidak mendukung notifikasi push.')
     if (!VAPID_PUBLIC_KEY) throw new Error('VITE_VAPID_PUBLIC_KEY belum diset di .env')
 
@@ -176,18 +113,6 @@ export const pushService = {
 
   async unsubscribe() {
     if (!this.supported()) return false
-    
-    if (Capacitor.isNativePlatform()) {
-      // Di Capacitor, mematikan notifikasi terbaik lewat pengaturan sistem Android/iOS,
-      // atau hapus semua langganan FCM user (tidak ideal jika multi-perangkat, tapi OK untuk saat ini)
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user?.id) {
-        // Hapus token-token FCM dari DB (token FCM cirinya tidak mengandung 'http')
-        await supabase.from('push_subscriptions').delete().eq('user_id', session.user.id).not('endpoint', 'ilike', 'http%')
-      }
-      return false
-    }
-
     const reg = await navigator.serviceWorker.ready
     const sub = await reg.pushManager.getSubscription()
     if (sub) {

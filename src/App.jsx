@@ -8,16 +8,6 @@ import { useAuth } from '@/hooks/useAuth'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import OfflineBanner from '@/components/OfflineBanner'
 import InstallPrompt from '@/components/InstallPrompt'
-import HardwareBackButton from '@/components/HardwareBackButton'
-import DeepLinkHandler from '@/components/DeepLinkHandler'
-import { Capacitor } from '@capacitor/core'
-
-// Sembunyikan status bar Android saat aplikasi dibuka
-if (Capacitor.isNativePlatform()) {
-  import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
-    StatusBar.hide()
-  }).catch(() => {})
-}
 
 // Onboarding
 import OnboardingPage from '@/pages/OnboardingPage'
@@ -152,8 +142,6 @@ export default function App() {
     <ThemeProvider>
     <LanguageProvider>
     <BrowserRouter>
-      <HardwareBackButton />
-      <DeepLinkHandler />
       <AuthProvider>
         <ToastProvider>
         <OfflineBanner />
