@@ -2742,3 +2742,84 @@ CREATE TRIGGER trg_point_komsel_upd BEFORE UPDATE ON komsel_attendance
 -- (lihat catatan rilis) — jangan jalankan ulang setelah koreksi.
 UPDATE komsel_attendance SET points_awarded = true
   WHERE session_id IS NOT NULL AND status = 'Hadir' AND points_awarded = false;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v52: Lindungi komsel_attendance.points_awarded dari tulis klien ──
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (security review v51, 2026-07-10): kolom points_awarded yang baru
+-- ditambahkan TIDAK dilindungi dari tulisan langsung klien. Policy
+-- "komsel_att_access_insert"/"_update" (Admin, atau PKS untuk komsel yang
+-- dipimpinnya) tidak membatasi kolom apa pun via WITH CHECK — PKS/Admin bisa
+-- INSERT baris kehadiran untuk anggota LAIN dengan points_awarded=true
+-- disisipkan manual di body request (lolos RLS, lolos award_attendance_point
+-- karena user_id != auth_user_id() sehingga fungsi itu return lebih awal
+-- tanpa menyentuh points_awarded). Lalu men-DELETE baris itu memicu
+-- trg_point_komsel_del → komsel_point_revoke() yang PERCAYA BEGITU SAJA
+-- OLD.points_awarded = true → apply_points(-1) pada user yang tidak pernah
+-- benar-benar dapat poin. Diulang-ulang → PKS/Admin bisa menguras poin
+-- anggota mana pun secara sewenang-wenang. Pola sama seperti kasus
+-- users.points (lihat guard_user_privilege_cols) yang seharusnya sudah
+-- diterapkan juga di sini sejak awal.
+--
+-- KEPUTUSAN OPERATOR: points_awarded HANYA boleh diubah oleh kode DB
+-- tepercaya (award_attendance_point/komsel_point_revoke), memakai escape
+-- hatch bersegel transaksi (pola sama dgn app.allow_points_update).
+-- Tulisan langsung dari klien (peran apa pun) dipaksa kembali ke nilai lama.
+CREATE OR REPLACE FUNCTION guard_komsel_points_awarded() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF COALESCE(current_setting('app.allow_komsel_points_awarded', true), '') = '1' THEN
+    RETURN NEW; -- dipanggil internal oleh award_attendance_point()/komsel_point_revoke()
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.points_awarded := false; -- baris baru dari klien tidak boleh mengaku sudah berpoin
+  ELSE
+    NEW.points_awarded := OLD.points_awarded; -- klien tidak boleh mengubah nilainya lewat UPDATE biasa
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_komsel_points_awarded ON komsel_attendance;
+CREATE TRIGGER trg_guard_komsel_points_awarded
+  BEFORE INSERT OR UPDATE ON komsel_attendance
+  FOR EACH ROW EXECUTE FUNCTION guard_komsel_points_awarded();
+
+-- award_attendance_point(): bungkus UPDATE internal yang menandai
+-- points_awarded=true dengan escape hatch, supaya tidak ikut diblokir
+-- oleh guard di atas (yang jalan lebih dulu secara alfabetis:
+-- "trg_guard_..." < "trg_point_..." pada event UPDATE yang sama).
+CREATE OR REPLACE FUNCTION award_attendance_point() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'komsel_attendance' THEN
+    IF NEW.session_id IS NULL
+       OR NEW.status IS DISTINCT FROM 'Hadir'
+       OR NEW.user_id IS DISTINCT FROM auth_user_id() THEN
+      RETURN NEW;
+    END IF;
+    PERFORM apply_points(NEW.user_id, 1, 'Kehadiran komsel');
+    PERFORM set_config('app.allow_komsel_points_awarded', '1', true);
+    UPDATE komsel_attendance SET points_awarded = true WHERE attendance_id = NEW.attendance_id;
+    PERFORM set_config('app.allow_komsel_points_awarded', '', true);
+    RETURN NEW;
+  END IF;
+  PERFORM apply_points(NEW.user_id, 1,
+    CASE TG_TABLE_NAME
+      WHEN 'class_attendance'  THEN 'Kehadiran kelas'
+      WHEN 'event_attendance'  THEN 'Kehadiran event'
+      WHEN 'sunday_attendance' THEN 'Kehadiran ibadah minggu'
+      ELSE 'Kehadiran'
+    END);
+  RETURN NEW;
+END $$;
+
+-- komsel_point_revoke(): set NEW.points_awarded := false langsung di dalam
+-- trigger BEFORE UPDATE yang sama (bukan statement UPDATE terpisah) — tidak
+-- perlu escape hatch, guard di atas hanya jalan sekali di awal event ini.
+
+-- Backfill ulang: baris yang sempat dipalsukan points_awarded=true via celah
+-- v51 (kalau ada) tidak bisa dibedakan otomatis dari yang sah. Tidak ada
+-- UPDATE otomatis di sini — lihat catatan rilis untuk verifikasi manual bila
+-- diperlukan (window kerentanan v51→v52 diasumsikan belum sempat dieksploitasi
+-- karena migrasi belum dijalankan production saat temuan ini ditulis).
