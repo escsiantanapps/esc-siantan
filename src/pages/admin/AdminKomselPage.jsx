@@ -168,6 +168,11 @@ export default function AdminKomselPage() {
 
   async function addPks(user) {
     if (leaders.some(l => l.user_id === user.user_id)) return
+    // 1 komsel = 1 PKS: tolak bila komsel sudah punya PKS lain (DB menegakkan v60).
+    if (leaders.length > 0) {
+      toast.error(t('akom.onePksOnly'))
+      return
+    }
     setPksBusy(true)
     try {
       await komselService.addLeader(pksView.komsel_id, user.user_id)
@@ -642,9 +647,12 @@ export default function AdminKomselPage() {
               )}
             </div>
 
-            {/* Tambah PKS */}
+            {/* Tambah PKS — 1 komsel maksimal 1 PKS */}
             <div className="border-t border-gray-100 pt-3">
               <p className="text-xs font-semibold text-gray-400 mb-2">{t('akom.addPks')}</p>
+              {leaders.length > 0 && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 mb-2">{t('akom.onePksHint')}</p>
+              )}
               <Input
                 icon={Search}
                 placeholder={t('akom.searchMember')}
@@ -656,11 +664,12 @@ export default function AdminKomselPage() {
                   <p className="text-xs text-gray-400 px-1 py-2">{t('akom.typeToSearch')}</p>
                 ) : pksResults.map(u => {
                   const already = leaders.some(l => l.user_id === u.user_id)
+                  const blocked = leaders.length > 0 && !already
                   return (
                     <button
                       key={u.user_id}
                       onClick={() => addPks(u)}
-                      disabled={already || pksBusy}
+                      disabled={already || blocked || pksBusy}
                       className="w-full flex items-center gap-3 px-1 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-left"
                     >
                       <Avatar name={u.name} src={u.photo_url} size="sm" />

@@ -589,7 +589,10 @@ export default function PKSDashboardPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 truncate">{s.title}</p>
-                            <p className="text-xs text-gray-400">{formatDate(s.session_date)}</p>
+                            <p className="text-xs text-gray-400">
+                              {formatDate(s.session_date)} · dibuka {formatDate(s.created_at, 'HH:mm')}
+                              {s.opener?.name ? ` oleh ${s.opener.name}` : ''}
+                            </p>
                           </div>
                           <Badge color="green">{s.attendeeCount} hadir</Badge>
                         </button>

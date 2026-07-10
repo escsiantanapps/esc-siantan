@@ -3125,3 +3125,112 @@ CREATE TRIGGER trg_guard_komsel_single
 -- tidak dihapus agar tidak ada DROP destruktif. Policy msch_*/msa_*/matt_* v55
 -- tetap valid (semua berbasis schedule_id, bukan ministry) — TIDAK diubah.
 ALTER TABLE ministry_schedules ADD COLUMN IF NOT EXISTS label TEXT;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v59: Poin komsel — once-per-day & pemimpin hadir tanpa poin ─
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (2026-07-10): (1) BUG POIN GANDA — jemaat bisa dapat >1 poin komsel di
+-- HARI yang sama bila ada >1 sesi (terverifikasi: 'Cristian Kenneth' dapat 2
+-- poin komsel 09-Jul jam berbeda). award_attendance_point komsel tidak punya
+-- batas per-hari. (2) SELF-SCAN PEMIMPIN — PKS yang membuka sesi komsel yang ia
+-- PIMPIN bisa memindai QR yang ia unduh sendiri untuk memberi dirinya poin
+-- (farming).
+--
+-- KEPUTUSAN OPERATOR:
+--  (A) Poin komsel maksimal 1x per hari per jemaat (zona WIB) — sinyal tak
+--      terpalsukan: point_transactions (ditulis SECURITY DEFINER apply_points).
+--  (B) Pemimpin komsel (auth_leads_komsel) TIDAK dapat poin dari komselnya
+--      sendiri — hadir saja. Agar tetap tercatat hadir tanpa harus scan, sesi
+--      yang dibuka PKS otomatis menandai si pembuka 'Hadir' (poin=false).
+-- Keduanya ditegakkan di DB (bukan UI). auth_user_id() & auth_leads_komsel tetap
+-- benar di dalam SECURITY DEFINER (auth.uid tidak berubah). Cabang lain
+-- (class/event/sunday/ministry) DIPERTAHANKAN persis dari v55.
+CREATE OR REPLACE FUNCTION award_attendance_point() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'komsel_attendance' THEN
+    -- Poin komsel HANYA untuk scan mandiri jemaat sendiri, sesi valid, status
+    -- Hadir, DAN pemanggil BUKAN pemimpin komsel ini (pemimpin: hadir tanpa poin).
+    IF NEW.session_id IS NULL
+       OR NEW.status IS DISTINCT FROM 'Hadir'
+       OR NEW.user_id IS DISTINCT FROM auth_user_id()
+       OR auth_leads_komsel(NEW.komsel_id) THEN
+      RETURN NEW;
+    END IF;
+    -- Once-per-day (WIB): lewati bila jemaat ini sudah dapat poin komsel hari ini.
+    IF EXISTS (
+      SELECT 1 FROM point_transactions
+      WHERE user_id = NEW.user_id
+        AND description = 'Kehadiran komsel'
+        AND (created_at AT TIME ZONE 'Asia/Jakarta')::date
+            = (now() AT TIME ZONE 'Asia/Jakarta')::date
+    ) THEN
+      RETURN NEW;
+    END IF;
+    PERFORM apply_points(NEW.user_id, 1, 'Kehadiran komsel');
+    PERFORM set_config('app.allow_komsel_points_awarded', '1', true);
+    UPDATE komsel_attendance SET points_awarded = true WHERE attendance_id = NEW.attendance_id;
+    PERFORM set_config('app.allow_komsel_points_awarded', '', true);
+    RETURN NEW;
+  END IF;
+  PERFORM apply_points(NEW.user_id, 1,
+    CASE TG_TABLE_NAME
+      WHEN 'class_attendance'    THEN 'Kehadiran kelas'
+      WHEN 'event_attendance'    THEN 'Kehadiran event'
+      WHEN 'sunday_attendance'   THEN 'Kehadiran ibadah minggu'
+      WHEN 'ministry_attendance' THEN 'Absen Pelayanan Minggu'
+      ELSE 'Kehadiran'
+    END);
+  RETURN NEW;
+END $$;
+
+-- (B) Auto-hadir PKS pembuka sesi: saat sesi komsel dibuat oleh seseorang yang
+-- MEMIMPIN komsel itu, tandai ia 'Hadir' tanpa poin (leader-exclusion di atas
+-- memastikan tidak berpoin walau award trigger jalan). ON CONFLICT dihindari;
+-- pakai NOT EXISTS agar aman terhadap unique parsial (session_id,user_id).
+CREATE OR REPLACE FUNCTION komsel_session_mark_leader_present() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.created_by IS NOT NULL
+     AND EXISTS (SELECT 1 FROM komsel_leaders
+                 WHERE komsel_id = NEW.komsel_id AND user_id = NEW.created_by)
+     AND NOT EXISTS (SELECT 1 FROM komsel_attendance
+                     WHERE session_id = NEW.session_id AND user_id = NEW.created_by) THEN
+    INSERT INTO komsel_attendance (komsel_id, user_id, session_id, attendance_date, status)
+    VALUES (NEW.komsel_id, NEW.created_by, NEW.session_id, NEW.session_date, 'Hadir');
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_komsel_session_leader_present ON komsel_sessions;
+CREATE TRIGGER trg_komsel_session_leader_present
+  AFTER INSERT ON komsel_sessions
+  FOR EACH ROW EXECUTE FUNCTION komsel_session_mark_leader_present();
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v60: Satu komsel maksimal satu PKS ────────────────────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-10): tiap komsel hanya boleh punya SATU PKS
+-- (pemimpin). komsel_leaders (many-to-many) sebelumnya membolehkan >1. Karena
+-- ada 3 komsel yang TERLANJUR punya 2 PKS di production, TIDAK dipakai UNIQUE
+-- keras (akan gagal) — pakai trigger yang menolak penambahan PKS ke-2. Baris
+-- lama di-grandfather (perlu dibersihkan manual: cabut salah satu PKS). Setelah
+-- bersih, penambahan PKS ke-2 apa pun (klien maupun SQL) akan ditolak.
+-- Ditegakkan di DB, bukan cuma UI. Seorang PKS tetap boleh memimpin >1 komsel;
+-- yang dibatasi adalah jumlah PKS PER komsel.
+CREATE OR REPLACE FUNCTION guard_single_komsel_leader() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM komsel_leaders
+    WHERE komsel_id = NEW.komsel_id AND user_id <> NEW.user_id
+  ) THEN
+    RAISE EXCEPTION 'Komsel ini sudah punya PKS. Satu komsel hanya boleh satu PKS — cabut PKS lama dulu.';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_single_komsel_leader ON komsel_leaders;
+CREATE TRIGGER trg_guard_single_komsel_leader
+  BEFORE INSERT ON komsel_leaders
+  FOR EACH ROW EXECUTE FUNCTION guard_single_komsel_leader();

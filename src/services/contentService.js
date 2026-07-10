@@ -653,8 +653,10 @@ export const komselService = {
   },
 
   async getSessions(komselId) {
+    // Sertakan nama pembuka sesi (created_by) untuk ditampilkan "dibuka jam ...
+    // oleh ...". FK tunggal komsel_sessions.created_by -> users, jadi hint kolom.
     const { data, error } = await supabase.from('komsel_sessions')
-      .select('*').eq('komsel_id', komselId)
+      .select('*, opener:users!created_by(name)').eq('komsel_id', komselId)
       .order('created_at', { ascending: false }).limit(30)
     if (error) throw error
     return data
@@ -781,7 +783,12 @@ export const komselService = {
       if (error.code === '23505') throw new Error('Kehadiran sesi ini sudah tercatat.')
       throw error
     }
-    return data
+    // points_awarded di-set trigger AFTER INSERT (award_attendance_point) — nilai
+    // pada `data` masih false, jadi dibaca ulang. Poin komsel bersyarat: 0 untuk
+    // pemimpin komsel & bila sudah dapat poin komsel hari ini (Migrasi v59).
+    const { data: fresh } = await supabase.from('komsel_attendance')
+      .select('points_awarded').eq('attendance_id', data.attendance_id).maybeSingle()
+    return { ...data, points_awarded: fresh?.points_awarded ?? false }
   },
 
   async getAttendanceHistory(komselId) {

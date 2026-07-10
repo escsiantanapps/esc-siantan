@@ -265,8 +265,14 @@ export default function AttendanceScanPage() {
       }
 
       try {
-        await komselService.checkInSession(session, profile.user_id)
-        setResult({ type: 'success', message: `Kehadiran komsel "${session.komsel?.name || ''}" tercatat. +1 poin! 🎉` })
+        const rec = await komselService.checkInSession(session, profile.user_id)
+        const nm = session.komsel?.name || ''
+        setResult({
+          type: 'success',
+          message: rec.points_awarded
+            ? `Kehadiran komsel "${nm}" tercatat. +1 poin! 🎉`
+            : `Kehadiran komsel "${nm}" tercatat. ✅ (tanpa poin — sebagai pemimpin atau sudah dapat poin komsel hari ini)`,
+        })
       } catch (err) {
         setResult({ type: 'duplicate', message: err.message || 'Kehadiran sesi ini sudah tercatat.' })
       }
