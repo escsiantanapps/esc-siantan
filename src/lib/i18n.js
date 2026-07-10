@@ -74,6 +74,7 @@ export const translations = {
 
     // Beranda
     'home.welcomeQuote': '"Selamat datang. Kiranya damai sejahtera menyertaimu hari ini."',
+    'home.fetchError': 'Gagal memuat konten. Periksa koneksi internet kamu.',
     'home.greet.morning': 'Selamat pagi',
     'home.greet.afternoon': 'Selamat siang',
     'home.greet.evening': 'Selamat sore',
@@ -436,6 +437,7 @@ export const translations = {
     // Dashboard PKS
     'pks.title': 'Dashboard PKS',
     'pks.subtitleLeader': 'Pemimpin Komsel',
+    'pks.attendanceSaveFailed': 'Gagal menyimpan kehadiran.',
     'pks.noKomsel': 'Komsel belum ditetapkan',
     'pks.noKomselDesc': 'Hubungi admin untuk menetapkan kamu sebagai PKS sebuah komsel.',
     'pks.tabMembers': 'Anggota',
@@ -1351,6 +1353,7 @@ export const translations = {
 
     // Home
     'home.welcomeQuote': '"Welcome. May peace be with you today."',
+    'home.fetchError': 'Failed to load content. Check your internet connection.',
     'home.greet.morning': 'Good morning',
     'home.greet.afternoon': 'Good afternoon',
     'home.greet.evening': 'Good evening',
@@ -1713,6 +1716,7 @@ export const translations = {
     // PKS Dashboard
     'pks.title': 'PKS Dashboard',
     'pks.subtitleLeader': 'Cell Group Leader',
+    'pks.attendanceSaveFailed': 'Failed to save attendance.',
     'pks.noKomsel': 'No cell group assigned',
     'pks.noKomselDesc': 'Contact an admin to assign you as a PKS of a cell group.',
     'pks.tabMembers': 'Members',
