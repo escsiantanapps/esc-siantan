@@ -24,11 +24,13 @@ export default function AttendanceScanPage() {
   const [ready, setReady] = useState(false)
   const [result, setResult] = useState(null)
   const [errDetail, setErrDetail] = useState('')
+  const [retryTick, setRetryTick] = useState(0)
   const scannerRef = useRef(null)
   const processingRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
+    setReady(false)
 
     ;(async () => {
       // Pra-cek: HTTPS wajib untuk mengakses kamera (kecuali localhost). Chrome
@@ -140,7 +142,7 @@ export default function AttendanceScanPage() {
         scanner.stop().catch(() => {}).then(() => { try { scanner.clear() } catch { /* noop */ } })
       }
     }
-  }, [])
+  }, [retryTick])
 
   async function handleScan(decodedText) {
     if (processingRef.current) return
@@ -279,6 +281,11 @@ export default function AttendanceScanPage() {
     setResult(null)
     setErrDetail('')
     processingRef.current = false
+    // Kalau kamera belum pernah aktif (mis. gagal karena izin ditolak), pemindai
+    // tidak pernah start — reset UI saja tidak cukup. Picu ulang seluruh alur
+    // permintaan izin + start kamera, supaya user yang baru saja mengizinkan
+    // lewat pengaturan browser bisa langsung coba lagi tanpa reload halaman.
+    if (!ready) setRetryTick(t => t + 1)
   }
 
   return (
