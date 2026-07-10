@@ -25,6 +25,7 @@ export default function KTJPage() {
   const [form, setForm] = useState({
     full_name: '', birth_date: '', birth_place: '', address: '', komsel_id: '', photo_url: '',
   })
+  const [photoPreview, setPhotoPreview] = useState('') // signed URL sementara utk pratinjau, bukan yg disimpan
   const [photoUploading, setPhotoUploading] = useState(false)
 
   useEffect(() => {
@@ -54,15 +55,18 @@ export default function KTJPage() {
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
   // Unggah PAS Foto ke bucket privat `documents` (path ktj/<user_id>/...): owner
-  // boleh tulis, admin boleh baca. Dikembalikan sbg signed URL (1 tahun).
+  // boleh tulis, admin boleh baca. `photo_url` form menyimpan PATH storage saja
+  // (permanen); signed URL cuma dipakai lokal utk pratinjau sebelum submit —
+  // signed URL TIDAK boleh disimpan ke DB krn expired 4 jam (lihat contentService).
   async function handlePhoto(file) {
     if (!file) return
     setPhotoUploading(true)
     try {
       file = await compressImage(file, { maxDim: 1000 })
       validateUpload(file, { maxMB: 5, image: true })
-      const url = await registrationService.uploadDocument(`ktj/${profile.user_id}`, file)
-      set('photo_url', url)
+      const { path, url } = await registrationService.uploadDocument(`ktj/${profile.user_id}`, file)
+      set('photo_url', path)
+      setPhotoPreview(url)
       toast.success(t('ktj.photoUploaded'))
     } catch (err) {
       toast.error(err.message || t('ktj.photoFailed'))
@@ -147,8 +151,8 @@ export default function KTJPage() {
           <Uploader
             kind="image" crop aspect={3 / 4}
             label={t('ktj.photoLabel')} hint={t('ktj.photoHint')}
-            value={form.photo_url} uploading={photoUploading}
-            onFile={handlePhoto} onClear={() => set('photo_url', '')}
+            value={photoPreview} uploading={photoUploading}
+            onFile={handlePhoto} onClear={() => { set('photo_url', ''); setPhotoPreview('') }}
           />
         </Card>
 

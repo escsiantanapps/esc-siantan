@@ -47,6 +47,7 @@ export default function WeddingPage() {
     planned_date: '', estimated_guests: '', preferred_pastor: '', special_notes: '',
     documents: {},
   })
+  const [docPreviews, setDocPreviews] = useState({}) // signed URL sementara per dokumen, bukan yg disimpan
 
   useEffect(() => {
     if (!profile) return
@@ -69,8 +70,9 @@ export default function WeddingPage() {
     try {
       file = await compressImage(file, { maxDim: 1600 })
       validateUpload(file, { maxMB: 8 })
-      const url = await registrationService.uploadDocument(`wedding/${profile.user_id}`, file)
-      setDoc(key, url)
+      const { path, url } = await registrationService.uploadDocument(`wedding/${profile.user_id}`, file)
+      setDoc(key, path)
+      setDocPreviews(p => ({ ...p, [key]: url }))
       toast.success(t('common.docUploaded'))
     } catch (err) {
       setError(err.message || t('common.docUploadFailed'))
@@ -239,8 +241,9 @@ export default function WeddingPage() {
               {DOCS.map(doc => (
                 <Uploader
                   key={doc.key} kind="file" label={t(doc.labelKey)}
-                  value={form.documents[doc.key]} uploading={uploadingKey === doc.key}
-                  onFile={file => handleFile(doc.key, file)} onClear={() => setDoc(doc.key, '')}
+                  value={docPreviews[doc.key]} uploading={uploadingKey === doc.key}
+                  onFile={file => handleFile(doc.key, file)}
+                  onClear={() => { setDoc(doc.key, ''); setDocPreviews(p => ({ ...p, [doc.key]: '' })) }}
                 />
               ))}
               <p className="text-xs text-gray-400">{t('wedding.docsOptional')}</p>

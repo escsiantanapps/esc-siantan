@@ -101,12 +101,12 @@ export default function AdminRegistrationDetailPage() {
   async function handleSave() {
     setError(''); setSuccess(''); setSaving(true)
     try {
-      const updated = await registrationService.updateStatus(type, id, {
+      await registrationService.updateStatus(type, id, {
         status: form.status,
         admin_note: form.admin_note,
         scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
       })
-      setReg(updated)
+      await load() // reload lewat getById supaya photo_url/documents ter-resolve ulang (bukan path mentah)
       setSuccess('Status pendaftaran berhasil diperbarui.')
       toast.success('Status pendaftaran berhasil diperbarui.')
       // Beri tahu jemaat lewat push bila statusnya berubah

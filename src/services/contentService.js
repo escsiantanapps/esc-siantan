@@ -128,6 +128,31 @@ export const newsService = {
   },
 }
 
+// Bucket 'documents' privat: signed URL cuma valid 4 jam (lihat uploadDocument
+// di bawah). Field yg mengarah ke bucket ini (photo_url, documents.*, file_url
+// sertifikat) HARUS disimpan sbg PATH storage saja, bukan signed URL — kalau
+// signed URL yg disimpan, link jadi rusak begitu token expired (bug lama:
+// KTJ/baptisan/nikah/penyerahan-anak/sertifikat pernah simpan signed URL
+// langsung ke DB, rusak permanen setelah 4 jam). Fungsi ini resolve path →
+// signed URL fresh tiap kali dibaca. Kompatibel juga dgn data lama yg
+// terlanjur tersimpan sbg signed URL penuh (path diekstrak dari URL-nya).
+async function resolveDocUrl(pathOrUrl) {
+  if (!pathOrUrl) return ''
+  const m = String(pathOrUrl).match(/\/documents\/([^?]+)/)
+  const path = m ? decodeURIComponent(m[1]) : pathOrUrl
+  const { data, error } = await supabase.storage.from('documents').createSignedUrl(path, 60 * 60 * 4)
+  if (error) return ''
+  return data.signedUrl
+}
+
+async function resolveDocMap(docs) {
+  if (!docs) return docs
+  const entries = Object.entries(docs).filter(([, v]) => v)
+  if (entries.length === 0) return docs
+  const resolved = await Promise.all(entries.map(async ([k, v]) => [k, await resolveDocUrl(v)]))
+  return { ...docs, ...Object.fromEntries(resolved) }
+}
+
 // ─── Baptism & Wedding Registrations ──────────────────────
 // Peta jenis registrasi -> nama tabel & kolom PK, dipakai getById/updateStatus
 // generik di bawah supaya menambah jenis baru (mis. penyerahan anak) tidak
@@ -224,6 +249,8 @@ export const registrationService = {
     const { data, error } = await supabase
       .from(table).select('*, users(name, phone, email)').eq(idCol, id).single()
     if (error) throw error
+    if (type === 'ktj' && data.photo_url) data.photo_url = await resolveDocUrl(data.photo_url)
+    if (data.documents) data.documents = await resolveDocMap(data.documents)
     return data
   },
 
@@ -252,11 +279,10 @@ export const registrationService = {
       contentType: file.type || 'application/octet-stream',
     })
     if (error) throw error
-    // Bucket 'documents' privat (v38). Pakai signed URL on-demand.
-    const { data: signed, error: sErr } = await supabase.storage.from('documents')
-      .createSignedUrl(path, 60 * 60 * 4) // 4 jam — generate ulang on-demand
-    if (sErr) throw sErr
-    return signed.signedUrl
+    // Kembalikan PATH (disimpan ke DB, permanen) + signed URL (cuma utk
+    // pratinjau langsung di form sebelum submit — JANGAN disimpan ke DB).
+    const url = await resolveDocUrl(path)
+    return { path, url }
   },
 }
 
@@ -823,7 +849,7 @@ export const certificatesService = {
     const { data, error } = await supabase
       .from('certificates').select('*').eq('user_id', userId).order('issued_at', { ascending: false })
     if (error) throw error
-    return data
+    return Promise.all((data || []).map(async c => ({ ...c, file_url: await resolveDocUrl(c.file_url) })))
   },
 
   async getAll() {

@@ -19,7 +19,8 @@ export default function AdminCertificatesPage() {
 
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
-  const [fileUrl, setFileUrl] = useState('')
+  const [fileUrl, setFileUrl] = useState('') // PATH storage — ini yg dikirim ke certificatesService.issue
+  const [filePreview, setFilePreview] = useState('') // signed URL sementara utk pratinjau Uploader
   const [uploading, setUploading] = useState(false)
   const [issuing, setIssuing] = useState(false)
   const [error, setError] = useState('')
@@ -44,7 +45,7 @@ export default function AdminCertificatesPage() {
   function selectUser(u) {
     setSelected(u)
     setQuery(''); setResults([])
-    setTitle(''); setNote(''); setFileUrl(''); setError('')
+    setTitle(''); setNote(''); setFileUrl(''); setFilePreview(''); setError('')
   }
 
   async function handleFile(file) {
@@ -54,8 +55,9 @@ export default function AdminCertificatesPage() {
     try {
       file = await compressImage(file, { maxDim: 1600 })
       validateUpload(file, { maxMB: 8 })
-      const url = await registrationService.uploadDocument(`certificates/${selected.user_id}`, file)
-      setFileUrl(url)
+      const { path, url } = await registrationService.uploadDocument(`certificates/${selected.user_id}`, file)
+      setFileUrl(path)
+      setFilePreview(url)
     } catch (err) {
       setError(err.message || t('common.docUploadFailed'))
     } finally {
@@ -136,8 +138,8 @@ export default function AdminCertificatesPage() {
             {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-3 py-2">{error}</div>}
 
             <Input label={t('acert.certTitle')} placeholder={t('acert.certTitlePh')} value={title} onChange={e => setTitle(e.target.value)} />
-            <Uploader kind="file" label={t('acert.file')} required value={fileUrl} uploading={uploading}
-              onFile={handleFile} onClear={() => setFileUrl('')} />
+            <Uploader kind="file" label={t('acert.file')} required value={filePreview} uploading={uploading}
+              onFile={handleFile} onClear={() => { setFileUrl(''); setFilePreview('') }} />
             <Textarea label={t('common.note')} rows={2} value={note} onChange={e => setNote(e.target.value)} />
             <Button className="w-full" loading={issuing} onClick={handleIssue}>{t('acert.issueBtn')}</Button>
           </div>

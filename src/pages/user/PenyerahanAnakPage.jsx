@@ -36,6 +36,7 @@ export default function PenyerahanAnakPage() {
     father_name: '', mother_name: '', address: '', nik: '',
     notes: '', documents: {},
   })
+  const [docPreviews, setDocPreviews] = useState({}) // signed URL sementara per dokumen, bukan yg disimpan
 
   useEffect(() => {
     if (!profile) return
@@ -59,8 +60,9 @@ export default function PenyerahanAnakPage() {
     try {
       file = await compressImage(file, { maxDim: 1600 })
       validateUpload(file, { maxMB: 8 })
-      const url = await registrationService.uploadDocument(`dedication/${profile.user_id}`, file)
-      setDoc(key, url)
+      const { path, url } = await registrationService.uploadDocument(`dedication/${profile.user_id}`, file)
+      setDoc(key, path)
+      setDocPreviews(p => ({ ...p, [key]: url }))
       toast.success(t('common.docUploaded'))
     } catch (err) {
       setError(err.message || t('common.docUploadFailed'))
@@ -169,8 +171,9 @@ export default function PenyerahanAnakPage() {
               {DOCS.map(doc => (
                 <Uploader
                   key={doc.key} kind="file" label={t(doc.labelKey)}
-                  value={form.documents[doc.key]} uploading={uploadingKey === doc.key}
-                  onFile={file => handleFile(doc.key, file)} onClear={() => setDoc(doc.key, '')}
+                  value={docPreviews[doc.key]} uploading={uploadingKey === doc.key}
+                  onFile={file => handleFile(doc.key, file)}
+                  onClear={() => { setDoc(doc.key, ''); setDocPreviews(p => ({ ...p, [doc.key]: '' })) }}
                 />
               ))}
               <Textarea label={t('dedication.notes')} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} />
