@@ -22,6 +22,19 @@ export const pointsService = {
     return data
   },
 
+  // Semua transaksi poin (audit distribusi) — untuk halaman Distribusi Poin.
+  // RLS ptx_select mengizinkan Admin/Super Admin membaca semua. Nama jemaat
+  // di-join (inner: setiap transaksi pasti punya user_id). Limit tinggi karena
+  // dipakai agregasi "poin masuk ke mana saja". Filter nama di klien.
+  async getAllTransactions(limit = 3000) {
+    const { data, error } = await supabase
+      .from('point_transactions')
+      .select('transaction_id, user_id, amount, description, created_at, users!inner(name, photo_url)')
+      .order('created_at', { ascending: false }).limit(limit)
+    if (error) throw error
+    return data || []
+  },
+
   // Top-N jemaat dengan poin terbanyak (via fungsi definer — RLS users
   // tidak mengizinkan jemaat membaca baris jemaat lain).
   async getLeaderboard(limit = 10) {
