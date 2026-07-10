@@ -50,6 +50,14 @@ export default function PesanPage() {
                     </p>
                     <p className="text-sm font-semibold text-gray-900 mt-0.5">{msg.title}</p>
                     <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{msg.body}</p>
+                    {msg.image_url && (
+                      <a href={msg.image_url} target="_blank" rel="noreferrer" className="block mt-2">
+                        <img
+                          src={msg.image_url} alt=""
+                          className="w-full max-h-72 object-cover rounded-xl border border-gray-100"
+                        />
+                      </a>
+                    )}
                     <p className="text-[11px] text-gray-400 mt-2">{formatDate(msg.created_at)}</p>
                   </div>
                 </div>

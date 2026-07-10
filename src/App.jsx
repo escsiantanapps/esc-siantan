@@ -90,6 +90,7 @@ const AdminRoadmapPage = lazy(() => import('@/pages/admin/AdminRoadmapPage'))
 const AdminRedeemPage = lazy(() => import('@/pages/admin/AdminRedeemPage'))
 const AdminSundayPage = lazy(() => import('@/pages/admin/AdminSundayPage'))
 const AdminMessagesPage = lazy(() => import('@/pages/admin/AdminMessagesPage'))
+const AdminMinistrySchedulePage = lazy(() => import('@/pages/admin/AdminMinistrySchedulePage'))
 
 // Layouts
 import UserLayout from '@/layouts/UserLayout'
@@ -235,6 +236,7 @@ export default function App() {
             <Route path="roadmap"              element={<AdminRoadmapPage />} />
             <Route path="tukar-poin"           element={<AdminRedeemPage />} />
             <Route path="ibadah-minggu"        element={<AdminSundayPage />} />
+            <Route path="pelayanan"            element={<AdminMinistrySchedulePage />} />
             <Route path="pesan"                element={<AdminMessagesPage />} />
             <Route path="hak-akses"            element={<AdminPermissionsPage />} />
             <Route path="kategori-tugas"       element={<AdminTaskCategoriesPage />} />

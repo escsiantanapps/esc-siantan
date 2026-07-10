@@ -11,6 +11,7 @@ import SopNudgeCard from '@/components/SopNudgeCard'
 import BirthdayMessageCard from '@/components/BirthdayMessageCard'
 import PastoralMessageCard from '@/components/PastoralMessageCard'
 import MembershipCard from '@/components/MembershipCard'
+import MyMinistryScheduleCard from '@/components/MyMinistryScheduleCard'
 import EventCarousel from '@/components/EventCarousel'
 import { formatDate, spColor } from '@/lib/utils'
 
@@ -127,6 +128,9 @@ export default function HomePage() {
 
         {/* Pengingat ramah kalau ada SOP yang belum dituntaskan minggu ini */}
         <SopNudgeCard />
+
+        {/* Jadwal pelayanan Volunteer + status telat sendiri (self-gating) */}
+        <MyMinistryScheduleCard />
 
         {/* Status SP */}
         {profile?.sp_level && profile.sp_level !== 'Aman' && (

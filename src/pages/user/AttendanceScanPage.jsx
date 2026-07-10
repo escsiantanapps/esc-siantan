@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, XCircle, ScanLine, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { classesService, eventsService, komselService } from '@/services/contentService'
+import { ministryScheduleService } from '@/services/ministryScheduleService'
 import { classAttendanceService, eventAttendanceService } from '@/services/attendanceService'
 import { pointsService } from '@/services/pointsService'
 import { usersService } from '@/services/usersService'
@@ -16,6 +17,21 @@ const KOMSEL_PREFIX = 'ESC-KOMSEL:'
 const SUNDAY_PREFIX = 'ESC-SUNDAY:'
 const REDEEM_PREFIX = 'ESC-REDEEM:'
 const MEMBER_PREFIX = 'ESC-MEMBER:'
+const VOLUNTEER_PREFIX = 'ESC-VOLUNTEER:'
+
+// Ambil posisi GPS (best-effort, soft-log). Tidak memblokir absen: kalau izin
+// ditolak/timeout/GPS tak akurat, kembalikan {lat:null,lng:null} — server tetap
+// mencatat kehadiran, hanya menandai location_flag='Tidak Tersedia'.
+function getPosition() {
+  return new Promise(resolve => {
+    if (!navigator?.geolocation) return resolve({ lat: null, lng: null })
+    navigator.geolocation.getCurrentPosition(
+      p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => resolve({ lat: null, lng: null }),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    )
+  })
+}
 
 export default function AttendanceScanPage() {
   const { profile, isAdmin, isPKS } = useAuth()
@@ -147,7 +163,7 @@ export default function AttendanceScanPage() {
   async function handleScan(decodedText) {
     if (processingRef.current) return
     const text = (decodedText || '').trim()
-    const known = [CLASS_PREFIX, EVENT_PREFIX, KOMSEL_PREFIX, SUNDAY_PREFIX, REDEEM_PREFIX, MEMBER_PREFIX]
+    const known = [CLASS_PREFIX, EVENT_PREFIX, KOMSEL_PREFIX, SUNDAY_PREFIX, REDEEM_PREFIX, MEMBER_PREFIX, VOLUNTEER_PREFIX]
     if (!known.some(p => text.startsWith(p))) return
     processingRef.current = true
 
@@ -157,12 +173,39 @@ export default function AttendanceScanPage() {
       await handleEvent(text.slice(EVENT_PREFIX.length))
     } else if (text.startsWith(KOMSEL_PREFIX)) {
       await handleKomsel(text.slice(KOMSEL_PREFIX.length))
+    } else if (text.startsWith(VOLUNTEER_PREFIX)) {
+      await handleVolunteer(text.slice(VOLUNTEER_PREFIX.length))
     } else if (text.startsWith(SUNDAY_PREFIX)) {
       await handleSunday()
     } else if (text.startsWith(MEMBER_PREFIX)) {
       await handleMember(text.slice(MEMBER_PREFIX.length))
     } else {
       await handleRedeem(text.slice(REDEEM_PREFIX.length))
+    }
+  }
+
+  // Absen Pelayanan Minggu (Volunteer terjadwal). Geolokasi soft-log: diminta
+  // best-effort, tidak memblokir. Status telat & jarak dihitung server.
+  async function handleVolunteer(scheduleId) {
+    try {
+      const sched = await ministryScheduleService.getById(scheduleId)
+      const label = sched.ministries?.name || 'Pelayanan'
+      const pos = await getPosition()
+      try {
+        const rec = await ministryScheduleService.checkIn(scheduleId, profile.user_id, pos)
+        const late = rec.status === 'Terlambat'
+        setResult({
+          type: late ? 'duplicate' : 'success',
+          message: late
+            ? `Kehadiran pelayanan "${label}" tercatat — TERLAMBAT. +1 poin.`
+            : `Kehadiran pelayanan "${label}" tercatat tepat waktu. +1 poin! 🎉`,
+        })
+      } catch (err) {
+        const dup = /sudah tercatat/i.test(err.message || '')
+        setResult({ type: dup ? 'duplicate' : 'error', message: err.message || 'Gagal mencatat kehadiran pelayanan.' })
+      }
+    } catch {
+      setResult({ type: 'error', message: 'Jadwal pelayanan tidak ditemukan atau sudah berakhir.' })
     }
   }
 

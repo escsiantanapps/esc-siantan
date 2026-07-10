@@ -9,7 +9,7 @@ import { komselService, komselOfferingsService } from '@/services/contentService
 import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsService'
 import { birthdayService } from '@/services/birthdayService'
 import { evaluationService } from '@/services/evaluationService'
-import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, Select, Input, Button } from '@/components/ui'
+import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, Select, Input, Textarea, Button } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
@@ -92,6 +92,8 @@ export default function PKSDashboardPage() {
   const [creatingSession, setCreatingSession] = useState(false)
   const [activeSession, setActiveSession] = useState(null) // { ...session, qr }
   const [sessionAttendance, setSessionAttendance] = useState([])
+  const [guestDraft, setGuestDraft] = useState('') // tamu tanpa akun (teks bebas per sesi)
+  const [guestSaving, setGuestSaving] = useState(false)
   const [sessions, setSessions] = useState([]) // daftar sesi QR komsel (dibagi antar PKS)
   useBackClose(!!activeSession, () => closeSession())
 
@@ -277,6 +279,26 @@ export default function PKSDashboardPage() {
   function closeSession() {
     setActiveSession(null)
     loadSessions(selectedId)
+  }
+
+  // Sinkron draft tamu tanpa akun tiap ganti sesi aktif.
+  useEffect(() => {
+    setGuestDraft(activeSession?.guest_names || '')
+  }, [activeSession?.session_id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Simpan daftar tamu tanpa akun (anggota tanpa HP) ke sesi ini.
+  async function handleSaveGuests() {
+    if (!activeSession) return
+    setGuestSaving(true)
+    try {
+      const updated = await komselService.updateSessionGuests(activeSession.session_id, guestDraft.trim())
+      setActiveSession(s => ({ ...s, guest_names: updated.guest_names }))
+      toast.success(t('pks.guestSaved'))
+    } catch (err) {
+      toast.error(err.message || t('pks.guestSaveFailed'))
+    } finally {
+      setGuestSaving(false)
+    }
   }
 
   // Buat sesi absensi baru → tampilkan QR untuk dipindai anggota.
@@ -853,6 +875,25 @@ export default function PKSDashboardPage() {
                   })}
                 </div>
               )}
+            </div>
+
+            {/* Tamu tanpa akun (anggota tanpa HP): teks bebas, satu nama per
+                baris. Sekali-pakai per sesi — tidak berpoin, tidak jadi akun. */}
+            <div className="text-left pt-3 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-700 mb-1">{t('pks.guestTitle')}</p>
+              <p className="text-[11px] text-gray-400 mb-2">{t('pks.guestHint')}</p>
+              <Textarea
+                rows={3}
+                value={guestDraft}
+                onChange={e => setGuestDraft(e.target.value)}
+                placeholder={t('pks.guestPlaceholder')}
+              />
+              <Button
+                size="sm" variant="outline" className="w-full mt-2"
+                loading={guestSaving} onClick={handleSaveGuests}
+              >
+                {t('pks.guestSave')}
+              </Button>
             </div>
           </Card>
         </div>

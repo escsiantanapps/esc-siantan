@@ -29,10 +29,11 @@ export const messagesService = {
 
   // Buat pengumuman baru. sender_id/sender_name didenormalisasi dari profil
   // pengirim agar tetap tampil walau baris pengirim kelak dihapus.
-  async create({ title, body, senderId, senderName }) {
+  // imageUrl opsional (gambar lampiran, path publik profile-photos/pastoral/...).
+  async create({ title, body, senderId, senderName, imageUrl }) {
     const { data, error } = await supabase
       .from('pastoral_messages')
-      .insert({ title, body, sender_id: senderId, sender_name: senderName })
+      .insert({ title, body, sender_id: senderId, sender_name: senderName, image_url: imageUrl || null })
       .select()
       .single()
     if (error) throw error

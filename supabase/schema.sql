@@ -2825,6 +2825,244 @@ END $$;
 -- karena migrasi belum dijalankan production saat temuan ini ditulis).
 
 -- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v53: Kolom tamu tanpa akun pada absensi komsel ────────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-10): PKS perlu mencatat anggota komsel yang
+-- TIDAK punya HP (otomatis tidak punya akun/baris users) saat absensi.
+-- Pilihan operator = "sekali-pakai per sesi" (bukan roster tersimpan lintas
+-- minggu, bukan baris users): PKS mengetik nama tamu hadir pada sesi minggu
+-- itu, disimpan menempel di sesinya. Tidak ada poin (tidak ada user_id) —
+-- konsisten dengan aturan "poin komsel hanya self-scan".
+--
+-- Disimpan sebagai teks bebas (satu nama per baris) di kolom baru pada
+-- komsel_sessions. Tulis/baca sudah tercakup policy existing `ksess_write`
+-- (PKS komsel ybs / Admin) & `ksess_read` — TIDAK perlu policy baru.
+ALTER TABLE komsel_sessions ADD COLUMN IF NOT EXISTS guest_names TEXT;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v54: Gambar pada Pesan Gembala ────────────────────────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-10): Pesan Gembala boleh melampirkan 1 gambar
+-- (opsional). Gambar tampil compact (thumbnail) di list & Beranda, penuh di
+-- detail. Disimpan di bucket publik `profile-photos` (non-sensitif, sama spt
+-- gambar konten lain) pada path `pastoral/...`.
+ALTER TABLE pastoral_messages ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+-- Storage: pengunggah = role Gembala/Super Admin (pm_write). Policy
+-- `profile_photos_insert` existing (fail-closed whitelist) HANYA mengizinkan
+-- Admin/Super Admin pada folder konten tertentu — Gembala & folder `pastoral/`
+-- TIDAK termasuk, jadi upload akan ditolak. Alih-alih menimpa policy lama itu
+-- (RISIKO DRIFT — policy tsb mengatur SEMUA upload profile-photos: avatar,
+-- bukti persembahan, konten admin), tambahkan policy TERPISAH yang permissive
+-- (di-OR dengan yang lama). Additive-only, tidak menyentuh policy existing.
+DROP POLICY IF EXISTS "profile_photos_pastoral_insert" ON storage.objects;
+CREATE POLICY "profile_photos_pastoral_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'profile-photos'
+    AND name LIKE 'pastoral/%'
+    AND auth_user_role() IN ('Gembala','Super Admin')
+  );
+
+DROP POLICY IF EXISTS "profile_photos_pastoral_update" ON storage.objects;
+CREATE POLICY "profile_photos_pastoral_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'profile-photos'
+    AND name LIKE 'pastoral/%'
+    AND auth_user_role() IN ('Gembala','Super Admin')
+  )
+  WITH CHECK (
+    bucket_id = 'profile-photos'
+    AND name LIKE 'pastoral/%'
+  );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v55: Absen Pelayanan Minggu (Volunteer terjadwal) ─────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-10): Volunteer yang terjadwal melayani wajib
+-- absen di ibadah untuk kedisiplinan waktu. Beda dari sunday_attendance
+-- (absen jemaat umum): (a) hanya untuk Volunteer yang DITUGASKAN pada jadwal,
+-- (b) dinilai TEPAT WAKTU / TERLAMBAT terhadap jam mulai jadwal, (c) QR
+-- terpisah `ESC-VOLUNTEER:<schedule_id>`. Tiap scan = +1 poin (sama pola
+-- kehadiran lain). Grace telat = 5 menit. Badge "3x telat" dihitung per BULAN
+-- berjalan (reset tiap bulan) — lihat catatan di service klien.
+--
+-- Pengelola jadwal = ADMIN (digerbang Hak Akses `/admin/pelayanan`), bukan PKS.
+
+-- (1) Jadwal pelayanan: 1 baris per (ministry, tanggal) dgn 1 jam mulai.
+CREATE TABLE IF NOT EXISTS ministry_schedules (
+  schedule_id  TEXT PRIMARY KEY DEFAULT 'MSCH-' || replace(gen_random_uuid()::text, '-', ''),
+  ministry_id  TEXT REFERENCES ministries(ministry_id) ON DELETE CASCADE,
+  service_date DATE NOT NULL,
+  start_time   TIME NOT NULL,
+  created_by   TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE ministry_schedules ENABLE ROW LEVEL SECURITY;
+-- Baca: semua user login (dibutuhkan volunteer utk validasi saat scan).
+DROP POLICY IF EXISTS "msch_read" ON ministry_schedules;
+CREATE POLICY "msch_read" ON ministry_schedules FOR SELECT USING (auth.uid() IS NOT NULL);
+-- Tulis: Admin ber-Hak-Akses `/admin/pelayanan` (Super Admin selalu lolos).
+DROP POLICY IF EXISTS "msch_write" ON ministry_schedules;
+CREATE POLICY "msch_write" ON ministry_schedules FOR ALL
+  USING (auth_admin_can('/admin/pelayanan'))
+  WITH CHECK (auth_admin_can('/admin/pelayanan'));
+
+-- (2) Penugasan volunteer ke jadwal.
+CREATE TABLE IF NOT EXISTS ministry_schedule_assignments (
+  schedule_id TEXT NOT NULL REFERENCES ministry_schedules(schedule_id) ON DELETE CASCADE,
+  user_id     TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (schedule_id, user_id)
+);
+ALTER TABLE ministry_schedule_assignments ENABLE ROW LEVEL SECURITY;
+-- Baca: semua user login (volunteer perlu tahu ia terjadwal; RLS insert
+-- ministry_attendance juga mengacu ke sini).
+DROP POLICY IF EXISTS "msa_read" ON ministry_schedule_assignments;
+CREATE POLICY "msa_read" ON ministry_schedule_assignments FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "msa_write" ON ministry_schedule_assignments;
+CREATE POLICY "msa_write" ON ministry_schedule_assignments FOR ALL
+  USING (auth_admin_can('/admin/pelayanan'))
+  WITH CHECK (auth_admin_can('/admin/pelayanan'));
+
+-- (3) Kehadiran pelayanan (hasil scan QR volunteer). status & data geolokasi
+--     DIISI SERVER (trigger BEFORE), bukan dipercaya dari klien.
+CREATE TABLE IF NOT EXISTS ministry_attendance (
+  attendance_id TEXT PRIMARY KEY DEFAULT 'MATT-' || replace(gen_random_uuid()::text, '-', ''),
+  schedule_id   TEXT REFERENCES ministry_schedules(schedule_id) ON DELETE CASCADE,
+  user_id       TEXT REFERENCES users(user_id) ON DELETE CASCADE,
+  scanned_at    TIMESTAMPTZ DEFAULT now(),
+  status        TEXT DEFAULT 'Tepat Waktu' CHECK (status IN ('Tepat Waktu','Terlambat')),
+  lat           DOUBLE PRECISION,     -- posisi mentah yg dilaporkan klien (soft-log)
+  lng           DOUBLE PRECISION,
+  distance_m    INTEGER,              -- jarak ke koordinat gereja (dihitung server)
+  location_flag TEXT,                 -- 'Dalam Radius' | 'Di Luar Radius' | 'Tidak Tersedia'
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (schedule_id, user_id)
+);
+ALTER TABLE ministry_attendance ENABLE ROW LEVEL SECURITY;
+
+-- Baca: Admin/Super Admin (rekap) atau volunteer melihat barisnya sendiri.
+DROP POLICY IF EXISTS "matt_select" ON ministry_attendance;
+CREATE POLICY "matt_select" ON ministry_attendance FOR SELECT USING (
+  auth_user_role() IN ('Admin','Super Admin') OR user_id = auth_user_id()
+);
+-- Insert (self-scan): hanya volunteer yang (a) mencatat dirinya sendiri,
+-- (b) memang DITUGASKAN pada jadwal itu, dan (c) tanggal jadwal = hari ini WIB
+-- (anti-backdate, pola sama sunday_attendance). Volunteer tak terjadwal
+-- ditolak DB — bukan sekadar disembunyikan di UI.
+DROP POLICY IF EXISTS "matt_self_insert" ON ministry_attendance;
+CREATE POLICY "matt_self_insert" ON ministry_attendance FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND EXISTS (
+    SELECT 1 FROM ministry_schedule_assignments a
+    WHERE a.schedule_id = ministry_attendance.schedule_id AND a.user_id = auth_user_id()
+  )
+  AND EXISTS (
+    SELECT 1 FROM ministry_schedules s
+    WHERE s.schedule_id = ministry_attendance.schedule_id
+      AND s.service_date = (current_timestamp AT TIME ZONE 'Asia/Jakarta')::date
+  )
+);
+-- Hapus: Admin/Super Admin (koreksi rekap).
+DROP POLICY IF EXISTS "matt_admin_delete" ON ministry_attendance;
+CREATE POLICY "matt_admin_delete" ON ministry_attendance FOR DELETE USING (
+  auth_user_role() IN ('Admin','Super Admin')
+);
+
+CREATE INDEX IF NOT EXISTS idx_matt_user_month ON ministry_attendance (user_id, status, scanned_at);
+
+-- (4) Trigger BEFORE INSERT: tetapkan status (telat) & geolokasi di SERVER.
+--     Jangan percaya status/distance/flag kiriman klien — timpa semuanya.
+CREATE OR REPLACE FUNCTION ministry_attendance_stamp() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_start   time;
+  v_now_wib timestamp;
+  v_clat    double precision;
+  v_clng    double precision;
+  v_radius  double precision;
+  v_dist    double precision;
+BEGIN
+  SELECT start_time INTO v_start FROM ministry_schedules WHERE schedule_id = NEW.schedule_id;
+  v_now_wib := (now() AT TIME ZONE 'Asia/Jakarta');
+  NEW.scanned_at := now();
+
+  -- Status telat: grace 5 menit (keputusan operator 2026-07-10).
+  IF v_start IS NOT NULL AND v_now_wib::time > (v_start + interval '5 minutes') THEN
+    NEW.status := 'Terlambat';
+  ELSE
+    NEW.status := 'Tepat Waktu';
+  END IF;
+
+  -- Koordinat gereja dari app_settings (nilai bertipe text; parse aman).
+  BEGIN
+    SELECT value::double precision INTO v_clat FROM app_settings WHERE key = 'church_lat';
+    SELECT value::double precision INTO v_clng FROM app_settings WHERE key = 'church_lng';
+    SELECT value::double precision INTO v_radius FROM app_settings WHERE key = 'church_radius_m';
+  EXCEPTION WHEN others THEN
+    v_clat := NULL; v_clng := NULL; v_radius := NULL;
+  END;
+  IF v_radius IS NULL OR v_radius <= 0 THEN v_radius := 200; END IF; -- default 200 m
+
+  -- Geolocation SOFT-LOG: hitung jarak haversine bila klien mengirim posisi &
+  -- koordinat gereja tersedia. TIDAK memblokir absen (GPS indoor sering
+  -- meleset & bisa di-spoof) — hanya menandai untuk ditinjau Admin.
+  IF NEW.lat IS NOT NULL AND NEW.lng IS NOT NULL AND v_clat IS NOT NULL AND v_clng IS NOT NULL THEN
+    v_dist := 2 * 6371000 * asin(sqrt(
+      power(sin(radians(NEW.lat - v_clat) / 2), 2)
+      + cos(radians(v_clat)) * cos(radians(NEW.lat)) * power(sin(radians(NEW.lng - v_clng) / 2), 2)
+    ));
+    NEW.distance_m := round(v_dist);
+    NEW.location_flag := CASE WHEN v_dist <= v_radius THEN 'Dalam Radius' ELSE 'Di Luar Radius' END;
+  ELSE
+    NEW.distance_m := NULL;
+    NEW.location_flag := 'Tidak Tersedia';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_ministry_att_stamp ON ministry_attendance;
+CREATE TRIGGER trg_ministry_att_stamp
+  BEFORE INSERT ON ministry_attendance
+  FOR EACH ROW EXECUTE FUNCTION ministry_attendance_stamp();
+
+-- (5) +1 poin per scan pelayanan: perluas award_attendance_point() (definisi
+--     lengkap terakhir dari v52, ditambah cabang ministry_attendance) + trigger.
+CREATE OR REPLACE FUNCTION award_attendance_point() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'komsel_attendance' THEN
+    IF NEW.session_id IS NULL
+       OR NEW.status IS DISTINCT FROM 'Hadir'
+       OR NEW.user_id IS DISTINCT FROM auth_user_id() THEN
+      RETURN NEW;
+    END IF;
+    PERFORM apply_points(NEW.user_id, 1, 'Kehadiran komsel');
+    PERFORM set_config('app.allow_komsel_points_awarded', '1', true);
+    UPDATE komsel_attendance SET points_awarded = true WHERE attendance_id = NEW.attendance_id;
+    PERFORM set_config('app.allow_komsel_points_awarded', '', true);
+    RETURN NEW;
+  END IF;
+  PERFORM apply_points(NEW.user_id, 1,
+    CASE TG_TABLE_NAME
+      WHEN 'class_attendance'    THEN 'Kehadiran kelas'
+      WHEN 'event_attendance'    THEN 'Kehadiran event'
+      WHEN 'sunday_attendance'   THEN 'Kehadiran ibadah minggu'
+      WHEN 'ministry_attendance' THEN 'Absen Pelayanan Minggu'
+      ELSE 'Kehadiran'
+    END);
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_point_ministry_att ON ministry_attendance;
+CREATE TRIGGER trg_point_ministry_att
+  AFTER INSERT ON ministry_attendance
+  FOR EACH ROW EXECUTE FUNCTION award_attendance_point();
+
+-- ══════════════════════════════════════════════════════════════════════
 -- ── Migrasi v56: Admin boleh HAPUS pengajuan KTJ (yang ditolak) ───────
 -- ══════════════════════════════════════════════════════════════════════
 -- KEPUTUSAN OPERATOR (2026-07-10): pengajuan KTJ yang DITOLAK admin harus

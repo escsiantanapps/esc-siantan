@@ -62,7 +62,15 @@ export default function PastoralMessageCard() {
                 {t('pesan.from', { name: msg.sender_name || t('role.Gembala') })}
               </p>
               <p className="text-sm font-semibold text-gray-900 mt-0.5">{msg.title}</p>
-              <p className="text-sm text-gray-600 mt-1 whitespace-pre-line line-clamp-4">{msg.body}</p>
+              <div className="flex gap-2 mt-1">
+                {msg.image_url && (
+                  <img
+                    src={msg.image_url} alt=""
+                    className="w-12 h-12 rounded-lg object-cover border border-brand-100 shrink-0"
+                  />
+                )}
+                <p className="text-sm text-gray-600 whitespace-pre-line line-clamp-3">{msg.body}</p>
+              </div>
             </div>
           </div>
           <Link

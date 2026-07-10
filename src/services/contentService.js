@@ -747,6 +747,17 @@ export const komselService = {
     if (error) throw error
   },
 
+  // Simpan daftar tamu tanpa akun (anggota tanpa HP) pada sesi ini — teks bebas,
+  // satu nama per baris. Sekali-pakai per sesi (bukan roster lintas minggu);
+  // tidak memberi poin. Ditulis PKS komsel ybs (policy `ksess_write`).
+  async updateSessionGuests(sessionId, guestNames) {
+    const { data, error } = await supabase.from('komsel_sessions')
+      .update({ guest_names: guestNames || null })
+      .eq('session_id', sessionId).select().single()
+    if (error) throw error
+    return data
+  },
+
   // Kehadiran satu sesi (untuk PKS memantau siapa saja yang sudah scan).
   async getSessionAttendance(sessionId) {
     const { data, error } = await supabase.from('komsel_attendance')

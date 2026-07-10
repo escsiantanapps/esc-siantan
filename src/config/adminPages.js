@@ -2,7 +2,7 @@ import {
   Users, Calendar, Newspaper, BookOpen,
   ClipboardList, Droplets, Heart, AlertTriangle, BarChart3,
   Layers, Network, HandCoins, CalendarOff, Baby, Award, Map, Gift, Church, CreditCard,
-  LayoutDashboard, Inbox,
+  LayoutDashboard, Inbox, CalendarClock,
 } from 'lucide-react'
 
 // Daftar halaman admin yang aksesnya bisa dibatasi untuk role "Admin"
@@ -24,6 +24,7 @@ export const ADMIN_PAGES = [
   { to: '/admin/izin',     icon: CalendarOff,   label: 'Izin / Sakit',       section: 'Pelayanan',   labelKey: 'admin.nav.izin',        sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/persembahan', icon: HandCoins,  label: 'Persembahan',        section: 'Organisasi',  labelKey: 'admin.nav.persembahan', sectionKey: 'admin.sec.Organisasi' },
   { to: '/admin/ibadah-minggu', icon: Church,   label: 'Ibadah Minggu',      section: 'Konten',      labelKey: 'admin.nav.ibadahMinggu', sectionKey: 'admin.sec.Konten' },
+  { to: '/admin/pelayanan', icon: CalendarClock, label: 'Absen Pelayanan',   section: 'Pelayanan',   labelKey: 'admin.nav.pelayanan',  sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/tukar-poin',  icon: Gift,       label: 'Tukar Poin',         section: 'Organisasi',  labelKey: 'admin.nav.tukarPoin',  sectionKey: 'admin.sec.Organisasi' },
   { to: '/admin/baptisan', icon: Droplets,      label: 'Baptisan',           section: 'Pelayanan',   labelKey: 'admin.nav.baptisan',    sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/nikah',    icon: Heart,         label: 'Pemberkatan Nikah',  section: 'Pelayanan',   labelKey: 'admin.nav.nikah',       sectionKey: 'admin.sec.Pelayanan' },

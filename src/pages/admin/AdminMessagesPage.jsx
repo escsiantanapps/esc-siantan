@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Send, Trash2, MessageSquare } from 'lucide-react'
 import { messagesService } from '@/services/messagesService'
+import { mediaService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { Card, Input, Textarea, Button, Checkbox, Spinner, PageHeader, EmptyState } from '@/components/ui'
-import { formatDate } from '@/lib/utils'
+import Uploader from '@/components/Uploader'
+import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 
 // Panel Pesan Gembala — buat pengumuman broadcast ke SEMUA jemaat (tersimpan
 // di app + opsional push notification). Akses: Gembala & Super Admin (ditegakkan
@@ -16,10 +18,27 @@ export default function AdminMessagesPage() {
   const { toast, confirm } = useToast()
   const { t } = useLang()
 
-  const [form, setForm] = useState({ title: '', body: '', push: true })
+  const [form, setForm] = useState({ title: '', body: '', push: true, image_url: '' })
+  const [imgUploading, setImgUploading] = useState(false)
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+
+  // Gambar lampiran (opsional) → bucket publik profile-photos/pastoral/...
+  async function handleImage(file) {
+    if (!file) return
+    setImgUploading(true)
+    try {
+      file = await compressImage(file, { maxDim: 1400 })
+      validateUpload(file, { maxMB: 5, image: true })
+      const url = await mediaService.uploadPhoto('pastoral', file)
+      setForm(f => ({ ...f, image_url: url }))
+    } catch (err) {
+      toast.error(err.message || t('amsg.imgFailed'))
+    } finally {
+      setImgUploading(false)
+    }
+  }
 
   function load() {
     setLoading(true)
@@ -40,6 +59,7 @@ export default function AdminMessagesPage() {
         body: form.body.trim(),
         senderId: profile?.user_id,
         senderName: profile?.name || t('role.Gembala'),
+        imageUrl: form.image_url || null,
       })
 
       // Push opsional — fire-and-forget dengan laporan hasil eksplisit, meniru
@@ -59,7 +79,7 @@ export default function AdminMessagesPage() {
       }
 
       toast.success(t('amsg.saved'))
-      setForm({ title: '', body: '', push: true })
+      setForm({ title: '', body: '', push: true, image_url: '' })
       load()
     } catch (err) {
       toast.error(err?.message || t('amsg.saveFailed'))
@@ -107,6 +127,15 @@ export default function AdminMessagesPage() {
             placeholder={t('amsg.msgBodyPh')}
             maxLength={2000}
           />
+          <Uploader
+            kind="image"
+            label={t('amsg.imgLabel')}
+            hint={t('amsg.imgHint')}
+            value={form.image_url}
+            uploading={imgUploading}
+            onFile={handleImage}
+            onClear={() => setForm(f => ({ ...f, image_url: '' }))}
+          />
           <Checkbox
             label={t('amsg.alsoPush')}
             checked={form.push}
@@ -137,6 +166,12 @@ export default function AdminMessagesPage() {
               </button>
               <p className="text-sm font-semibold text-gray-900 pr-6">{msg.title}</p>
               <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{msg.body}</p>
+              {msg.image_url && (
+                <img
+                  src={msg.image_url} alt=""
+                  className="mt-2 w-14 h-14 rounded-lg object-cover border border-gray-100"
+                />
+              )}
               <p className="text-[11px] text-gray-400 mt-2">
                 {msg.sender_name || t('role.Gembala')} · {formatDate(msg.created_at)}
               </p>
