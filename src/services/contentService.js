@@ -671,14 +671,17 @@ export const komselService = {
   },
 
   async deleteSessionAttendance(sessionId, userId) {
-    // Hapus baris dari komsel_attendance
+    // Hapus baris dari komsel_attendance. Pencabutan poin (jika baris ini
+    // pernah memberi poin = hasil self-scan, points_awarded=true) ditangani
+    // otomatis oleh trigger DB `trg_point_komsel_del` (Migrasi v51) — jadi
+    // absensi manual PKS yang memang tak berpoin TIDAK ikut mengurangi poin.
     const { data: existing } = await supabase
       .from('komsel_attendance')
-      .select('attendance_id, status')
+      .select('attendance_id')
       .eq('session_id', sessionId)
       .eq('user_id', userId)
       .maybeSingle()
-      
+
     if (!existing) return
 
     const { error } = await supabase
@@ -686,12 +689,6 @@ export const komselService = {
       .delete()
       .eq('attendance_id', existing.attendance_id)
     if (error) throw error
-
-    // Tarik kembali poin jika status sebelumnya adalah Hadir
-    if (existing.status === 'Hadir') {
-      // Kita pakai rpc untuk deduct point
-      await supabase.rpc('deduct_user_point', { p_user_id: userId, amount: 1 }).catch(console.error)
-    }
   },
 
   // Semua kehadiran untuk sekumpulan sesi (dipakai agregasi rekap bulanan).

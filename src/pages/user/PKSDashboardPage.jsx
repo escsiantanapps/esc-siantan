@@ -331,7 +331,7 @@ export default function PKSDashboardPage() {
     if (!att) return
     const ok = await confirm({
       title: 'Batalkan Kehadiran',
-      message: 'Apakah Anda yakin ingin menghapus data kehadiran ini? Jika sebelumnya Hadir, poin akan ditarik.',
+      message: 'Apakah Anda yakin ingin menghapus data kehadiran ini? Poin hanya ditarik bila kehadiran ini berasal dari scan QR mandiri jemaat.',
       confirmText: 'Batalkan',
       danger: true
     })

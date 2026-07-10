@@ -2654,3 +2654,91 @@ BEGIN
   END IF;
   RETURN NEW;
 END $$;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v51: Poin komsel HANYA untuk self-scan, bukan absensi manual ──
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (2026-07-10): jemaat yang diabsen MANUAL oleh PKS/Admin lewat panel
+-- PKS (komselService.upsertSessionAttendance) mendapat +1 poin, padahal
+-- kehadiran manual seharusnya TIDAK memberi poin — hanya scan QR mandiri.
+-- Penyebab: award_attendance_point() dulu membedakan scan vs manual HANYA dari
+-- `session_id IS NULL`. Ternyata absensi manual PKS juga menulis baris ber-
+-- session_id (record memuat session_id sesi aktif), jadi lolos guard.
+-- Terverifikasi: user 'Hety' & 'Ifan' (auth_id NULL — mustahil login/scan)
+-- mendapat poin dari sesi yang dibuat admin.
+--
+-- KEPUTUSAN OPERATOR: poin komsel hanya diberi bila baris kehadiran dibuat oleh
+-- JEMAAT ITU SENDIRI (self check-in scan QR). Sinyal DB yang tak bisa dipalsukan
+-- lewat PostgREST langsung: NEW.user_id = auth_user_id().
+--   • self-scan (checkInSession, JWT jemaat)  → user_id = auth_user_id() → +1
+--   • manual PKS (JWT PKS/Admin utk anggota)  → user_id ≠ auth_user_id() → 0
+--   • service_role / SQL Editor (restore, dsb) → auth_user_id() NULL → 0 (benar)
+--
+-- Agar poin bisa dicabut SIMETRIS saat kehadiran dihapus/diubah oleh PKS (yang
+-- BUKAN pemilik baris → auth match tak berlaku lagi), simpan penanda persisten
+-- `points_awarded` di barisnya, di-set oleh trigger insert saat poin diberi.
+ALTER TABLE komsel_attendance
+  ADD COLUMN IF NOT EXISTS points_awarded BOOLEAN NOT NULL DEFAULT false;
+
+-- Award saat INSERT: hanya self-scan komsel yang dapat poin; tandai barisnya.
+CREATE OR REPLACE FUNCTION award_attendance_point() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'komsel_attendance' THEN
+    -- Poin komsel HANYA untuk kehadiran hasil scan QR mandiri jemaat sendiri.
+    -- Absensi manual PKS (user_id ≠ auth pemanggil) & baris tanpa sesi = 0 poin.
+    IF NEW.session_id IS NULL
+       OR NEW.status IS DISTINCT FROM 'Hadir'
+       OR NEW.user_id IS DISTINCT FROM auth_user_id() THEN
+      RETURN NEW;
+    END IF;
+    PERFORM apply_points(NEW.user_id, 1, 'Kehadiran komsel');
+    UPDATE komsel_attendance SET points_awarded = true WHERE attendance_id = NEW.attendance_id;
+    RETURN NEW;
+  END IF;
+  PERFORM apply_points(NEW.user_id, 1,
+    CASE TG_TABLE_NAME
+      WHEN 'class_attendance'  THEN 'Kehadiran kelas'
+      WHEN 'event_attendance'  THEN 'Kehadiran event'
+      WHEN 'sunday_attendance' THEN 'Kehadiran ibadah minggu'
+      ELSE 'Kehadiran'
+    END);
+  RETURN NEW;
+END $$;
+
+-- Cabut poin bila baris kehadiran yang PERNAH memberi poin (points_awarded=true)
+-- dihapus, atau statusnya diubah dari 'Hadir'. Mengandalkan penanda persisten,
+-- jadi tetap benar walau yang menghapus adalah PKS (bukan pemilik baris).
+CREATE OR REPLACE FUNCTION komsel_point_revoke() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.points_awarded THEN
+      PERFORM apply_points(OLD.user_id, -1, 'Pembatalan kehadiran komsel');
+    END IF;
+    RETURN OLD;
+  END IF;
+  -- UPDATE: baris yang sudah dapat poin kehilangan status 'Hadir'
+  IF OLD.points_awarded AND NEW.status IS DISTINCT FROM 'Hadir' THEN
+    PERFORM apply_points(OLD.user_id, -1, 'Pembatalan kehadiran komsel');
+    NEW.points_awarded := false;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_point_komsel_del ON komsel_attendance;
+CREATE TRIGGER trg_point_komsel_del AFTER DELETE ON komsel_attendance
+  FOR EACH ROW EXECUTE FUNCTION komsel_point_revoke();
+
+DROP TRIGGER IF EXISTS trg_point_komsel_upd ON komsel_attendance;
+CREATE TRIGGER trg_point_komsel_upd BEFORE UPDATE ON komsel_attendance
+  FOR EACH ROW EXECUTE FUNCTION komsel_point_revoke();
+
+-- Backfill penanda untuk baris LAMA: sampai kini SEMUA baris session-Hadir sudah
+-- terlanjur diberi poin (bug lama), jadi tandai true agar penghapusan/perubahan
+-- ke depan mengurangi poinnya dengan benar. Idempotent (true→true no-op).
+-- PENTING: jalankan blok v51 ini SEKALI, SEBELUM skrip koreksi poin manual
+-- (lihat catatan rilis) — jangan jalankan ulang setelah koreksi.
+UPDATE komsel_attendance SET points_awarded = true
+  WHERE session_id IS NOT NULL AND status = 'Hadir' AND points_awarded = false;
