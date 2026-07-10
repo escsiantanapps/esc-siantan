@@ -169,11 +169,11 @@ export default function AdminEvaluationPage() {
 
       {/* Filter section */}
       <Card className="p-4 mb-4 space-y-3">
-        <div className="grid sm:grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <Input type="date" label={t('aev.startDate')} value={startDate} onChange={e => setStartDate(e.target.value)} />
           <Input type="date" label={t('aev.endDate')} value={endDate} onChange={e => setEndDate(e.target.value)} />
         </div>
-        <div className="grid sm:grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <Select label={t('aev.form')} value={formId} onChange={e => setFormId(e.target.value)}>
             <option value="">Semua Form</option>
             {templates.map(tm => <option key={tm.form_id} value={tm.form_id}>{tm.title}</option>)}
@@ -183,7 +183,7 @@ export default function AdminEvaluationPage() {
             {['Volunteer', 'Jemaat', 'PKS'].map(r => <option key={r} value={r}>{r}</option>)}
           </Select>
         </div>
-        <div className="grid sm:grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid sm:grid-cols-3 gap-3">
           <Select label={t('aev.ministry')} value={ministryId} onChange={e => setMinistryId(e.target.value)}>
             <option value="">{t('aev.allMinistry')}</option>
             {ministries.map(m => <option key={m.ministry_id} value={m.ministry_id}>{m.name}</option>)}
@@ -205,7 +205,7 @@ export default function AdminEvaluationPage() {
       {!loading && !loadingMeta && templates.length > 0 && (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-3 gap-3 mb-4">
             <Card className="p-4 text-center">
               <div className="w-9 h-9 mx-auto rounded-xl bg-green-50 flex items-center justify-center mb-2">
                 <CheckCircle2 size={18} className="text-green-500" />

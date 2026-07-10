@@ -150,7 +150,7 @@ export default function AdminTaskCategoriesPage() {
               {ministries.length === 0 ? (
                 <p className="text-sm text-gray-400">Belum ada data ministry.</p>
               ) : (
-                <div className="grid sm:grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid sm:grid-cols-2 gap-2">
                   {ministries.map(m => (
                     <Checkbox key={m.ministry_id} label={m.name} checked={form.ministry_ids.includes(m.ministry_id)} onChange={() => toggleMinistry(m.ministry_id)} />
                   ))}
