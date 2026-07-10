@@ -24,7 +24,7 @@ export const usersService = {
 
   async getAll({ search = '', role = '', status = '', ministry = '', komsel = '', duplicatesOnly = false, page = 1, limit = 20, sort = 'name' } = {}) {
     let query = supabase.from('users').select('*, user_ministries(ministry_id)', { count: 'exact' })
-    if (search) query = query.ilike('name', `%${search}%`)
+    if (search) query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`)
     if (role) query = query.eq('role', role)
     if (status) query = query.eq('status', status)
     if (komsel) query = query.eq('komsel_id', komsel)
