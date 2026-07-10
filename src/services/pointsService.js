@@ -35,6 +35,36 @@ export const pointsService = {
     return data || []
   },
 
+  // Rincian poin kehadiran per KOMSEL (baris komsel_attendance yang benar-benar
+  // berpoin, points_awarded=true) — untuk breakdown "poin dari komsel mana".
+  // point_transactions tidak menyimpan komsel-nya, jadi diambil dari tabel absensi.
+  async getKomselPointBreakdown(limit = 5000) {
+    const { data, error } = await supabase
+      .from('komsel_attendance')
+      .select('komsel_id, komsel(name)')
+      .eq('points_awarded', true).limit(limit)
+    if (error) throw error
+    return data || []
+  },
+
+  // Rincian poin kehadiran per KELAS (tiap baris class_attendance = +1 poin).
+  async getClassPointBreakdown(limit = 5000) {
+    const { data, error } = await supabase
+      .from('class_attendance')
+      .select('class_id, classes(name)').limit(limit)
+    if (error) throw error
+    return data || []
+  },
+
+  // Hapus (revoke) satu poin yang didapat jemaat — RPC tepercaya, gated
+  // Hak Akses `/admin/distribusi-poin` di server (Migrasi v61). Menurunkan
+  // saldo & mencatat penyesuaian (ditampilkan "Dikurangi oleh sistem").
+  async revokePointTransaction(txId) {
+    const { data, error } = await supabase.rpc('admin_revoke_point_transaction', { p_txid: txId })
+    if (error) throw error
+    return data
+  },
+
   // Top-N jemaat dengan poin terbanyak (via fungsi definer — RLS users
   // tidak mengizinkan jemaat membaca baris jemaat lain).
   async getLeaderboard(limit = 10) {

@@ -3234,3 +3234,34 @@ DROP TRIGGER IF EXISTS trg_guard_single_komsel_leader ON komsel_leaders;
 CREATE TRIGGER trg_guard_single_komsel_leader
   BEFORE INSERT ON komsel_leaders
   FOR EACH ROW EXECUTE FUNCTION guard_single_komsel_leader();
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v61: RPC hapus (revoke) poin oleh admin — halaman Distribusi ─
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-10): admin (ber-Hak-Akses `/admin/distribusi-poin`)
+-- boleh MENGHAPUS poin yang sudah didapat seorang jemaat (mis. poin salah/dobel
+-- dari bug lama). "Hapus" di sini = pembalik (reversal) yang menurunkan saldo
+-- sebesar poin itu dan mencatat transaksi penyesuaian — TIDAK menghapus baris
+-- asli, agar jejak audit tetap ada. Poin hanya bisa ditulis lewat apply_points
+-- (SECURITY DEFINER), jadi ini RPC tepercaya, bukan tulis klien langsung.
+-- Deskripsi 'Penyesuaian poin oleh admin' ditampilkan UI sebagai "Dikurangi oleh
+-- sistem" (detail koreksi tidak dipamerkan).
+CREATE OR REPLACE FUNCTION admin_revoke_point_transaction(p_txid TEXT) RETURNS jsonb
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_uid TEXT;
+  v_amt INT;
+BEGIN
+  IF NOT (auth_user_role() = 'Super Admin' OR auth_admin_can('/admin/distribusi-poin')) THEN
+    RAISE EXCEPTION 'not_authorized';
+  END IF;
+  SELECT user_id, amount INTO v_uid, v_amt
+    FROM point_transactions WHERE transaction_id = p_txid;
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'tx_not_found'; END IF;
+  -- Hanya poin yang DIDAPAT (positif) yang boleh dihapus, bukan penukaran/koreksi.
+  IF v_amt <= 0 THEN RAISE EXCEPTION 'only_earned_points'; END IF;
+  PERFORM apply_points(v_uid, -v_amt, 'Penyesuaian poin oleh admin');
+  RETURN jsonb_build_object('ok', true, 'user_id', v_uid, 'amount', -v_amt);
+END $$;
+REVOKE EXECUTE ON FUNCTION admin_revoke_point_transaction(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION admin_revoke_point_transaction(TEXT) TO authenticated;
