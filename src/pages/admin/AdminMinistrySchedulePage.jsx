@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import {
-  CalendarClock, Download, FileSpreadsheet, Plus, Trash2, ArrowLeft, Users, MapPin, AlertTriangle,
+  CalendarClock, Download, FileSpreadsheet, Plus, Trash2, ArrowLeft, Users, MapPin, AlertTriangle, Search,
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { ministryScheduleService } from '@/services/ministryScheduleService'
-import { ministriesService, appSettingsService } from '@/services/contentService'
+import { appSettingsService } from '@/services/contentService'
 import { Card, PageHeader, Input, Button, Spinner, EmptyState, Badge, Avatar, Checkbox } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
@@ -24,13 +24,18 @@ export default function AdminMinistrySchedulePage() {
   const { t } = useLang()
 
   const [date, setDate] = useState(todayISO())
-  const [ministries, setMinistries] = useState([])
-  const [schedules, setSchedules] = useState([]) // jadwal pada tanggal ini
+  const [schedules, setSchedules] = useState([]) // sesi pada tanggal ini
   const [loading, setLoading] = useState(true)
 
-  // Panel detail satu jadwal.
+  // Form buka sesi baru.
+  const [newLabel, setNewLabel] = useState('')
+  const [newTime, setNewTime] = useState('09:00')
+  const [creating, setCreating] = useState(false)
+
+  // Panel detail satu sesi.
   const [selected, setSelected] = useState(null) // schedule object
-  const [members, setMembers] = useState([])
+  const [members, setMembers] = useState([]) // kandidat roster (peran pelayanan)
+  const [memberQuery, setMemberQuery] = useState('')
   const [assigned, setAssigned] = useState([]) // user_id[]
   const [startTime, setStartTime] = useState('09:00')
   const [qr, setQr] = useState('')
@@ -41,30 +46,40 @@ export default function AdminMinistrySchedulePage() {
 
   function loadList() {
     setLoading(true)
-    Promise.all([
-      ministriesService.getAll().catch(() => []),
-      ministryScheduleService.listByDate(date).catch(() => []),
-    ])
-      .then(([mins, schs]) => { setMinistries(mins || []); setSchedules(schs || []) })
+    ministryScheduleService.listByDate(date).catch(() => [])
+      .then(schs => setSchedules(schs || []))
       .finally(() => setLoading(false))
   }
   useEffect(loadList, [date])
 
-  const scheduleByMinistry = Object.fromEntries(schedules.map(s => [s.ministry_id, s]))
+  // Cari kandidat roster (debounce) saat panel sesi terbuka.
+  useEffect(() => {
+    if (!selected) return
+    const id = setTimeout(() => {
+      ministryScheduleService.listAssignableUsers(memberQuery).then(setMembers).catch(() => {})
+    }, 250)
+    return () => clearTimeout(id)
+  }, [memberQuery, selected])
 
-  async function handleCreate(ministry) {
+  async function handleCreate() {
+    const label = newLabel.trim()
+    if (!label) { toast.error(t('apel.labelRequired')); return }
+    setCreating(true)
     try {
       const sched = await ministryScheduleService.create({
-        ministryId: ministry.ministry_id,
+        label,
         serviceDate: date,
-        startTime: '09:00',
+        startTime: newTime || '09:00',
         createdBy: profile.user_id,
       })
       toast.success(t('apel.created'))
+      setNewLabel('')
       loadList()
       openSchedule(sched)
     } catch (err) {
       toast.error(err.message || t('apel.createFailed'))
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -74,7 +89,7 @@ export default function AdminMinistrySchedulePage() {
     setStartTime((sched.start_time || '09:00').slice(0, 5))
     try {
       const [mem, asg, att, late, qrUrl] = await Promise.all([
-        ministryScheduleService.listMinistryMembers(sched.ministry_id).catch(() => []),
+        ministryScheduleService.listAssignableUsers('').catch(() => []),
         ministryScheduleService.getAssignments(sched.schedule_id).catch(() => []),
         ministryScheduleService.getAttendance(sched.schedule_id).catch(() => []),
         ministryScheduleService.getMonthlyLateCounts(ymOf(sched.service_date)).catch(() => ({})),
@@ -88,7 +103,7 @@ export default function AdminMinistrySchedulePage() {
 
   function closePanel() {
     setSelected(null)
-    setMembers([]); setAssigned([]); setAttendance([]); setQr(''); setLateCounts({})
+    setMembers([]); setAssigned([]); setAttendance([]); setQr(''); setLateCounts({}); setMemberQuery('')
     loadList()
   }
 
@@ -135,9 +150,9 @@ export default function AdminMinistrySchedulePage() {
   async function exportXlsx() {
     if (attendance.length === 0) { toast.info(t('apel.exportEmpty')); return }
     await downloadXlsx({
-      filename: `pelayanan-${selected.ministries?.name || ''}-${selected.service_date}.xlsx`,
+      filename: `pelayanan-${selected.label || ''}-${selected.service_date}.xlsx`,
       sheetName: 'Absen Pelayanan',
-      titleLines: ['ESC Siantan', 'Absen Pelayanan Minggu', `${selected.ministries?.name || ''} — ${formatDate(selected.service_date)}`],
+      titleLines: ['ESC Siantan', 'Absen Pelayanan Minggu', `${selected.label || ''} — ${formatDate(selected.service_date)}`],
       headers: ['Nama', 'No. HP', 'Waktu Scan', 'Status', 'Lokasi', 'Jarak (m)'],
       rows: attendance.map(r => [
         r.users?.name || '-',
@@ -162,7 +177,7 @@ export default function AdminMinistrySchedulePage() {
         <Card className="p-4 mb-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-base font-semibold text-gray-900">{selected.ministries?.name || '-'}</p>
+              <p className="text-base font-semibold text-gray-900">{selected.label || '-'}</p>
               <p className="text-xs text-gray-400">{formatDate(selected.service_date)}</p>
             </div>
             <button onClick={() => handleDelete(selected)} className="p-2 text-gray-400 hover:text-red-500">
@@ -184,6 +199,14 @@ export default function AdminMinistrySchedulePage() {
               <div className="flex items-center gap-2 mb-3">
                 <Users size={16} className="text-brand-500" />
                 <p className="text-sm font-semibold text-gray-900">{t('apel.assignTitle')} ({assigned.length})</p>
+              </div>
+              <div className="mb-2.5">
+                <Input
+                  icon={Search}
+                  placeholder={t('apel.searchAssignee')}
+                  value={memberQuery}
+                  onChange={e => setMemberQuery(e.target.value)}
+                />
               </div>
               {members.length === 0 ? (
                 <p className="text-sm text-gray-400">{t('apel.noMembers')}</p>
@@ -269,7 +292,7 @@ export default function AdminMinistrySchedulePage() {
     )
   }
 
-  // ── Daftar: pilih tanggal → ministry (buat/buka jadwal) ──
+  // ── Daftar: pilih tanggal → buka sesi berlabel & kelola ──
   return (
     <div className="max-w-2xl">
       <PageHeader title={t('apel.title')} subtitle={t('apel.subtitle')} />
@@ -277,36 +300,42 @@ export default function AdminMinistrySchedulePage() {
       {profile?.role === 'Super Admin' && <GeoConfigCard t={t} toast={toast} />}
 
       <Card className="p-4 mb-4">
-        <div className="max-w-xs">
+        <div className="max-w-xs mb-4">
           <Input label={t('apel.date')} type="date" value={date} onChange={e => setDate(e.target.value)} />
+        </div>
+        {/* Buka sesi baru: label bebas (mis. "Minggu 1") + jam mulai. */}
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <Input label={t('apel.labelField')} placeholder={t('apel.labelPlaceholder')} value={newLabel} onChange={e => setNewLabel(e.target.value)} />
+          </div>
+          <div className="w-28">
+            <Input label={t('apel.startTime')} type="time" value={newTime} onChange={e => setNewTime(e.target.value)} />
+          </div>
+          <Button loading={creating} onClick={handleCreate}><Plus size={15} /> {t('apel.openSession')}</Button>
         </div>
       </Card>
 
       {loading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
-      ) : ministries.length === 0 ? (
-        <EmptyState icon={Users} title={t('apel.noMinistry')} description={t('apel.noMinistryDesc')} />
+      ) : schedules.length === 0 ? (
+        <EmptyState icon={CalendarClock} title={t('apel.noSessions')} description={t('apel.noSessionsDesc')} />
       ) : (
         <Card className="divide-y divide-gray-100">
-          {ministries.map(m => {
-            const sched = scheduleByMinistry[m.ministry_id]
-            return (
-              <div key={m.ministry_id} className="flex items-center gap-3 p-3.5">
-                <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
-                  <Users size={16} className="text-brand-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                  {sched && <p className="text-[11px] text-gray-400">{t('apel.startAt', { time: (sched.start_time || '').slice(0, 5) })}</p>}
-                </div>
-                {sched ? (
-                  <Button size="sm" variant="outline" onClick={() => openSchedule(sched)}>{t('apel.open')}</Button>
-                ) : (
-                  <Button size="sm" onClick={() => handleCreate(m)}><Plus size={14} /> {t('apel.create')}</Button>
-                )}
+          {schedules.map(sched => (
+            <div key={sched.schedule_id} className="flex items-center gap-3 p-3.5">
+              <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+                <CalendarClock size={16} className="text-brand-500" />
               </div>
-            )
-          })}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{sched.label || '-'}</p>
+                <p className="text-[11px] text-gray-400">{t('apel.startAt', { time: (sched.start_time || '').slice(0, 5) })}</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => openSchedule(sched)}>{t('apel.open')}</Button>
+              <button onClick={() => handleDelete(sched)} className="p-2 text-gray-400 hover:text-red-500">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
         </Card>
       )}
     </div>

@@ -37,11 +37,13 @@ export const ministryScheduleService = {
     return data
   },
 
-  async create({ ministryId, serviceDate, startTime, createdBy }) {
+  // Buka sesi pelayanan berlabel (mis. "Minggu 1"). Sejak v58 lepas dari
+  // ministry — ministry_id sengaja NULL, unit organisasi = label + tanggal.
+  async create({ label, serviceDate, startTime, createdBy }) {
     const { data, error } = await supabase
       .from('ministry_schedules')
-      .insert({ ministry_id: ministryId, service_date: serviceDate, start_time: startTime, created_by: createdBy })
-      .select('*, ministries(name)')
+      .insert({ label, ministry_id: null, service_date: serviceDate, start_time: startTime, created_by: createdBy })
+      .select('*')
       .single()
     if (error) throw error
     return data
@@ -63,17 +65,22 @@ export const ministryScheduleService = {
     if (error) throw error
   },
 
-  // Volunteer yang bisa ditugaskan = anggota ministry ybs (user_ministries).
-  async listMinistryMembers(ministryId) {
-    const { data, error } = await supabase
-      .from('user_ministries')
-      .select('user_id, users(user_id, name, photo_url, role, role_secondary)')
-      .eq('ministry_id', ministryId)
+  // Kandidat roster sesi = jemaat aktif yang punya peran pelayanan (Volunteer,
+  // PKS, Admin, Super Admin — lewat role, role_secondary, atau is_pks). Sejak
+  // v58 roster bebas lintas ministry, admin memasukkan "nama siapa saja yang
+  // melayani". `query` opsional untuk filter nama.
+  async listAssignableUsers(query = '') {
+    let q = supabase
+      .from('users')
+      .select('user_id, name, photo_url, role, role_secondary, is_pks')
+      .eq('status', 'Aktif')
+      .or('role.in.(Volunteer,PKS,Admin,"Super Admin"),role_secondary.in.(Volunteer,PKS,Admin,"Super Admin"),is_pks.eq.true')
+      .order('name', { ascending: true })
+      .limit(50)
+    if (query) q = q.ilike('name', `%${query}%`)
+    const { data, error } = await q
     if (error) throw error
-    return (data || [])
-      .map(r => r.users)
-      .filter(Boolean)
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    return data || []
   },
 
   async getAssignments(scheduleId) {
@@ -131,7 +138,7 @@ export const ministryScheduleService = {
   async listMySchedules(userId) {
     const { data: asg, error: e1 } = await supabase
       .from('ministry_schedule_assignments')
-      .select('schedule_id, ministry_schedules(schedule_id, service_date, start_time, ministries(name))')
+      .select('schedule_id, ministry_schedules(schedule_id, service_date, start_time, label, ministries(name))')
       .eq('user_id', userId)
     if (e1) throw e1
     const scheds = (asg || []).map(r => r.ministry_schedules).filter(Boolean)

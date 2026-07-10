@@ -70,7 +70,7 @@ export default function MyMinistryScheduleCard() {
               return (
                 <div key={s.schedule_id} className="flex items-center gap-3 rounded-xl border border-gray-100 px-3 py-2.5">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{s.ministries?.name || '-'}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">{s.label || s.ministries?.name || '-'}</p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {formatDate(s.service_date)}{time ? ` · ${t('apel.startAt', { time })}` : ''}
                     </p>

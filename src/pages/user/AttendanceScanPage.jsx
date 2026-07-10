@@ -189,7 +189,7 @@ export default function AttendanceScanPage() {
   async function handleVolunteer(scheduleId) {
     try {
       const sched = await ministryScheduleService.getById(scheduleId)
-      const label = sched.ministries?.name || 'Pelayanan'
+      const label = sched.label || sched.ministries?.name || 'Pelayanan'
       const pos = await getPosition()
       try {
         const rec = await ministryScheduleService.checkIn(scheduleId, profile.user_id, pos)
