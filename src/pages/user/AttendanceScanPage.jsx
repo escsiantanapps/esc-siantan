@@ -19,20 +19,6 @@ const REDEEM_PREFIX = 'ESC-REDEEM:'
 const MEMBER_PREFIX = 'ESC-MEMBER:'
 const VOLUNTEER_PREFIX = 'ESC-VOLUNTEER:'
 
-// Ambil posisi GPS (best-effort, soft-log). Tidak memblokir absen: kalau izin
-// ditolak/timeout/GPS tak akurat, kembalikan {lat:null,lng:null} — server tetap
-// mencatat kehadiran, hanya menandai location_flag='Tidak Tersedia'.
-function getPosition() {
-  return new Promise(resolve => {
-    if (!navigator?.geolocation) return resolve({ lat: null, lng: null })
-    navigator.geolocation.getCurrentPosition(
-      p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => resolve({ lat: null, lng: null }),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
-    )
-  })
-}
-
 export default function AttendanceScanPage() {
   const { profile, isAdmin, isPKS } = useAuth()
   const navigate = useNavigate()
@@ -176,7 +162,7 @@ export default function AttendanceScanPage() {
     } else if (text.startsWith(VOLUNTEER_PREFIX)) {
       await handleVolunteer(text.slice(VOLUNTEER_PREFIX.length))
     } else if (text.startsWith(SUNDAY_PREFIX)) {
-      await handleSunday()
+      await handleSunday(text.slice(SUNDAY_PREFIX.length))
     } else if (text.startsWith(MEMBER_PREFIX)) {
       await handleMember(text.slice(MEMBER_PREFIX.length))
     } else {
@@ -184,15 +170,13 @@ export default function AttendanceScanPage() {
     }
   }
 
-  // Absen Pelayanan Minggu (Volunteer terjadwal). Geolokasi soft-log: diminta
-  // best-effort, tidak memblokir. Status telat & jarak dihitung server.
+  // Absen Pelayanan Minggu (Volunteer terjadwal). Status telat dihitung server.
   async function handleVolunteer(scheduleId) {
     try {
       const sched = await ministryScheduleService.getById(scheduleId)
       const label = sched.label || sched.ministries?.name || 'Pelayanan'
-      const pos = await getPosition()
       try {
-        const rec = await ministryScheduleService.checkIn(scheduleId, profile.user_id, pos)
+        const rec = await ministryScheduleService.checkIn(scheduleId, profile.user_id)
         const late = rec.status === 'Terlambat'
         setResult({
           type: late ? 'duplicate' : 'success',
@@ -281,12 +265,29 @@ export default function AttendanceScanPage() {
     }
   }
 
-  async function handleSunday() {
+  // Absen ibadah minggu. QR kini berisi session_id acak (bukan tanggal statis
+  // seperti dulu) — anti-curang v63. Pra-cek sesi di klien untuk pesan yang
+  // jelas; gerbang sebenarnya = policy insert sunday_attendance di DB.
+  async function handleSunday(sessionId) {
+    if (!sessionId) {
+      setResult({ type: 'error', message: 'QR ibadah tidak valid. Minta petugas menampilkan QR ibadah terbaru.' })
+      return
+    }
     try {
-      await pointsService.checkInSunday(profile.user_id)
+      const sess = await pointsService.getSundaySession(sessionId)
+      if (!sess) {
+        setResult({ type: 'error', message: 'Sesi ibadah tidak ditemukan. QR mungkin sudah kedaluwarsa — minta petugas membuka ulang.' })
+        return
+      }
+      if (new Date(sess.expires_at).getTime() < Date.now()) {
+        setResult({ type: 'error', message: 'Sesi ibadah sudah berakhir. Minta petugas menampilkan QR ibadah terbaru.' })
+        return
+      }
+      await pointsService.checkInSunday(profile.user_id, sessionId)
       setResult({ type: 'success', message: 'Kehadiran ibadah minggu tercatat. +1 poin! 🎉' })
     } catch (err) {
-      setResult({ type: 'duplicate', message: err.message || 'Kehadiran ibadah hari ini sudah tercatat.' })
+      const dup = /sudah tercatat/i.test(err.message || '')
+      setResult({ type: dup ? 'duplicate' : 'error', message: err.message || 'Gagal mencatat kehadiran ibadah.' })
     }
   }
 

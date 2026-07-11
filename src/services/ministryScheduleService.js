@@ -155,12 +155,12 @@ export const ministryScheduleService = {
       .sort((a, b) => (b.service_date || '').localeCompare(a.service_date || ''))
   },
 
-  // Self-scan volunteer (dipanggil dari AttendanceScanPage). lat/lng opsional
-  // (soft-log); status telat & jarak dihitung trigger DB.
-  async checkIn(scheduleId, userId, { lat = null, lng = null } = {}) {
+  // Self-scan volunteer (dipanggil dari AttendanceScanPage). Status telat
+  // dihitung trigger DB. Geolocation dihapus (keputusan operator 2026-07-11).
+  async checkIn(scheduleId, userId) {
     const { data, error } = await supabase
       .from('ministry_attendance')
-      .insert({ schedule_id: scheduleId, user_id: userId, lat, lng })
+      .insert({ schedule_id: scheduleId, user_id: userId })
       .select()
       .single()
     if (error) {

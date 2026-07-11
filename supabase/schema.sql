@@ -3325,3 +3325,95 @@ DROP POLICY IF EXISTS "rdn_delete" ON reading_notes;
 CREATE POLICY "rdn_delete" ON reading_notes FOR DELETE USING (
   user_id = auth_user_id() OR auth_user_role() IN ('Admin', 'Super Admin')
 );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v63: Sesi QR ibadah minggu (anti-curang absen jemaat) ─────
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (operator, 2026-07-11): QR ibadah lama STATIS (ESC-SUNDAY:<tanggal>).
+-- Isinya bisa ditebak/difoto/dibagikan, jadi jemaat bisa "absen" dari rumah
+-- tanpa hadir fisik. Percobaan geofence GPS DITOLAK operator (koordinat bisa
+-- di-spoof + berisiko mengunci jemaat ber-GPS jelek/izin ditolak).
+--
+-- KEPUTUSAN OPERATOR: QR ibadah diganti TOKEN SESI ACAK + JENDELA WAKTU (pola
+-- komsel_sessions, diperkuat kolom expires_at). Admin "membuka sesi" saat
+-- ibadah → QR berisi session_id acak (ESC-SUNDAY:<session_id>) yang hanya
+-- valid sampai expires_at. Absen DITOLAK DB bila: tak menyertakan session_id,
+-- sesi bukan hari ini (WIB), atau sesi sudah kedaluwarsa. Ini menaikkan biaya
+-- curang (format tak bisa ditebak & QR lama mati). BATAS NYATA yang diterima
+-- operator: foto QR live yang dibagikan SELAMA jendela masih bisa tembus —
+-- risiko sisa dari model self-scan (alternatif "petugas scan jemaat" ditolak).
+
+CREATE TABLE IF NOT EXISTS sunday_sessions (
+  session_id   TEXT PRIMARY KEY DEFAULT 'SSES-' || replace(gen_random_uuid()::text, '-', ''),
+  service_date DATE NOT NULL DEFAULT (current_timestamp AT TIME ZONE 'Asia/Jakarta')::date,
+  title        TEXT,
+  opened_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at   TIMESTAMPTZ NOT NULL DEFAULT now() + interval '3 hours',
+  created_by   TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sunday_sessions_active ON sunday_sessions (service_date, expires_at);
+ALTER TABLE sunday_sessions ENABLE ROW LEVEL SECURITY;
+-- Baca: semua user login (dibutuhkan validasi saat jemaat scan QR).
+DROP POLICY IF EXISTS "ssess_read" ON sunday_sessions;
+CREATE POLICY "ssess_read" ON sunday_sessions FOR SELECT USING (auth.uid() IS NOT NULL);
+-- Tulis (buka/tutup sesi): Admin ber-Hak-Akses `/admin/ibadah-minggu`
+-- (Super Admin selalu lolos). Jemaat TIDAK boleh membuat sesi sendiri.
+DROP POLICY IF EXISTS "ssess_write" ON sunday_sessions;
+CREATE POLICY "ssess_write" ON sunday_sessions FOR ALL
+  USING (auth_admin_can('/admin/ibadah-minggu'))
+  WITH CHECK (auth_admin_can('/admin/ibadah-minggu'));
+
+-- Kaitkan kehadiran ibadah ke sesi. Kolom nullable demi baris LAMA, tapi
+-- policy insert baru mewajibkan sesi valid → baris baru mustahil tanpa sesi.
+ALTER TABLE sunday_attendance
+  ADD COLUMN IF NOT EXISTS session_id TEXT REFERENCES sunday_sessions(session_id) ON DELETE SET NULL;
+
+-- Perketat INSERT: wajib menunjuk sesi milik HARI INI (WIB) yang BELUM
+-- kedaluwarsa. Menggantikan aturan dow=0 lama — gerbang farming kini =
+-- keberadaan sesi yang HANYA Admin buka, sehingga ibadah non-Minggu
+-- (Natal/Jumat Agung) tetap bisa diabsenkan tanpa membuka celah poin.
+DROP POLICY IF EXISTS "sunday_att_insert" ON sunday_attendance;
+CREATE POLICY "sunday_att_insert" ON sunday_attendance FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND attendance_date = (current_timestamp AT TIME ZONE 'Asia/Jakarta')::date
+  AND EXISTS (
+    SELECT 1 FROM sunday_sessions s
+    WHERE s.session_id = sunday_attendance.session_id
+      AND s.service_date = (current_timestamp AT TIME ZONE 'Asia/Jakarta')::date
+      AND now() <= s.expires_at
+  )
+);
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v64: Hapus geolocation Absen Pelayanan ────────────────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-11): Fitur geolokasi soft-log pada Absen
+-- Pelayanan (v55) dicabut — koordinat bisa di-spoof & tak dipakai untuk
+-- keputusan apa pun, jadi hanya menambah kebisingan. Klien berhenti mengirim
+-- lat/lng dan panel koordinat gereja di Admin dihapus.
+--
+-- Trigger stamp disederhanakan: hanya menetapkan scanned_at & status telat.
+-- Kolom lat/lng/distance_m/location_flag DIBIARKAN ADA (nullable, selalu NULL
+-- untuk baris baru) demi menjaga baris lama & sifat append-only — tidak
+-- di-DROP untuk menghindari kehilangan data historis.
+CREATE OR REPLACE FUNCTION ministry_attendance_stamp() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_start   time;
+  v_now_wib timestamp;
+BEGIN
+  SELECT start_time INTO v_start FROM ministry_schedules WHERE schedule_id = NEW.schedule_id;
+  v_now_wib := (now() AT TIME ZONE 'Asia/Jakarta');
+  NEW.scanned_at := now();
+
+  -- Status telat: grace 5 menit (keputusan operator 2026-07-10).
+  IF v_start IS NOT NULL AND v_now_wib::time > (v_start + interval '5 minutes') THEN
+    NEW.status := 'Terlambat';
+  ELSE
+    NEW.status := 'Tepat Waktu';
+  END IF;
+
+  -- Geolocation dicabut (v64): jangan hitung/isi lat/lng/distance/flag.
+  RETURN NEW;
+END $$;

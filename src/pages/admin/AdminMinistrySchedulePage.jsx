@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import {
-  CalendarClock, Download, FileSpreadsheet, Plus, Trash2, ArrowLeft, Users, MapPin, AlertTriangle, Search,
+  CalendarClock, Download, FileSpreadsheet, Plus, Trash2, ArrowLeft, Users, AlertTriangle, Search,
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { ministryScheduleService } from '@/services/ministryScheduleService'
-import { appSettingsService } from '@/services/contentService'
 import { Card, PageHeader, Input, Button, Spinner, EmptyState, Badge, Avatar, Checkbox } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
@@ -153,14 +152,12 @@ export default function AdminMinistrySchedulePage() {
       filename: `pelayanan-${selected.label || ''}-${selected.service_date}.xlsx`,
       sheetName: 'Absen Pelayanan',
       titleLines: ['ESC Siantan', 'Absen Pelayanan Minggu', `${selected.label || ''} — ${formatDate(selected.service_date)}`],
-      headers: ['Nama', 'No. HP', 'Waktu Scan', 'Status', 'Lokasi', 'Jarak (m)'],
+      headers: ['Nama', 'No. HP', 'Waktu Scan', 'Status'],
       rows: attendance.map(r => [
         r.users?.name || '-',
         r.users?.phone || '',
         formatDate(r.scanned_at, 'HH:mm'),
         r.status,
-        r.location_flag || '-',
-        r.distance_m ?? '-',
       ]),
     })
   }
@@ -273,11 +270,6 @@ export default function AdminMinistrySchedulePage() {
                         </div>
                         <p className="text-[11px] text-gray-400 flex items-center gap-1">
                           {formatDate(r.scanned_at, 'HH:mm')}
-                          {r.location_flag && r.location_flag !== 'Tidak Tersedia' && (
-                            <span className={`inline-flex items-center gap-0.5 ${r.location_flag === 'Di Luar Radius' ? 'text-amber-600' : 'text-gray-400'}`}>
-                              · <MapPin size={10} /> {r.location_flag}{r.distance_m != null ? ` (${r.distance_m}m)` : ''}
-                            </span>
-                          )}
                         </p>
                       </div>
                       <Badge color={r.status === 'Terlambat' ? 'red' : 'green'}>{r.status}</Badge>
@@ -296,8 +288,6 @@ export default function AdminMinistrySchedulePage() {
   return (
     <div className="max-w-2xl">
       <PageHeader title={t('apel.title')} subtitle={t('apel.subtitle')} />
-
-      {profile?.role === 'Super Admin' && <GeoConfigCard t={t} toast={toast} />}
 
       <Card className="p-4 mb-4">
         <div className="max-w-xs mb-4">
@@ -339,54 +329,5 @@ export default function AdminMinistrySchedulePage() {
         </Card>
       )}
     </div>
-  )
-}
-
-// Konfigurasi koordinat gereja (geolocation soft-log). Super Admin only —
-// app_settings kunci sembarang hanya boleh ditulis Super Admin (RLS).
-function GeoConfigCard({ t, toast }) {
-  const [lat, setLat] = useState('')
-  const [lng, setLng] = useState('')
-  const [radius, setRadius] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    appSettingsService.getMany(['church_lat', 'church_lng', 'church_radius_m'])
-      .then(v => {
-        setLat(v.church_lat != null ? String(v.church_lat) : '')
-        setLng(v.church_lng != null ? String(v.church_lng) : '')
-        setRadius(v.church_radius_m != null ? String(v.church_radius_m) : '')
-      })
-      .catch(() => {})
-  }, [])
-
-  async function save() {
-    setSaving(true)
-    try {
-      await appSettingsService.set('church_lat', lat.trim())
-      await appSettingsService.set('church_lng', lng.trim())
-      await appSettingsService.set('church_radius_m', radius.trim() || '200')
-      toast.success(t('apel.geoSaved'))
-    } catch (err) {
-      toast.error(err.message || t('apel.geoSaveFailed'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Card className="p-4 mb-4">
-      <div className="flex items-center gap-2 mb-1">
-        <MapPin size={16} className="text-brand-500" />
-        <p className="text-sm font-semibold text-gray-900">{t('apel.geoTitle')}</p>
-      </div>
-      <p className="text-[11px] text-gray-400 mb-3">{t('apel.geoHint')}</p>
-      <div className="grid grid-cols-2 gap-3">
-        <Input label={t('apel.geoLat')} value={lat} onChange={e => setLat(e.target.value)} placeholder="-0.026" />
-        <Input label={t('apel.geoLng')} value={lng} onChange={e => setLng(e.target.value)} placeholder="109.34" />
-        <Input label={t('apel.geoRadius')} type="number" value={radius} onChange={e => setRadius(e.target.value)} placeholder="200" />
-      </div>
-      <Button size="sm" variant="outline" className="w-full mt-3" loading={saving} onClick={save}>{t('apel.geoSave')}</Button>
-    </Card>
   )
 }

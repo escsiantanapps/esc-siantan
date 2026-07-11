@@ -148,13 +148,55 @@ export const pointsService = {
   },
 
   // ── Kehadiran Ibadah Minggu (QR harian: ESC-SUNDAY:<YYYY-MM-DD>) ──
-  async checkInSunday(userId) {
+  // ── Sesi QR ibadah minggu (ESC-SUNDAY:<session_id>) — Migrasi v63 ──
+  // Anti-curang: QR statis lama diganti token sesi acak + jendela waktu.
+  // Absen ditolak DB (42501) bila sesi tak valid / bukan hari ini / kedaluwarsa.
+  async checkInSunday(userId, sessionId) {
     const { data, error } = await supabase.from('sunday_attendance')
-      .insert({ user_id: userId }).select().single()
+      .insert({ user_id: userId, session_id: sessionId }).select().single()
     if (error) {
       if (error.code === '23505') throw new Error('Kehadiran ibadah hari ini sudah tercatat.')
+      if (error.code === '42501' || /row-level security/i.test(error.message || '')) {
+        throw new Error('Sesi ibadah tidak aktif atau sudah berakhir. Minta petugas menampilkan QR ibadah terbaru.')
+      }
       throw error
     }
+    return data
+  },
+
+  async getSundaySession(sessionId) {
+    const { data, error } = await supabase.from('sunday_sessions')
+      .select('*').eq('session_id', sessionId).maybeSingle()
+    if (error) throw error
+    return data
+  },
+
+  // Sesi aktif (belum kedaluwarsa) untuk hari ini WIB. Dipakai Admin agar tak
+  // membuat sesi ganda — QR yang sama dipakai ulang sepanjang jendela waktu.
+  async getActiveSundaySession() {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
+    const { data, error } = await supabase.from('sunday_sessions')
+      .select('*').eq('service_date', today).gte('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false }).limit(1)
+    if (error) throw error
+    return data?.[0] || null
+  },
+
+  async openSundaySession(createdBy, { title = null, durationMin = 180 } = {}) {
+    const existing = await this.getActiveSundaySession()
+    if (existing) return existing
+    const expires = new Date(Date.now() + durationMin * 60000).toISOString()
+    const { data, error } = await supabase.from('sunday_sessions')
+      .insert({ created_by: createdBy, title, expires_at: expires }).select().single()
+    if (error) throw error
+    return data
+  },
+
+  // Tutup sesi lebih awal = set kedaluwarsa ke sekarang (scan berikutnya ditolak).
+  async closeSundaySession(sessionId) {
+    const { data, error } = await supabase.from('sunday_sessions')
+      .update({ expires_at: new Date().toISOString() }).eq('session_id', sessionId).select().single()
+    if (error) throw error
     return data
   },
 
