@@ -19,6 +19,8 @@ export default function AdminResponsesPage() {
   const [formId, setFormId] = useState(() => new URLSearchParams(window.location.search).get('form') || '')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [search, setSearch] = useState('')       // input mentah pencarian nama
+  const [userQuery, setUserQuery] = useState('')  // versi ter-debounce (dikirim ke server)
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState(null)   // respon yang sedang dibuka
   const [deletingId, setDeletingId] = useState(null)
@@ -28,6 +30,12 @@ export default function AdminResponsesPage() {
     tasksService.getTemplates().then(setTemplates).catch(() => {})
   }, [])
 
+  // Debounce pencarian nama 350ms agar tak query tiap ketikan.
+  useEffect(() => {
+    const id = setTimeout(() => { setUserQuery(search.trim()); setPage(1) }, 350)
+    return () => clearTimeout(id)
+  }, [search])
+
   useEffect(() => {
     setLoading(true)
     tasksService.getResponsesGlobal({
@@ -35,14 +43,15 @@ export default function AdminResponsesPage() {
       formId: formId || null,
       startDate: startDate || null,
       endDate: endDate ? `${endDate}T23:59:59` : null,
+      userQuery: userQuery || null,
     })
       .then(({ data, count }) => { setResponses(data || []); setCount(count || 0) })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [page, formId, startDate, endDate])
+  }, [page, formId, startDate, endDate, userQuery])
 
   function resetFilter() {
-    setFormId(''); setStartDate(''); setEndDate(''); setPage(1)
+    setFormId(''); setStartDate(''); setEndDate(''); setSearch(''); setUserQuery(''); setPage(1)
   }
 
   async function handleDelete(r) {
@@ -68,7 +77,7 @@ export default function AdminResponsesPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(count / LIMIT))
-  const filterActive = !!(formId || startDate || endDate)
+  const filterActive = !!(formId || startDate || endDate || userQuery)
 
   // Render satu nilai field sesuai tipenya (link utk file/gambar).
   function renderValue(field, val) {
@@ -90,6 +99,12 @@ export default function AdminResponsesPage() {
 
       {/* Filter */}
       <Card className="p-4 mb-4 space-y-3">
+        <Input
+          label={t('aresp.searchUser')}
+          placeholder={t('aresp.searchUserPlaceholder')}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
         <Select label={t('aresp.filterForm')} value={formId} onChange={e => { setFormId(e.target.value); setPage(1) }}>
           <option value="">{t('aresp.allForms')}</option>
           {templates.map(tpl => <option key={tpl.form_id} value={tpl.form_id}>{tpl.title}</option>)}

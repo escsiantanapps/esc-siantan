@@ -201,14 +201,19 @@ export const tasksService = {
   // Respon GLOBAL lintas semua form/SOP — untuk halaman Admin "Respon SOP".
   // Join form_templates (judul + fields_json utk render detail) dan users (nama).
   // Kedua relasi punya satu FK saja dari form_responses → tidak ambigu.
-  async getResponsesGlobal({ page = 1, limit = 20, formId = null, startDate = null, endDate = null } = {}) {
+  async getResponsesGlobal({ page = 1, limit = 20, formId = null, startDate = null, endDate = null, userQuery = null } = {}) {
     const from = (page - 1) * limit
+    // Saat ada pencarian nama, pakai INNER join + ilike agar filter menyaring baris
+    // form_responses (bukan cuma data embed). Tanpa pencarian pakai LEFT join biasa
+    // supaya respon yatim (user sudah dihapus) tetap tampil.
+    const userJoin = userQuery ? 'users!inner(name, role)' : 'users(name, role)'
     let query = supabase
       .from('form_responses')
-      .select('*, users(name, role), form_templates(title, fields_json)', { count: 'exact' })
+      .select(`*, ${userJoin}, form_templates(title, fields_json)`, { count: 'exact' })
     if (formId) query = query.eq('form_id', formId)
     if (startDate) query = query.gte('submitted_at', startDate)
     if (endDate) query = query.lte('submitted_at', endDate)
+    if (userQuery) query = query.ilike('users.name', `%${userQuery}%`)
     const { data, error, count } = await query
       .order('submitted_at', { ascending: false })
       .range(from, from + limit - 1)

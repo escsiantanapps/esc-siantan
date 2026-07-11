@@ -721,7 +721,6 @@ export const translations = {
     'backup.tipBody': 'Setelah file terunduh, segera pindahkan ke hardisk eksternal, SSD, atau Google Drive sebagai cadangan permanen. Lakukan backup rutin minimal 1x sebulan.',
     'backup.exportTitle': 'Export Semua Data',
     'backup.exportDesc': '{count} tabel akan di-export ke satu file Excel (multi-sheet)',
-    'backup.exportBtn': 'Download Backup',
     'backup.exportBtnXlsx': 'Download Excel',
     'backup.exportBtnJson': 'Download JSON',
     'backup.formatHint': 'Excel untuk dibaca manusia. JSON menyimpan seluruh tipe data & relasi utuh — dipakai untuk pemulihan.',
@@ -999,6 +998,8 @@ export const translations = {
     // Admin — Respon SOP Rohani
     'aresp.title': 'Respon SOP Rohani',
     'aresp.subtitle': '{count} respon masuk',
+    'aresp.searchUser': 'Cari Jemaat',
+    'aresp.searchUserPlaceholder': 'Ketik nama jemaat...',
     'aresp.filterForm': 'Form / SOP',
     'aresp.allForms': 'Semua Form',
     'aresp.fromDate': 'Dari tanggal',
@@ -2014,7 +2015,6 @@ export const translations = {
     'backup.tipBody': 'After downloading, move the file to an external hard drive, SSD, or Google Drive as a permanent backup. Do this at least once a month.',
     'backup.exportTitle': 'Export All Data',
     'backup.exportDesc': '{count} tables will be exported to one Excel file (multi-sheet)',
-    'backup.exportBtn': 'Download Backup',
     'backup.exportBtnXlsx': 'Download Excel',
     'backup.exportBtnJson': 'Download JSON',
     'backup.formatHint': 'Excel for human reading. JSON preserves all data types & relations — used for restoring.',
@@ -2291,6 +2291,8 @@ export const translations = {
     // Admin — Spiritual SOP Responses
     'aresp.title': 'Spiritual SOP Responses',
     'aresp.subtitle': '{count} responses received',
+    'aresp.searchUser': 'Search Member',
+    'aresp.searchUserPlaceholder': 'Type a member name...',
     'aresp.filterForm': 'Form / SOP',
     'aresp.allForms': 'All Forms',
     'aresp.fromDate': 'From date',
