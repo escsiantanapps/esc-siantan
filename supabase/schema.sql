@@ -3458,3 +3458,45 @@ CREATE POLICY "task_files_insert" ON storage.objects
         AND auth_user_role() IN ('Admin','Super Admin'))
     )
   );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v66: Absen Pelayanan TANPA poin — cukup kehadiran ─────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-11): Absen Pelayanan Minggu (v55/v58) tidak lagi
+-- memberi +1 poin. Alasan: pelayanan adalah kewajiban/kedisiplinan, bukan
+-- aktivitas ber-reward seperti kehadiran ibadah/kelas/event/komsel. Kehadiran
+-- TETAP tercatat di ministry_attendance (status Tepat Waktu/Terlambat, geolokasi)
+-- — hanya pemberian poinnya yang dicabut.
+--
+-- Cara: cukup DROP trigger AFTER INSERT yang memanggil award_attendance_point
+-- pada ministry_attendance. Fungsi award_attendance_point TIDAK diubah (cabang
+-- 'ministry_attendance' di dalamnya menjadi kode mati/tak terpanggil — dibiarkan
+-- agar tidak menyentuh fungsi bersama yang rawan drift; cabang komsel/class/
+-- event/sunday tetap utuh). Idempotent: DROP TRIGGER IF EXISTS.
+--
+-- CATATAN: poin pelayanan yang TERLANJUR didapat sebelum migrasi ini TIDAK
+-- ditarik otomatis (bukan retroaktif). Bila perlu koreksi, pakai RPC
+-- admin_revoke_point_transaction (v61) per transaksi.
+DROP TRIGGER IF EXISTS trg_point_ministry_att ON ministry_attendance;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v67: Buang objek schema mati (dead code) ─────────────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-11): audit dead-schema menemukan 3 objek yang
+-- TIDAK dipakai kode maupun objek DB lain (policy/trigger/fungsi). Dibuang agar
+-- schema tidak menyimpan sisa fitur yang sudah dihapus. Semua DROP idempotent
+-- (IF EXISTS). Ketiganya diverifikasi nol-referensi sebelum dibuang:
+--
+--  (1) activation_otp — sisa fitur "aktivasi akun via OTP WhatsApp" yang sudah
+--      DIHAPUS (rute /aktivasi kini redirect ke /register, lihat App.jsx). Tabel
+--      RLS-enabled TANPA policy apa pun (tak bisa diakses via PostgREST), tanpa
+--      FK, tanpa referensi kode. Baris OTP basi (bila ada) ikut terhapus — tak
+--      dipakai lagi.
+--  (2) auth_user_komsel() — helper role lama, nol pemanggil (digantikan
+--      auth_leads_komsel() + kolom users.komsel_id langsung).
+--  (3) deduct_user_point(TEXT,INT) — pengurang poin lama, nol pemanggil di
+--      api/ maupun DB (pengurangan poin kini lewat apply_points(negatif) &
+--      admin_revoke_point_transaction v61).
+DROP TABLE IF EXISTS activation_otp;
+DROP FUNCTION IF EXISTS auth_user_komsel();
+DROP FUNCTION IF EXISTS deduct_user_point(TEXT, INT);

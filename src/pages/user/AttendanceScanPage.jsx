@@ -181,8 +181,8 @@ export default function AttendanceScanPage() {
         setResult({
           type: late ? 'duplicate' : 'success',
           message: late
-            ? `Kehadiran pelayanan "${label}" tercatat — TERLAMBAT. +1 poin.`
-            : `Kehadiran pelayanan "${label}" tercatat tepat waktu. +1 poin! 🎉`,
+            ? `Kehadiran pelayanan "${label}" tercatat — TERLAMBAT.`
+            : `Kehadiran pelayanan "${label}" tercatat tepat waktu. ✅`,
         })
       } catch (err) {
         const dup = /sudah tercatat/i.test(err.message || '')
