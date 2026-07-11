@@ -1,46 +1,11 @@
 import { useState } from 'react'
-import { HardDrive, Download, CheckCircle2, AlertTriangle } from 'lucide-react'
-import ExcelJS from 'exceljs'
+import { HardDrive, Download, CheckCircle2, AlertTriangle, FileJson } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { Card, PageHeader, Button } from '@/components/ui'
-
-const BACKUP_TABLES = [
-  { table: 'users', sheet: 'Data Jemaat' },
-  { table: 'ministries', sheet: 'Ministry' },
-  { table: 'user_ministries', sheet: 'Anggota Ministry' },
-  { table: 'komsel', sheet: 'Komsel' },
-  { table: 'komsel_categories', sheet: 'Kategori Komsel' },
-  { table: 'komsel_leaders', sheet: 'Pemimpin Komsel' },
-  { table: 'komsel_sessions', sheet: 'Sesi Komsel' },
-  { table: 'komsel_attendance', sheet: 'Kehadiran Komsel' },
-  { table: 'komsel_offerings', sheet: 'Persembahan Komsel' },
-  { table: 'sunday_attendance', sheet: 'Ibadah Minggu' },
-  { table: 'events', sheet: 'Events' },
-  { table: 'event_registrations', sheet: 'Pendaftaran Event' },
-  { table: 'event_attendance', sheet: 'Kehadiran Event' },
-  { table: 'classes', sheet: 'Kelas' },
-  { table: 'class_registrations', sheet: 'Pendaftaran Kelas' },
-  { table: 'class_attendance', sheet: 'Kehadiran Kelas' },
-  { table: 'news', sheet: 'Berita' },
-  { table: 'form_templates', sheet: 'Template Form' },
-  { table: 'template_ministries', sheet: 'Ministry Template' },
-  { table: 'form_responses', sheet: 'Jawaban Form' },
-  { table: 'task_categories', sheet: 'Kategori Tugas' },
-  { table: 'task_category_ministries', sheet: 'Ministry Kat Tugas' },
-  { table: 'task_leaves', sheet: 'Izin Sakit' },
-  { table: 'baptism_registrations', sheet: 'Baptisan' },
-  { table: 'wedding_registrations', sheet: 'Nikah' },
-  { table: 'child_dedication_registrations', sheet: 'Penyerahan Anak' },
-  { table: 'certificates', sheet: 'Sertifikat' },
-  { table: 'birthday_messages', sheet: 'Pesan Ulang Tahun' },
-  { table: 'offerings', sheet: 'Persembahan' },
-  { table: 'payment_accounts', sheet: 'Rekening' },
-  { table: 'point_transactions', sheet: 'Transaksi Poin' },
-  { table: 'app_settings', sheet: 'Pengaturan App' },
-  { table: 'admin_user_permissions', sheet: 'Hak Akses Admin' },
-]
+import { BACKUP_TABLES } from '@/lib/backupTables'
+import { buildBackupWorkbook, buildBackupJson } from '@/lib/backupBuild'
 
 async function fetchAll(table) {
   const PAGE = 1000
@@ -57,35 +22,14 @@ async function fetchAll(table) {
   return all
 }
 
-function addSheet(wb, name, rows) {
-  const ws = wb.addWorksheet(name)
-  if (!rows.length) {
-    ws.addRow(['(Tidak ada data)'])
-    return 0
-  }
-  const keys = Object.keys(rows[0])
-  const hr = ws.addRow(keys)
-  hr.eachCell(cell => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4511E' } }
-  })
-  for (const row of rows) {
-    ws.addRow(keys.map(k => {
-      const v = row[k]
-      if (v === null || v === undefined) return ''
-      if (typeof v === 'object') return JSON.stringify(v)
-      return v
-    }))
-  }
-  keys.forEach((k, i) => {
-    let max = k.length
-    for (let r = 0; r < Math.min(rows.length, 50); r++) {
-      const len = String(rows[r][k] ?? '').length
-      if (len > max) max = len
-    }
-    ws.getColumn(i + 1).width = Math.min(max + 2, 40)
-  })
-  return rows.length
+// Unduh Blob sebagai file di browser.
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export default function AdminBackupPage() {
@@ -96,45 +40,47 @@ export default function AdminBackupPage() {
   const [result, setResult] = useState(null)
   const [errors, setErrors] = useState([])
 
-  async function handleExport() {
+  async function handleExport(format) {
     setExporting(true)
     setResult(null)
     setErrors([])
     const start = Date.now()
     const total = BACKUP_TABLES.length
     let totalRows = 0
+    const dataByTable = {}
+    const errorsByTable = {}
     const errs = []
 
     try {
-      const wb = new ExcelJS.Workbook()
-      wb.creator = 'ESC Siantan'
-      wb.created = new Date()
-
+      // Tarik semua tabel sekali; kedua format (Excel & JSON) pakai data yang sama.
       for (let i = 0; i < total; i++) {
         const { table, sheet } = BACKUP_TABLES[i]
         setProgress({ current: i + 1, total, label: sheet })
         try {
           const rows = await fetchAll(table)
-          totalRows += addSheet(wb, sheet, rows)
+          dataByTable[table] = rows
+          totalRows += rows.length
         } catch (err) {
+          errorsByTable[table] = err.message
           errs.push({ table, sheet, msg: err.message })
-          const ws = wb.addWorksheet(sheet)
-          ws.addRow([`ERROR: ${err.message}`])
         }
       }
 
       setProgress({ current: total, total, label: t('backup.generating') })
-      const buf = await wb.xlsx.writeBuffer()
       const date = new Date().toISOString().slice(0, 10)
-      const blob = new Blob([buf], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `ESC-Siantan-Backup-${date}.xlsx`
-      a.click()
-      URL.revokeObjectURL(url)
+
+      if (format === 'json') {
+        const json = buildBackupJson(dataByTable, errorsByTable)
+        const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' })
+        downloadBlob(blob, `ESC-Siantan-Backup-${date}.json`)
+      } else {
+        const wb = buildBackupWorkbook(dataByTable, errorsByTable)
+        const buf = await wb.xlsx.writeBuffer()
+        const blob = new Blob([buf], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        })
+        downloadBlob(blob, `ESC-Siantan-Backup-${date}.xlsx`)
+      }
 
       const elapsed = ((Date.now() - start) / 1000).toFixed(1)
       setResult({ totalRows, time: elapsed })
@@ -222,10 +168,17 @@ export default function AdminBackupPage() {
             </div>
           )}
 
-          <Button onClick={handleExport} loading={exporting} className="w-full">
-            <Download size={16} className="mr-1.5" />
-            {exporting ? t('backup.exporting') : t('backup.exportBtn')}
-          </Button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Button onClick={() => handleExport('xlsx')} loading={exporting} disabled={exporting} className="w-full">
+              <Download size={16} className="mr-1.5" />
+              {exporting ? t('backup.exporting') : t('backup.exportBtnXlsx')}
+            </Button>
+            <Button onClick={() => handleExport('json')} loading={exporting} disabled={exporting} variant="outline" className="w-full">
+              <FileJson size={16} className="mr-1.5" />
+              {t('backup.exportBtnJson')}
+            </Button>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">{t('backup.formatHint')}</p>
         </div>
       </Card>
 
