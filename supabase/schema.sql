@@ -3500,3 +3500,48 @@ DROP TRIGGER IF EXISTS trg_point_ministry_att ON ministry_attendance;
 DROP TABLE IF EXISTS activation_otp;
 DROP FUNCTION IF EXISTS auth_user_komsel();
 DROP FUNCTION IF EXISTS deduct_user_point(TEXT, INT);
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v68: device_tokens — token FCM aplikasi native Android ────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-12): dibuat versi NATIVE Android (Flutter,
+-- folder terpisah di luar repo) karena web push tidak andal di iOS dan APK
+-- TWA punya bug DelegationService. Push native memakai FCM — mekanismenya
+-- BERBEDA dari web-push VAPID, sehingga token device disimpan di tabel
+-- sendiri, bukan menumpang push_subscriptions (kolomnya beda: endpoint/
+-- p256dh/auth vs token FCM tunggal). Dua pipeline hidup berdampingan:
+-- web-push (PWA) + FCM (native).
+--
+-- Pengirim: backend service-role (api/send-fcm nanti) — bypass RLS.
+-- Klien native hanya upsert/menghapus token MILIKNYA sendiri.
+CREATE TABLE IF NOT EXISTS device_tokens (
+  token      TEXT PRIMARY KEY,                -- token FCM device (unik global)
+  user_id    TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  platform   TEXT NOT NULL DEFAULT 'android' CHECK (platform IN ('android', 'ios')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens (user_id);
+
+ALTER TABLE device_tokens ENABLE ROW LEVEL SECURITY;
+
+-- User kelola token miliknya sendiri; pengiriman via service-role (bypass RLS).
+-- Pakai helper auth_user_id() (SECURITY DEFINER) — jangan tulis ulang subquery.
+DROP POLICY IF EXISTS "devtok_select_own" ON device_tokens;
+CREATE POLICY "devtok_select_own" ON device_tokens FOR SELECT USING (
+  user_id = auth_user_id()
+);
+DROP POLICY IF EXISTS "devtok_insert_own" ON device_tokens;
+CREATE POLICY "devtok_insert_own" ON device_tokens FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+);
+-- UPDATE dibutuhkan upsert onConflict(token): token sama pindah pemilik saat
+-- ganti akun di device yang sama — WITH CHECK memastikan pemilik BARU = pemanggil.
+DROP POLICY IF EXISTS "devtok_update_own" ON device_tokens;
+CREATE POLICY "devtok_update_own" ON device_tokens FOR UPDATE
+  USING (true)
+  WITH CHECK (user_id = auth_user_id());
+DROP POLICY IF EXISTS "devtok_delete_own" ON device_tokens;
+CREATE POLICY "devtok_delete_own" ON device_tokens FOR DELETE USING (
+  user_id = auth_user_id()
+);

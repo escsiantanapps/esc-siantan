@@ -100,10 +100,28 @@ export default async function handler(req, res) {
       })
     )
 
+    // ── Pipeline kedua: FCM untuk app native Android (device_tokens, v68) ──
+    // Opsional: hanya jalan bila FIREBASE_SERVICE_ACCOUNT diset; kegagalan FCM
+    // tidak menggagalkan web-push yang sudah terkirim.
+    let fcm = { sent: 0, removed: 0, errors: [] }
+    try {
+      const { fcmAvailable, sendFcm } = await import('./_lib/fcm.js')
+      if (fcmAvailable()) {
+        let tq = admin.from('device_tokens').select('token, user_id')
+        if (Array.isArray(userIds) && userIds.length) tq = tq.in('user_id', userIds)
+        const { data: toks } = await tq
+        fcm = await sendFcm(admin, toks || [], { title, body: message, url })
+      }
+    } catch (err) {
+      console.error('[send-push] FCM error:', err)
+      fcm.errors.push({ statusCode: null, detail: String(err.message || err).slice(0, 300) })
+    }
+
     return res.status(200).json({
       ok: true, total: (subs || []).length, sent, removed, errors,
       targetCount: Array.isArray(userIds) ? userIds.length : null,
       totalSystemWide,
+      fcm,
     })
   } catch (err) {
     console.error('[send-push] Fatal:', err)
