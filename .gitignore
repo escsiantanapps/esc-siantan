@@ -10,4 +10,12 @@ dist
 .vercel
 scripts/
 nul
-scratch/firebase-service-account.json
+
+# File kerja / scratch — jangan pernah di-commit
+scratch/
+scratch_*.js
+/test-*.js
+.agents/
+agents/
+/ORIGINAL_REQUEST.md
+/PROJECT.md
