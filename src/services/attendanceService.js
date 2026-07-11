@@ -87,3 +87,40 @@ export const eventAttendanceService = {
     return data
   },
 }
+
+// ─── Ringkasan kehadiran pribadi (widget dashboard) ────────
+// Menghitung jumlah kehadiran user pada BULAN berjalan (batas bulan zona WIB)
+// dari 3 sumber. RLS SELECT tiap tabel sudah mengizinkan user membaca barisnya
+// sendiri, jadi aman dipanggil jemaat biasa.
+export const attendanceSummaryService = {
+  async getMyMonthlySummary(userId) {
+    // Batas bulan WIB: 'YYYY-MM-01' s/d awal bulan berikutnya (eksklusif).
+    const nowWib = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
+    const ym = nowWib.slice(0, 7)
+    const [y, m] = ym.split('-').map(Number)
+    const monthStart = `${ym}-01`
+    const nextY = m === 12 ? y + 1 : y
+    const nextM = m === 12 ? 1 : m + 1
+    const nextStart = `${nextY}-${String(nextM).padStart(2, '0')}-01`
+
+    const countRows = async (table, dateCol, isTimestamp) => {
+      const lo = isTimestamp ? `${monthStart}T00:00:00` : monthStart
+      const hi = isTimestamp ? `${nextStart}T00:00:00` : nextStart
+      const { count, error } = await supabase
+        .from(table)
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte(dateCol, lo)
+        .lt(dateCol, hi)
+      if (error) throw error
+      return count || 0
+    }
+
+    const [ibadah, kelas, event] = await Promise.all([
+      countRows('sunday_attendance', 'attendance_date', false),
+      countRows('class_attendance', 'attendance_date', false),
+      countRows('event_attendance', 'recorded_at', true),
+    ])
+    return { ibadah, kelas, event, total: ibadah + kelas + event }
+  },
+}

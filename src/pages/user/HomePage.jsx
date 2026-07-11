@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, ChevronRight, Calendar, BookOpen, Droplets, Heart, Baby, Clock, MapPin, Church, HandCoins, WifiOff, RefreshCw, Sparkles, CreditCard, Star, Library } from 'lucide-react'
+import { Bell, Calendar, BookOpen, Droplets, Heart, Baby, Church, HandCoins, WifiOff, RefreshCw, CreditCard, Star, Library } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { newsService, eventsService, classesService, appSettingsService, registrationService } from '@/services/contentService'
-import { Card, Skeleton, SkeletonCard, SectionHeader } from '@/components/ui'
+import { eventsService, appSettingsService, registrationService } from '@/services/contentService'
+import { Skeleton, SkeletonCard, SectionHeader } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
 import SopNudgeCard from '@/components/SopNudgeCard'
@@ -12,8 +12,10 @@ import BirthdayMessageCard from '@/components/BirthdayMessageCard'
 import PastoralMessageCard from '@/components/PastoralMessageCard'
 import MembershipCard from '@/components/MembershipCard'
 import MyMinistryScheduleCard from '@/components/MyMinistryScheduleCard'
+import PointsProgressCard from '@/components/PointsProgressCard'
+import AttendanceSummaryCard from '@/components/AttendanceSummaryCard'
 import EventCarousel from '@/components/EventCarousel'
-import { formatDate, spColor } from '@/lib/utils'
+import { spColor } from '@/lib/utils'
 
 // Sapaan sesuai jam lokal perangkat (pagi/siang/sore/malam)
 function greeting(t) {
@@ -27,9 +29,7 @@ function greeting(t) {
 export default function HomePage() {
   const { profile } = useAuth()
   const { t } = useLang()
-  const [news, setNews] = useState([])
   const [events, setEvents] = useState([])
-  const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
   const [baptismOpen, setBaptismOpen] = useState(true)
@@ -42,9 +42,7 @@ export default function HomePage() {
     // Beranda menampilkan yang belum selesai (status Mulai / Sedang Berlangsung).
     const ongoing = list => (list || []).filter(x => ['Mulai', 'Sedang Berlangsung'].includes(x.status))
     Promise.all([
-      newsService.getAll().then(setNews).catch(() => { anyFailed = true }),
       eventsService.getAll().then(list => setEvents(ongoing(list))).catch(() => { anyFailed = true }),
-      classesService.getAll().then(list => setClasses(ongoing(list))).catch(() => { anyFailed = true }),
       appSettingsService.get('baptism_status').then(s => setBaptismOpen(s !== 'closed')).catch(() => {}),
       // Cek pengajuan KTJ aktif untuk menyembunyikan quick link "Daftar KTJ".
       profile?.user_id
@@ -130,9 +128,6 @@ export default function HomePage() {
         {/* Pengingat ramah kalau ada SOP yang belum dituntaskan minggu ini */}
         <SopNudgeCard />
 
-        {/* Jadwal pelayanan Volunteer + status telat sendiri (self-gating) */}
-        <MyMinistryScheduleCard />
-
         {/* Status SP */}
         {profile?.sp_level && profile.sp_level !== 'Aman' && (
           <div
@@ -206,59 +201,14 @@ export default function HomePage() {
         </section>
         )}
 
-        {/* Pengumuman */}
-        {news.length > 0 && (
-          <section className="mb-6 animate-fade-in-up" style={{ animationDelay: '120ms' }}>
-            <SectionHeader title={t('home.announcements')} to="/informasi" />
-            <div className="space-y-2.5 stagger-children">
-              {news.slice(0, 3).map(item => (
-                <Link key={item.news_id} to={`/informasi/${item.news_id}`} className="block">
-                  <Card glass lift className="p-3.5 flex items-start gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
-                      <Bell size={18} className="text-brand-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{formatDate(item.created_at)}</p>
-                    </div>
-                    <ChevronRight size={16} className="text-gray-300 flex-shrink-0 mt-1" />
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Jadwal pelayanan Volunteer (self-gating; pindah ke bawah Menu Cepat) */}
+        <MyMinistryScheduleCard />
 
-        {/* Kelas tersedia */}
-        {classes.length > 0 && (
-          <section className="animate-fade-in-up" style={{ animationDelay: '200ms' }}>
-            <SectionHeader title={t('home.availableClasses')} to="/kelas" />
-            <div className="space-y-2.5 stagger-children">
-              {classes.slice(0, 3).map(cls => (
-                <Link key={cls.class_id} to={`/kelas/${cls.class_id}`} className="block">
-                  <Card glass lift className="p-3.5 flex items-start gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                      <BookOpen size={18} className="text-blue-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{cls.name}</p>
-                      {cls.schedule && (
-                        <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1"><Clock size={11} /> {cls.schedule}</p>
-                      )}
-                    </div>
-                    <ChevronRight size={16} className="text-gray-300 flex-shrink-0 mt-1" />
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Ringkasan poin + progres hadiah */}
+        <PointsProgressCard />
 
-        {!loading && news.length === 0 && events.length === 0 && classes.length === 0 && (
-          <div className="text-center py-10 animate-fade-in">
-            <p className="text-sm text-gray-400">{t('home.empty')}</p>
-          </div>
-        )}
+        {/* Ringkasan kehadiran bulan ini */}
+        <AttendanceSummaryCard />
       </div>
     </div>
   )
