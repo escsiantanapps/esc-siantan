@@ -6,7 +6,8 @@
     { "path": "/api/cron-reminders?slot=pagi",  "schedule": "0 1 * * *" },
     { "path": "/api/cron-reminders?slot=siang", "schedule": "0 5 * * *" },
     { "path": "/api/cron-reminders?slot=sore",  "schedule": "0 10 * * *" },
-    { "path": "/api/cron-birthdays",            "schedule": "0 0 * * *" }
+    { "path": "/api/cron-birthdays",            "schedule": "0 0 * * *" },
+    { "path": "/api/cron-backup",               "schedule": "0 18 * * *" }
   ],
   "headers": [
     {
