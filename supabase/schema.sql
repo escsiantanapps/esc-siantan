@@ -3417,3 +3417,44 @@ BEGIN
   -- Geolocation dicabut (v64): jangan hitung/isi lat/lng/distance/flag.
   RETURN NEW;
 END $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v65: Izinkan unggah PDF buku ke bucket task-files ──────────
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (2026-07-11): Fitur Buku (Migrasi v62) mengunggah file PDF buku lewat
+-- contentService.uploadPdf('books', file) → path `books/pdf/<...>` di bucket
+-- `task-files`, TAPI policy `task_files_insert` (terakhir diubah v46) hanya
+-- mengizinkan Admin menulis path `form-bg/%`, `*/video/%`, dan `news/pdf/%`.
+-- Path `books/pdf/%` tidak ada di allowlist → INSERT ditolak:
+--   "new row violates row-level security policy".
+--
+-- KEPUTUSAN OPERATOR (2026-07-11): izinkan Admin/Super Admin mengunggah PDF
+-- buku kurasi ke `books/pdf/%` (setara izin PDF berita v46 & video v38).
+--
+-- CATATAN DRIFT: blok ini men-`CREATE OR REPLACE` policy storage `task_files_insert`.
+-- Isi di bawah = SALINAN PERSIS versi Migrasi v46 DITAMBAH dua pola
+-- `books/pdf/%` & `books/%/pdf/%` pada cabang admin. Cabang jawaban-tugas/izin
+-- (responses/leaves milik sendiri) DIPERTAHANKAN tanpa perubahan. Bila production
+-- sudah drift dari v46, verifikasi dulu:
+--   SELECT pg_get_expr(polwithcheck, polrelid) FROM pg_policy
+--   WHERE polname = 'task_files_insert';
+-- lalu samakan sebelum menjalankan agar tidak ada izin lama yang hilang.
+DROP POLICY IF EXISTS "task_files_insert" ON storage.objects;
+CREATE POLICY "task_files_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'task-files'
+    AND (
+      -- Jawaban tugas & bukti izin: path[1] wajib user_id sendiri.
+      ((name LIKE 'responses/%' OR name LIKE 'leaves/%')
+        AND split_part(name, '/', 2) = auth_user_id())
+      -- Background form + media kurasi (video & PDF): Admin/Super Admin saja.
+      OR ((name LIKE 'form-bg/%'
+           OR name LIKE 'classes/video/%' OR name LIKE 'classes/%/video/%'
+           OR name LIKE 'events/video/%'  OR name LIKE 'events/%/video/%'
+           OR name LIKE 'news/video/%'    OR name LIKE 'news/%/video/%'
+           OR name LIKE 'news/pdf/%'      OR name LIKE 'news/%/pdf/%'
+           OR name LIKE 'books/pdf/%'     OR name LIKE 'books/%/pdf/%')
+        AND auth_user_role() IN ('Admin','Super Admin'))
+    )
+  );
