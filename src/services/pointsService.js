@@ -182,10 +182,15 @@ export const pointsService = {
     return data?.[0] || null
   },
 
-  async openSundaySession(createdBy, { title = null, durationMin = 180 } = {}) {
+  // QR berlaku sepanjang hari (keputusan operator 2026-07-12): ibadah beda-beda
+  // jamnya, jadi batas = akhir hari WIB, bukan durasi tetap. expires_at = awal
+  // hari WIB berikutnya (00:00 Asia/Jakarta besok). RLS insert tetap mensyaratkan
+  // service_date = hari ini WIB, jadi tak ada celah lintas hari.
+  async openSundaySession(createdBy, { title = null } = {}) {
     const existing = await this.getActiveSundaySession()
     if (existing) return existing
-    const expires = new Date(Date.now() + durationMin * 60000).toISOString()
+    const wibToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
+    const expires = new Date(`${wibToday}T23:59:59+07:00`).toISOString()
     const { data, error } = await supabase.from('sunday_sessions')
       .insert({ created_by: createdBy, title, expires_at: expires }).select().single()
     if (error) throw error

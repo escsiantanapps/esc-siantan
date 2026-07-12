@@ -65,16 +65,17 @@ export const ministryScheduleService = {
     if (error) throw error
   },
 
-  // Kandidat roster sesi = jemaat aktif yang punya peran pelayanan (Volunteer,
-  // PKS, Admin, Super Admin — lewat role, role_secondary, atau is_pks). Sejak
-  // v58 roster bebas lintas ministry, admin memasukkan "nama siapa saja yang
-  // melayani". `query` opsional untuk filter nama.
+  // Kandidat roster sesi = SEMUA jemaat aktif (keputusan operator 2026-07-12:
+  // filter peran pelayanan dicabut — admin memasukkan "nama siapa saja yang
+  // melayani/hadir", jemaat biasa pun bisa ditugaskan agar dapat scan QR
+  // ESC-VOLUNTEER). Akses scan tetap dijaga RLS matt_self_insert: hanya yang
+  // ada di roster + tanggal hari ini yang bisa insert kehadiran. `query`
+  // opsional untuk filter nama (limit 50 → wajib cari nama pada jemaat banyak).
   async listAssignableUsers(query = '') {
     let q = supabase
       .from('users')
       .select('user_id, name, photo_url, role, role_secondary, is_pks')
       .eq('status', 'Aktif')
-      .or('role.in.(Volunteer,PKS,Admin,"Super Admin"),role_secondary.in.(Volunteer,PKS,Admin,"Super Admin"),is_pks.eq.true')
       .order('name', { ascending: true })
       .limit(50)
     if (query) q = q.ilike('name', `%${query}%`)

@@ -92,8 +92,9 @@ export default function AdminSundayPage() {
         ) : !session ? (
           <div className="flex flex-col items-center text-center gap-3 py-2">
             <p className="text-sm text-gray-500 max-w-xs">
-              Buka sesi saat ibadah dimulai. QR berlaku 3 jam (atau sampai kamu tutup).
-              Jemaat memindainya lewat menu Scan untuk mencatat kehadiran &amp; mendapat 1 poin.
+              Buka sesi saat ibadah dimulai. QR otomatis dibuat &amp; berlaku
+              sepanjang hari ini (bisa ditutup lebih awal kapan saja). Jemaat
+              memindainya lewat menu Scan untuk mencatat kehadiran &amp; mendapat 1 poin.
             </p>
             <Button onClick={openSession} disabled={busy}>
               {busy ? <Spinner size="sm" /> : <Play size={15} />} Buka Sesi Ibadah
@@ -102,7 +103,7 @@ export default function AdminSundayPage() {
         ) : (
           <div className="flex flex-col items-center text-center gap-3">
             {qr ? <img src={qr} alt="QR Ibadah" className="w-56 rounded-xl border border-gray-100" /> : <Spinner />}
-            <Badge color="green">Sesi aktif · berlaku s/d {formatDate(session.expires_at, 'HH:mm')}</Badge>
+            <Badge color="green">Sesi aktif · berlaku sepanjang hari ini</Badge>
             <p className="text-xs text-gray-400 max-w-xs">
               Tampilkan/cetak QR ini di pintu masuk. QR ini acak &amp; hanya berlaku selama sesi —
               jangan sebar fotonya di grup.
