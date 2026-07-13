@@ -981,14 +981,16 @@ function HelpPage() {
         back={() => navigate('/profil')} 
       />
 
-      <div className="px-4 -mt-2 pt-4">
+      <div className="px-4 -mt-2 pt-4 pb-6">
         {loading ? (
           <div className="flex justify-center py-10">
             <Spinner />
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
-            {renderMarkdown(content)}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="p-6 space-y-1">
+              {renderMarkdown(content)}
+            </div>
           </div>
         )}
       </div>

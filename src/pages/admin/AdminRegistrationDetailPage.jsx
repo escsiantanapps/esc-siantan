@@ -103,28 +103,36 @@ export default function AdminRegistrationDetailPage() {
     // menumpuk). Konfirmasi dulu karena tidak bisa dibatalkan.
     if (type === 'ktj' && form.status === 'Ditolak') {
       const ok = await confirm({
-        title: 'Tolak & Hapus Pengajuan KTJ',
-        message: 'Pengajuan KTJ ini akan DITOLAK dan DIHAPUS permanen. Jemaat bisa mengajukan ulang. Lanjutkan?',
-        confirmText: 'Tolak & Hapus',
+        title: 'Tolak Pengajuan KTJ',
+        message: 'Pengajuan akan ditandai sebagai "Ditolak" dan jemaat dapat melihat alasan penolakan untuk mengajukan ulang.',
+        confirmText: 'Tolak',
         danger: true,
       })
       if (!ok) return
       setError(''); setSuccess(''); setSaving(true)
       try {
+        // Update status ke Ditolak (TIDAK dihapus agar user bisa lihat admin_note)
+        await registrationService.updateStatus(type, id, {
+          status: form.status,
+          admin_note: form.admin_note,
+          scheduled_at: null,
+        })
+        // Kirim push notification dengan alasan penolakan
         if (reg.user_id) {
           pushService.broadcast({
             title: `Status ${typeLabel}: Ditolak`,
-            body: form.admin_note || `Pengajuan ${typeLabel} Anda ditolak. Anda dapat mengajukan ulang.`,
-            url: '/status-pendaftaran',
+            body: form.admin_note || `Pengajuan ${typeLabel} Anda ditolak. Lihat alasan di halaman KTJ untuk mengajukan ulang.`,
+            url: '/ktj',
             userIds: [reg.user_id],
           }).catch(() => {})
         }
-        await registrationService.remove(type, id)
-        toast.success('Pengajuan KTJ ditolak & dihapus.')
-        navigate(backTo)
+        await load()
+        setSuccess('Pengajuan KTJ ditolak. Jemaat dapat melihat alasan dan mengajukan ulang.')
+        toast.success('Pengajuan KTJ ditolak. Jemaat dapat melihat alasan dan mengajukan ulang.')
       } catch (err) {
-        setError(err.message || 'Gagal menghapus pengajuan.')
-        toast.error(err.message || 'Gagal menghapus pengajuan.')
+        setError(err.message || 'Gagal menolak pengajuan.')
+        toast.error(err.message || 'Gagal menolak pengajuan.')
+      } finally {
         setSaving(false)
       }
       return

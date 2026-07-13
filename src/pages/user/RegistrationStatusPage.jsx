@@ -112,17 +112,25 @@ export default function RegistrationStatusPage() {
 
         {!loading && ktj.length > 0 && (
           <div>
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('regStatus.ktj')}</h2>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('regStatus.ktj')}</h2>
             <div className="space-y-2.5">
               {ktj.map(item => (
                 <Card key={item.ktj_id} className="p-3.5 flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
                     <CreditCard size={18} className="text-indigo-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{item.full_name}</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.full_name}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{t('common.submitted')} {formatDate(item.created_at)}</p>
-                    {item.admin_note && <p className="text-xs text-gray-500 mt-1">{t('common.note')}: {item.admin_note}</p>}
+                    {item.status === 'Ditolak' && item.admin_note && (
+                      <div className="mt-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-2.5 py-2">
+                        <p className="text-xs font-semibold text-red-900 dark:text-red-200 mb-0.5">Alasan Penolakan:</p>
+                        <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">{item.admin_note}</p>
+                      </div>
+                    )}
+                    {item.status !== 'Ditolak' && item.admin_note && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('common.note')}: {item.admin_note}</p>
+                    )}
                   </div>
                   <StatusBadge status={item.status} />
                 </Card>

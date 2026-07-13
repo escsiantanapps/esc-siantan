@@ -43,10 +43,13 @@ export default function KTJPage() {
       usersService.getAllKomsel().catch(() => []),
     ])
       .then(([{ ktj }, komsel]) => {
-        // Aktif = status apapun selain Ditolak. Jemaat dg pengajuan Disetujui/Selesai
-        // tetap "punya" pengajuan (kartu masih di-issue admin manual).
-        const active = (ktj || []).find(k => k.status !== 'Ditolak')
-        setExisting(active || null)
+        // Cek semua KTJ - yang ditolak juga perlu ditampilkan agar user bisa lihat alasan
+        const all = ktj || []
+        const rejected = all.find(k => k.status === 'Ditolak')
+        const active = all.find(k => k.status !== 'Ditolak')
+        
+        // Prioritas: tampilkan yang ditolak (dengan pesan) atau yang aktif
+        setExisting(rejected || active || null)
         setKomselList(komsel || [])
       })
       .finally(() => setLoading(false))
@@ -100,21 +103,62 @@ export default function KTJPage() {
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
 
   if (existing) {
+    // KTJ ditolak: tampilkan pesan penolakan dengan jelas + tombol ajukan ulang
+    if (existing.status === 'Ditolak') {
+      return (
+        <div className="pb-4">
+          <GradientHeader title={t('ktj.title')} subtitle="Pengajuan Ditolak" back={() => navigate('/')} />
+          <div className="px-4 py-4 space-y-4">
+            <Card className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{existing.full_name}</p>
+                <StatusBadge status={existing.status} />
+              </div>
+              <p className="text-xs text-gray-400">{t('common.submitted')} {formatDate(existing.created_at)}</p>
+              
+              {existing.admin_note && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
+                  <p className="text-xs font-semibold text-red-900 dark:text-red-200 mb-1">Alasan Penolakan:</p>
+                  <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">{existing.admin_note}</p>
+                </div>
+              )}
+              
+              {!existing.admin_note && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
+                  <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">
+                    Pengajuan KTJ Anda ditolak. Silakan hubungi admin untuk informasi lebih lanjut.
+                  </p>
+                </div>
+              )}
+            </Card>
+
+            <Button 
+              className="w-full" 
+              onClick={() => { setExisting(null); setForm(p => ({ ...p, photo_url: '', komsel_id: profile.komsel_id || '' })); setPhotoPreview('') }}
+            >
+              Ajukan Ulang
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
+    // KTJ dengan status selain Ditolak: tampilan existing
     return (
       <div className="pb-4">
         <GradientHeader title={t('ktj.title')} subtitle={t('common.regStatusSub')} back={() => navigate('/')} />
         <div className="px-4 py-4 space-y-3">
           <Card className="p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-900">{existing.full_name}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{existing.full_name}</p>
               <StatusBadge status={existing.status} />
             </div>
             <p className="text-xs text-gray-400">{t('common.submitted')} {formatDate(existing.created_at)}</p>
             {existing.scheduled_at && (
-              <p className="text-sm text-gray-600">{t('common.scheduled')}: {formatDate(existing.scheduled_at, 'd MMMM yyyy, HH:mm')}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('common.scheduled')}: {formatDate(existing.scheduled_at, 'd MMMM yyyy, HH:mm')}</p>
             )}
             {existing.admin_note && (
-              <div className="bg-brand-50 border border-brand-100 rounded-xl px-3 py-2 text-sm text-brand-700">{existing.admin_note}</div>
+              <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-100 dark:border-brand-800 rounded-xl px-3 py-2 text-sm text-brand-700 dark:text-brand-300">{existing.admin_note}</div>
             )}
           </Card>
           <p className="text-xs text-gray-400 text-center">{t('ktj.processing')}</p>
