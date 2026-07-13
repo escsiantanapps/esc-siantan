@@ -838,18 +838,24 @@ function HelpPage() {
   useEffect(() => {
     if (!profile) return
     
-    // Tentukan panduan berdasarkan role tertinggi
+    // Tentukan panduan berdasarkan role tertinggi (cek primary dan secondary)
     let panduan = PANDUAN_JEMAAT
     const role = profile.role || 'Jemaat'
     const roleSecondary = profile.role_secondary
     
+    // Super Admin / Admin (tertinggi)
     if (role === 'Super Admin' || role === 'Admin') {
       panduan = PANDUAN_ADMIN
-    } else if (role === 'PKS' || roleSecondary === 'PKS' || profile.is_pks) {
+    }
+    // PKS (cek di role, role_secondary, atau is_pks)
+    else if (role === 'PKS' || roleSecondary === 'PKS' || profile.is_pks) {
       panduan = PANDUAN_PKS
-    } else if (role === 'Volunteer') {
+    }
+    // Volunteer (cek di role dan role_secondary)
+    else if (role === 'Volunteer' || roleSecondary === 'Volunteer') {
       panduan = PANDUAN_VOLUNTEER
     }
+    // Default: Jemaat
     
     setContent(panduan)
     setLoading(false)
@@ -865,7 +871,7 @@ function HelpPage() {
     const flushList = () => {
       if (currentList && currentListItems.length > 0) {
         elements.push(
-          <ul key={`list-${elements.length}`} className="list-disc list-inside space-y-1 mb-4 text-gray-700 ml-4">
+          <ul key={`list-${elements.length}`} className="list-disc list-inside space-y-1 mb-4 text-gray-700 dark:text-gray-300 ml-4">
             {currentListItems.map((item, i) => (
               <li key={i} className="text-sm leading-relaxed">{item}</li>
             ))}
@@ -880,17 +886,17 @@ function HelpPage() {
       // Header H1
       if (line.startsWith('# ')) {
         flushList()
-        elements.push(<h1 key={idx} className="text-2xl font-bold text-gray-900 mb-3 mt-6">{line.slice(2)}</h1>)
+        elements.push(<h1 key={idx} className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3 mt-6">{line.slice(2)}</h1>)
       }
       // Header H2
       else if (line.startsWith('## ')) {
         flushList()
-        elements.push(<h2 key={idx} className="text-xl font-semibold text-gray-800 mb-2 mt-5">{line.slice(3)}</h2>)
+        elements.push(<h2 key={idx} className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2 mt-5">{line.slice(3)}</h2>)
       }
       // Header H3
       else if (line.startsWith('### ')) {
         flushList()
-        elements.push(<h3 key={idx} className="text-lg font-semibold text-gray-700 mb-2 mt-4">{line.slice(4)}</h3>)
+        elements.push(<h3 key={idx} className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 mt-4">{line.slice(4)}</h3>)
       }
       // List item
       else if (line.match(/^[-*]\s/)) {
@@ -900,13 +906,13 @@ function HelpPage() {
       // Horizontal rule
       else if (line.trim() === '---') {
         flushList()
-        elements.push(<hr key={idx} className="my-4 border-gray-200" />)
+        elements.push(<hr key={idx} className="my-4 border-gray-200 dark:border-gray-700" />)
       }
       // Bold text inline (basic support)
       else if (line.trim().startsWith('**') && line.trim().endsWith('**')) {
         flushList()
         const text = line.trim().slice(2, -2)
-        elements.push(<p key={idx} className="font-semibold text-gray-800 mb-2">{text}</p>)
+        elements.push(<p key={idx} className="font-semibold text-gray-800 dark:text-gray-200 mb-2">{text}</p>)
       }
       // Numbered list
       else if (line.match(/^\d+\.\s/)) {
@@ -928,18 +934,18 @@ function HelpPage() {
             currentListItems.push(line.replace(/^\d+\.\s/, ''))
           } else {
             flushList()
-            elements.push(<p key={idx} className="text-sm text-gray-700 mb-3 leading-relaxed">{line}</p>)
+            elements.push(<p key={idx} className="text-sm text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">{line}</p>)
           }
         } else {
           flushList()
-          elements.push(<p key={idx} className="text-sm text-gray-700 mb-3 leading-relaxed">{line}</p>)
+          elements.push(<p key={idx} className="text-sm text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">{line}</p>)
         }
       }
       // Empty line
       else {
         if (currentList === 'ol') {
           elements.push(
-            <ol key={`ol-${elements.length}`} className="list-decimal list-inside space-y-1 mb-4 text-gray-700 ml-4">
+            <ol key={`ol-${elements.length}`} className="list-decimal list-inside space-y-1 mb-4 text-gray-700 dark:text-gray-300 ml-4">
               {currentListItems.map((item, i) => (
                 <li key={i} className="text-sm leading-relaxed">{item}</li>
               ))}
@@ -956,7 +962,7 @@ function HelpPage() {
     flushList()
     if (currentList === 'ol' && currentListItems.length > 0) {
       elements.push(
-        <ol key={`ol-final`} className="list-decimal list-inside space-y-1 mb-4 text-gray-700 ml-4">
+        <ol key={`ol-final`} className="list-decimal list-inside space-y-1 mb-4 text-gray-700 dark:text-gray-300 ml-4">
           {currentListItems.map((item, i) => (
             <li key={i} className="text-sm leading-relaxed">{item}</li>
           ))}
@@ -981,7 +987,7 @@ function HelpPage() {
             <Spinner />
           </div>
         ) : (
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
             {renderMarkdown(content)}
           </div>
         )}
