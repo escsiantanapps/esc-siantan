@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, Calendar, BookOpen, Droplets, Heart, Baby, Church, HandCoins, WifiOff, RefreshCw, CreditCard, Star, Library } from 'lucide-react'
+import { Bell, Calendar, BookOpen, Droplets, Heart, Baby, Church, HandCoins, WifiOff, RefreshCw, Star, Library } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { eventsService, appSettingsService, registrationService } from '@/services/contentService'
+import { eventsService, appSettingsService } from '@/services/contentService'
 import { Skeleton, SkeletonCard, SectionHeader } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
@@ -33,7 +33,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
   const [baptismOpen, setBaptismOpen] = useState(true)
-  const [hasActiveKtj, setHasActiveKtj] = useState(false)
 
   function loadData() {
     setLoading(true)
@@ -44,12 +43,6 @@ export default function HomePage() {
     Promise.all([
       eventsService.getAll().then(list => setEvents(ongoing(list))).catch(() => { anyFailed = true }),
       appSettingsService.get('baptism_status').then(s => setBaptismOpen(s !== 'closed')).catch(() => {}),
-      // Cek pengajuan KTJ aktif untuk menyembunyikan quick link "Daftar KTJ".
-      profile?.user_id
-        ? registrationService.getMyRegistrations(profile.user_id)
-            .then(r => setHasActiveKtj((r.ktj || []).some(k => k.status !== 'Ditolak')))
-            .catch(() => {})
-        : Promise.resolve(),
     ]).finally(() => {
       setLoading(false)
       if (anyFailed) setFetchError(true)
@@ -59,19 +52,14 @@ export default function HomePage() {
   useEffect(() => { loadData() }, [profile?.user_id])
 
   const quickLinks = [
-    { to: '/persembahan',        icon: HandCoins,     label: t('home.q.offering'), color: 'bg-emerald-100 text-emerald-600' },
-    { to: '/events',             icon: Calendar,      label: t('home.q.events'),   color: 'bg-red-100 text-red-600' },
-    { to: '/kelas',              icon: BookOpen,      label: t('home.q.classes'),  color: 'bg-blue-100 text-blue-600' },
-    { to: '/baca',               icon: Library,       label: t('home.q.book'),     color: 'bg-cyan-100 text-cyan-600' },
-    ...(baptismOpen ? [{ to: '/baptisan', icon: Droplets, label: t('home.q.baptism'), color: 'bg-teal-100 text-teal-600' }] : []),
-    { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-100 text-pink-600' },
-    { to: '/penyerahan-anak',    icon: Baby,          label: t('home.q.dedication'), color: 'bg-amber-100 text-amber-600' },
-    // Daftar KTJ: sembunyikan bila jemaat sudah punya kartu, atau punya pengajuan
-    // aktif (Menunggu/Disetujui/Terjadwal/Selesai — apapun kecuali Ditolak).
-    ...(!profile?.membership_card_url && !hasActiveKtj
-      ? [{ to: '/ktj', icon: CreditCard, label: t('home.q.ktj'), color: 'bg-indigo-100 text-indigo-600' }]
-      : []),
-    { to: '/status-pendaftaran', icon: Bell,          label: t('home.q.status'),   color: 'bg-purple-100 text-purple-600' },
+    { to: '/persembahan',        icon: HandCoins,     label: t('home.q.offering'), color: 'bg-emerald-600/15 text-emerald-600' },
+    { to: '/events',             icon: Calendar,      label: t('home.q.events'),   color: 'bg-red-600/15 text-red-600' },
+    { to: '/kelas',              icon: BookOpen,      label: t('home.q.classes'),  color: 'bg-blue-600/15 text-blue-600' },
+    { to: '/baca',               icon: Library,       label: t('home.q.book'),     color: 'bg-cyan-600/15 text-cyan-600' },
+    ...(baptismOpen ? [{ to: '/baptisan', icon: Droplets, label: t('home.q.baptism'), color: 'bg-teal-600/15 text-teal-600' }] : []),
+    { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-600/15 text-pink-600' },
+    { to: '/penyerahan-anak',    icon: Baby,          label: t('home.q.dedication'), color: 'bg-amber-600/15 text-amber-600' },
+    { to: '/status-pendaftaran', icon: Bell,          label: t('home.q.status'),   color: 'bg-purple-600/15 text-purple-600' },
   ]
 
   return (

@@ -71,7 +71,7 @@ export default function BacaPage() {
     <div className="pb-6">
       <GradientHeader title={t('baca.title')} subtitle={t('baca.subtitle')} />
 
-      <div className="px-4 -mt-4">
+      <div className="px-4 -mt-2 pt-4">
         {loading ? (
           <div className="flex justify-center py-10"><Spinner /></div>
         ) : books.length === 0 ? (
