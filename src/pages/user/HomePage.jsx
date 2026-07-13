@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, Calendar, BookOpen, Droplets, Heart, Baby, Church, HandCoins, WifiOff, RefreshCw, Star, Library } from 'lucide-react'
+import { Bell, Calendar, BookOpen, Droplets, Heart, Baby, Church, HandCoins, WifiOff, RefreshCw, Star, Library, CreditCard } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { eventsService, appSettingsService } from '@/services/contentService'
@@ -59,6 +59,7 @@ export default function HomePage() {
     ...(baptismOpen ? [{ to: '/baptisan', icon: Droplets, label: t('home.q.baptism'), color: 'bg-teal-600/15 text-teal-600' }] : []),
     { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-600/15 text-pink-600' },
     { to: '/penyerahan-anak',    icon: Baby,          label: t('home.q.dedication'), color: 'bg-amber-600/15 text-amber-600' },
+    { to: '/ktj',                icon: CreditCard,    label: t('home.q.ktj'),      color: 'bg-indigo-600/15 text-indigo-600' },
     { to: '/status-pendaftaran', icon: Bell,          label: t('home.q.status'),   color: 'bg-purple-600/15 text-purple-600' },
   ]
 
@@ -103,12 +104,7 @@ export default function HomePage() {
         {/* Pesan ulang tahun personal dari PKS, kalau ada yang belum dibaca */}
         <BirthdayMessageCard />
 
-        {/* Kartu Jemaat (tampil hanya bila sudah diunggah admin) */}
-        {profile?.membership_card_url && (
-          <div className="mb-5 animate-fade-in-up">
-            <MembershipCard profile={profile} />
-          </div>
-        )}
+
 
         {/* Panduan akun baru: lengkapi data & aktifkan notifikasi */}
         <OnboardingPrompt />

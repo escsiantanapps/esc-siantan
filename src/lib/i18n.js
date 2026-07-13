@@ -26,6 +26,12 @@ export const translations = {
     'profile.settingsDesc': 'Mode gelap, notifikasi, ubah kata sandi',
     'profile.editProfile': 'Edit Profil',
     'profile.logout': 'Keluar',
+    'profile.help': 'Bantuan',
+    'profile.helpDesc': 'Panduan penggunaan aplikasi',
+
+    // Halaman bantuan
+    'help.title': 'Bantuan',
+    'help.subtitle': 'Panduan penggunaan aplikasi sesuai peran Anda',
 
     // Halaman pengaturan
     'settings.title': 'Pengaturan',
@@ -1322,6 +1328,11 @@ export const translations = {
     'profile.settingsDesc': 'Dark mode, notifications, change password',
     'profile.editProfile': 'Edit Profile',
     'profile.logout': 'Log out',
+    'profile.help': 'Help',
+    'profile.helpDesc': 'Application usage guide',
+
+    'help.title': 'Help',
+    'help.subtitle': 'Application guide based on your role',
 
     'settings.title': 'Settings',
     'settings.subtitle': 'Manage your account & app preferences',

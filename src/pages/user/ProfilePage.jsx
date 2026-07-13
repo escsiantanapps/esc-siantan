@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight, Star } from 'lucide-react'
+import { LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight, Star, HelpCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
@@ -225,6 +225,20 @@ export default function ProfilePage() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900">{t('profile.settings')}</p>
               <p className="text-xs text-gray-400">{t('profile.settingsDesc')}</p>
+            </div>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </Link>
+        </Card>
+
+        {/* Bantuan */}
+        <Card className="p-2">
+          <Link to="/panduan" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
+            <div className="w-10 h-10 rounded-full bg-control flex items-center justify-center text-gray-600 shrink-0">
+              <HelpCircle size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900">{t('profile.help')}</p>
+              <p className="text-xs text-gray-400">{t('profile.helpDesc')}</p>
             </div>
             <ChevronRight size={18} className="text-gray-300 shrink-0" />
           </Link>
