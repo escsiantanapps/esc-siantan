@@ -41,14 +41,9 @@ export default function ForgotPasswordPage() {
     setError(''); setInfo(''); setLoading(true)
     try {
       const r = await postJson('/api/wa-reset-request', { email: email.trim() })
-      const m = r.method || 'whatsapp'
-      setMethod(m)
+      setMethod('whatsapp')
       setStep('otp')
-      if (m === 'email') {
-        setInfo(t('auth.emailCodeSent', { email: r.masked || '' }))
-      } else {
-        setInfo(t('auth.waCodeSent', { wa: r.masked || '' }))
-      }
+      setInfo(t('auth.waCodeSent', { wa: r.masked || '' }))
       setCooldown(60)
     } catch (err) {
       setError(err.message || t('auth.sendCodeFailed'))

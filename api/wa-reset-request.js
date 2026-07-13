@@ -1,6 +1,6 @@
-// Lupa password — langkah 1: kirim kode OTP.
-// Jalur utama: email OTP via Supabase Auth (gratis).
-// Fallback: WhatsApp OTP via Fonnte jika email sintetis atau email gagal.
+// Lupa password — langkah 1: kirim kode OTP via WhatsApp (Fonnte).
+// Jalur email (signInWithOtp Supabase) DIHAPUS — Supabase mengirim magic link
+// (bukan kode 6 digit), membingungkan user. Keputusan operator 2026-07-13.
 export const config = { runtime: 'nodejs' }
 
 function waTarget(phone) {
@@ -10,20 +10,12 @@ function waTarget(phone) {
   else if (d.startsWith('8')) d = '62' + d
   return d
 }
-function hasRealEmail(email) {
-  return typeof email === 'string' && email.includes('@') && !email.endsWith('@wa.esc-siantan.app')
-}
-function maskEmail(email) {
-  const [local, domain] = email.split('@')
-  return local.slice(0, 1) + '***@' + domain
-}
 
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
     const { checkRateLimit } = await import('./_lib/rate-limit.js')
-    // Rate limit ketat (5/menit) — mempersulit enumeration email terdaftar.
     if (checkRateLimit(req, res, { endpoint: 'wa-reset-request', max: 5 })) return
 
     const { createClient } = await import('@supabase/supabase-js')
@@ -31,9 +23,9 @@ export default async function handler(req, res) {
 
     const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
-    const ANON_KEY = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim()
     const FONNTE_TOKEN = (process.env.FONNTE_TOKEN || '').trim()
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Konfigurasi Supabase belum lengkap.' })
+    if (!FONNTE_TOKEN) return res.status(500).json({ error: 'FONNTE_TOKEN belum diatur di server.' })
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
@@ -44,25 +36,10 @@ export default async function handler(req, res) {
       .from('users').select('user_id, phone, auth_id').ilike('email', email).maybeSingle()
     if (!user || !user.auth_id) {
       // Pesan generik: jangan bocorkan apakah email terdaftar.
-      return res.status(200).json({ ok: true, method: 'unknown', message: 'Jika akun dengan email tersebut ada, kode reset akan dikirim.' })
+      return res.status(200).json({ ok: true, method: 'whatsapp', message: 'Jika akun dengan email tersebut ada, kode reset akan dikirim.' })
     }
+
     const target = waTarget(user.phone)
-
-    // ── Jalur email (utama) ───────────────────────────────────────────────────
-    if (hasRealEmail(email) && ANON_KEY) {
-      const anon = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } })
-      const { error: otpErr } = await anon.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: false },
-      })
-      if (!otpErr) {
-        return res.status(200).json({ ok: true, method: 'email', masked: maskEmail(email) })
-      }
-      console.error('Email OTP gagal, fallback ke WA:', otpErr.message)
-    }
-
-    // ── Jalur WhatsApp (fallback) ─────────────────────────────────────────────
-    if (!FONNTE_TOKEN) return res.status(500).json({ error: 'FONNTE_TOKEN belum diatur di server.' })
     if (!target) {
       return res.status(400).json({ error: 'Nomor WhatsApp belum terdaftar untuk akun ini. Hubungi admin.' })
     }
