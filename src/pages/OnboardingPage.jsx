@@ -97,19 +97,30 @@ function Dots({ total, active }) {
 
 export default function OnboardingPage() {
   const navigate  = useNavigate()
-  const [stages, setStages] = useState(DEFAULT_ROADMAP)
+  const [stages, setStages] = useState(null)
   const [index, setIndex] = useState(0)
   const [exiting, setExiting] = useState(false)
   const touchStartX = useRef(null)
 
   // Muat template dari DB; fallback diam-diam ke DEFAULT_ROADMAP.
+  // stages = null sampai fetch selesai → render spinner, bukan flash default.
   useEffect(() => {
     appSettingsService.get('discipleship_roadmap')
       .then(v => {
         if (Array.isArray(v) && v.length > 0 && v.every(s => s && s.title)) setStages(v)
+        else setStages(DEFAULT_ROADMAP)
       })
-      .catch(() => {})
+      .catch(() => setStages(DEFAULT_ROADMAP))
   }, [])
+
+  // Tampilkan loading sampai data siap (mencegah flash konten default).
+  if (!stages) {
+    return (
+      <div className="h-svh flex items-center justify-center bg-gradient-to-br from-sky-600 to-blue-800">
+        <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   const slide = stages[index]
   const isLast = index === stages.length - 1
