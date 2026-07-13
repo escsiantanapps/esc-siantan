@@ -3545,3 +3545,61 @@ DROP POLICY IF EXISTS "devtok_delete_own" ON device_tokens;
 CREATE POLICY "devtok_delete_own" ON device_tokens FOR DELETE USING (
   user_id = auth_user_id()
 );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v69: Gerbang Hak Akses untuk upload foto KTJ ──────────────
+-- ══════════════════════════════════════════════════════════════════════
+-- TEMUAN (2026-07-13):
+-- Policy `documents_owner_insert` (Migrasi v38) mengizinkan SEMUA Admin upload
+-- ke path `ktj/<user_id>/...` tanpa memeriksa Hak Akses `/admin/ktj`. Akibatnya,
+-- Admin yang TIDAK diberi Hak Akses halaman KTJ tetap bisa upload foto KTJ
+-- jemaat lain, melanggar prinsip least-privilege.
+--
+-- KEPUTUSAN OPERATOR (2026-07-13):
+-- Admin biasa yang diberi Hak Akses `/admin/ktj` BOLEH upload foto KTJ siapa pun
+-- (untuk operasi massal pembuatan kartu), tapi Admin tanpa Hak Akses TIDAK boleh.
+--
+-- Perbaikan: Pisahkan policy upload untuk path `ktj/` dengan gerbang Hak Akses
+-- `auth_admin_can('/admin/ktj')`. Path lain (baptism, wedding, dll) tidak berubah
+-- — semua Admin tetap boleh upload (belum ada keputusan untuk membatasinya).
+--
+-- Policy documents_owner_insert dipecah jadi 2:
+--   1. documents_ktj_insert       → khusus path ktj/, butuh Hak Akses
+--   2. documents_general_insert   → path selain ktj/, aturan lama (semua Admin boleh)
+--
+-- Urutan evaluasi policy: Postgres mengevaluasi policy dengan operator OR — bila
+-- SATU SAJA policy WITH CHECK lolos, INSERT diizinkan. Jadi tidak ada konflik antara
+-- policy ktj (ketat) dan policy general (longgar) karena masing-masing mengatur
+-- path berbeda.
+
+-- Hapus policy lama (sudah diverifikasi ada di production via dump user).
+DROP POLICY IF EXISTS "documents_owner_insert" ON storage.objects;
+
+-- Policy baru #1: Upload ke path ktj/ butuh Super Admin atau Admin ber-Hak-Akses.
+CREATE POLICY "documents_ktj_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'documents'
+    AND split_part(name, '/', 1) = 'ktj'
+    AND (
+      -- Owner boleh upload foto KTJ sendiri saat mengajukan
+      split_part(name, '/', 2) = auth_user_id()
+      -- Super Admin boleh upload foto KTJ siapa pun
+      OR auth_user_role() = 'Super Admin'
+      -- Admin dengan Hak Akses /admin/ktj boleh upload foto KTJ siapa pun
+      OR (auth_user_role() = 'Admin' AND auth_admin_can('/admin/ktj'))
+    )
+  );
+
+-- Policy baru #2: Upload ke path SELAIN ktj/ — aturan lama (semua Admin boleh).
+-- Path: baptism, wedding, child_dedication, certificates, dll.
+CREATE POLICY "documents_general_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'documents'
+    AND split_part(name, '/', 1) != 'ktj'
+    AND (
+      split_part(name, '/', 2) = auth_user_id()
+      OR auth_user_role() IN ('Admin', 'Super Admin')
+    )
+  );
