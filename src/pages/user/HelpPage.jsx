@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { GradientHeader, Spinner } from '@/components/ui'
@@ -834,6 +834,7 @@ function HelpPage() {
   const navigate = useNavigate()
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(true)
+  const [openSection, setOpenSection] = useState(null)
 
   useEffect(() => {
     if (!profile) return
@@ -860,6 +861,36 @@ function HelpPage() {
     setContent(panduan)
     setLoading(false)
   }, [profile])
+
+  const sections = useMemo(() => {
+    if (!content) return []
+    const lines = content.trim().split('\n')
+    const items = []
+    let current = null
+
+    const pushCurrent = () => {
+      if (!current) return
+      items.push(current)
+      current = null
+    }
+
+    for (const line of lines) {
+      if (line.startsWith('## ')) {
+        pushCurrent()
+        current = { title: line.slice(3).trim(), body: [] }
+      } else if (current) {
+        current.body.push(line)
+      }
+    }
+    pushCurrent()
+
+    return items
+      .map(section => ({
+        ...section,
+        body: section.body.join('\n').trim(),
+      }))
+      .filter(section => section.title && section.body)
+  }, [content])
 
   // Render markdown sederhana (tanpa library tambahan)
   const renderMarkdown = (md) => {
@@ -973,6 +1004,8 @@ function HelpPage() {
     return elements
   }
 
+  const quickStart = sections.find(s => /Memulai|Tentang Role|Tentang PKS|Tentang Volunteer|Tentang Admin/i.test(s.title)) || sections[0]
+
   return (
     <div className="pb-6">
       <GradientHeader 
@@ -987,9 +1020,58 @@ function HelpPage() {
             <Spinner />
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-            <div className="p-6 space-y-1">
-              {renderMarkdown(content)}
+          <div className="space-y-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 mb-2">Ringkasan</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
+                Buka topik yang kamu perlukan. Mulai dari bagian paling atas untuk langkah awal.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {sections.slice(0, 6).map(section => (
+                  <button
+                    key={section.title}
+                    type="button"
+                    onClick={() => setOpenSection(section.title)}
+                    className="px-3 py-1.5 rounded-full bg-control text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700"
+                  >
+                    {section.title}
+                  </button>
+                ))}
+              </div>
+              {quickStart && (
+                <div className="mt-4 rounded-2xl border border-brand-100 bg-brand-50/60 p-4 dark:border-brand-900/40 dark:bg-brand-900/20">
+                  <p className="text-sm font-semibold text-brand-700 dark:text-brand-300 mb-2">{quickStart.title}</p>
+                  <div className="max-h-48 overflow-auto pr-1">
+                    {renderMarkdown(quickStart.body)}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {sections.map(section => {
+                const expanded = openSection === section.title
+                return (
+                  <div key={section.title} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setOpenSection(expanded ? null : section.title)}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-4 text-left"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{section.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Ketuk untuk buka atau tutup</p>
+                      </div>
+                      <span className="text-xl text-gray-400">{expanded ? '−' : '+'}</span>
+                    </button>
+                    {expanded && (
+                      <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700 pt-4">
+                        {renderMarkdown(section.body)}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
