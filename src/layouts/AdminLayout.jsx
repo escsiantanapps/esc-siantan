@@ -15,28 +15,17 @@ import { useExitConfirm } from '@/hooks/useExitConfirm'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 import { notificationService } from '@/services/notificationService'
 
-// Item menu Pesan Gembala — dipakai Gembala (menu inti) & Super Admin.
+// Item menu Pesan Gembala — dipakai Gembala & Super Admin.
 const PESAN_ITEM = { to: '/admin/pesan', icon: MessageSquare, labelKey: 'admin.nav.pesan' }
 
 function buildMenu(isSuperAdmin, isGembala, allowedPages) {
-  // Gembala = peran fokus: menu terkurasi (Dashboard + Pesan + laporan),
-  // tanpa akses ke konfigurasi sistem/master data.
-  if (isGembala) {
-    return [
-      { to: '/admin',          icon: LayoutDashboard, label: 'Dashboard',        section: 'Utama', labelKey: 'admin.nav.dashboard', sectionKey: 'admin.sec.Utama', exact: true },
-      { to: '/admin/pesan',    icon: MessageSquare,   label: 'Pesan Gembala', section: 'Utama', labelKey: 'admin.nav.pesan', sectionKey: 'admin.sec.Utama' },
-      { to: '/admin/evaluasi', icon: BarChart3,       label: 'Evaluasi & Laporan', section: 'Utama', labelKey: 'admin.nav.evaluasi', sectionKey: 'admin.sec.Utama' },
-      { to: '/admin/komsel',   icon: UsersRound,      label: 'Laporan Komsel', section: 'Utama', labelKey: 'admin.nav.komsel', sectionKey: 'admin.sec.Utama' },
-    ]
-  }
-
   const items = []
 
   // Dashboard sekarang jadi entri ADMIN_PAGES pertama (bisa dicabut Super
   // Admin). Filter yang sama berlaku untuknya.
   let lastSection = null
   for (const page of ADMIN_PAGES) {
-    if (!isSuperAdmin && allowedPages && !allowedPages.includes(page.to)) continue
+    if (!isSuperAdmin && !isGembala && allowedPages && !allowedPages.includes(page.to)) continue
     if (page.section !== lastSection) {
       items.push({ section: page.section, sectionKey: page.sectionKey })
       lastSection = page.section
@@ -46,9 +35,12 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
     items.push(page.to === '/admin' ? { ...page, exact: true } : page)
   }
 
-  if (isSuperAdmin) {
+  if (isSuperAdmin || isGembala) {
     items.push({ section: 'Komunikasi', sectionKey: 'admin.sec.Komunikasi' })
     items.push(PESAN_ITEM)
+  }
+
+  if (isSuperAdmin) {
     items.push({ section: 'Sistem', sectionKey: 'admin.sec.Sistem' })
     items.push({ to: '/admin/tukar-poin', icon: Gift, labelKey: 'admin.nav.tukarPoin' })
     items.push({ to: '/admin/distribusi-poin', icon: Coins, labelKey: 'admin.nav.distribusiPoin' })
@@ -60,10 +52,6 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
 
   return items
 }
-
-// Halaman yang boleh diakses Gembala di panel admin (sisanya diarahkan ke Dashboard).
-// Khusus untuk Dashboard (/admin), pengecekannya exact match di bawah.
-const GEMBALA_ALLOWED = ['/admin/pesan', '/admin/evaluasi', '/admin/komsel']
 
 export default function AdminLayout() {
   const [open, setOpen] = useState(false)
@@ -85,7 +73,7 @@ export default function AdminLayout() {
   const isVolunteerSecondary = profile?.role_secondary === 'Volunteer'
   const hasSecondaryAccess = isPKS || isVolunteerSecondary
   const [allowedPages, setAllowedPages] = useState(null)
-  const [permLoading, setPermLoading] = useState(!isSuperAdmin)
+  const [permLoading, setPermLoading] = useState(!isSuperAdmin && !isGembala)
   const [pendingCounts, setPendingCounts] = useState({
     pendingUsers: 0, pendingClasses: 0, pendingEvents: 0, pendingEvaluations: 0
   })
@@ -99,13 +87,13 @@ export default function AdminLayout() {
   }, [profile?.role])
 
   useEffect(() => {
-    if (isSuperAdmin || !profile?.user_id) { setPermLoading(false); return }
+    if (isSuperAdmin || isGembala || !profile?.user_id) { setPermLoading(false); return }
     setPermLoading(true)
     permissionsService.getMyPermissions(profile.user_id)
       .then(setAllowedPages)
       .catch(() => setAllowedPages(null))
       .finally(() => setPermLoading(false))
-  }, [isSuperAdmin, profile?.user_id])
+  }, [isSuperAdmin, isGembala, profile?.user_id])
 
   async function handleLogout() {
     const ok = await confirm({
@@ -135,15 +123,9 @@ export default function AdminLayout() {
     return first ? first.to : '/'
   }
 
-  // Gembala: kunci ke halaman terkurasi saja.
-  // Sisanya diarahkan ke Dashboard (karena Gembala sekarang punya Dashboard).
-  if (isGembala) {
-    const p = location.pathname
-    const ok = p === '/admin' || GEMBALA_ALLOWED.some(base => p === base || p.startsWith(base + '/'))
-    if (!ok) return <Navigate to="/admin" replace />
-  }
-
-  // Halaman khusus Super Admin (Hak Akses, Kategori Tugas, Backup, Audit, Tukar Poin, Distribusi Poin)
+  // Halaman bagian Sistem khusus Super Admin (Hak Akses, Kategori Tugas,
+  // Backup, Audit, Tukar Poin, Distribusi Poin). Gembala boleh seluruh
+  // halaman admin lain, tetapi tetap tidak masuk bagian Sistem.
   if (['/admin/hak-akses', '/admin/kategori-tugas', '/admin/backup', '/admin/audit', '/admin/tukar-poin', '/admin/distribusi-poin'].includes(location.pathname) && !isSuperAdmin) {
     return <Navigate to={fallbackPath()} replace />
   }
