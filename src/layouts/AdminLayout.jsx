@@ -18,6 +18,11 @@ import { notificationService } from '@/services/notificationService'
 // Item menu Pesan Gembala — dipakai Gembala & Super Admin.
 const PESAN_ITEM = { to: '/admin/pesan', icon: MessageSquare, labelKey: 'admin.nav.pesan' }
 
+const GEMBALA_BLOCKED_ACTIONS = [
+  'tambah', 'simpan', 'hapus', 'edit', 'setujui', 'tolak', 'kirim',
+  'terbit', 'unggah', 'upload', 'buat', 'buka sesi', 'batalkan', 'nonaktifkan',
+]
+
 function buildMenu(isSuperAdmin, isGembala, allowedPages) {
   const items = []
 
@@ -68,6 +73,7 @@ export default function AdminLayout() {
 
   const isSuperAdmin = profile?.role === 'Super Admin'
   const isGembala = profile?.role === 'Gembala'
+  const gembalaReadOnly = isGembala && location.pathname !== '/admin/pesan' && !location.pathname.startsWith('/admin/pesan/')
   const isAdminOnly = profile?.role === 'Admin'
   const isPKS = profile?.is_pks === true || profile?.role === 'PKS'
   const isVolunteerSecondary = profile?.role_secondary === 'Volunteer'
@@ -105,6 +111,25 @@ export default function AdminLayout() {
     if (!ok) return
     await logout()
     navigate('/login')
+  }
+
+  function handleReadOnlyCapture(event) {
+    if (!gembalaReadOnly) return
+    const target = event.target?.closest?.('button, a, input, textarea, select, [role="button"]')
+    if (!target) return
+    if (target.closest('[data-readonly-allow]')) return
+
+    const tag = target.tagName?.toLowerCase()
+    const text = (target.textContent || target.getAttribute('aria-label') || target.getAttribute('title') || '').trim().toLowerCase()
+    const href = target.getAttribute?.('href') || ''
+    const isWriteLink = /\/(baru|edit)(\/|$)/.test(href)
+    const isWriteButton = tag === 'button' && GEMBALA_BLOCKED_ACTIONS.some(word => text.includes(word))
+    const isFormSubmit = event.type === 'submit'
+
+    if (!isWriteLink && !isWriteButton && !isFormSubmit) return
+    event.preventDefault()
+    event.stopPropagation()
+    toast.info('Mode Gembala hanya baca. Input tetap tersedia di menu Pesan Gembala.')
   }
 
   if (permLoading) return (
@@ -259,7 +284,7 @@ export default function AdminLayout() {
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0" onClickCapture={handleReadOnlyCapture} onSubmitCapture={handleReadOnlyCapture}>
         {/* Top bar mobile */}
         <header className="lg:hidden bg-surface/90 backdrop-blur-md border-b border-gray-100 px-4 pb-3 flex items-center gap-3 sticky top-0 z-20" style={{paddingTop: 'calc(var(--safe-top, 28px) + 0.75rem)'}}>
           <button onClick={() => setOpen(true)} className="p-1 text-gray-500 active:scale-90 transition-transform">
