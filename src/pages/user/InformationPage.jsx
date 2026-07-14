@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bell, BookOpen, Clock, MapPin } from 'lucide-react'
-import { newsService, classesService } from '@/services/contentService'
+import { newsService, classesService, eventsService } from '@/services/contentService'
 import { Skeleton, EmptyState, GradientHeader, StatusBadge, SectionHeader } from '@/components/ui'
 import Carousel from '@/components/Carousel'
+import EventCarousel from '@/components/EventCarousel'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, truncate } from '@/lib/utils'
 
 export default function InformationPage() {
   const { t } = useLang()
   const [news, setNews] = useState([])
+  const [events, setEvents] = useState([])
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const ongoing = list => (list || []).filter(x => ['Mulai', 'Sedang Berlangsung'].includes(x.status))
     Promise.all([
       newsService.getAll().then(setNews).catch(() => {}),
+      eventsService.getAll().then(list => setEvents(ongoing(list))).catch(() => {}),
       classesService.getAll().then(list =>
         setClasses((list || []).filter(c => ['Mulai', 'Sedang Berlangsung'].includes(c.status)))
       ).catch(() => {}),
@@ -80,6 +84,16 @@ export default function InformationPage() {
                     </Link>
                   )}
                 />
+              )}
+            </section>
+
+            {/* Section: Event */}
+            <section className="animate-fade-in-up" style={{ animationDelay: '40ms' }}>
+              <SectionHeader title={t('home.event')} to="/events" />
+              {events.length === 0 ? (
+                <EmptyState icon={Bell} title={t('events.empty')} description={t('events.emptyDesc')} />
+              ) : (
+                <EventCarousel events={events.slice(0, 8)} />
               )}
             </section>
 

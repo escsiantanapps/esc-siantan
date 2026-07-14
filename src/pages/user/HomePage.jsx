@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import { Bell, Calendar, BookOpen, Droplets, Heart, Baby, Church, HandCoins, WifiOff, RefreshCw, Star, Library, CreditCard } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { eventsService, appSettingsService } from '@/services/contentService'
-import { Skeleton, SkeletonCard, SectionHeader } from '@/components/ui'
+import { newsService, appSettingsService } from '@/services/contentService'
+import { Skeleton, SkeletonCard, SectionHeader, EmptyState } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
 import SopNudgeCard from '@/components/SopNudgeCard'
@@ -14,7 +14,7 @@ import MembershipCard from '@/components/MembershipCard'
 import MyMinistryScheduleCard from '@/components/MyMinistryScheduleCard'
 import PointsProgressCard from '@/components/PointsProgressCard'
 import AttendanceSummaryCard from '@/components/AttendanceSummaryCard'
-import EventCarousel from '@/components/EventCarousel'
+import Carousel from '@/components/Carousel'
 import { spColor } from '@/lib/utils'
 
 // Sapaan sesuai jam lokal perangkat (pagi/siang/sore/malam)
@@ -29,7 +29,7 @@ function greeting(t) {
 export default function HomePage() {
   const { profile } = useAuth()
   const { t } = useLang()
-  const [events, setEvents] = useState([])
+  const [news, setNews] = useState([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
   const [baptismOpen, setBaptismOpen] = useState(true)
@@ -38,10 +38,8 @@ export default function HomePage() {
     setLoading(true)
     setFetchError(false)
     let anyFailed = false
-    // Beranda menampilkan yang belum selesai (status Mulai / Sedang Berlangsung).
-    const ongoing = list => (list || []).filter(x => ['Mulai', 'Sedang Berlangsung'].includes(x.status))
     Promise.all([
-      eventsService.getAll().then(list => setEvents(ongoing(list))).catch(() => { anyFailed = true }),
+      newsService.getAll().then(setNews).catch(() => { anyFailed = true }),
       appSettingsService.get('baptism_status').then(s => setBaptismOpen(s !== 'closed')).catch(() => {}),
     ]).finally(() => {
       setLoading(false)
@@ -156,11 +154,48 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Event — carousel yang bisa digeser */}
-        {events.length > 0 && (
+        {/* Isi info di beranda dipusatkan ke pengumuman terbaru */}
+        {news.length > 0 && (
           <section>
-            <SectionHeader title={t('home.event')} to="/events" />
-            <EventCarousel events={events.slice(0, 6)} />
+            <SectionHeader title={t('info.announcements')} to="/informasi" />
+            <Carousel
+              items={news.slice(0, 6)}
+              getKey={item => item.news_id}
+              renderItem={item => (
+                <Link to={`/informasi/${item.news_id}`} className="block">
+                  <div className="rounded-3xl overflow-hidden ambient-shadow bg-surface active:scale-[0.99] transition-transform">
+                    <div className="relative h-36">
+                      {item.thumbnail_url
+                        ? <img src={item.thumbnail_url} alt={item.title} className="w-full h-full object-cover" />
+                        : (
+                          <div className="w-full h-full gradient-main flex items-center justify-center">
+                            <Bell size={32} className="text-white/85" strokeWidth={1.5} />
+                          </div>
+                        )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
+                      <span className="absolute top-3 left-3 bg-surface/90 text-brand-600 text-[11px] font-semibold px-2.5 py-1 rounded-full">
+                        {t('info.announcementTag')}
+                      </span>
+                    </div>
+                    <div className="p-3.5">
+                      <p className="text-sm font-semibold text-gray-900 line-clamp-1">{item.title}</p>
+                      {item.content && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{item.content}</p>}
+                    </div>
+                  </div>
+                </Link>
+              )}
+            />
+          </section>
+        )}
+
+        {!loading && news.length === 0 && (
+          <section>
+            <SectionHeader title={t('info.announcements')} to="/informasi" />
+            <EmptyState
+              icon={Bell}
+              title={t('info.noAnnouncements')}
+              description={t('info.noAnnouncementsDesc')}
+            />
           </section>
         )}
 

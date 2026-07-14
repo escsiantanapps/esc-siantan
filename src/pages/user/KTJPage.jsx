@@ -43,13 +43,13 @@ export default function KTJPage() {
       usersService.getAllKomsel().catch(() => []),
     ])
       .then(([{ ktj }, komsel]) => {
-        // Cek semua KTJ - yang ditolak juga perlu ditampilkan agar user bisa lihat alasan
-        const all = ktj || []
-        const rejected = all.find(k => k.status === 'Ditolak')
+        // Jika user sudah ajukan ulang, status aktif terbaru harus menang dari
+        // penolakan lama agar pesan ditolak tidak muncul lagi setelah refresh.
+        const all = [...(ktj || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
         const active = all.find(k => k.status !== 'Ditolak')
-        
-        // Prioritas: tampilkan yang ditolak (dengan pesan) atau yang aktif
-        setExisting(rejected || active || null)
+        const rejected = all.find(k => k.status === 'Ditolak')
+
+        setExisting(active || rejected || null)
         setKomselList(komsel || [])
       })
       .finally(() => setLoading(false))

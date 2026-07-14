@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, MapPin, Clock, QrCode } from 'lucide-react'
-import { classesService } from '@/services/contentService'
-import { Card, Skeleton, EmptyState, GradientHeader, StatusBadge } from '@/components/ui'
+import { classesService, eventsService } from '@/services/contentService'
+import { Card, Skeleton, EmptyState, GradientHeader, StatusBadge, SectionHeader } from '@/components/ui'
+import EventCarousel from '@/components/EventCarousel'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 
@@ -17,11 +18,16 @@ export default function ClassesPage() {
   const { toast } = useToast()
   const { t } = useLang()
   const [classes, setClasses] = useState([])
+  const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Mulai')
 
   useEffect(() => {
-    classesService.getAll().then(setClasses)
+    const ongoing = list => (list || []).filter(x => ['Mulai', 'Sedang Berlangsung'].includes(x.status))
+    Promise.all([
+      classesService.getAll().then(setClasses),
+      eventsService.getAll().then(list => setEvents(ongoing(list))).catch(() => {}),
+    ])
       .catch(err => toast.error(err.message || t('classes.loadFailed')))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -38,6 +44,13 @@ export default function ClassesPage() {
       </GradientHeader>
 
       <div className="px-4 -mt-2 pt-4">
+        {!loading && events.length > 0 && (
+          <section className="mb-5">
+            <SectionHeader title={t('home.event')} to="/events" />
+            <EventCarousel events={events.slice(0, 6)} />
+          </section>
+        )}
+
         {/* Tabs status */}
         <div className="flex gap-2 mb-4">
           {TABS.map(({ value, key }) => (
