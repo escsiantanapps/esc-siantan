@@ -716,8 +716,8 @@ export const translations = {
     'admin.nav.audit': 'Audit Log',
     'admin.sec.Utama': 'Utama',
     'admin.sec.Konten': 'Konten',
+    'admin.sec.Administrasi': 'Administrasi',
     'admin.sec.Pelayanan': 'Pelayanan',
-    'admin.sec.Organisasi': 'Organisasi',
     'admin.sec.Sistem': 'Sistem',
 
     // Backup Data
@@ -2015,8 +2015,8 @@ export const translations = {
     'admin.nav.audit': 'Audit Log',
     'admin.sec.Utama': 'Main',
     'admin.sec.Konten': 'Content',
+    'admin.sec.Administrasi': 'Administration',
     'admin.sec.Pelayanan': 'Ministry',
-    'admin.sec.Organisasi': 'Organization',
     'admin.sec.Sistem': 'System',
 
     // Data Backup
