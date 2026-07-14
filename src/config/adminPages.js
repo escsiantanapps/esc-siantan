@@ -1,8 +1,8 @@
 import {
   Users, Calendar, Newspaper, BookOpen,
   ClipboardList, Droplets, Heart, AlertTriangle, BarChart3,
-  Layers, Network, HandCoins, CalendarOff, Baby, Award, Map, Gift, Church, CreditCard,
-  LayoutDashboard, Inbox, CalendarClock, Coins, Library,
+  Layers, Network, HandCoins, CalendarOff, Baby, Award, Map, Church, CreditCard,
+  LayoutDashboard, Inbox, CalendarClock, Library,
 } from 'lucide-react'
 
 // Daftar halaman admin yang aksesnya bisa dibatasi untuk role "Admin"
@@ -24,8 +24,9 @@ export const ADMIN_PAGES = [
   { to: '/admin/kelas',    icon: BookOpen,        label: 'Kelas',            section: 'Konten',       labelKey: 'admin.nav.kelas',       sectionKey: 'admin.sec.Konten' },
   { to: '/admin/baca',     icon: Library,         label: 'Buku',             section: 'Konten',       labelKey: 'admin.nav.baca',        sectionKey: 'admin.sec.Konten' },
   { to: '/admin/roadmap',  icon: Map,             label: 'Roadmap Pemuridan',section: 'Konten',       labelKey: 'admin.nav.roadmap',     sectionKey: 'admin.sec.Konten' },
-  { to: '/admin/ibadah-minggu', icon: Church,     label: 'Ibadah Minggu',    section: 'Konten',       labelKey: 'admin.nav.ibadahMinggu',sectionKey: 'admin.sec.Konten' },
   // ── Administrasi ──
+  { to: '/admin/ibadah-minggu', icon: Church,     label: 'Ibadah Minggu',    section: 'Administrasi', labelKey: 'admin.nav.ibadahMinggu',sectionKey: 'admin.sec.Administrasi' },
+  { to: '/admin/pelayanan', icon: CalendarClock,  label: 'Absen Pelayanan',  section: 'Administrasi', labelKey: 'admin.nav.pelayanan',   sectionKey: 'admin.sec.Administrasi' },
   { to: '/admin/baptisan', icon: Droplets,        label: 'Baptisan',         section: 'Administrasi', labelKey: 'admin.nav.baptisan',    sectionKey: 'admin.sec.Administrasi' },
   { to: '/admin/nikah',    icon: Heart,           label: 'Pemberkatan Nikah',section: 'Administrasi', labelKey: 'admin.nav.nikah',       sectionKey: 'admin.sec.Administrasi' },
   { to: '/admin/penyerahan-anak', icon: Baby,     label: 'Penyerahan Anak',  section: 'Administrasi', labelKey: 'admin.nav.dedikasi',    sectionKey: 'admin.sec.Administrasi' },
@@ -35,15 +36,11 @@ export const ADMIN_PAGES = [
   { to: '/admin/tugas',    icon: ClipboardList,   label: 'Tugas & Form',     section: 'Pelayanan',    labelKey: 'admin.nav.tugas',       sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/respon',   icon: Inbox,           label: 'Respon SOP',       section: 'Pelayanan',    labelKey: 'admin.nav.respon',      sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/evaluasi', icon: BarChart3,       label: 'Evaluasi & Laporan',section: 'Pelayanan',   labelKey: 'admin.nav.evaluasi',    sectionKey: 'admin.sec.Pelayanan' },
-  { to: '/admin/pelayanan', icon: CalendarClock,  label: 'Absen Pelayanan',  section: 'Pelayanan',    labelKey: 'admin.nav.pelayanan',   sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/izin',     icon: CalendarOff,     label: 'Izin / Sakit',     section: 'Pelayanan',    labelKey: 'admin.nav.izin',        sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/komsel',   icon: Network,         label: 'Komsel',           section: 'Pelayanan',    labelKey: 'admin.nav.komsel',      sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/ministry', icon: Layers,          label: 'Ministry',         section: 'Pelayanan',    labelKey: 'admin.nav.ministry',    sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/persembahan', icon: HandCoins,    label: 'Persembahan',      section: 'Pelayanan',    labelKey: 'admin.nav.persembahan', sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/sp',       icon: AlertTriangle,   label: 'Surat Peringatan', section: 'Pelayanan',    labelKey: 'admin.nav.sp',          sectionKey: 'admin.sec.Pelayanan' },
-  // ── Sistem ──
-  { to: '/admin/tukar-poin',      icon: Gift,     label: 'Tukar Poin',       section: 'Sistem',       labelKey: 'admin.nav.tukarPoin',   sectionKey: 'admin.sec.Sistem' },
-  { to: '/admin/distribusi-poin', icon: Coins,    label: 'Distribusi Poin',  section: 'Sistem',       labelKey: 'admin.nav.distribusiPoin', sectionKey: 'admin.sec.Sistem' },
 ]
 
 export const ALL_ADMIN_PAGE_PATHS = ADMIN_PAGES.map(p => p.to)
