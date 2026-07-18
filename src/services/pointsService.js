@@ -171,33 +171,50 @@ export const pointsService = {
     return data
   },
 
-  // Sesi aktif (belum kedaluwarsa) untuk hari ini WIB. Dipakai Admin agar tak
-  // membuat sesi ganda — QR yang sama dipakai ulang sepanjang jendela waktu.
-  async getActiveSundaySession() {
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
+  // Sesi aktif (belum kedaluwarsa) untuk tanggal tertentu. Dipakai Admin agar
+  // tak membuat sesi ganda — QR yang sama dipakai ulang sepanjang jendela waktu.
+  // Parameter date opsional (default = hari ini WIB).
+  async getActiveSundaySession(date = null) {
+    const targetDate = date || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
     const { data, error } = await supabase.from('sunday_sessions')
-      .select('*').eq('service_date', today).gte('expires_at', new Date().toISOString())
+      .select('*').eq('service_date', targetDate).gte('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false }).limit(1)
     if (error) throw error
     return data?.[0] || null
   },
 
   // QR berlaku sepanjang hari (keputusan operator 2026-07-12): ibadah beda-beda
-  // jamnya, jadi batas = akhir hari WIB, bukan durasi tetap. expires_at = awal
-  // hari WIB berikutnya (00:00 Asia/Jakarta besok). RLS insert tetap mensyaratkan
-  // service_date = hari ini WIB, jadi tak ada celah lintas hari.
-  async openSundaySession(createdBy, { title = null } = {}) {
-    const existing = await this.getActiveSundaySession()
+  // jamnya, jadi batas = akhir hari WIB, bukan durasi tetap. expires_at = akhir
+  // hari target (23:59:59 WIB). Sejak v70, bisa buka sesi untuk tanggal selain
+  // hari ini (date opsional, default = hari ini WIB).
+  async openSundaySession(createdBy, date = null, { title = null } = {}) {
+    const targetDate = date || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
+    const existing = await this.getActiveSundaySession(targetDate)
     if (existing) return existing
-    const wibToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
-    const expires = new Date(`${wibToday}T23:59:59+07:00`).toISOString()
+    const expires = new Date(`${targetDate}T23:59:59+07:00`).toISOString()
     const { data, error } = await supabase.from('sunday_sessions')
-      .insert({ created_by: createdBy, title, expires_at: expires }).select().single()
+      .insert({ service_date: targetDate, created_by: createdBy, title, expires_at: expires }).select().single()
     if (error) throw error
     return data
   },
 
-  // Tutup sesi lebih awal = set kedaluwarsa ke sekarang (scan berikutnya ditolak).
+  // Pause sesi ibadah (set is_paused = true → scan ditolak, QR tetap sama).
+  async pauseSundaySession(sessionId) {
+    const { data, error } = await supabase.from('sunday_sessions')
+      .update({ is_paused: true }).eq('session_id', sessionId).select().single()
+    if (error) throw error
+    return data
+  },
+
+  // Resume sesi ibadah (set is_paused = false → scan kembali diterima).
+  async resumeSundaySession(sessionId) {
+    const { data, error } = await supabase.from('sunday_sessions')
+      .update({ is_paused: false }).eq('session_id', sessionId).select().single()
+    if (error) throw error
+    return data
+  },
+
+  // Tutup sesi ibadah permanen (set expires_at ke sekarang → sesi berakhir).
   async closeSundaySession(sessionId) {
     const { data, error } = await supabase.from('sunday_sessions')
       .update({ expires_at: new Date().toISOString() }).eq('session_id', sessionId).select().single()

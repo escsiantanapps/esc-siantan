@@ -3603,3 +3603,41 @@ CREATE POLICY "documents_general_insert" ON storage.objects
       OR auth_user_role() IN ('Admin', 'Super Admin')
     )
   );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v70: Pause/Resume Sesi Ibadah Minggu ──────────────────────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-18):
+-- (a) QR Ibadah Minggu dapat digenerate di hari lain (bukan hanya hari H).
+-- (b) Admin dapat pause/resume sesi tanpa mengubah session_id (QR tetap
+--     konsisten saat sesi di-pause untuk mencegah jemaat absen sebelum
+--     jam ibadah tiba).
+--
+-- Sebelumnya: Admin hanya bisa buka sesi di hari yang sama (cek isToday
+-- di klien), dan tombol Close mengubah expires_at ke now() — sehingga
+-- QR berubah setiap kali pause (karena harus buat sesi baru).
+--
+-- Perbaikan:
+-- 1. Tambah kolom is_paused untuk pause/resume tanpa ubah session_id.
+-- 2. Update policy sunday_att_insert untuk cek is_paused = false (selain
+--    cek expires_at yang sudah ada).
+-- 3. Klien akan diubah untuk menghilangkan batasan isToday dan mengganti
+--    tombol Close dengan Pause/Resume.
+
+ALTER TABLE sunday_sessions
+  ADD COLUMN IF NOT EXISTS is_paused BOOLEAN NOT NULL DEFAULT false;
+
+-- Perketat policy INSERT sunday_attendance: selain cek expires_at, juga
+-- cek is_paused = false. Ini mencegah jemaat scan QR saat sesi di-pause.
+DROP POLICY IF EXISTS "sunday_att_insert" ON sunday_attendance;
+CREATE POLICY "sunday_att_insert" ON sunday_attendance FOR INSERT WITH CHECK (
+  user_id = auth_user_id()
+  AND attendance_date = (current_timestamp AT TIME ZONE 'Asia/Jakarta')::date
+  AND EXISTS (
+    SELECT 1 FROM sunday_sessions s
+    WHERE s.session_id = sunday_attendance.session_id
+      AND s.service_date = (current_timestamp AT TIME ZONE 'Asia/Jakarta')::date
+      AND now() <= s.expires_at
+      AND s.is_paused = false
+  )
+);

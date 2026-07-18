@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { Church, Download, FileSpreadsheet, Play, Square } from 'lucide-react'
+import { Church, Download, FileSpreadsheet, Play, Pause, Square } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAuth'
 import { pointsService } from '@/services/pointsService'
@@ -14,21 +14,18 @@ export default function AdminSundayPage() {
   const { toast } = useToast()
   const { profile } = useAuth()
   const [date, setDate] = useState(todayISO())
-  const [session, setSession] = useState(null)   // sesi aktif hari ini (bila ada)
+  const [session, setSession] = useState(null)   // sesi aktif untuk tanggal terpilih (bila ada)
   const [qr, setQr] = useState('')
   const [busy, setBusy] = useState(false)
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
 
-  const isToday = date === todayISO()
-
-  // Muat sesi ibadah aktif hari ini. QR ibadah kini = token sesi acak dengan
-  // jendela waktu (anti-curang v63), bukan lagi tanggal statis yang bisa
-  // ditebak/difoto/dibagikan.
+  // Muat sesi ibadah aktif untuk tanggal terpilih. QR ibadah = token sesi acak
+  // dengan jendela waktu (anti-curang v63) + pause/resume (v70) — QR tetap
+  // konsisten saat di-pause untuk mencegah jemaat absen sebelum jam ibadah tiba.
   useEffect(() => {
-    if (!isToday) { setSession(null); return }
-    pointsService.getActiveSundaySession().then(setSession).catch(() => setSession(null))
-  }, [isToday, date])
+    pointsService.getActiveSundaySession(date).then(setSession).catch(() => setSession(null))
+  }, [date])
 
   // Render QR dari session_id sesi aktif.
   useEffect(() => {
@@ -45,11 +42,35 @@ export default function AdminSundayPage() {
   async function openSession() {
     setBusy(true)
     try {
-      const s = await pointsService.openSundaySession(profile.user_id)
+      const s = await pointsService.openSundaySession(profile.user_id, date)
       setSession(s)
       toast.success('Sesi ibadah dibuka. Tampilkan QR di pintu masuk.')
     } catch (err) {
       toast.error(err.message || 'Gagal membuka sesi ibadah.')
+    } finally { setBusy(false) }
+  }
+
+  async function pauseSession() {
+    if (!session) return
+    setBusy(true)
+    try {
+      const s = await pointsService.pauseSundaySession(session.session_id)
+      setSession(s)
+      toast.info('Sesi dijeda. Jemaat tidak bisa scan QR hingga di-resume.')
+    } catch (err) {
+      toast.error(err.message || 'Gagal menjeda sesi.')
+    } finally { setBusy(false) }
+  }
+
+  async function resumeSession() {
+    if (!session) return
+    setBusy(true)
+    try {
+      const s = await pointsService.resumeSundaySession(session.session_id)
+      setSession(s)
+      toast.success('Sesi dilanjutkan. Jemaat bisa scan QR kembali.')
+    } catch (err) {
+      toast.error(err.message || 'Gagal melanjutkan sesi.')
     } finally { setBusy(false) }
   }
 
@@ -59,7 +80,7 @@ export default function AdminSundayPage() {
     try {
       await pointsService.closeSundaySession(session.session_id)
       setSession(null)
-      toast.info('Sesi ibadah ditutup. QR tidak berlaku lagi.')
+      toast.info('Sesi ibadah ditutup permanen. QR tidak berlaku lagi.')
     } catch (err) {
       toast.error(err.message || 'Gagal menutup sesi.')
     } finally { setBusy(false) }
@@ -85,16 +106,13 @@ export default function AdminSundayPage() {
           <Input label="Tanggal" type="date" value={date} onChange={e => setDate(e.target.value)} />
         </div>
 
-        {!isToday ? (
-          <p className="text-sm text-gray-400 text-center py-2">
-            QR ibadah hanya bisa dibuka untuk hari ini. Pilih tanggal hari ini untuk membuka sesi.
-          </p>
-        ) : !session ? (
+        {!session ? (
           <div className="flex flex-col items-center text-center gap-3 py-2">
             <p className="text-sm text-gray-500 max-w-xs">
               Buka sesi saat ibadah dimulai. QR otomatis dibuat &amp; berlaku
-              sepanjang hari ini (bisa ditutup lebih awal kapan saja). Jemaat
-              memindainya lewat menu Scan untuk mencatat kehadiran &amp; mendapat 1 poin.
+              sepanjang hari (bisa di-pause untuk mencegah scan sebelum ibadah tiba,
+              atau ditutup permanen). Jemaat memindainya lewat menu Scan untuk
+              mencatat kehadiran &amp; mendapat 1 poin.
             </p>
             <Button onClick={openSession} disabled={busy}>
               {busy ? <Spinner size="sm" /> : <Play size={15} />} Buka Sesi Ibadah
@@ -103,10 +121,13 @@ export default function AdminSundayPage() {
         ) : (
           <div className="flex flex-col items-center text-center gap-3">
             {qr ? <img src={qr} alt="QR Ibadah" className="w-56 rounded-xl border border-gray-100" /> : <Spinner />}
-            <Badge color="green">Sesi aktif · berlaku sepanjang hari ini</Badge>
+            <Badge color={session.is_paused ? 'yellow' : 'green'}>
+              {session.is_paused ? 'Sesi dijeda — scan ditolak' : 'Sesi aktif — jemaat bisa scan'}
+            </Badge>
             <p className="text-xs text-gray-400 max-w-xs">
-              Tampilkan/cetak QR ini di pintu masuk. QR ini acak &amp; hanya berlaku selama sesi —
-              jangan sebar fotonya di grup.
+              {session.is_paused
+                ? 'QR tidak berubah saat dijeda. Klik Resume untuk melanjutkan sesi.'
+                : 'Tampilkan/cetak QR ini di pintu masuk. QR ini acak & hanya berlaku selama sesi — jangan sebar fotonya di grup.'}
             </p>
             <div className="flex items-center gap-3 flex-wrap justify-center">
               {qr && (
@@ -114,8 +135,17 @@ export default function AdminSundayPage() {
                   <Download size={15} /> Unduh QR
                 </a>
               )}
+              {session.is_paused ? (
+                <Button onClick={resumeSession} disabled={busy}>
+                  {busy ? <Spinner size="sm" /> : <Play size={14} />} Resume Sesi
+                </Button>
+              ) : (
+                <Button variant="secondary" onClick={pauseSession} disabled={busy}>
+                  {busy ? <Spinner size="sm" /> : <Pause size={14} />} Pause Sesi
+                </Button>
+              )}
               <Button variant="secondary" onClick={closeSession} disabled={busy}>
-                <Square size={14} /> Tutup Sesi
+                <Square size={14} /> Tutup Permanen
               </Button>
             </div>
           </div>
