@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { GradientHeader, Spinner } from '@/components/ui'
 import { useNavigate } from 'react-router-dom'
+import { ChevronDown } from 'lucide-react'
 
 // Konten panduan per role (embedded langsung, tidak fetch eksternal)
 const PANDUAN_JEMAAT = `
@@ -535,7 +536,7 @@ const PANDUAN_ADMIN = `
 **Super Admin:**
 - Akses penuh semua halaman
 - Bisa atur Hak Akses
-- Akses: Backup, Audit, Kategori Tugas
+- Akses: Backup, Audit
 
 ---
 
@@ -562,7 +563,7 @@ const PANDUAN_ADMIN = `
 - **Ibadah Minggu** - Kelola jadwal ibadah
 
 ### Pelayanan
-- **Tugas & Form** - Kelola SOP volunteer
+- **Tugas & Form** - Kelola SOP volunteer (punya tab Kategori Tugas untuk Super Admin)
 - **Respon SOP** - Lihat jawaban form
 - **Baptisan** - Kelola pendaftaran
 - **Pemberkatan Nikah** - Kelola pernikahan
@@ -572,18 +573,19 @@ const PANDUAN_ADMIN = `
 - **Pelayanan** - Kelola jadwal ministry
 
 ### Organisasi
-- **SP** - Surat Peringatan
+- **SP** - Surat Peringatan (lihat riwayat, terbitkan SP, kelola kategori SP)
 - **Ministry** - Kelola ministry
 - **Komsel** - Kelola komsel dan PKS
 - **Persembahan** - Kelola persembahan
 - **Poin** - Kelola hadiah dan penukaran
 - **Cuti/Izin** - Kelola izin volunteer
 
-### Super Admin Only
+### Sistem (Super Admin Only)
 - **Hak Akses** - Atur akses admin
-- **Kategori Tugas** - Kelola kategori
+- **Tukar Poin** - Kelola hadiah penukaran
+- **Distribusi Poin** - Log distribusi poin
 - **Backup** - Backup data
-- **Audit** - Log aktivitas
+- **Audit** - Log aktivitas admin
 
 ---
 
@@ -892,46 +894,77 @@ function HelpPage() {
       .filter(section => section.title && section.body)
   }, [content])
 
+  // Render teks inline: **bold** dan teks biasa bercampur
+  const renderInline = (text, key) => {
+    const parts = text.split(/(\*\*[^*]+\*\*)/)
+    if (parts.length === 1) return text
+    return (
+      <span key={key}>
+        {parts.map((part, i) =>
+          part.startsWith('**') && part.endsWith('**')
+            ? <strong key={i} className="font-semibold text-gray-900 dark:text-gray-100">{part.slice(2, -2)}</strong>
+            : part
+        )}
+      </span>
+    )
+  }
+
   // Render markdown sederhana (tanpa library tambahan)
   const renderMarkdown = (md) => {
     const lines = md.trim().split('\n')
     const elements = []
-    let currentList = null
+    let currentList = null   // null | 'ul' | 'ol'
     let currentListItems = []
 
     const flushList = () => {
-      if (currentList && currentListItems.length > 0) {
+      if (!currentList || currentListItems.length === 0) return
+      if (currentList === 'ol') {
         elements.push(
-          <ul key={`list-${elements.length}`} className="list-disc list-inside space-y-1 mb-4 text-gray-700 dark:text-gray-300 ml-4">
+          <ol key={`ol-${elements.length}`} className="list-decimal list-inside space-y-1 mb-4 text-gray-700 dark:text-gray-300 ml-4">
             {currentListItems.map((item, i) => (
-              <li key={i} className="text-sm leading-relaxed">{item}</li>
+              <li key={i} className="text-sm leading-relaxed">{renderInline(item, i)}</li>
+            ))}
+          </ol>
+        )
+      } else {
+        elements.push(
+          <ul key={`ul-${elements.length}`} className="list-disc list-inside space-y-1 mb-4 text-gray-700 dark:text-gray-300 ml-4">
+            {currentListItems.map((item, i) => (
+              <li key={i} className="text-sm leading-relaxed">{renderInline(item, i)}</li>
             ))}
           </ul>
         )
-        currentListItems = []
-        currentList = null
       }
+      currentListItems = []
+      currentList = null
     }
 
     lines.forEach((line, idx) => {
       // Header H1
       if (line.startsWith('# ')) {
         flushList()
-        elements.push(<h1 key={idx} className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3 mt-6">{line.slice(2)}</h1>)
+        elements.push(<h1 key={idx} className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3 mt-6">{line.slice(2)}</h1>)
       }
       // Header H2
       else if (line.startsWith('## ')) {
         flushList()
-        elements.push(<h2 key={idx} className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2 mt-5">{line.slice(3)}</h2>)
+        elements.push(<h2 key={idx} className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2 mt-5">{line.slice(3)}</h2>)
       }
       // Header H3
       else if (line.startsWith('### ')) {
         flushList()
-        elements.push(<h3 key={idx} className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2 mt-4">{line.slice(4)}</h3>)
+        elements.push(<h3 key={idx} className="text-base font-semibold text-brand-600 dark:text-brand-400 mb-2 mt-4">{line.slice(4)}</h3>)
       }
-      // List item
+      // Numbered list
+      else if (line.match(/^\d+\.\s/)) {
+        if (currentList === 'ul') flushList()
+        currentList = 'ol'
+        currentListItems.push(line.replace(/^\d+\.\s/, ''))
+      }
+      // Bullet list
       else if (line.match(/^[-*]\s/)) {
-        currentList = true
+        if (currentList === 'ol') flushList()
+        currentList = 'ul'
         currentListItems.push(line.slice(2))
       }
       // Horizontal rule
@@ -939,68 +972,22 @@ function HelpPage() {
         flushList()
         elements.push(<hr key={idx} className="my-4 border-gray-200 dark:border-gray-700" />)
       }
-      // Bold text inline (basic support)
-      else if (line.trim().startsWith('**') && line.trim().endsWith('**')) {
-        flushList()
-        const text = line.trim().slice(2, -2)
-        elements.push(<p key={idx} className="font-semibold text-gray-800 dark:text-gray-200 mb-2">{text}</p>)
-      }
-      // Numbered list
-      else if (line.match(/^\d+\.\s/)) {
-        flushList()
-        const text = line.replace(/^\d+\.\s/, '')
-        if (currentList === 'ol') {
-          currentListItems.push(text)
-        } else {
-          flushList()
-          currentList = 'ol'
-          currentListItems = [text]
-        }
-      }
-      // Regular paragraph
+      // Regular paragraph (dengan bold inline support)
       else if (line.trim()) {
-        if (currentList === 'ol') {
-          // Continue numbered list
-          if (line.match(/^\d+\.\s/)) {
-            currentListItems.push(line.replace(/^\d+\.\s/, ''))
-          } else {
-            flushList()
-            elements.push(<p key={idx} className="text-sm text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">{line}</p>)
-          }
-        } else {
-          flushList()
-          elements.push(<p key={idx} className="text-sm text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">{line}</p>)
-        }
+        flushList()
+        elements.push(
+          <p key={idx} className="text-sm text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">
+            {renderInline(line.trim(), idx)}
+          </p>
+        )
       }
-      // Empty line
+      // Empty line — flush list
       else {
-        if (currentList === 'ol') {
-          elements.push(
-            <ol key={`ol-${elements.length}`} className="list-decimal list-inside space-y-1 mb-4 text-gray-700 dark:text-gray-300 ml-4">
-              {currentListItems.map((item, i) => (
-                <li key={i} className="text-sm leading-relaxed">{item}</li>
-              ))}
-            </ol>
-          )
-          currentListItems = []
-          currentList = null
-        } else {
-          flushList()
-        }
+        flushList()
       }
     })
 
     flushList()
-    if (currentList === 'ol' && currentListItems.length > 0) {
-      elements.push(
-        <ol key={`ol-final`} className="list-decimal list-inside space-y-1 mb-4 text-gray-700 dark:text-gray-300 ml-4">
-          {currentListItems.map((item, i) => (
-            <li key={i} className="text-sm leading-relaxed">{item}</li>
-          ))}
-        </ol>
-      )
-    }
-
     return elements
   }
 
@@ -1022,17 +1009,23 @@ function HelpPage() {
         ) : (
           <div className="space-y-4">
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 mb-2">Ringkasan</p>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-                Buka topik yang kamu perlukan. Mulai dari bagian paling atas untuk langkah awal.
+              <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 mb-2">Daftar Topik</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Ketuk topik untuk langsung membuka bagian tersebut.
               </p>
-              <div className="flex flex-wrap gap-2">
-                {sections.slice(0, 6).map(section => (
+              {/* Chip navigasi — scroll horizontal agar semua seksi terjangkau */}
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+                {sections.map(section => (
                   <button
                     key={section.title}
                     type="button"
-                    onClick={() => setOpenSection(section.title)}
-                    className="px-3 py-1.5 rounded-full bg-control text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700"
+                    onClick={() => {
+                      setOpenSection(section.title)
+                      setTimeout(() => {
+                        document.getElementById(`section-${section.title}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      }, 50)
+                    }}
+                    className="flex-shrink-0 px-3 py-1.5 rounded-full bg-control text-xs font-medium text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700"
                   >
                     {section.title}
                   </button>
@@ -1048,21 +1041,25 @@ function HelpPage() {
               )}
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {sections.map(section => {
                 const expanded = openSection === section.title
                 return (
-                  <div key={section.title} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                  <div
+                    key={section.title}
+                    id={`section-${section.title}`}
+                    className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden"
+                  >
                     <button
                       type="button"
                       onClick={() => setOpenSection(expanded ? null : section.title)}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-4 text-left"
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left"
                     >
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{section.title}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">Ketuk untuk buka atau tutup</p>
-                      </div>
-                      <span className="text-xl text-gray-400">{expanded ? '−' : '+'}</span>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{section.title}</p>
+                      <ChevronDown
+                        size={16}
+                        className={`text-gray-400 flex-shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+                      />
                     </button>
                     {expanded && (
                       <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700 pt-4">

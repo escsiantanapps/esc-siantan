@@ -202,9 +202,9 @@ export default function ProfilePage() {
           </Card>
         )}
 
-        {/* Status SP — clickable link ke halaman riwayat SP */}
+        {/* Status SP — read-only, tidak ada link ke /sp */}
         <Card className="p-2">
-          <Link to="/sp" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
+          <div className="flex items-center gap-3 p-2.5 rounded-xl">
             <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
               <ShieldAlert size={18} className="text-amber-500" />
             </div>
@@ -215,8 +215,7 @@ export default function ProfilePage() {
               </p>
             </div>
             <StatusBadge status={profile.sp_level} />
-            <ChevronRight size={18} className="text-gray-300 shrink-0" />
-          </Link>
+          </div>
         </Card>
 
         {/* Pengaturan */}

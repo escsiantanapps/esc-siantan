@@ -51,11 +51,13 @@ function PhotoCarousel({ photos }) {
       <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
         <ImageIcon size={13} /> Foto
       </p>
-      <div className="relative rounded-2xl overflow-hidden ambient-shadow aspect-video bg-gray-100">
+      {/* Tinggi container mengikuti foto aktif — tidak ada rasio paksa.
+          object-contain agar foto tidak ter-crop; bg-gray-950 menutup area kosong. */}
+      <div className="relative rounded-2xl overflow-hidden ambient-shadow bg-gray-950 min-h-32 max-h-[70vh]">
         {photos.map((src, i) => (
           <img
             key={i} src={src} alt=""
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${i === idx ? 'opacity-100' : 'opacity-0'}`}
+            className={`w-full max-h-[70vh] object-contain transition-opacity duration-700 ${i === idx ? 'opacity-100 relative' : 'opacity-0 absolute inset-0'}`}
             draggable="false"
           />
         ))}
