@@ -104,9 +104,9 @@ export default function InformationDetailPage() {
               </button>
             </div>
           </div>
-          {/* PDF iframe */}
+          {/* PDF iframe — dibungkus Google Docs Viewer agar tampil di semua mobile browser */}
           <iframe
-            src={pdfViewer.url}
+            src={`https://docs.google.com/viewer?url=${encodeURIComponent(pdfViewer.url)}&embedded=true`}
             title={pdfViewer.name}
             className="flex-1 w-full bg-gray-100"
           />
