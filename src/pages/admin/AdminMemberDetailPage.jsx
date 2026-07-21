@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { ArrowLeft, Trash2, Download } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
 import { mediaService } from '@/services/contentService'
-import { Card, Avatar, Select, Textarea, Input, Button, Spinner, Checkbox, EmptyState } from '@/components/ui'
+import { Card, Avatar, Select, Textarea, Input, Button, Spinner, Checkbox, EmptyState, StatusBadge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import MembershipCard from '@/components/MembershipCard'
 import { formatDate, formatPhone, hitungUmur, validateUpload } from '@/lib/utils'
@@ -519,14 +519,24 @@ export default function AdminMemberDetailPage() {
         )}
       </Card>
 
-      {/* Surat Peringatan */}
-      <Card className="p-4 mb-4 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-900">Surat Peringatan (SP)</h2>
-        <Select label="Status SP" value={form.sp_level} onChange={e => set('sp_level', e.target.value)}>
-          {['Aman', 'SP 1', 'SP 2', 'SP 3'].map(s => <option key={s} value={s}>{s}</option>)}
-        </Select>
-        <Textarea label="Catatan SP" rows={3} placeholder="Alasan / catatan SP (opsional)" value={form.sp_notes} onChange={e => set('sp_notes', e.target.value)} />
-      </Card>
+      {/* Surat Peringatan — read-only, kelola via /admin/sp */}
+      {form.sp_level && form.sp_level !== 'Aman' && (
+        <Card className="p-4 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-900">Surat Peringatan (SP)</h2>
+            <StatusBadge status={form.sp_level} />
+          </div>
+          {form.sp_notes && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 mb-3">
+              <p className="text-xs text-gray-400 mb-1">Keterangan:</p>
+              <p className="text-sm text-gray-900 dark:text-gray-100">{form.sp_notes}</p>
+            </div>
+          )}
+          <Link to="/admin/sp" className="text-xs text-brand-500 hover:text-brand-600 font-medium">
+            Kelola SP di halaman Surat Peringatan →
+          </Link>
+        </Card>
+      )}
 
       <Button className="w-full" loading={saving} onClick={handleSave}>Simpan Perubahan</Button>
 

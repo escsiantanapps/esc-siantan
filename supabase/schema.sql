@@ -3641,3 +3641,165 @@ CREATE POLICY "sunday_att_insert" ON sunday_attendance FOR INSERT WITH CHECK (
       AND s.is_paused = false
   )
 );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- ── Migrasi v71: Sistem SP Admin-Managed dengan Kategori Fleksibel ────
+-- ══════════════════════════════════════════════════════════════════════
+-- KEPUTUSAN OPERATOR (2026-07-21):
+-- (a) SP tidak lagi diisi jemaat sendiri, tapi diterbitkan admin ke jemaat.
+-- (b) Kategori SP dapat di-CRUD admin (tidak hardcoded "SP 1/2/3").
+-- (c) Admin workflow: cari user → pilih kategori → isi keterangan → simpan.
+-- (d) Jemaat lihat riwayat SP yang diterima (read-only).
+-- (e) Kolom users.sp_level & sp_notes tetap ada (backward compatibility view),
+--     di-sync otomatis dari sp_letters terbaru via trigger.
+--
+-- Sebelumnya: SP disimpan langsung di users.sp_level (Aman/SP 1/SP 2/SP 3)
+-- dan users.sp_notes — admin edit lewat form Edit Jemaat. Tidak ada riwayat,
+-- tidak ada pelacakan siapa yang menerbitkan SP, kategori hardcoded.
+
+-- 1. TABEL KATEGORI SP (master data, CRUD admin)
+CREATE TABLE IF NOT EXISTS sp_categories (
+  category_id   TEXT PRIMARY KEY DEFAULT 'SPC-' || replace(gen_random_uuid()::text, '-', ''),
+  name          TEXT NOT NULL,
+  level         INTEGER NOT NULL DEFAULT 1 CHECK (level >= 0),
+  description   TEXT,
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  updated_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- Index untuk sorting by level
+CREATE INDEX IF NOT EXISTS idx_sp_categories_level ON sp_categories(level);
+
+-- 2. TABEL SP LETTERS (riwayat SP yang diterbitkan admin ke jemaat)
+CREATE TABLE IF NOT EXISTS sp_letters (
+  letter_id     TEXT PRIMARY KEY DEFAULT 'SPL-' || replace(gen_random_uuid()::text, '-', ''),
+  user_id       TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  category_id   TEXT NOT NULL REFERENCES sp_categories(category_id) ON DELETE RESTRICT,
+  issued_by     TEXT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+  notes         TEXT,
+  issued_at     TIMESTAMPTZ DEFAULT now(),
+  is_active     BOOLEAN DEFAULT true,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- Index untuk query cepat: SP aktif per user, riwayat per user, issued_by
+CREATE INDEX IF NOT EXISTS idx_sp_letters_user_active ON sp_letters(user_id, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_sp_letters_user_issued ON sp_letters(user_id, issued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sp_letters_issued_by ON sp_letters(issued_by, issued_at DESC);
+
+-- 3. RLS untuk sp_categories
+ALTER TABLE sp_categories ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "sp_categories_read" ON sp_categories;
+CREATE POLICY "sp_categories_read" ON sp_categories FOR SELECT
+  TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "sp_categories_write" ON sp_categories;
+CREATE POLICY "sp_categories_write" ON sp_categories FOR ALL
+  TO authenticated USING (
+    auth_user_role() IN ('Admin', 'Super Admin')
+  ) WITH CHECK (
+    auth_user_role() IN ('Admin', 'Super Admin')
+  );
+
+-- 4. RLS untuk sp_letters
+ALTER TABLE sp_letters ENABLE ROW LEVEL SECURITY;
+
+-- Baca: jemaat lihat SP-nya sendiri; Admin/Super Admin lihat semua
+DROP POLICY IF EXISTS "sp_letters_read" ON sp_letters;
+CREATE POLICY "sp_letters_read" ON sp_letters FOR SELECT
+  TO authenticated USING (
+    user_id = auth_user_id()
+    OR auth_user_role() IN ('Admin', 'Super Admin')
+  );
+
+-- Tulis: hanya Admin/Super Admin (issue SP baru, update is_active)
+DROP POLICY IF EXISTS "sp_letters_write" ON sp_letters;
+CREATE POLICY "sp_letters_write" ON sp_letters FOR ALL
+  TO authenticated USING (
+    auth_user_role() IN ('Admin', 'Super Admin')
+  ) WITH CHECK (
+    auth_user_role() IN ('Admin', 'Super Admin')
+  );
+
+-- 5. TRIGGER: Sync users.sp_level & sp_notes dari sp_letters terbaru
+-- Setiap kali sp_letters berubah (INSERT/UPDATE is_active), perbarui
+-- users.sp_level & sp_notes dengan data SP aktif terbaru (level tertinggi).
+-- Bila tidak ada SP aktif, set ke 'Aman' & NULL.
+
+CREATE OR REPLACE FUNCTION sync_user_sp_from_letters() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user_id text;
+  v_latest record;
+BEGIN
+  -- Tentukan user_id yang terpengaruh
+  IF TG_OP = 'DELETE' THEN
+    v_user_id := OLD.user_id;
+  ELSE
+    v_user_id := NEW.user_id;
+  END IF;
+
+  -- Ambil SP aktif dengan level tertinggi untuk user ini
+  SELECT c.name, l.notes
+  INTO v_latest
+  FROM sp_letters l
+  JOIN sp_categories c ON c.category_id = l.category_id
+  WHERE l.user_id = v_user_id AND l.is_active = true
+  ORDER BY c.level DESC, l.issued_at DESC
+  LIMIT 1;
+
+  -- Update users.sp_level & sp_notes
+  IF v_latest IS NOT NULL THEN
+    UPDATE users
+    SET sp_level = v_latest.name,
+        sp_notes = v_latest.notes
+    WHERE user_id = v_user_id;
+  ELSE
+    -- Tidak ada SP aktif → reset ke 'Aman'
+    UPDATE users
+    SET sp_level = 'Aman',
+        sp_notes = NULL
+    WHERE user_id = v_user_id;
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tr_sp_letters_sync ON sp_letters;
+CREATE TRIGGER tr_sp_letters_sync
+  AFTER INSERT OR UPDATE OR DELETE ON sp_letters
+  FOR EACH ROW EXECUTE FUNCTION sync_user_sp_from_letters();
+
+-- 6. Seed kategori SP default (idempotent)
+-- Kategori default: SP 1, SP 2, SP 3 (level 1, 2, 3) + Aman (level 0)
+INSERT INTO sp_categories (category_id, name, level, description) VALUES
+  ('SPC-AMAN', 'Aman', 0, 'Tidak ada surat peringatan'),
+  ('SPC-SP1', 'SP 1', 1, 'Surat Peringatan Pertama'),
+  ('SPC-SP2', 'SP 2', 2, 'Surat Peringatan Kedua'),
+  ('SPC-SP3', 'SP 3', 3, 'Surat Peringatan Ketiga')
+ON CONFLICT (category_id) DO NOTHING;
+
+-- 7. Migrasi data existing: Pindahkan SP dari users.sp_level/sp_notes ke sp_letters
+-- Hanya untuk user dengan sp_level != 'Aman'. issued_by = NULL (tidak diketahui),
+-- issued_at = now() (asumsi, karena tidak ada timestamp lama), is_active = true.
+-- category_id di-resolve dari sp_categories.name.
+
+INSERT INTO sp_letters (user_id, category_id, issued_by, notes, issued_at, is_active)
+SELECT
+  u.user_id,
+  c.category_id,
+  (SELECT user_id FROM users WHERE role = 'Super Admin' LIMIT 1), -- Issued by first Super Admin (fallback)
+  u.sp_notes,
+  now(),
+  true
+FROM users u
+JOIN sp_categories c ON c.name = u.sp_level
+WHERE u.sp_level != 'Aman'
+  AND NOT EXISTS (
+    SELECT 1 FROM sp_letters l WHERE l.user_id = u.user_id
+  );
+
+-- Note: Trigger sync_user_sp_from_letters akan otomatis memastikan
+-- users.sp_level & sp_notes tetap konsisten dengan sp_letters yang baru dibuat.

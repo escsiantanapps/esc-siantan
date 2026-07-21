@@ -202,18 +202,21 @@ export default function ProfilePage() {
           </Card>
         )}
 
-        {/* Status SP */}
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
-              <ShieldAlert size={15} className="text-amber-500" />
+        {/* Status SP — clickable link ke halaman riwayat SP */}
+        <Card className="p-2">
+          <Link to="/sp" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
+            <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+              <ShieldAlert size={18} className="text-amber-500" />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-400">{t('profile.spStatus')}</p>
-              <p className="text-sm text-gray-800 font-medium">{profile.sp_notes || t('profile.spNone')}</p>
+              <p className="text-sm text-gray-800 dark:text-gray-100 font-medium truncate">
+                {profile.sp_notes || t('profile.spNone')}
+              </p>
             </div>
             <StatusBadge status={profile.sp_level} />
-          </div>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </Link>
         </Card>
 
         {/* Pengaturan */}

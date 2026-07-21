@@ -46,6 +46,7 @@ import PointsPage from '@/pages/user/PointsPage'
 import BacaPage from '@/pages/user/BacaPage'
 import PesanPage from '@/pages/user/PesanPage'
 import HelpPage from '@/pages/user/HelpPage'
+import MySPPage from '@/pages/user/MySPPage'
 
 // Halaman berat (QR scanner) — dimuat saat dibutuhkan
 const AttendanceScanPage = lazy(() => import('@/pages/user/AttendanceScanPage'))
@@ -200,6 +201,7 @@ export default function App() {
             <Route path="pesan"                element={<PesanPage />} />
             <Route path="panduan"              element={<HelpPage />} />
             <Route path="izin"                 element={<UserLeavePage />} />
+            <Route path="sp"                   element={<MySPPage />} />
             <Route path="pks"                  element={<PKSRoute><PKSDashboardPage /></PKSRoute>} />
           </Route>
 

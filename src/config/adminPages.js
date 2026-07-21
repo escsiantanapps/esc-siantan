@@ -2,7 +2,7 @@ import {
   Users, Calendar, Newspaper, BookOpen,
   ClipboardList, Droplets, Heart, AlertTriangle, BarChart3,
   Layers, Network, HandCoins, CalendarOff, Baby, Award, Map, Church, CreditCard,
-  LayoutDashboard, Inbox, CalendarClock, Library,
+  LayoutDashboard, Inbox, CalendarClock, Library, Tag,
 } from 'lucide-react'
 
 // Daftar halaman admin yang aksesnya bisa dibatasi untuk role "Admin"
