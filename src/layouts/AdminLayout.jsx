@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
-  LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, Tag, HardDrive, ScrollText,
+  LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, HardDrive, ScrollText,
   MessageSquare, Users, BarChart3, LayoutDashboard, MessageSquareText, LayoutList, UsersRound, Droplet,
   Gift, Coins
 } from 'lucide-react'
@@ -50,7 +50,6 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
     items.push({ to: '/admin/tukar-poin', icon: Gift, labelKey: 'admin.nav.tukarPoin' })
     items.push({ to: '/admin/distribusi-poin', icon: Coins, labelKey: 'admin.nav.distribusiPoin' })
     items.push({ to: '/admin/hak-akses', icon: KeyRound, labelKey: 'admin.nav.hakAkses' })
-    items.push({ to: '/admin/kategori-tugas', icon: Tag, labelKey: 'admin.nav.kategoriTugas' })
     items.push({ to: '/admin/backup', icon: HardDrive, labelKey: 'admin.nav.backup' })
     items.push({ to: '/admin/audit', icon: ScrollText, labelKey: 'admin.nav.audit' })
   }
@@ -151,7 +150,7 @@ export default function AdminLayout() {
   // Halaman bagian Sistem khusus Super Admin (Hak Akses, Kategori Tugas,
   // Backup, Audit, Tukar Poin, Distribusi Poin). Gembala boleh seluruh
   // halaman admin lain, tetapi tetap tidak masuk bagian Sistem.
-  if (['/admin/hak-akses', '/admin/kategori-tugas', '/admin/backup', '/admin/audit', '/admin/tukar-poin', '/admin/distribusi-poin'].includes(location.pathname) && !isSuperAdmin) {
+  if (['/admin/hak-akses', '/admin/backup', '/admin/audit', '/admin/tukar-poin', '/admin/distribusi-poin'].includes(location.pathname) && !isSuperAdmin) {
     return <Navigate to={fallbackPath()} replace />
   }
 

@@ -76,7 +76,6 @@ const AdminEvaluationPage = lazy(() => import('@/pages/admin/AdminEvaluationPage
 const AdminOfferingsPage = lazy(() => import('@/pages/admin/AdminOfferingsPage'))
 const AdminLeavesPage = lazy(() => import('@/pages/admin/AdminLeavesPage'))
 const AdminPermissionsPage = lazy(() => import('@/pages/admin/AdminPermissionsPage'))
-const AdminTaskCategoriesPage = lazy(() => import('@/pages/admin/AdminTaskCategoriesPage'))
 const AdminBackupPage = lazy(() => import('@/pages/admin/AdminBackupPage'))
 const AdminAuditPage = lazy(() => import('@/pages/admin/AdminAuditPage'))
 const AdminRoadmapPage = lazy(() => import('@/pages/admin/AdminRoadmapPage'))
@@ -243,7 +242,6 @@ export default function App() {
             <Route path="pelayanan"            element={<AdminMinistrySchedulePage />} />
             <Route path="pesan"                element={<AdminMessagesPage />} />
             <Route path="hak-akses"            element={<AdminPermissionsPage />} />
-            <Route path="kategori-tugas"       element={<AdminTaskCategoriesPage />} />
             <Route path="backup"               element={<AdminBackupPage />} />
             <Route path="audit"                element={<AdminAuditPage />} />
           </Route>
