@@ -534,7 +534,7 @@ export default function PKSDashboardPage() {
                       <button
                         key={m.user_id}
                         onClick={() => setMemberDetail(m)}
-                        className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-gray-50 transition-colors"
+                        className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-control transition-colors"
                       >
                         <Avatar name={m.name} src={m.photo_url} size="sm" />
                         <div className="flex-1 min-w-0">
@@ -582,7 +582,7 @@ export default function PKSDashboardPage() {
                         <button
                           key={s.session_id}
                           onClick={() => openSession(s)}
-                          className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 transition-colors"
+                          className="w-full flex items-center gap-3 p-3 text-left hover:bg-control transition-colors"
                         >
                           <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                             <QrCode size={16} className="text-brand-500" />

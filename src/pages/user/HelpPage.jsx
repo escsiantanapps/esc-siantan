@@ -943,17 +943,17 @@ function HelpPage() {
       // Header H1
       if (line.startsWith('# ')) {
         flushList()
-        elements.push(<h1 key={idx} className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3 mt-6">{line.slice(2)}</h1>)
+        elements.push(<h1 key={idx} className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3 mt-6">{renderInline(line.slice(2), idx)}</h1>)
       }
       // Header H2
       else if (line.startsWith('## ')) {
         flushList()
-        elements.push(<h2 key={idx} className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2 mt-5">{line.slice(3)}</h2>)
+        elements.push(<h2 key={idx} className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2 mt-5">{renderInline(line.slice(3), idx)}</h2>)
       }
       // Header H3
       else if (line.startsWith('### ')) {
         flushList()
-        elements.push(<h3 key={idx} className="text-base font-semibold text-brand-600 dark:text-brand-400 mb-2 mt-4">{line.slice(4)}</h3>)
+        elements.push(<h3 key={idx} className="text-base font-semibold text-brand-600 dark:text-brand-400 mb-2 mt-4">{renderInline(line.slice(4), idx)}</h3>)
       }
       // Numbered list
       else if (line.match(/^\d+\.\s/)) {

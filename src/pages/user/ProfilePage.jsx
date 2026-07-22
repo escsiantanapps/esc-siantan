@@ -30,9 +30,9 @@ export default function ProfilePage() {
 
   async function handleLogout() {
     const ok = await confirm({
-      title: 'Keluar dari akun?',
-      message: 'Anda akan keluar dari aplikasi dan perlu masuk kembali.',
-      confirmText: 'Keluar',
+      title: t('settings.logoutTitle'),
+      message: t('settings.logoutMessage'),
+      confirmText: t('profile.logout'),
       danger: true,
     })
     if (!ok) return
@@ -65,7 +65,7 @@ export default function ProfilePage() {
       </div>
       <div className="px-4 -mt-14 relative z-10">
         <div className="flex items-end justify-between gap-3">
-          <div className="w-24 h-24 rounded-3xl ring-4 ring-surface shadow-lg overflow-hidden shrink-0">
+          <div className="w-24 h-24 rounded-3xl overflow-hidden shrink-0" style={{outline: '4px solid var(--color-surface)', outlineOffset: '0px', boxShadow: '0 8px 24px -6px rgba(0,0,0,0.18)'}}>
             {profile.photo_url
               ? <img src={profile.photo_url} alt={profile.name} className="w-full h-full object-cover" />
               : <div className="w-full h-full gradient-main flex items-center justify-center text-white text-2xl font-bold">{initials}</div>}
@@ -107,7 +107,7 @@ export default function ProfilePage() {
           <Card className="p-2">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2.5 pt-2 pb-1">{t('profile.switchPanel')}</p>
             {(isAdmin || isGembala) && (
-              <Link to="/admin" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
+              <Link to="/admin" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all">
                 <div className="w-10 h-10 rounded-full gradient-main flex items-center justify-center text-white shrink-0">
                   <ShieldCheck size={18} />
                 </div>
@@ -119,7 +119,7 @@ export default function ProfilePage() {
               </Link>
             )}
             {isPKS && (
-              <Link to="/pks" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
+              <Link to="/pks" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all">
                 <div className="w-10 h-10 rounded-full gradient-main flex items-center justify-center text-white shrink-0">
                   <ClipboardCheck size={18} />
                 </div>
@@ -137,7 +137,7 @@ export default function ProfilePage() {
 
         {/* Kartu Jemaat (PNG dari admin, expired 1 tahun sejak terbit) */}
         <div>
-          <h2 className="text-sm font-semibold text-gray-900 mb-2">Kartu Jemaat</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-2">{t('profile.memberCard')}</h2>
           <MembershipCard profile={profile} placeholder />
         </div>
 
@@ -220,7 +220,7 @@ export default function ProfilePage() {
 
         {/* Pengaturan */}
         <Card className="p-2">
-          <Link to="/pengaturan" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
+          <Link to="/pengaturan" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all">
             <div className="w-10 h-10 rounded-full bg-control flex items-center justify-center text-gray-600 shrink-0">
               <Settings size={18} />
             </div>
@@ -234,7 +234,7 @@ export default function ProfilePage() {
 
         {/* Bantuan */}
         <Card className="p-2">
-          <Link to="/panduan" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all">
+          <Link to="/panduan" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all">
             <div className="w-10 h-10 rounded-full bg-control flex items-center justify-center text-gray-600 shrink-0">
               <HelpCircle size={18} />
             </div>

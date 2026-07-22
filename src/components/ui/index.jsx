@@ -35,7 +35,7 @@ export function Input({ label, error, required, icon: Icon, rightElement, classN
       <div className="relative">
         {Icon && <Icon size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />}
         <input
-          className={`w-full py-2.5 text-sm bg-gray-50 border rounded-xl transition
+          className={`w-full py-2.5 text-base bg-gray-50 border rounded-xl transition
             ${Icon ? 'pl-10' : 'pl-3'} ${rightElement ? 'pr-10' : 'pr-3'}
             ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
           {...props}
@@ -58,7 +58,7 @@ export function Textarea({ label, error, required, rows = 3, className = '', ...
       )}
       <textarea
         rows={rows}
-        className={`w-full px-3 py-2.5 text-sm bg-gray-50 border rounded-xl resize-none transition
+        className={`w-full px-3 py-2.5 text-base bg-gray-50 border rounded-xl resize-none transition
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
         {...props}
       />
@@ -333,7 +333,7 @@ export function ActionItem({ icon: Icon, label, onClick, danger }) {
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onClick(e); }}
-      className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors ${danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-50 hover:text-brand-600'}`}
+      className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors cursor-pointer ${danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-control hover:text-brand-600'}`}
     >
       {Icon && <Icon size={16} />} 
       <span className="flex-1 truncate">{label}</span>

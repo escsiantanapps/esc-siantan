@@ -69,7 +69,7 @@ export default function SettingsPage() {
 
           <button
             onClick={() => navigate('/profil/edit')}
-            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all"
+            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all"
           >
             <div className="w-9 h-9 rounded-full bg-brand-50 flex items-center justify-center text-brand-500 shrink-0">
               <Pencil size={16} />
@@ -83,7 +83,7 @@ export default function SettingsPage() {
 
           <button
             onClick={() => { setPwOpen(o => !o); setPwError('') }}
-            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all"
+            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all"
           >
             <div className="w-9 h-9 rounded-full bg-amber-50 flex items-center justify-center text-amber-500 shrink-0">
               <KeyRound size={16} />
@@ -97,7 +97,7 @@ export default function SettingsPage() {
 
           <button
             onClick={() => navigate('/sertifikat')}
-            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all"
+            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all"
           >
             <div className="w-9 h-9 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
               <Award size={16} />
@@ -135,7 +135,7 @@ export default function SettingsPage() {
             <button
               key={code}
               onClick={() => setLang(code)}
-              className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all"
+              className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all"
             >
               <span className="text-xl shrink-0">{flag}</span>
               <span className="flex-1 text-left text-sm font-medium text-gray-900">{label}</span>
@@ -172,7 +172,7 @@ export default function SettingsPage() {
         <Card className="p-2">
           <button
             onClick={() => navigate('/kebijakan-privasi')}
-            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 active:scale-[0.99] transition-all"
+            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all"
           >
             <div className="w-9 h-9 rounded-full bg-control flex items-center justify-center text-gray-500 shrink-0">
               <ShieldCheck size={16} />
