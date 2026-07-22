@@ -3803,3 +3803,32 @@ WHERE u.sp_level != 'Aman'
 
 -- Note: Trigger sync_user_sp_from_letters akan otomatis memastikan
 -- users.sp_level & sp_notes tetap konsisten dengan sp_letters yang baru dibuat.
+
+-- ── Migrasi v72: Gembala bypass RLS form_templates ───────────────────────────
+-- TEMUAN: canAccessTemplate() di klien sudah di-bypass untuk Gembala (ee9e098)
+-- agar Gembala bisa melihat semua form SOP Rohani untuk keperluan monitoring.
+-- Namun policy DB templates_read_access masih hanya bypass Admin & Super Admin —
+-- inkonsistensi: query PostgREST langsung oleh Gembala masih difilter DB.
+-- KEPUTUSAN OPERATOR: Gembala = role pengawas, bisa melihat semua form (read-only).
+-- Perbaikan: tambah 'Gembala' ke bypass, konsisten dengan canAccessTemplate().
+DROP POLICY IF EXISTS "templates_read_access" ON form_templates;
+CREATE POLICY "templates_read_access" ON form_templates FOR SELECT USING (
+  auth_user_role() IN ('Admin', 'Super Admin', 'Gembala')
+  OR (
+    (
+      coalesce(array_length(allowed_roles, 1), 0) = 0
+      OR auth_user_role() = ANY (allowed_roles)
+      OR auth_user_role_secondary() = ANY (allowed_roles)
+      OR ('PKS' = ANY (allowed_roles) AND auth_user_is_pks())
+    )
+    AND
+    (
+      NOT EXISTS (SELECT 1 FROM template_ministries tm WHERE tm.form_id = form_templates.form_id)
+      OR EXISTS (
+        SELECT 1 FROM template_ministries tm
+        JOIN user_ministries um ON um.ministry_id = tm.ministry_id
+        WHERE tm.form_id = form_templates.form_id AND um.user_id = auth_user_id()
+      )
+    )
+  )
+);
