@@ -29,7 +29,8 @@ function userHasRole(profile, role) {
 // bisa melihatnya (Admin biasa tidak dievaluasi kecuali punya role_secondary
 // yang lolos gerbang role + ministry).
 export function canAccessTemplate(template, profile, { strict = false } = {}) {
-  if (!strict && ['Admin', 'Super Admin'].includes(profile?.role)) return true
+  // Admin, Super Admin, dan Gembala selalu bisa melihat semua form (untuk monitoring).
+  if (!strict && ['Admin', 'Super Admin', 'Gembala'].includes(profile?.role)) return true
 
   const roles = template?.allowed_roles || []
   if (roles.length > 0 && !roles.some(r => userHasRole(profile, r))) return false
