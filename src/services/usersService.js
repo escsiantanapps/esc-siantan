@@ -171,11 +171,16 @@ export const usersService = {
   // Hapus akun permanen (auth + profil) via serverless function dengan service
   // role. Hanya Admin/Super Admin yang diizinkan (diverifikasi di server).
   async deleteAccount(userId) {
+    // getUser() memverifikasi token ke server dan auto-refresh bila expired,
+    // berbeda dengan getSession() yang hanya baca storage lokal (bisa stale).
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) throw new Error('Sesi tidak ditemukan.')
+    await supabase.auth.getUser() // paksa refresh token bila perlu
+    const { data: { session: freshSession } } = await supabase.auth.getSession()
+    if (!freshSession) throw new Error('Sesi tidak ditemukan setelah refresh.')
     const res = await fetchApi('/api/delete-user', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshSession.access_token}` },
       body: JSON.stringify({ userId }),
     })
     if (!res.ok) {
