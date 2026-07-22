@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, MessageCircle, FileText, X, ExternalLink } from 'lucide-react'
+import { Bell, MessageCircle, FileText, X, Download } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
@@ -14,6 +14,27 @@ export default function InformationDetailPage() {
   const [news, setNews] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pdfViewer, setPdfViewer] = useState(null) // { url, name }
+  const [downloading, setDownloading] = useState(false)
+
+  // Download via blob agar URL Supabase tidak pernah muncul di address bar (PWA)
+  const handleDownload = async (url, name) => {
+    if (downloading) return
+    setDownloading(true)
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      // fallback diam — file tetap bisa dibuka lewat viewer
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   useEffect(() => {
     newsService.getById(id).then(setNews).catch(() => {}).finally(() => setLoading(false))
@@ -86,14 +107,16 @@ export default function InformationDetailPage() {
           <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-gray-900 shrink-0">
             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate flex-1">{pdfViewer.name}</p>
             <div className="flex items-center gap-2 shrink-0">
-              <a
-                href={pdfViewer.url}
-                download={pdfViewer.name}
-                className="p-2 text-gray-500 hover:text-brand-500"
+              {/* Download via blob agar URL Supabase tidak muncul di address bar PWA */}
+              <button
+                type="button"
+                onClick={() => handleDownload(pdfViewer.url, pdfViewer.name)}
+                disabled={downloading}
+                className="p-2 text-gray-500 hover:text-brand-500 disabled:opacity-40"
                 title="Unduh"
               >
-                <ExternalLink size={18} />
-              </a>
+                <Download size={18} />
+              </button>
               <button
                 type="button"
                 onClick={() => setPdfViewer(null)}
@@ -104,9 +127,9 @@ export default function InformationDetailPage() {
               </button>
             </div>
           </div>
-          {/* PDF iframe — dibungkus Google Docs Viewer agar tampil di semua mobile browser */}
+          {/* PDF iframe langsung dari Supabase — frame-src sudah diizinkan di CSP */}
           <iframe
-            src={`https://docs.google.com/viewer?url=${encodeURIComponent(pdfViewer.url)}&embedded=true`}
+            src={pdfViewer.url}
             title={pdfViewer.name}
             className="flex-1 w-full bg-gray-100"
           />

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Inbox, ChevronLeft, ChevronRight, X, Trash2, Eye, FileText } from 'lucide-react'
 import { tasksService } from '@/services/tasksService'
 import { useToast } from '@/hooks/useToast'
+import { useAuth } from '@/hooks/useAuth'
 import { Card, PageHeader, Spinner, EmptyState, Select, Input, Button, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import { useLang } from '@/hooks/useLang'
@@ -11,6 +12,8 @@ const LIMIT = 20
 export default function AdminResponsesPage() {
   const { t } = useLang()
   const { toast, confirm } = useToast()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
 
   const [templates, setTemplates] = useState([])
   const [responses, setResponses] = useState([])
@@ -153,13 +156,15 @@ export default function AdminResponsesPage() {
               >
                 <Eye size={14} /> {t('aresp.detail')}
               </button>
-              <button
-                onClick={() => handleDelete(r)}
-                disabled={deletingId === r.response_id}
-                className="text-xs text-red-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 flex-shrink-0 disabled:opacity-50"
-              >
-                <Trash2 size={14} /> {deletingId === r.response_id ? '…' : t('a.delete')}
-              </button>
+              {!isGembala && (
+                <button
+                  onClick={() => handleDelete(r)}
+                  disabled={deletingId === r.response_id}
+                  className="text-xs text-red-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 flex-shrink-0 disabled:opacity-50"
+                >
+                  <Trash2 size={14} /> {deletingId === r.response_id ? '…' : t('a.delete')}
+                </button>
+              )}
             </div>
           ))}
         </Card>
@@ -208,9 +213,11 @@ export default function AdminResponsesPage() {
             )}
 
             <div className="flex gap-2 pt-1">
-              <Button variant="danger" className="flex-1" loading={deletingId === detail.response_id} onClick={() => handleDelete(detail)}>
-                <Trash2 size={15} /> {t('a.delete')}
-              </Button>
+              {!isGembala && (
+                <Button variant="danger" className="flex-1" loading={deletingId === detail.response_id} onClick={() => handleDelete(detail)}>
+                  <Trash2 size={15} /> {t('a.delete')}
+                </Button>
+              )}
               <Button variant="outline" className="flex-1" onClick={() => setDetail(null)}>{t('common.close')}</Button>
             </div>
           </Card>

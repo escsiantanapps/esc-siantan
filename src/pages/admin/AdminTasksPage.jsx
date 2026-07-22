@@ -7,6 +7,7 @@ import { evaluationService } from '@/services/evaluationService'
 import { pushService } from '@/services/pushService'
 import { usersService } from '@/services/usersService'
 import { useToast } from '@/hooks/useToast'
+import { useAuth } from '@/hooks/useAuth'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Checkbox, Spinner, EmptyState } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
@@ -17,6 +18,8 @@ const emptyForm = { name: '', ministry_ids: [] }
 export default function AdminTasksPage() {
   const { t: tr } = useLang()
   const { toast, confirm } = useToast()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const [activeTab, setActiveTab] = useState(0)
 
   // ── Tab 0: Tugas & Form ──
@@ -157,26 +160,29 @@ export default function AdminTasksPage() {
         subtitle={activeTab === 0
           ? tr('atask.subtitle', { count: templates.length })
           : 'Khusus Super Admin — batasi kategori tugas ke ministry tertentu'}
-        action={activeTab === 0
+        action={isGembala ? null : (activeTab === 0
           ? <Link to="/admin/tugas/baru"><Button size="sm"><Plus size={15} /> {tr('atask.create')}</Button></Link>
-          : <Button size="sm" onClick={openCreate}><Plus size={15} /> Tambah</Button>}
+          : <Button size="sm" onClick={openCreate}><Plus size={15} /> Tambah</Button>)}
       />
 
-      {/* Tab bar */}
+      {/* Tab bar — Gembala hanya lihat tab Tugas & Form */}
       <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {TABS.map((tab, i) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(i)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === i
-                ? 'border-brand-500 text-brand-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+        {TABS.filter((_, i) => !isGembala || i === 0).map((tab, i) => {
+          const tabIdx = isGembala ? 0 : i
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tabIdx)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tabIdx
+                  ? 'border-brand-500 text-brand-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab}
+            </button>
+          )
+        })}
       </div>
 
       {/* ── Tab 0: Tugas & Form ── */}
@@ -198,17 +204,21 @@ export default function AdminTasksPage() {
                       {tr('atask.targetLine', { goal: t.weekly_goal || 1, period: t.period === 'bulan' ? tr('atask.perMonth') : tr('atask.perWeek'), fields: (t.fields_json || []).length })}
                     </p>
                   </div>
-                  <button
-                    onClick={() => sendReminder(t)}
-                    disabled={sendingId === t.form_id}
-                    title={tr('atask.remind')}
-                    className="text-xs text-amber-600 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-amber-50 flex-shrink-0 disabled:opacity-50"
-                  >
-                    <Bell size={13} /> {sendingId === t.form_id ? '…' : tr('atask.remind')}
-                  </button>
-                  <Link to={`/admin/tugas/${t.form_id}/edit`} className="text-xs text-brand-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-brand-50 flex-shrink-0">
-                    {tr('a.edit')} <ChevronRight size={13} />
-                  </Link>
+                  {!isGembala && (
+                    <button
+                      onClick={() => sendReminder(t)}
+                      disabled={sendingId === t.form_id}
+                      title={tr('atask.remind')}
+                      className="text-xs text-amber-600 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-amber-50 flex-shrink-0 disabled:opacity-50"
+                    >
+                      <Bell size={13} /> {sendingId === t.form_id ? '…' : tr('atask.remind')}
+                    </button>
+                  )}
+                  {!isGembala && (
+                    <Link to={`/admin/tugas/${t.form_id}/edit`} className="text-xs text-brand-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-brand-50 flex-shrink-0">
+                      {tr('a.edit')} <ChevronRight size={13} />
+                    </Link>
+                  )}
                 </div>
               ))}
             </Card>
