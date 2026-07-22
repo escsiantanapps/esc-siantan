@@ -22,6 +22,8 @@ export default function AdminMinistrySchedulePage() {
   const { profile } = useAuth()
   const { t } = useLang()
 
+  const isGembala = profile?.role === 'Gembala'
+
   const [date, setDate] = useState(todayISO())
   const [schedules, setSchedules] = useState([]) // sesi pada tanggal ini
   const [loading, setLoading] = useState(true)
@@ -294,15 +296,17 @@ export default function AdminMinistrySchedulePage() {
           <Input label={t('apel.date')} type="date" value={date} onChange={e => setDate(e.target.value)} />
         </div>
         {/* Buka sesi baru: label bebas (mis. "Minggu 1") + jam mulai. */}
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
-            <Input label={t('apel.labelField')} placeholder={t('apel.labelPlaceholder')} value={newLabel} onChange={e => setNewLabel(e.target.value)} />
+        {!isGembala && (
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Input label={t('apel.labelField')} placeholder={t('apel.labelPlaceholder')} value={newLabel} onChange={e => setNewLabel(e.target.value)} />
+            </div>
+            <div className="w-28">
+              <Input label={t('apel.startTime')} type="time" value={newTime} onChange={e => setNewTime(e.target.value)} />
+            </div>
+            <Button loading={creating} onClick={handleCreate}><Plus size={15} /> {t('apel.openSession')}</Button>
           </div>
-          <div className="w-28">
-            <Input label={t('apel.startTime')} type="time" value={newTime} onChange={e => setNewTime(e.target.value)} />
-          </div>
-          <Button loading={creating} onClick={handleCreate}><Plus size={15} /> {t('apel.openSession')}</Button>
-        </div>
+        )}
       </Card>
 
       {loading ? (
@@ -321,9 +325,11 @@ export default function AdminMinistrySchedulePage() {
                 <p className="text-[11px] text-gray-400">{t('apel.startAt', { time: (sched.start_time || '').slice(0, 5) })}</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => openSchedule(sched)}>{t('apel.open')}</Button>
-              <button onClick={() => handleDelete(sched)} className="p-2 text-gray-400 hover:text-red-500">
-                <Trash2 size={15} />
-              </button>
+              {!isGembala && (
+                <button onClick={() => handleDelete(sched)} className="p-2 text-gray-400 hover:text-red-500">
+                  <Trash2 size={15} />
+                </button>
+              )}
             </div>
           ))}
         </Card>

@@ -5,6 +5,7 @@ import { Calendar, MapPin, Plus, Pencil, QrCode, Users, X, Download, FileSpreads
 import { eventsService, prerequisiteService } from '@/services/contentService'
 import { eventAttendanceService } from '@/services/attendanceService'
 import { pushService } from '@/services/pushService'
+import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { Card, PageHeader, Button, Input, Textarea, Spinner, EmptyState, StatusBadge, Badge, Avatar, ActionMenu, ActionItem } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
@@ -15,6 +16,8 @@ import { downloadXlsx } from '@/lib/exportXlsx'
 export default function AdminEventsPage() {
   const { t } = useLang()
   const { toast, confirm } = useToast()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -174,7 +177,7 @@ export default function AdminEventsPage() {
       <PageHeader
         title={t('aevt.title')}
         subtitle={t('aevt.subtitle', { count: events.length })}
-        action={<Link to="/admin/events/baru"><Button size="sm"><Plus size={15} /> {t('aevt.add')}</Button></Link>}
+        action={!isGembala && <Link to="/admin/events/baru"><Button size="sm"><Plus size={15} /> {t('aevt.add')}</Button></Link>}
       />
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
@@ -186,7 +189,7 @@ export default function AdminEventsPage() {
       {!loading && events.length > 0 && (
         <Card className="divide-y divide-gray-100">
           {events.map(ev => (
-            <div key={ev.event_id} className="flex items-center gap-3 p-3.5">
+            <div key={ev.event_id} className="flex items-center gap-3 p-3.5" data-event-id={ev.event_id}>
               {ev.thumbnail_url ? (
                 <img src={ev.thumbnail_url} alt={ev.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
               ) : (
@@ -205,7 +208,7 @@ export default function AdminEventsPage() {
               <ActionMenu>
                 <ActionItem icon={Users} label={t('aevt.rekap')} onClick={() => { setRekapDate(''); setRekapModal(ev) }} />
                 <ActionItem icon={QrCode} label={t('a.qrAttendance')} onClick={() => setQrModal(ev)} />
-                <ActionItem icon={Pencil} label={t('a.edit')} onClick={(e) => { e.preventDefault(); window.location.href = `/admin/events/${ev.event_id}/edit` }} />
+                {!isGembala && <ActionItem icon={Pencil} label={t('a.edit')} onClick={(e) => { e.preventDefault(); window.location.href = `/admin/events/${ev.event_id}/edit` }} />}
               </ActionMenu>
             </div>
           ))}
@@ -290,13 +293,13 @@ export default function AdminEventsPage() {
                     {r.present
                       ? <Badge color="green">{t('aevt.present')}</Badge>
                       : <Badge color="gray">{t('aevt.notYet')}</Badge>}
-                    <button
+                    {!isGembala && <button
                       type="button" onClick={() => handleRemoveRegistrant(r)}
                       className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
                       aria-label="Hapus peserta"
                     >
                       <Trash2 size={14} />
-                    </button>
+                    </button>}
                   </div>
                 ))}
               </div>
@@ -336,7 +339,7 @@ export default function AdminEventsPage() {
                           })}
                           {s.admin_note && <p className="text-[10px] text-gray-500 italic pt-1">Catatan admin: {s.admin_note}</p>}
                         </div>
-                        {rejectingId === s.id ? (
+                        {!isGembala && (rejectingId === s.id ? (
                           <div className="space-y-2">
                             <Textarea rows={2} placeholder="Alasan penolakan (dikirim ke jemaat)" value={rejectNote} onChange={e => setRejectNote(e.target.value)} />
                             <div className="flex gap-2">
@@ -361,7 +364,7 @@ export default function AdminEventsPage() {
                               <Trash2 size={14} />
                             </button>
                           </div>
-                        )}
+                        ))}
                       </div>
                     ))}
                   </div>

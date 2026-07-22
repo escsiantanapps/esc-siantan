@@ -18,6 +18,7 @@ export default function AdminOfferingsPage() {
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
   const { t } = useLang()
+  const isGembala = profile?.role === 'Gembala'
   const [tab, setTab] = useState('rekap')
 
   const [items, setItems] = useState([])
@@ -212,7 +213,7 @@ export default function AdminOfferingsPage() {
             </div>
           )
           : tab === 'rekening'
-            ? <Button size="sm" onClick={() => openAcc(null)}><Plus size={15} /> {t('a.add')}</Button>
+            ? (!isGembala ? <Button size="sm" onClick={() => openAcc(null)}><Plus size={15} /> {t('a.add')}</Button> : null)
             : null}
       />
 
@@ -277,15 +278,15 @@ export default function AdminOfferingsPage() {
                       <a href={o.proof_url} target="_blank" rel="noreferrer" className="text-xs text-brand-500 underline">{t('aoff.viewProof')}</a>
                     )}
                     <div className="flex-1" />
-                    {o.status !== 'Terverifikasi' && (
+                    {!isGembala && o.status !== 'Terverifikasi' && (
                       <button onClick={() => verify(o, 'Terverifikasi')} className="text-xs text-green-600 hover:underline flex items-center gap-1">
                         <Check size={13} /> {t('aoff.verify')}
                       </button>
                     )}
-                    {o.status !== 'Ditolak' && (
+                    {!isGembala && o.status !== 'Ditolak' && (
                       <button onClick={() => verify(o, 'Ditolak')} className="text-xs text-red-500 hover:underline">{t('aoff.reject')}</button>
                     )}
-                    <button onClick={() => removeOffering(o)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
+                    {!isGembala && <button onClick={() => removeOffering(o)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>}
                   </div>
                 </div>
               ))}
@@ -312,12 +313,12 @@ export default function AdminOfferingsPage() {
                   {o.note && <p className="text-xs text-gray-500 mt-1.5">{o.note}</p>}
                   <div className="flex items-center gap-2 mt-2">
                     <div className="flex-1" />
-                    {o.status !== 'Terverifikasi' && (
+                    {!isGembala && o.status !== 'Terverifikasi' && (
                       <button onClick={() => verifyKomsel(o, 'Terverifikasi')} className="text-xs text-green-600 hover:underline flex items-center gap-1">
                         <Check size={13} /> {t('aoff.verify')}
                       </button>
                     )}
-                    {o.status !== 'Ditolak' && (
+                    {!isGembala && o.status !== 'Ditolak' && (
                       <button onClick={() => verifyKomsel(o, 'Ditolak')} className="text-xs text-red-500 hover:underline">{t('aoff.reject')}</button>
                     )}
                   </div>
@@ -344,8 +345,8 @@ export default function AdminOfferingsPage() {
                     {a.account_no && <p className="text-xs text-gray-400">{a.account_no}</p>}
                     {a.account_name && <p className="text-xs text-gray-400">a.n. {a.account_name}</p>}{/* a.n. = atas nama */}
                   </div>
-                  <button onClick={() => openAcc(a)} className="p-2 text-gray-400 hover:text-brand-500"><Pencil size={16} /></button>
-                  <button onClick={() => deleteAcc(a)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
+                  {!isGembala && <button onClick={() => openAcc(a)} className="p-2 text-gray-400 hover:text-brand-500"><Pencil size={16} /></button>}
+                  {!isGembala && <button onClick={() => deleteAcc(a)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>}
                 </div>
               ))}
             </Card>

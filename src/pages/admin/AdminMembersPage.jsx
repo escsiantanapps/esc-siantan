@@ -27,6 +27,7 @@ export default function AdminMembersPage() {
   const { t } = useLang()
   const { profile } = useAuth()
   const { toast } = useToast()
+  const isGembala = profile?.role === 'Gembala'
   const canSetRole = profile?.role === 'Super Admin'
   const canSetNik = profile?.role === 'Super Admin'
   const [searchParams] = useSearchParams()
@@ -128,7 +129,7 @@ export default function AdminMembersPage() {
       <PageHeader
         title={t('amem.title')}
         subtitle={t('amem.subtitle', { count })}
-        action={<Button size="sm" onClick={openAddModal}><Plus size={15} /> {t('amem.addBtn')}</Button>}
+        action={!isGembala && <Button size="sm" onClick={openAddModal}><Plus size={15} /> {t('amem.addBtn')}</Button>}
       />
 
       <div className="grid sm:grid-cols-3 gap-3 mb-4">

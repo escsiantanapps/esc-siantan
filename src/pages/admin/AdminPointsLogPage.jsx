@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Coins, TrendingUp, TrendingDown, Search, History, Wallet, Network, BookOpen, ShieldAlert, Trash2 } from 'lucide-react'
 import { pointsService } from '@/services/pointsService'
+import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { Card, PageHeader, Input, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
@@ -48,6 +49,8 @@ const TABS = [
 
 export default function AdminPointsLogPage() {
   const { toast, confirm } = useToast()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const [tab, setTab] = useState('ringkasan')
   const [tx, setTx] = useState([])
   const [users, setUsers] = useState([])
@@ -238,7 +241,7 @@ export default function AdminPointsLogPage() {
                     <p className="text-[11px] text-gray-400 truncate">{displayDesc(t)} · {formatDate(t.created_at, 'd MMM yyyy · HH:mm')}</p>
                   </div>
                   <Badge color={t.amount >= 0 ? 'green' : 'red'}>{t.amount >= 0 ? '+' : ''}{t.amount}</Badge>
-                  {t.amount > 0 && (
+                  {t.amount > 0 && !isGembala && (
                     <button
                       onClick={() => handleRevoke(t)}
                       disabled={busyId === t.transaction_id}

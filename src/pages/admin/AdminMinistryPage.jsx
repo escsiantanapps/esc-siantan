@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Church, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { ministriesService } from '@/services/contentService'
+import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
@@ -11,6 +12,8 @@ const emptyForm = { name: '', description: '' }
 export default function AdminMinistryPage() {
   const { toast, confirm } = useToast()
   const { t } = useLang()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const [ministries, setMinistries] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -86,7 +89,7 @@ export default function AdminMinistryPage() {
       <PageHeader
         title={t('amin.title')}
         subtitle={t('amin.subtitle', { count: ministries.length })}
-        action={<Button size="sm" onClick={openCreate}><Plus size={15} /> {t('amin.add')}</Button>}
+        action={!isGembala && <Button size="sm" onClick={openCreate}><Plus size={15} /> {t('amin.add')}</Button>}
       />
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
@@ -106,12 +109,12 @@ export default function AdminMinistryPage() {
                 <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
                 {item.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{item.description}</p>}
               </div>
-              <button onClick={() => openEdit(item)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
+              {!isGembala && <button onClick={() => openEdit(item)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
                 <Pencil size={16} />
-              </button>
-              <button onClick={() => handleDelete(item)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
+              </button>}
+              {!isGembala && <button onClick={() => handleDelete(item)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
                 <Trash2 size={16} />
-              </button>
+              </button>}
             </div>
           ))}
         </Card>

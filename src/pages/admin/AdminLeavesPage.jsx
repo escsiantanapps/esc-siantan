@@ -9,6 +9,7 @@ import { formatDate } from '@/lib/utils'
 export default function AdminLeavesPage() {
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
+  const isGembala = profile?.role === 'Gembala'
   const [items, setItems] = useState([])
   const [status, setStatus] = useState('Menunggu')
   const [loading, setLoading] = useState(true)
@@ -70,17 +71,17 @@ export default function AdminLeavesPage() {
               <div className="flex items-center gap-3 mt-2">
                 {it.proof_url && <a href={it.proof_url} target="_blank" rel="noreferrer" className="text-xs text-brand-500 underline">Lihat bukti</a>}
                 <div className="flex-1" />
-                {it.status !== 'Disetujui' && (
+                {!isGembala && it.status !== 'Disetujui' && (
                   <button onClick={() => review(it, 'Disetujui')} className="text-xs text-green-600 hover:underline flex items-center gap-1">
                     <Check size={13} /> Setujui
                   </button>
                 )}
-                {it.status !== 'Ditolak' && (
+                {!isGembala && it.status !== 'Ditolak' && (
                   <button onClick={() => review(it, 'Ditolak')} className="text-xs text-red-500 hover:underline flex items-center gap-1">
                     <X size={13} /> Tolak
                   </button>
                 )}
-                <button onClick={() => remove(it)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
+                {!isGembala && <button onClick={() => remove(it)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>}
               </div>
             </div>
           ))}

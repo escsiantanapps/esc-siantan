@@ -4,6 +4,7 @@ import { ArrowLeft, FileText, Printer } from 'lucide-react'
 import { registrationService } from '@/services/contentService'
 import { usersService } from '@/services/usersService'
 import { pushService } from '@/services/pushService'
+import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { Card, Select, Textarea, Input, Button, Spinner, StatusBadge, EmptyState } from '@/components/ui'
 import { formatDate, formatPhone, hitungUmur } from '@/lib/utils'
@@ -47,6 +48,8 @@ export default function AdminRegistrationDetailPage() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { toast, confirm } = useToast()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const type = pathname.startsWith('/admin/nikah')
     ? 'wedding'
     : pathname.startsWith('/admin/penyerahan-anak') ? 'dedication'
@@ -462,19 +465,23 @@ export default function AdminRegistrationDetailPage() {
         </Card>
       )}
 
-      {/* Status update */}
-      <Card className="p-4 mb-4 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-900">Tinjau Pendaftaran</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
-            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </Select>
-          <Input label="Jadwal" type="datetime-local" value={form.scheduled_at} onChange={e => set('scheduled_at', e.target.value)} />
-        </div>
-        <Textarea label="Catatan Admin" rows={3} placeholder="Catatan untuk jemaat (akan terlihat oleh jemaat)" value={form.admin_note} onChange={e => set('admin_note', e.target.value)} />
-      </Card>
+      {/* Status update — hanya untuk non-Gembala */}
+      {!isGembala && (
+        <Card className="p-4 mb-4 space-y-4">
+          <h2 className="text-sm font-semibold text-gray-900">Tinjau Pendaftaran</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select label="Status" value={form.status} onChange={e => set('status', e.target.value)}>
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </Select>
+            <Input label="Jadwal" type="datetime-local" value={form.scheduled_at} onChange={e => set('scheduled_at', e.target.value)} />
+          </div>
+          <Textarea label="Catatan Admin" rows={3} placeholder="Catatan untuk jemaat (akan terlihat oleh jemaat)" value={form.admin_note} onChange={e => set('admin_note', e.target.value)} />
+        </Card>
+      )}
 
-      <Button className="w-full" loading={saving} onClick={handleSave}>Simpan Perubahan</Button>
+      {!isGembala && (
+        <Button className="w-full" loading={saving} onClick={handleSave}>Simpan Perubahan</Button>
+      )}
     </div>
   )
 }

@@ -18,6 +18,8 @@ export default function AdminSPPage() {
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
   
+  const isGembala = profile?.role === 'Gembala'
+
   // Tab: 'list', 'issue', atau 'categories'
   const [tab, setTab] = useState('list')
   
@@ -229,12 +231,16 @@ export default function AdminSPPage() {
             <Button size="sm" variant={tab === 'list' ? 'primary' : 'ghost'} onClick={() => setTab('list')}>
               Daftar SP
             </Button>
-            <Button size="sm" variant={tab === 'issue' ? 'primary' : 'ghost'} onClick={() => { setTab('issue'); openIssueModal() }}>
-              <Plus size={15} /> Terbitkan SP
-            </Button>
-            <Button size="sm" variant={tab === 'categories' ? 'primary' : 'ghost'} onClick={() => setTab('categories')}>
-              <Tag size={15} /> Kategori
-            </Button>
+            {!isGembala && (
+              <Button size="sm" variant={tab === 'issue' ? 'primary' : 'ghost'} onClick={() => { setTab('issue'); openIssueModal() }}>
+                <Plus size={15} /> Terbitkan SP
+              </Button>
+            )}
+            {!isGembala && (
+              <Button size="sm" variant={tab === 'categories' ? 'primary' : 'ghost'} onClick={() => setTab('categories')}>
+                <Tag size={15} /> Kategori
+              </Button>
+            )}
           </div>
         }
       />

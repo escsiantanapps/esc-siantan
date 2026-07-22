@@ -17,6 +17,7 @@ const MAX_PDF_MB = 25
 export default function AdminBooksPage() {
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
+  const isGembala = profile?.role === 'Gembala'
   const [tab, setTab] = useState('buku')
   const [books, setBooks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -92,7 +93,7 @@ export default function AdminBooksPage() {
 
       {tab === 'buku' && (
         <>
-          <Button className="w-full mb-3" onClick={openNew}><Plus size={15} /> Tambah Buku</Button>
+          {!isGembala && <Button className="w-full mb-3" onClick={openNew}><Plus size={15} /> Tambah Buku</Button>}
           {loading ? <div className="flex justify-center py-8"><Spinner /></div>
             : books.length === 0 ? <EmptyState icon={BookOpen} title="Belum ada buku" description="Tambahkan buku program membaca." />
             : (
@@ -104,8 +105,8 @@ export default function AdminBooksPage() {
                       <p className="text-sm font-medium text-gray-900 truncate">{b.title}</p>
                       <p className="text-[11px] text-gray-400 truncate">{b.author || '—'} · {b.total_pages || '?'} hal{b.pdf_url && ' · PDF'}{!b.is_active && ' · nonaktif'}</p>
                     </div>
-                    <button onClick={() => openEdit(b)} className="p-2 text-gray-400 hover:text-brand-500"><Pencil size={15} /></button>
-                    <button onClick={() => remove(b)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={15} /></button>
+                    {!isGembala && <button onClick={() => openEdit(b)} className="p-2 text-gray-400 hover:text-brand-500"><Pencil size={15} /></button>}
+                    {!isGembala && <button onClick={() => remove(b)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={15} /></button>}
                   </div>
                 ))}
               </Card>

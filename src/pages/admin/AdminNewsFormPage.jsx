@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, FileText, UploadCloud, X } from 'lucide-react'
 import { newsService, mediaService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
+import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { Card, Input, Textarea, Button, Spinner } from '@/components/ui'
@@ -15,7 +16,13 @@ export default function AdminNewsFormPage() {
   const navigate = useNavigate()
   const { toast, confirm } = useToast()
   const { t } = useLang()
+  const { profile } = useAuth()
   const isEdit = !!id
+
+  // Gembala hanya read-only — redirect ke list berita
+  useEffect(() => {
+    if (profile && profile.role === 'Gembala') navigate('/admin/berita', { replace: true })
+  }, [profile])
 
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)

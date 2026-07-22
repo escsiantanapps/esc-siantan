@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Map, RotateCcw, Save } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { appSettingsService, mediaService } from '@/services/contentService'
 import { DEFAULT_ROADMAP } from '@/pages/OnboardingPage'
@@ -12,6 +13,8 @@ import { compressImage, validateUpload } from '@/lib/utils'
 // roadmap ditayangkan per perangkat (roadmap_show_count).
 export default function AdminRoadmapPage() {
   const { toast, confirm } = useToast()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const [stages, setStages] = useState(DEFAULT_ROADMAP)
   const [showCount, setShowCount] = useState(1)
   const [loading, setLoading] = useState(true)
@@ -86,10 +89,12 @@ export default function AdminRoadmapPage() {
         title="Roadmap Pemuridan"
         subtitle="Konten onboarding 4 tahap perkembangan rohani jemaat"
         action={
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={handleReset}><RotateCcw size={15} /> Bawaan</Button>
-            <Button size="sm" loading={saving} onClick={handleSave}><Save size={15} /> Simpan</Button>
-          </div>
+          !isGembala ? (
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={handleReset}><RotateCcw size={15} /> Bawaan</Button>
+              <Button size="sm" loading={saving} onClick={handleSave}><Save size={15} /> Simpan</Button>
+            </div>
+          ) : null
         }
       />
 

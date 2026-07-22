@@ -61,7 +61,13 @@ export default function AdminTaskFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { toast, confirm } = useToast()
+  const { profile } = useAuth()
   const isEdit = !!id
+
+  // Gembala hanya read-only — redirect ke list tugas
+  useEffect(() => {
+    if (profile && profile.role === 'Gembala') navigate('/admin/tugas', { replace: true })
+  }, [profile])
 
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)

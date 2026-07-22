@@ -4,6 +4,7 @@ import { BookOpen, Plus, Pencil, Trash2, X, QrCode, ClipboardCheck, Download, Us
 import { classesService, mediaService } from '@/services/contentService'
 import { classAttendanceService } from '@/services/attendanceService'
 import { pushService } from '@/services/pushService'
+import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
@@ -42,6 +43,8 @@ const emptyForm = {
 export default function AdminClassesPage() {
   const { toast, confirm } = useToast()
   const { t } = useLang()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -411,7 +414,7 @@ export default function AdminClassesPage() {
       <PageHeader
         title={t('acls.title')}
         subtitle={t('acls.subtitle', { count: classes.length })}
-        action={<Button size="sm" onClick={openCreate}><Plus size={15} /> {t('acls.add')}</Button>}
+        action={!isGembala ? <Button size="sm" onClick={openCreate}><Plus size={15} /> {t('acls.add')}</Button> : null}
       />
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
@@ -437,8 +440,8 @@ export default function AdminClassesPage() {
                 <ActionItem icon={Users} label={t('acls.registrants')} onClick={() => setRegModal(cls)} />
                 <ActionItem icon={QrCode} label={t('a.qrAttendance')} onClick={() => openQr(cls)} />
                 <ActionItem icon={ClipboardCheck} label={t('a.attendanceList')} onClick={() => openAttendance(cls)} />
-                <ActionItem icon={Pencil} label="Edit" onClick={() => openEdit(cls)} />
-                <ActionItem icon={Trash2} label="Hapus" onClick={() => handleDelete(cls)} danger />
+                {!isGembala && <ActionItem icon={Pencil} label="Edit" onClick={() => openEdit(cls)} />}
+                {!isGembala && <ActionItem icon={Trash2} label="Hapus" onClick={() => handleDelete(cls)} danger />}
               </ActionMenu>
             </div>
           ))}
@@ -785,7 +788,7 @@ export default function AdminClassesPage() {
                           })}
                           {s.admin_note && <p className="text-[10px] text-gray-500 italic pt-1">Catatan admin: {s.admin_note}</p>}
                         </div>
-                        {rejectingId === s.id ? (
+                        {!isGembala && (rejectingId === s.id ? (
                           <div className="space-y-2">
                             <Textarea rows={2} placeholder="Alasan penolakan (dikirim ke jemaat)" value={rejectNote} onChange={e => setRejectNote(e.target.value)} />
                             <div className="flex gap-2">
@@ -810,7 +813,7 @@ export default function AdminClassesPage() {
                               <Trash2 size={14} />
                             </button>
                           </div>
-                        )}
+                        ))}
                       </div>
                     ))}
                   </div>

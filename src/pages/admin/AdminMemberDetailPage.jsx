@@ -16,6 +16,7 @@ export default function AdminMemberDetailPage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
+  const isGembala = profile?.role === 'Gembala'
   const canEditRole = ['Admin', 'Super Admin'].includes(profile?.role)
 
   const [member, setMember] = useState(null)
@@ -538,10 +539,12 @@ export default function AdminMemberDetailPage() {
         </Card>
       )}
 
-      <Button className="w-full" loading={saving} onClick={handleSave}>Simpan Perubahan</Button>
+      {!isGembala && (
+        <Button className="w-full" loading={saving} onClick={handleSave}>Simpan Perubahan</Button>
+      )}
 
       {/* Zona berbahaya — hapus akun permanen */}
-      {canDelete && (
+      {canDelete && !isGembala && (
         <Card className="p-4 mt-4 border-red-200 bg-red-50">
           <h2 className="text-sm font-semibold text-red-700">Zona Berbahaya</h2>
           <p className="text-xs text-red-600 mt-1">

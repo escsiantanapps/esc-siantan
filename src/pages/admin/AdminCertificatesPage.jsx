@@ -12,6 +12,7 @@ export default function AdminCertificatesPage() {
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
   const { t } = useLang()
+  const isGembala = profile?.role === 'Gembala'
 
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -104,47 +105,49 @@ export default function AdminCertificatesPage() {
     <div>
       <PageHeader title={t('acert.title')} subtitle={t('acert.subtitle')} />
 
-      <Card className="p-4 mb-4 space-y-3">
-        <h2 className="text-sm font-semibold text-gray-900">{t('acert.issueNew')}</h2>
+      {!isGembala && (
+        <Card className="p-4 mb-4 space-y-3">
+          <h2 className="text-sm font-semibold text-gray-900">{t('acert.issueNew')}</h2>
 
-        {!selected ? (
-          <>
-            <Input icon={Search} placeholder={t('akom.searchMember')} value={query} onChange={e => setQuery(e.target.value)} />
-            {results.length > 0 && (
-              <div className="space-y-1 max-h-60 overflow-y-auto">
-                {results.map(u => (
-                  <button key={u.user_id} onClick={() => selectUser(u)}
-                    className="w-full flex items-center gap-3 px-1 py-1.5 rounded-lg hover:bg-gray-50 text-left">
-                    <Avatar name={u.name} src={u.photo_url} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                      <p className="text-xs text-gray-400">{t(`role.${u.role}`)}</p>
-                    </div>
-                  </button>
-                ))}
+          {!selected ? (
+            <>
+              <Input icon={Search} placeholder={t('akom.searchMember')} value={query} onChange={e => setQuery(e.target.value)} />
+              {results.length > 0 && (
+                <div className="space-y-1 max-h-60 overflow-y-auto">
+                  {results.map(u => (
+                    <button key={u.user_id} onClick={() => selectUser(u)}
+                      className="w-full flex items-center gap-3 px-1 py-1.5 rounded-lg hover:bg-gray-50 text-left">
+                      <Avatar name={u.name} src={u.photo_url} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
+                        <p className="text-xs text-gray-400">{t(`role.${u.role}`)}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-2.5">
+                <Avatar name={selected.name} src={selected.photo_url} size="sm" />
+                <p className="flex-1 text-sm font-medium text-gray-900 truncate">{selected.name}</p>
+                <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600">
+                  <X size={16} />
+                </button>
               </div>
-            )}
-          </>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-2.5">
-              <Avatar name={selected.name} src={selected.photo_url} size="sm" />
-              <p className="flex-1 text-sm font-medium text-gray-900 truncate">{selected.name}</p>
-              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600">
-                <X size={16} />
-              </button>
+
+              {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-3 py-2">{error}</div>}
+
+              <Input label={t('acert.certTitle')} placeholder={t('acert.certTitlePh')} value={title} onChange={e => setTitle(e.target.value)} />
+              <Uploader kind="file" label={t('acert.file')} required value={filePreview} uploading={uploading}
+                onFile={handleFile} onClear={() => { setFileUrl(''); setFilePreview('') }} />
+              <Textarea label={t('common.note')} rows={2} value={note} onChange={e => setNote(e.target.value)} />
+              <Button className="w-full" loading={issuing} onClick={handleIssue}>{t('acert.issueBtn')}</Button>
             </div>
-
-            {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-3 py-2">{error}</div>}
-
-            <Input label={t('acert.certTitle')} placeholder={t('acert.certTitlePh')} value={title} onChange={e => setTitle(e.target.value)} />
-            <Uploader kind="file" label={t('acert.file')} required value={filePreview} uploading={uploading}
-              onFile={handleFile} onClear={() => { setFileUrl(''); setFilePreview('') }} />
-            <Textarea label={t('common.note')} rows={2} value={note} onChange={e => setNote(e.target.value)} />
-            <Button className="w-full" loading={issuing} onClick={handleIssue}>{t('acert.issueBtn')}</Button>
-          </div>
-        )}
-      </Card>
+          )}
+        </Card>
+      )}
 
       <h2 className="text-sm font-semibold text-gray-900 mb-2">{t('acert.issuedList')}</h2>
 
@@ -165,9 +168,11 @@ export default function AdminCertificatesPage() {
                 <p className="text-sm font-medium text-gray-900 truncate">{c.title}</p>
                 <p className="text-xs text-gray-400 truncate">{c.users?.name || '-'} · {formatDate(c.issued_at)}</p>
               </div>
-              <button onClick={() => handleDelete(c)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
-                <Trash2 size={16} />
-              </button>
+              {!isGembala && (
+                <button onClick={() => handleDelete(c)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
           ))}
         </Card>

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { eventsService, mediaService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
+import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { Card, Input, Textarea, Select, Checkbox, Button, Spinner } from '@/components/ui'
 import Uploader from '@/components/Uploader'
@@ -32,7 +33,13 @@ export default function AdminEventFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { toast, confirm } = useToast()
+  const { profile } = useAuth()
   const isEdit = !!id
+
+  // Gembala hanya read-only — redirect ke list events
+  useEffect(() => {
+    if (profile && profile.role === 'Gembala') navigate('/admin/events', { replace: true })
+  }, [profile])
 
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)

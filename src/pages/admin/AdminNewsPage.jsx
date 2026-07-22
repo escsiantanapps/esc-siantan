@@ -4,10 +4,13 @@ import { Bell, Plus, ChevronRight } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, PageHeader, Button, Spinner, EmptyState } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
+import { useAuth } from '@/hooks/useAuth'
 import { formatDate, truncate } from '@/lib/utils'
 
 export default function AdminNewsPage() {
   const { t } = useLang()
+  const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const [news, setNews] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -20,7 +23,7 @@ export default function AdminNewsPage() {
       <PageHeader
         title={t('anews.title')}
         subtitle={t('anews.subtitle', { count: news.length })}
-        action={<Link to="/admin/berita/baru"><Button size="sm"><Plus size={15} /> {t('anews.add')}</Button></Link>}
+        action={!isGembala && <Link to="/admin/berita/baru"><Button size="sm"><Plus size={15} /> {t('anews.add')}</Button></Link>}
       />
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
@@ -32,7 +35,7 @@ export default function AdminNewsPage() {
       {!loading && news.length > 0 && (
         <Card className="divide-y divide-gray-100">
           {news.map(item => (
-            <Link key={item.news_id} to={`/admin/berita/${item.news_id}/edit`} className="flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors">
+            <Link key={item.news_id} to={isGembala ? '#' : `/admin/berita/${item.news_id}/edit`} onClick={isGembala ? e => e.preventDefault() : undefined} className="flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors">
               {item.thumbnail_url ? (
                 <img src={item.thumbnail_url} alt={item.title} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
               ) : (
