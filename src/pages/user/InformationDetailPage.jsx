@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, MessageCircle, FileText, X, Download } from 'lucide-react'
+import { Bell, MessageCircle, FileText, X, ExternalLink } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
@@ -14,27 +14,6 @@ export default function InformationDetailPage() {
   const [news, setNews] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pdfViewer, setPdfViewer] = useState(null) // { url, name }
-  const [downloading, setDownloading] = useState(false)
-
-  // Download via blob agar URL Supabase tidak pernah muncul di address bar (PWA)
-  const handleDownload = async (url, name) => {
-    if (downloading) return
-    setDownloading(true)
-    try {
-      const res = await fetch(url)
-      const blob = await res.blob()
-      const blobUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = name
-      a.click()
-      URL.revokeObjectURL(blobUrl)
-    } catch {
-      // fallback diam — file tetap bisa dibuka lewat viewer
-    } finally {
-      setDownloading(false)
-    }
-  }
 
   useEffect(() => {
     newsService.getById(id).then(setNews).catch(() => {}).finally(() => setLoading(false))
@@ -78,45 +57,44 @@ export default function InformationDetailPage() {
                       className="w-full flex items-center gap-2.5 rounded-xl border border-gray-100 bg-control px-3 py-2.5 hover:border-brand-300 transition-colors text-left"
                     >
                       <FileText size={18} className="text-red-500 shrink-0" />
-                      <span className="flex-1 min-w-0 text-sm text-gray-700 truncate">{f.name}</span>
-                      <span className="text-xs font-medium text-brand-500 shrink-0">{t('infoDetail.openPdf')}</span>
+                      <span className="text-sm text-gray-700 truncate flex-1">{f.name}</span>
                     </button>
                   ))}
                 </div>
               )}
 
-              {waLink(news.contact_wa) && (
-                <a
-                  href={waLink(news.contact_wa)}
-                  target="_blank" rel="noopener noreferrer"
-                >
-                  <Button variant="outline" className="w-full">
-                    <MessageCircle size={16} /> {t('common.contactWa')}
-                  </Button>
-                </a>
+              {news.contact_name && (
+                <div className="pt-1 border-t border-gray-100">
+                  <p className="text-xs text-gray-400 mb-1">{t('infoDetail.contact')}</p>
+                  <a
+                    href={waLink(news.contact_phone, `Halo, saya ingin bertanya tentang: ${news.title}`)}
+                    target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-green-600 font-medium"
+                  >
+                    <MessageCircle size={15} />
+                    {news.contact_name}
+                  </a>
+                </div>
               )}
             </div>
           </Card>
         )}
       </div>
 
-      {/* In-app PDF viewer modal */}
+      {/* PDF Viewer modal — dibungkus Google Docs Viewer agar tampil di semua mobile browser */}
       {pdfViewer && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-gray-900 shrink-0">
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-900" style={{paddingTop: 'var(--safe-top, 0px)'}}>
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 shrink-0">
             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate flex-1">{pdfViewer.name}</p>
             <div className="flex items-center gap-2 shrink-0">
-              {/* Download via blob agar URL Supabase tidak muncul di address bar PWA */}
-              <button
-                type="button"
-                onClick={() => handleDownload(pdfViewer.url, pdfViewer.name)}
-                disabled={downloading}
-                className="p-2 text-gray-500 hover:text-brand-500 disabled:opacity-40"
+              <a
+                href={pdfViewer.url}
+                download={pdfViewer.name}
+                className="p-2 text-gray-500 hover:text-brand-500"
                 title="Unduh"
               >
-                <Download size={18} />
-              </button>
+                <ExternalLink size={18} />
+              </a>
               <button
                 type="button"
                 onClick={() => setPdfViewer(null)}
@@ -127,9 +105,9 @@ export default function InformationDetailPage() {
               </button>
             </div>
           </div>
-          {/* PDF iframe langsung dari Supabase — frame-src sudah diizinkan di CSP */}
+          {/* PDF iframe — dibungkus Google Docs Viewer agar tampil di semua mobile browser */}
           <iframe
-            src={pdfViewer.url}
+            src={`https://docs.google.com/viewer?url=${encodeURIComponent(pdfViewer.url)}&embedded=true`}
             title={pdfViewer.name}
             className="flex-1 w-full bg-gray-100"
           />

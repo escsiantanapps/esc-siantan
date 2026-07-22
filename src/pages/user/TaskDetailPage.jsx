@@ -18,6 +18,7 @@ export default function TaskDetailPage() {
   const { profile } = useAuth()
   const { toast } = useToast()
   const { t } = useLang()
+  const isGembala = profile?.role === 'Gembala'
 
   const [template, setTemplate] = useState(null)
   const [responses, setResponses] = useState([])
@@ -198,6 +199,14 @@ export default function TaskDetailPage() {
         <Card className="p-4 space-y-4">
           <h2 className="text-sm font-semibold text-gray-900">{t('taskDetail.fillAnswer')}</h2>
 
+          {/* Gembala: mode lihat saja — tidak bisa mengisi form */}
+          {isGembala && (
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+              <Lock size={18} className="text-blue-500 flex-shrink-0" />
+              <p className="text-sm text-blue-700">Mode Gembala — hanya bisa melihat form ini.</p>
+            </div>
+          )}
+
           {locked && (
             <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
               <CheckCircle2 size={18} className="text-green-500 flex-shrink-0" />
@@ -288,7 +297,7 @@ export default function TaskDetailPage() {
             </div>
           ))}
 
-          {!locked && !closed && (
+          {!locked && !closed && !isGembala && (
             <Button className="w-full" loading={saving} onClick={handleSubmit}>
               {t('taskDetail.submit')}
             </Button>
