@@ -13,6 +13,7 @@ function todayISO() { return new Date().toISOString().slice(0, 10) }
 export default function AdminSundayPage() {
   const { toast } = useToast()
   const { profile } = useAuth()
+  const isGembala = profile?.role === 'Gembala'
   const [date, setDate] = useState(todayISO())
   const [session, setSession] = useState(null)   // sesi aktif untuk tanggal terpilih (bila ada)
   const [qr, setQr] = useState('')
@@ -114,9 +115,12 @@ export default function AdminSundayPage() {
               atau ditutup permanen). Jemaat memindainya lewat menu Scan untuk
               mencatat kehadiran &amp; mendapat 1 poin.
             </p>
-            <Button onClick={openSession} disabled={busy}>
-              {busy ? <Spinner size="sm" /> : <Play size={15} />} Buka Sesi Ibadah
-            </Button>
+            {!isGembala && (
+              <Button onClick={openSession} disabled={busy}>
+                {busy ? <Spinner size="sm" /> : <Play size={15} />} Buka Sesi Ibadah
+              </Button>
+            )}
+            {isGembala && <p className="text-xs text-gray-400 italic">Gembala hanya bisa memantau kehadiran.</p>}
           </div>
         ) : (
           <div className="flex flex-col items-center text-center gap-3">
@@ -135,7 +139,7 @@ export default function AdminSundayPage() {
                   <Download size={15} /> Unduh QR
                 </a>
               )}
-              {session.is_paused ? (
+              {!isGembala && (session.is_paused ? (
                 <Button onClick={resumeSession} disabled={busy}>
                   {busy ? <Spinner size="sm" /> : <Play size={14} />} Resume Sesi
                 </Button>
@@ -143,10 +147,12 @@ export default function AdminSundayPage() {
                 <Button variant="secondary" onClick={pauseSession} disabled={busy}>
                   {busy ? <Spinner size="sm" /> : <Pause size={14} />} Pause Sesi
                 </Button>
+              ))}
+              {!isGembala && (
+                <Button variant="secondary" onClick={closeSession} disabled={busy}>
+                  <Square size={14} /> Tutup Permanen
+                </Button>
               )}
-              <Button variant="secondary" onClick={closeSession} disabled={busy}>
-                <Square size={14} /> Tutup Permanen
-              </Button>
             </div>
           </div>
         )}

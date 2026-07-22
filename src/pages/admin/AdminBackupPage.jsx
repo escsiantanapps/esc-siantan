@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { HardDrive, Download, CheckCircle2, AlertTriangle, FileJson, FolderOpen, FolderCheck, Trash2, RefreshCw, File } from 'lucide-react'
+import { HardDrive, Download, CheckCircle2, AlertTriangle, FileJson, FolderOpen, FolderCheck, Trash2, RefreshCw, File, ArchiveRestore, Upload, Package } from 'lucide-react'
+import JSZip from 'jszip'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
@@ -56,6 +57,59 @@ async function listBackupFiles(dirHandle) {
   return files.sort((a, b) => b.lastModified - a.lastModified)
 }
 
+// Daftar semua file di satu bucket Storage (paginasi 1000).
+async function listBucketFiles(bucket) {
+  const files = []
+  // Supabase Storage list() hanya satu level — perlu rekursi per folder.
+  async function listFolder(prefix) {
+    const { data, error } = await supabase.storage.from(bucket).list(prefix || undefined, { limit: 1000 })
+    if (error) throw error
+    for (const item of data || []) {
+      if (item.id === null) {
+        // folder (metadata id null = subfolder)
+        const sub = prefix ? `${prefix}/${item.name}` : item.name
+        await listFolder(sub)
+      } else {
+        files.push(prefix ? `${prefix}/${item.name}` : item.name)
+      }
+    }
+  }
+  await listFolder('')
+  return files
+}
+
+// Download satu file dari bucket sebagai ArrayBuffer.
+async function downloadStorageFile(bucket, path) {
+  const { data, error } = await supabase.storage.from(bucket).download(path)
+  if (error) throw error
+  return data.arrayBuffer()
+}
+
+// Restore semua baris JSON ke Supabase menggunakan upsert per tabel.
+// Kembalikan { restored, errors } setelah semua tabel dicoba.
+async function restoreFromJson(json, onProgress) {
+  const tables = json?.tables
+  if (!tables) throw new Error('Format JSON tidak dikenal — bukan file backup ESC Siantan.')
+  const keys = Object.keys(tables)
+  const errors = []
+  let restored = 0
+  for (let i = 0; i < keys.length; i++) {
+    const table = keys[i]
+    const rows = tables[table]
+    if (!Array.isArray(rows) || rows.length === 0) continue
+    onProgress?.({ current: i + 1, total: keys.length, label: table })
+    // Upsert dalam batch 500 baris supaya tidak timeout.
+    const BATCH = 500
+    for (let b = 0; b < rows.length; b += BATCH) {
+      const chunk = rows.slice(b, b + BATCH)
+      const { error } = await supabase.from(table).upsert(chunk, { onConflict: 'id' })
+      if (error) { errors.push({ table, msg: error.message }); break }
+      restored += chunk.length
+    }
+  }
+  return { restored, errors }
+}
+
 export default function AdminBackupPage() {
   const { toast } = useToast()
   const { t } = useLang()
@@ -70,6 +124,17 @@ export default function AdminBackupPage() {
   const [folderFiles, setFolderFiles] = useState([])
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [permGranted, setPermGranted] = useState(false)
+
+  // State arsip storage
+  const [archiving, setArchiving] = useState(false)
+  const [archiveProgress, setArchiveProgress] = useState({ current: 0, total: 0, label: '' })
+  const [archiveResult, setArchiveResult] = useState(null)
+
+  // State restore
+  const restoreInputRef = useRef(null)
+  const [restoring, setRestoring] = useState(false)
+  const [restoreProgress, setRestoreProgress] = useState({ current: 0, total: 0, label: '' })
+  const [restoreResult, setRestoreResult] = useState(null)
 
   // Muat nama folder terakhir dari localStorage saat buka halaman
   useEffect(() => {
@@ -197,6 +262,77 @@ export default function AdminBackupPage() {
       toast.error(t('backup.errorToast', { msg: err.message }))
     } finally {
       setExporting(false)
+    }
+  }
+
+  // Handler arsip storage: tarik semua file dari semua bucket lalu zip & download.
+  async function handleArchiveStorage() {
+    setArchiving(true)
+    setArchiveResult(null)
+    try {
+      const BUCKETS = ['profile-photos', 'task-files', 'documents']
+      const zip = new JSZip()
+      let totalFiles = 0
+      let failedFiles = 0
+
+      for (const bucket of BUCKETS) {
+        setArchiveProgress({ current: 0, total: 0, label: `Membaca daftar ${bucket}...` })
+        const paths = await listBucketFiles(bucket)
+        for (let i = 0; i < paths.length; i++) {
+          setArchiveProgress({ current: i + 1, total: paths.length, label: `${bucket}: ${paths[i]}` })
+          try {
+            const buf = await downloadStorageFile(bucket, paths[i])
+            zip.folder(bucket).file(paths[i], buf)
+            totalFiles++
+          } catch {
+            failedFiles++
+          }
+        }
+      }
+
+      setArchiveProgress({ current: 1, total: 1, label: 'Membuat file ZIP...' })
+      const date = new Date().toISOString().slice(0, 10)
+      const filename = `ESC-Siantan-Storage-${date}.zip`
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
+      downloadBlob(blob, filename)
+      setArchiveResult({ totalFiles, failedFiles, filename })
+      toast.success(`Arsip storage diunduh: ${totalFiles} file (${failedFiles} gagal).`)
+    } catch (err) {
+      toast.error('Gagal arsip storage: ' + err.message)
+    } finally {
+      setArchiving(false)
+      setArchiveProgress({ current: 0, total: 0, label: '' })
+    }
+  }
+
+  // Handler restore: baca file JSON backup lalu upsert ke semua tabel.
+  async function handleRestore(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset input agar file yang sama bisa dipilih ulang
+    e.target.value = ''
+    if (!file.name.endsWith('.json')) {
+      toast.error('Hanya file JSON yang didukung untuk restore.'); return
+    }
+    if (!window.confirm(`PERHATIAN: Restore akan menimpa data yang ada di Supabase dengan isi file "${file.name}". Lanjutkan?`)) return
+
+    setRestoring(true)
+    setRestoreResult(null)
+    try {
+      const text = await file.text()
+      const json = JSON.parse(text)
+      const { restored, errors } = await restoreFromJson(json, (p) => setRestoreProgress(p))
+      setRestoreResult({ restored, errors, filename: file.name })
+      if (errors.length === 0) {
+        toast.success(`Restore selesai: ${restored.toLocaleString()} baris dipulihkan.`)
+      } else {
+        toast.info(`Restore selesai dengan ${errors.length} tabel gagal. Cek detail di bawah.`)
+      }
+    } catch (err) {
+      toast.error('Gagal restore: ' + err.message)
+    } finally {
+      setRestoring(false)
+      setRestoreProgress({ current: 0, total: 0, label: '' })
     }
   }
 
@@ -404,6 +540,131 @@ export default function AdminBackupPage() {
               </div>
             ))}
           </div>
+        </div>
+      </Card>
+
+      {/* Card arsip storage */}
+      <Card className="mb-4">
+        <div className="p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+              <Package size={20} className="text-emerald-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Arsip File Storage</p>
+              <p className="text-xs text-gray-500">Download semua file jemaat (foto, dokumen, lampiran) sebagai ZIP lokal. File di Supabase tidak dihapus.</p>
+            </div>
+          </div>
+
+          {/* Progress arsip */}
+          {archiving && (
+            <div className="mb-4">
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span className="truncate max-w-[80%]">{archiveProgress.label}</span>
+                <span>{archiveProgress.total > 0 ? `${archiveProgress.current}/${archiveProgress.total}` : '...'}</span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                  style={{ width: archiveProgress.total > 0 ? `${Math.round((archiveProgress.current / archiveProgress.total) * 100)}%` : '10%' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Hasil arsip */}
+          {archiveResult && !archiving && (
+            <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-lg mb-4 text-sm text-emerald-700">
+              <CheckCircle2 size={16} className="flex-shrink-0 mt-0.5" />
+              <div>
+                <p>{archiveResult.totalFiles} file diarsipkan ke <span className="font-medium">{archiveResult.filename}</span></p>
+                {archiveResult.failedFiles > 0 && (
+                  <p className="text-xs text-amber-600 mt-0.5">{archiveResult.failedFiles} file gagal diunduh (mungkin sudah terhapus di Storage).</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-amber-50 rounded-xl px-3 py-2.5 mb-3 text-xs text-amber-700">
+            Bucket yang diarsipkan: <span className="font-medium">profile-photos</span>, <span className="font-medium">task-files</span>, <span className="font-medium">documents</span>. File besar — proses bisa memakan waktu beberapa menit tergantung koneksi.
+          </div>
+
+          <Button onClick={handleArchiveStorage} loading={archiving} disabled={archiving} variant="outline" className="w-full">
+            <Download size={16} className="mr-1.5" />
+            {archiving ? 'Mengarsipkan...' : 'Download Arsip Storage (ZIP)'}
+          </Button>
+        </div>
+      </Card>
+
+      {/* Card restore */}
+      <Card className="mb-4">
+        <div className="p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+              <ArchiveRestore size={20} className="text-rose-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Restore Data dari Backup</p>
+              <p className="text-xs text-gray-500">Pulihkan semua tabel dari file JSON backup. Hanya gunakan saat data hilang atau perlu dipulihkan.</p>
+            </div>
+          </div>
+
+          {/* Progress restore */}
+          {restoring && (
+            <div className="mb-4">
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span className="truncate max-w-[80%]">Memulihkan: {restoreProgress.label}</span>
+                <span>{restoreProgress.total > 0 ? `${restoreProgress.current}/${restoreProgress.total}` : '...'}</span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-rose-500 rounded-full transition-all duration-300"
+                  style={{ width: restoreProgress.total > 0 ? `${Math.round((restoreProgress.current / restoreProgress.total) * 100)}%` : '10%' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Hasil restore */}
+          {restoreResult && !restoring && (
+            <div className={`flex items-start gap-2 p-3 rounded-lg mb-4 text-sm ${restoreResult.errors.length === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+              {restoreResult.errors.length === 0
+                ? <CheckCircle2 size={16} className="flex-shrink-0 mt-0.5" />
+                : <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />}
+              <div>
+                <p>{restoreResult.restored.toLocaleString()} baris dipulihkan dari <span className="font-medium">{restoreResult.filename}</span></p>
+                {restoreResult.errors.length > 0 && (
+                  <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+                    {restoreResult.errors.map(e => (
+                      <li key={e.table}>{e.table}: {e.msg}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-rose-50 rounded-xl px-3 py-2.5 mb-3 text-xs text-rose-700">
+            <span className="font-semibold">Hanya file JSON</span> yang didukung. Restore menggunakan <span className="font-medium">upsert</span> — data existing dengan ID yang sama akan ditimpa. Pastikan file berasal dari backup ESC Siantan.
+          </div>
+
+          <input
+            ref={restoreInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleRestore}
+          />
+          <Button
+            onClick={() => restoreInputRef.current?.click()}
+            loading={restoring}
+            disabled={restoring}
+            variant="outline"
+            className="w-full border-rose-200 text-rose-600 hover:bg-rose-50"
+          >
+            <Upload size={16} className="mr-1.5" />
+            {restoring ? 'Memulihkan...' : 'Pilih File JSON & Restore'}
+          </Button>
         </div>
       </Card>
     </div>
