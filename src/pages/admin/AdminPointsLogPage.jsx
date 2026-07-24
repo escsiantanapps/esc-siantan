@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Coins, TrendingUp, TrendingDown, Search, History, Wallet, Network, BookOpen, ShieldAlert, Trash2 } from 'lucide-react'
+import { Coins, TrendingUp, TrendingDown, Search, History, Wallet, Network, BookOpen, ShieldAlert, Trash2, Gift } from 'lucide-react'
 import { pointsService } from '@/services/pointsService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
-import { Card, PageHeader, Input, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
+import { Card, PageHeader, Input, Textarea, Select, Button, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
 // Distribusi Poin (Admin) — audit ke mana saja poin bergerak. Tersusun dalam
@@ -50,7 +51,9 @@ const TABS = [
 export default function AdminPointsLogPage() {
   const { toast, confirm } = useToast()
   const { profile } = useAuth()
+  const { t } = useLang()
   const isGembala = profile?.role === 'Gembala'
+  const isSuperAdmin = profile?.role === 'Super Admin'
   const [tab, setTab] = useState('ringkasan')
   const [tx, setTx] = useState([])
   const [users, setUsers] = useState([])
@@ -59,6 +62,10 @@ export default function AdminPointsLogPage() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [busyId, setBusyId] = useState(null)
+  const [grantUserId, setGrantUserId] = useState('')
+  const [grantAmount, setGrantAmount] = useState('')
+  const [grantReason, setGrantReason] = useState('')
+  const [granting, setGranting] = useState(false)
 
   function loadAll() {
     return Promise.all([
@@ -117,11 +124,69 @@ export default function AdminPointsLogPage() {
     }
   }
 
+  async function handleGrant(e) {
+    e.preventDefault()
+    const amount = Number(grantAmount)
+    const user = users.find(item => item.user_id === grantUserId)
+    const reason = grantReason.trim()
+
+    if (!user) return toast.error(t('apoints.grantUserRequired'))
+    if (!Number.isInteger(amount) || amount <= 0 || amount > 100000) return toast.error(t('apoints.grantAmountInvalid'))
+    if (reason.length < 3 || reason.length > 300) return toast.error(t('apoints.grantReasonInvalid'))
+
+    const ok = await confirm({
+      title: t('apoints.grantConfirmTitle'),
+      message: t('apoints.grantConfirmMessage', { name: user.name, amount, reason }),
+      confirmText: t('apoints.grantButton'),
+    })
+    if (!ok) return
+
+    setGranting(true)
+    try {
+      const result = await pointsService.grantPoints(user.user_id, amount, reason)
+      toast.success(t('apoints.grantSuccess', { name: user.name, balance: result.balance }))
+      setGrantUserId('')
+      setGrantAmount('')
+      setGrantReason('')
+      await loadAll()
+    } catch (err) {
+      const message = err.message || ''
+      if (/not_authorized/i.test(message)) toast.error(t('apoints.grantUnauthorized'))
+      else if (/invalid_amount/i.test(message)) toast.error(t('apoints.grantAmountInvalid'))
+      else if (/invalid_reason/i.test(message)) toast.error(t('apoints.grantReasonInvalid'))
+      else if (/user_not_found_or_inactive/i.test(message)) toast.error(t('apoints.grantUserInactive'))
+      else toast.error(t('apoints.grantFailed'))
+    } finally {
+      setGranting(false)
+    }
+  }
+
   if (loading) return <div className="flex justify-center py-16"><Spinner /></div>
 
   return (
     <div className="max-w-2xl">
       <PageHeader title="Distribusi Poin" subtitle="Ke mana saja poin bergerak" />
+
+      {isSuperAdmin && (
+        <Card className="p-4 mb-4">
+          <div className="flex items-start gap-2 mb-4">
+            <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><Gift size={16} /></span>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">{t('apoints.grantTitle')}</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{t('apoints.grantDesc')}</p>
+            </div>
+          </div>
+          <form onSubmit={handleGrant} className="space-y-3">
+            <Select label={t('apoints.grantUser')} required value={grantUserId} onChange={e => setGrantUserId(e.target.value)}>
+              <option value="">{t('apoints.grantUserPlaceholder')}</option>
+              {users.map(user => <option key={user.user_id} value={user.user_id}>{user.name} ({t('apoints.currentBalance', { points: user.points || 0 })})</option>)}
+            </Select>
+            <Input label={t('apoints.grantAmount')} required type="number" min="1" max="100000" step="1" value={grantAmount} onChange={e => setGrantAmount(e.target.value)} placeholder={t('apoints.grantAmountPlaceholder')} />
+            <Textarea label={t('apoints.grantReason')} required rows={2} maxLength={300} value={grantReason} onChange={e => setGrantReason(e.target.value)} placeholder={t('apoints.grantReasonPlaceholder')} />
+            <Button type="submit" loading={granting} className="w-full">{t('apoints.grantButton')}</Button>
+          </form>
+        </Card>
+      )}
 
       {/* Alert akses (yang diminta): halaman & aksi hapus khusus admin ber-Hak-Akses */}
       <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-4">

@@ -107,4 +107,32 @@ export const evaluationService = {
     }
     return rows
   },
+
+  // Ringkasan tren dashboard. Setiap minggu memakai aturan evaluasi yang sama
+  // dengan halaman Evaluasi agar angka status tidak berbeda antar halaman.
+  async getWeeklyTrend({ weeks = 6 } = {}) {
+    const now = new Date()
+    const currentWeekStart = new Date(now)
+    const day = currentWeekStart.getDay() || 7
+    currentWeekStart.setDate(currentWeekStart.getDate() - day + 1)
+    currentWeekStart.setHours(0, 0, 0, 0)
+
+    const periods = Array.from({ length: weeks }, (_, index) => {
+      const start = new Date(currentWeekStart)
+      start.setDate(start.getDate() - (weeks - index - 1) * 7)
+      const end = index === weeks - 1
+        ? now
+        : new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7 - 1, 23, 59, 59, 999)
+      return { start, end }
+    })
+
+    return Promise.all(periods.map(async ({ start, end }) => {
+      const rows = await this.getEvaluation({ startDate: start.toISOString(), endDate: end.toISOString() })
+      const summary = rows.reduce((result, row) => {
+        if (row.status in result) result[row.status] += 1
+        return result
+      }, { TERPENUHI: 0, PROSES: 0, KOSONG: 0, IZIN: 0 })
+      return { start: start.toISOString(), ...summary, total: rows.length }
+    }))
+  },
 }

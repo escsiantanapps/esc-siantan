@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake, Database } from 'lucide-react'
-import { startOfWeek } from 'date-fns'
+import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake, Database, BarChart3 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
@@ -13,14 +12,16 @@ import MemberStats from '@/components/MemberStats'
 
 export default function AdminDashboardPage() {
   const { profile } = useAuth()
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const [stats, setStats] = useState({ members: 0, events: 0, tasks: 0, sp: 0, baptism: 0, wedding: 0, pendingUsers: 0 })
   const [recentMembers, setRecentMembers] = useState([])
   const [pendingRegs, setPendingRegs] = useState([])
   const [birthdays, setBirthdays] = useState([])
   const [bdayMonth, setBdayMonth] = useState(new Date().getMonth()) // 0-11, default bulan ini
   const [evalSummary, setEvalSummary] = useState({ TERPENUHI: 0, PROSES: 0, KOSONG: 0 })
+  const [evalTrend, setEvalTrend] = useState([])
   const [evalLoading, setEvalLoading] = useState(true)
+  const [evalTrendError, setEvalTrendError] = useState(false)
   const [storage, setStorage] = useState(null) // { total } byte terpakai (Super Admin)
   const [loading, setLoading] = useState(true)
 
@@ -66,15 +67,16 @@ export default function AdminDashboardPage() {
 
   async function loadEvaluation() {
     try {
-      const startDate = startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString()
-      const endDate = new Date().toISOString()
-      const rows = await evaluationService.getEvaluation({ startDate, endDate })
+      const weeklyTrend = await evaluationService.getWeeklyTrend()
+      const currentWeek = weeklyTrend.at(-1) || { TERPENUHI: 0, PROSES: 0, KOSONG: 0 }
       setEvalSummary({
-        TERPENUHI: rows.filter(r => r.status === 'TERPENUHI').length,
-        PROSES: rows.filter(r => r.status === 'PROSES').length,
-        KOSONG: rows.filter(r => r.status === 'KOSONG').length,
+        TERPENUHI: currentWeek.TERPENUHI,
+        PROSES: currentWeek.PROSES,
+        KOSONG: currentWeek.KOSONG,
       })
+      setEvalTrend(weeklyTrend)
     } catch {
+      setEvalTrendError(true)
     } finally {
       setEvalLoading(false)
     }
@@ -111,6 +113,10 @@ export default function AdminDashboardPage() {
     amber: { bar: 'bg-amber-500', text: 'text-amber-600', bg: 'bg-amber-50', icon: 'text-amber-500', msg: t('adash.storageWarn') },
     red:   { bar: 'bg-red-500',   text: 'text-red-600',   bg: 'bg-red-50',   icon: 'text-red-500',   msg: t('adash.storageFull') },
   }[storageColor]
+  const maxWeeklyEvaluation = Math.max(...evalTrend.map(week => week.total), 1)
+  const weekLabel = start => new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'id-ID', {
+    day: 'numeric', month: 'short',
+  }).format(new Date(start))
 
   if (loading) return (
     <div className="animate-fade-in">
@@ -253,6 +259,77 @@ export default function AdminDashboardPage() {
               <p className="text-xs text-gray-400 mt-0.5">{t('adash.empty')}</p>
             </div>
           </div>
+        )}
+      </Card>
+
+      {/* Tren enam minggu: batang bertumpuk memperlihatkan jumlah sekaligus status evaluasi. */}
+      <Card className="p-4 mb-6">
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
+              <BarChart3 size={18} className="text-brand-500" strokeWidth={1.75} />
+            </div>
+            <div className="min-w-0">
+              <h3 id="evaluation-trend-title" className="text-sm font-semibold text-gray-900">{t('adash.evalTrend')}</h3>
+              <p className="text-xs text-gray-400">{t('adash.evalTrendDesc')}</p>
+            </div>
+          </div>
+          <Link to="/admin/evaluasi" className="text-xs text-brand-500 flex items-center gap-0.5 shrink-0">
+            {t('adash.detail')} <ChevronRight size={13} />
+          </Link>
+        </div>
+
+        {evalLoading ? (
+          <Skeleton className="h-44 rounded-xl mt-4" />
+        ) : evalTrendError ? (
+          <p className="text-sm text-red-600 text-center py-8">{t('adash.evalTrendError')}</p>
+        ) : evalTrend.every(week => week.total === 0) ? (
+          <p className="text-sm text-gray-400 text-center py-8">{t('adash.evalTrendEmpty')}</p>
+        ) : (
+          <figure className="mt-4" aria-labelledby="evaluation-trend-title">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 mb-4 text-xs text-gray-500" aria-label={t('adash.evalTrendLegend')}>
+              {[
+                ['TERPENUHI', 'bg-green-500', t('adash.fulfilled')],
+                ['PROSES', 'bg-amber-500', t('adash.inProgress')],
+                ['KOSONG', 'bg-red-500', t('adash.empty')],
+                ['IZIN', 'bg-gray-400', t('adash.onLeave')],
+              ].map(([key, color, label]) => (
+                <span key={key} className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className={`w-2.5 h-2.5 rounded-sm ${color}`} />
+                  {label}
+                </span>
+              ))}
+            </div>
+
+            <div role="img" className="h-44 flex items-end gap-2 sm:gap-4 border-b border-gray-200 pb-1" aria-label={t('adash.evalTrendA11y')}>
+              {evalTrend.map(week => {
+                const parts = [
+                  ['TERPENUHI', 'bg-green-500'], ['PROSES', 'bg-amber-500'],
+                  ['KOSONG', 'bg-red-500'], ['IZIN', 'bg-gray-400'],
+                ]
+                return (
+                  <div key={week.start} className="flex-1 min-w-0 h-full flex flex-col justify-end items-center gap-1.5">
+                    <span className="text-[11px] font-semibold tabular-nums text-gray-600">{week.total}</span>
+                    <div
+                      className="w-full max-w-10 rounded-t-md overflow-hidden flex flex-col-reverse bg-control"
+                      style={{ height: `${Math.max((week.total / maxWeeklyEvaluation) * 118, 4)}px` }}
+                      title={t('adash.evalTrendWeek', { date: weekLabel(week.start), fulfilled: week.TERPENUHI, progress: week.PROSES, empty: week.KOSONG, leave: week.IZIN })}
+                    >
+                      {parts.map(([key, color]) => week[key] > 0 && (
+                        <div key={key} className={color} style={{ height: `${(week[key] / week.total) * 100}%` }} />
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-gray-400 whitespace-nowrap">{weekLabel(week.start)}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <table className="sr-only">
+              <caption>{t('adash.evalTrend')}</caption>
+              <thead><tr><th>{t('adash.week')}</th><th>{t('adash.fulfilled')}</th><th>{t('adash.inProgress')}</th><th>{t('adash.empty')}</th><th>{t('adash.onLeave')}</th></tr></thead>
+              <tbody>{evalTrend.map(week => <tr key={week.start}><th>{weekLabel(week.start)}</th><td>{week.TERPENUHI}</td><td>{week.PROSES}</td><td>{week.KOSONG}</td><td>{week.IZIN}</td></tr>)}</tbody>
+            </table>
+          </figure>
         )}
       </Card>
 

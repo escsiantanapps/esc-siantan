@@ -4025,3 +4025,50 @@ CREATE TABLE IF NOT EXISTS cold_archives (
 ALTER TABLE cold_archives ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON cold_archives FROM anon, authenticated;
 CREATE INDEX IF NOT EXISTS cold_archives_created_idx ON cold_archives (created_at DESC);
+
+-- ── Migrasi v75: Pemberian poin manual khusus Super Admin ────────────────
+-- TEMUAN: saldo users.points tidak boleh ditulis klien; bypass PostgREST akan
+-- melewati validasi UI. KEPUTUSAN OPERATOR: Super Admin dapat memberi poin
+-- kepada jemaat aktif dengan alasan wajib, melalui jalur apply_points yang
+-- juga menulis riwayat point_transactions dan audit_log.
+CREATE OR REPLACE FUNCTION super_admin_grant_points(
+  p_user_id TEXT,
+  p_amount INT,
+  p_reason TEXT
+) RETURNS jsonb
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_reason TEXT := btrim(COALESCE(p_reason, ''));
+  v_actor_name TEXT;
+  v_balance INT;
+BEGIN
+  IF auth_user_role() IS DISTINCT FROM 'Super Admin' THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF p_amount IS NULL OR p_amount < 1 OR p_amount > 100000 THEN
+    RAISE EXCEPTION 'invalid_amount' USING ERRCODE = '22023';
+  END IF;
+  IF char_length(v_reason) < 3 OR char_length(v_reason) > 300 THEN
+    RAISE EXCEPTION 'invalid_reason' USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM users WHERE user_id = p_user_id AND status = 'Aktif') THEN
+    RAISE EXCEPTION 'user_not_found_or_inactive' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM apply_points(p_user_id, p_amount, 'Pemberian Super Admin: ' || v_reason);
+  SELECT points INTO v_balance FROM users WHERE user_id = p_user_id;
+  SELECT name INTO v_actor_name FROM users WHERE user_id = auth_user_id();
+
+  INSERT INTO audit_log (
+    actor_user_id, actor_name, actor_role, action, table_name, record_id,
+    changed_fields, old_data, new_data
+  ) VALUES (
+    auth_user_id(), v_actor_name, 'Super Admin', 'INSERT', 'point_transactions', p_user_id,
+    ARRAY['amount', 'description'], NULL,
+    jsonb_build_object('amount', p_amount, 'reason', v_reason, 'balance_after', v_balance)
+  );
+
+  RETURN jsonb_build_object('ok', true, 'user_id', p_user_id, 'amount', p_amount, 'balance', v_balance);
+END $$;
+REVOKE EXECUTE ON FUNCTION super_admin_grant_points(TEXT, INT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION super_admin_grant_points(TEXT, INT, TEXT) TO authenticated;

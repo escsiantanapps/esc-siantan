@@ -65,6 +65,18 @@ export const pointsService = {
     return data
   },
 
+  // Pemberian poin manual hanya lewat RPC. Validasi peran Super Admin, alasan,
+  // saldo, transaksi, dan audit semuanya terjadi atomik di database (v75).
+  async grantPoints(userId, amount, reason) {
+    const { data, error } = await supabase.rpc('super_admin_grant_points', {
+      p_user_id: userId,
+      p_amount: amount,
+      p_reason: reason,
+    })
+    if (error) throw error
+    return data
+  },
+
   // Top-N jemaat dengan poin terbanyak (via fungsi definer — RLS users
   // tidak mengizinkan jemaat membaca baris jemaat lain).
   async getLeaderboard(limit = 10) {

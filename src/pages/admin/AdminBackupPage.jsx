@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
-import { HardDrive, Download, CheckCircle2, AlertTriangle, FileJson, FolderOpen, FolderCheck, Trash2, RefreshCw, File, ArchiveRestore, Upload, Package } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { HardDrive, Download, CheckCircle2, AlertTriangle, FileJson, FolderOpen, FolderCheck, Trash2, RefreshCw, File, ArchiveRestore, Upload, Package, ClipboardList } from 'lucide-react'
 import JSZip from 'jszip'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { Card, PageHeader, Button, Input } from '@/components/ui'
+import { Card, PageHeader, Button, Input, Select, Avatar, Badge } from '@/components/ui'
 import { BACKUP_TABLES } from '@/lib/backupTables'
 import { buildBackupWorkbook, buildBackupJson } from '@/lib/backupBuild'
 import { coldArchiveService } from '@/services/coldArchiveService'
@@ -105,6 +105,13 @@ async function sha256(blob) {
   return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
+function answerText(value) {
+  if (value == null || value === '') return '-'
+  if (Array.isArray(value)) return value.map(answerText).join(', ')
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
 // Restore semua baris JSON ke Supabase menggunakan upsert per tabel.
 // Kembalikan { restored, errors } setelah semua tabel dicoba.
 async function restoreFromJson(json, onProgress) {
@@ -158,12 +165,35 @@ export default function AdminBackupPage() {
   const [coldBusy, setColdBusy] = useState(false)
   const [coldResult, setColdResult] = useState(null)
   const [coldHistory, setColdHistory] = useState(null)
+  const [coldHistoryFormId, setColdHistoryFormId] = useState('')
+  const [coldHistorySearch, setColdHistorySearch] = useState('')
+  const [coldHistoryStart, setColdHistoryStart] = useState('')
+  const [coldHistoryEnd, setColdHistoryEnd] = useState('')
+  const [coldSelectedResponse, setColdSelectedResponse] = useState(null)
 
   // State restore
   const restoreInputRef = useRef(null)
   const [restoring, setRestoring] = useState(false)
   const [restoreProgress, setRestoreProgress] = useState({ current: 0, total: 0, label: '' })
   const [restoreResult, setRestoreResult] = useState(null)
+
+  const coldHistoryForms = coldHistory?.context?.forms || []
+  const coldHistoryUsers = coldHistory?.context?.users || []
+  const coldHistoryFormMap = useMemo(() => Object.fromEntries(coldHistoryForms.map(form => [form.form_id, form])), [coldHistoryForms])
+  const coldHistoryUserMap = useMemo(() => Object.fromEntries(coldHistoryUsers.map(user => [user.user_id, user])), [coldHistoryUsers])
+  const coldHistoryRows = useMemo(() => {
+    const query = coldHistorySearch.trim().toLowerCase()
+    return [...(coldHistory?.responses || [])]
+      .filter(row => {
+        const date = String(row.submitted_at || '').slice(0, 10)
+        const user = coldHistoryUserMap[row.volunteer_id]
+        return (!coldHistoryFormId || row.form_id === coldHistoryFormId)
+          && (!query || user?.name?.toLowerCase().includes(query))
+          && (!coldHistoryStart || date >= coldHistoryStart)
+          && (!coldHistoryEnd || date <= coldHistoryEnd)
+      })
+      .sort((a, b) => new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0))
+  }, [coldHistory, coldHistoryEnd, coldHistoryFormId, coldHistorySearch, coldHistoryStart, coldHistoryUserMap])
 
   // Muat nama folder terakhir dari localStorage saat buka halaman
   useEffect(() => {
@@ -359,9 +389,11 @@ export default function AdminBackupPage() {
       const archiveId = `COLD-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
       const filename = `ESC-Siantan-Respon-${coldCutoff}-${date}.zip`
       const manifest = { archiveId, cutoffDate: coldCutoff, filename, responseIds: responses.map(r => r.response_id), filePaths, createdAt: new Date().toISOString() }
+      const context = await coldArchiveService.getArchiveContext(responses)
       const zip = new JSZip()
       zip.file('manifest.json', JSON.stringify(manifest, null, 2))
       zip.file('form_responses.json', JSON.stringify(responses, null, 2))
+      zip.file('evaluation_context.json', JSON.stringify(context, null, 2))
       for (const path of filePaths) {
         const data = await coldArchiveService.downloadResponseFile(path)
         zip.file(`task-files/${path}`, data)
@@ -406,12 +438,19 @@ export default function AdminBackupPage() {
       const manifestFile = zip.file('manifest.json')
       const responsesFile = zip.file('form_responses.json')
       if (!manifestFile || !responsesFile) throw new Error(t('backup.coldInvalidFile'))
-      const [manifest, responses] = await Promise.all([
+      const [manifest, responses, savedContext] = await Promise.all([
         manifestFile.async('string').then(JSON.parse),
         responsesFile.async('string').then(JSON.parse),
+        zip.file('evaluation_context.json')?.async('string').then(JSON.parse),
       ])
       if (!Array.isArray(responses)) throw new Error(t('backup.coldInvalidFile'))
-      setColdHistory({ filename, manifest, responses })
+      const context = savedContext || await coldArchiveService.getArchiveContext(responses)
+      setColdHistory({ filename, manifest, responses, context, isLegacy: !savedContext })
+      setColdHistoryFormId('')
+      setColdHistorySearch('')
+      setColdHistoryStart('')
+      setColdHistoryEnd('')
+      setColdSelectedResponse(null)
     } catch (err) {
       toast.error(t('backup.coldOpenError', { msg: err.message }))
     } finally {
@@ -469,6 +508,35 @@ export default function AdminBackupPage() {
         title={t('backup.title')}
         subtitle={t('backup.subtitle')}
       />
+
+      {/* Urutan ini mencegah sumber respons terhapus sebelum arsip lokal benar-benar dapat dibaca. */}
+      <Card className="mb-4 border-l-4 border-l-brand-500">
+        <div className="p-4">
+          <h2 className="text-sm font-semibold text-gray-900">{t('backup.guideTitle')}</h2>
+          <p className="text-xs text-gray-500 mt-1">{t('backup.guideDesc')}</p>
+          <ol className="mt-4 space-y-3">
+            {[
+              ['1', t('backup.guideStep1Title'), t('backup.guideStep1Desc')],
+              ['2', t('backup.guideStep2Title'), t('backup.guideStep2Desc')],
+              ['3', t('backup.guideStep3Title'), t('backup.guideStep3Desc')],
+              ['4', t('backup.guideStep4Title'), t('backup.guideStep4Desc')],
+              ['5', t('backup.guideStep5Title'), t('backup.guideStep5Desc')],
+            ].map(([number, title, desc]) => (
+              <li key={number} className="flex gap-3">
+                <span aria-hidden="true" className="w-6 h-6 rounded-full bg-brand-50 text-brand-600 text-xs font-bold inline-flex items-center justify-center shrink-0">{number}</span>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <div className="flex gap-2 mt-4 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+            <p>{t('backup.guideWarning')}</p>
+          </div>
+        </div>
+      </Card>
 
       {/* Card tip */}
       <Card className="mb-4 border-l-4 border-l-amber-400">
@@ -599,11 +667,81 @@ export default function AdminBackupPage() {
               ))}
             </div>
           )}
-          {coldHistory && <div className="rounded-xl bg-control p-3 text-xs text-gray-600 space-y-1">
-            <p className="font-semibold text-gray-800">{coldHistory.filename}</p>
-            <p>{t('backup.coldHistoryResult', { count: coldHistory.responses.length, cutoff: coldHistory.manifest?.cutoffDate || '-' })}</p>
-            {coldHistory.responses.slice(0, 10).map(row => <p key={row.response_id} className="truncate">{row.submitted_at} · {row.response_id}</p>)}
-          </div>}
+          {coldHistory && (
+            <div className="border-t border-gray-100 pt-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
+                  <ClipboardList size={18} className="text-brand-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{t('backup.coldEvalTitle')}</p>
+                  <p className="text-xs text-gray-500 truncate">{coldHistory.filename}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{t('backup.coldHistoryResult', { count: coldHistory.responses.length, cutoff: coldHistory.manifest?.cutoffDate || '-' })}</p>
+                </div>
+              </div>
+
+              {coldHistory.isLegacy && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">{t('backup.coldLegacyHint')}</p>}
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Select label={t('backup.coldHistoryForm')} value={coldHistoryFormId} onChange={e => setColdHistoryFormId(e.target.value)}>
+                  <option value="">{t('backup.coldHistoryAllForms')}</option>
+                  {coldHistoryForms.map(form => <option key={form.form_id} value={form.form_id}>{form.title}</option>)}
+                </Select>
+                <Input label={t('backup.coldHistorySearch')} placeholder={t('backup.coldHistorySearchPh')} value={coldHistorySearch} onChange={e => setColdHistorySearch(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input label={t('backup.coldHistoryStart')} type="date" value={coldHistoryStart} onChange={e => setColdHistoryStart(e.target.value)} />
+                <Input label={t('backup.coldHistoryEnd')} type="date" value={coldHistoryEnd} onChange={e => setColdHistoryEnd(e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl bg-control p-2 text-center"><p className="text-base font-bold text-gray-900">{coldHistoryRows.length}</p><p className="text-[10px] text-gray-500">{t('backup.coldHistoryResponses')}</p></div>
+                <div className="rounded-xl bg-control p-2 text-center"><p className="text-base font-bold text-gray-900">{new Set(coldHistoryRows.map(row => row.volunteer_id)).size}</p><p className="text-[10px] text-gray-500">{t('backup.coldHistoryMembers')}</p></div>
+                <div className="rounded-xl bg-control p-2 text-center"><p className="text-base font-bold text-gray-900">{new Set(coldHistoryRows.map(row => row.form_id)).size}</p><p className="text-[10px] text-gray-500">{t('backup.coldHistoryForms')}</p></div>
+              </div>
+
+              {coldHistoryRows.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-5">{t('backup.coldHistoryEmpty')}</p>
+              ) : (
+                <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+                  {coldHistoryRows.map(row => {
+                    const user = coldHistoryUserMap[row.volunteer_id]
+                    const form = coldHistoryFormMap[row.form_id]
+                    return (
+                      <button key={row.response_id} type="button" onClick={() => setColdSelectedResponse(row)} className="w-full flex items-center gap-3 p-3 text-left bg-surface hover:bg-control transition-colors">
+                        <Avatar name={user?.name || t('backup.coldUnknownMember')} src={user?.photo_url} size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{user?.name || t('backup.coldUnknownMember')}</p>
+                          <p className="text-xs text-brand-500 truncate">{form?.title || t('backup.coldUnknownForm')}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(row.submitted_at)}</p>
+                        </div>
+                        <Badge color="gray" className="text-[10px]! py-0! shrink-0">{t('backup.coldHistoryView')}</Badge>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {coldSelectedResponse && (
+                <div className="rounded-xl bg-control p-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{coldHistoryUserMap[coldSelectedResponse.volunteer_id]?.name || t('backup.coldUnknownMember')}</p>
+                      <p className="text-xs text-brand-500">{coldHistoryFormMap[coldSelectedResponse.form_id]?.title || t('backup.coldUnknownForm')}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{formatDate(coldSelectedResponse.submitted_at)}</p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setColdSelectedResponse(null)}>{t('backup.coldHistoryClose')}</Button>
+                  </div>
+                  <div className="space-y-2">
+                    {Object.entries(coldSelectedResponse.data_json || {}).map(([key, value]) => {
+                      const field = (coldHistoryFormMap[coldSelectedResponse.form_id]?.fields_json || []).find(item => item.key === key)
+                      return <div key={key} className="border-t border-gray-200 pt-2"><p className="text-xs font-medium text-gray-600">{field?.label || key}</p><p className="text-sm text-gray-900 break-words mt-0.5">{answerText(value)}</p></div>
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 

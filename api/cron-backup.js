@@ -18,6 +18,11 @@ import { BACKUP_TABLES } from '../src/lib/backupTables.js'
 
 const KEEP = 30 // simpan 30 arsip harian terakhir (rotasi otomatis)
 const PAGE = 1000 // batas baris per request PostgREST; tabel besar dipaginasi
+const RESPONSE_BATCH_SIZE = 100 // Hindari URL PostgREST terlalu panjang saat arsip ribuan respons.
+
+function chunks(items, size) {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size))
+}
 
 function responseFilePaths(value, paths = new Set()) {
   if (Array.isArray(value)) value.forEach(v => responseFilePaths(v, paths))
@@ -91,25 +96,33 @@ async function handleColdResponses(req, res) {
     if (!archive || archive.status !== 'Siap Dihapus') return res.status(409).json({ error: 'Arsip belum siap dihapus atau sudah diproses.' })
     const ids = Array.isArray(archive.response_ids) ? archive.response_ids : []
     const cutoff = `${archive.cutoff_date}T00:00:00.000Z`
-    const { data: rows, error: rowsError } = await admin.from('form_responses')
-      .select('response_id, submitted_at, data_json').in('response_id', ids)
-    if (rowsError) throw rowsError
-    if ((rows || []).some(row => row.submitted_at >= cutoff)) return res.status(409).json({ error: 'Manifest memuat respons yang belum melewati tanggal batas.' })
+    const rows = []
+    for (const responseIds of chunks(ids, RESPONSE_BATCH_SIZE)) {
+      const { data, error: rowsError } = await admin.from('form_responses')
+        .select('response_id, submitted_at, data_json').in('response_id', responseIds)
+      if (rowsError) throw rowsError
+      rows.push(...(data || []))
+    }
+    if (rows.some(row => row.submitted_at >= cutoff)) return res.status(409).json({ error: 'Manifest memuat respons yang belum melewati tanggal batas.' })
 
-    const { error: deleteError } = await admin.from('form_responses').delete().in('response_id', (rows || []).map(r => r.response_id))
-    if (deleteError) throw deleteError
+    // Validasi seluruh batch lebih dahulu. Setelah lolos, hapus bertahap agar
+    // query PostgREST tidak melewati batas panjang URL untuk manifest besar.
+    for (const responseIds of chunks(rows.map(row => row.response_id), RESPONSE_BATCH_SIZE)) {
+      const { error: deleteError } = await admin.from('form_responses').delete().in('response_id', responseIds)
+      if (deleteError) throw deleteError
+    }
 
-    const paths = [...new Set((rows || []).flatMap(row => [...responseFilePaths(row.data_json)]))]
+    const paths = [...new Set(rows.flatMap(row => [...responseFilePaths(row.data_json)]))]
     let fileErrors = 0
-    if (paths.length) {
-      const { error: storageError } = await admin.storage.from('task-files').remove(paths)
-      if (storageError) fileErrors = paths.length
+    for (const filePaths of chunks(paths, RESPONSE_BATCH_SIZE)) {
+      const { error: storageError } = await admin.storage.from('task-files').remove(filePaths)
+      if (storageError) fileErrors += filePaths.length
     }
     const { error: updateError } = await admin.from('cold_archives').update({
       status: 'Dipindahkan', deleted_at: new Date().toISOString(), deleted_by: caller.user_id,
     }).eq('archive_id', archiveId)
     if (updateError) throw updateError
-    return res.status(200).json({ ok: true, deletedResponses: (rows || []).length, deletedFiles: paths.length - fileErrors, fileErrors })
+    return res.status(200).json({ ok: true, deletedResponses: rows.length, deletedFiles: paths.length - fileErrors, fileErrors })
   }
   return res.status(400).json({ error: 'Aksi tidak valid.' })
 }
@@ -219,7 +232,15 @@ export default async function handler(req, res) {
       rotated: deleted,
     })
   } catch (e) {
-    console.error('[cron-backup]', e)
+    // Detail tetap hanya di log server; klien menerima pesan generik agar tidak
+    // membocorkan struktur database maupun data jemaat.
+    console.error('[cron-backup]', {
+      name: e?.name,
+      message: e?.message,
+      code: e?.code,
+      details: e?.details,
+      hint: e?.hint,
+    })
     return res.status(500).json({ error: 'Terjadi kesalahan internal.' })
   }
 }
