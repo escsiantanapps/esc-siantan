@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake, Database, BarChart3 } from 'lucide-react'
+import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake, Database, LineChart } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
@@ -9,6 +9,23 @@ import { storageService } from '@/services/storageService'
 import { Card, PageHeader, Spinner, Skeleton, StatusBadge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import MemberStats from '@/components/MemberStats'
+
+function smoothCurve(points) {
+  if (points.length < 2) return ''
+  let path = `M ${points[0].x} ${points[0].y}`
+  for (let index = 0; index < points.length - 1; index++) {
+    const previous = points[index - 1] || points[index]
+    const current = points[index]
+    const next = points[index + 1]
+    const after = points[index + 2] || next
+    const control1X = current.x + (next.x - previous.x) / 6
+    const control1Y = current.y + (next.y - previous.y) / 6
+    const control2X = next.x - (after.x - current.x) / 6
+    const control2Y = next.y - (after.y - current.y) / 6
+    path += ` C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${next.x} ${next.y}`
+  }
+  return path
+}
 
 export default function AdminDashboardPage() {
   const { profile } = useAuth()
@@ -117,6 +134,22 @@ export default function AdminDashboardPage() {
   const weekLabel = start => new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'id-ID', {
     day: 'numeric', month: 'short',
   }).format(new Date(start))
+  const trendSeries = [
+    { key: 'TERPENUHI', color: '#22c55e', dot: 'bg-green-500', label: t('adash.fulfilled') },
+    { key: 'PROSES', color: '#f59e0b', dot: 'bg-amber-500', label: t('adash.inProgress') },
+    { key: 'KOSONG', color: '#ef4444', dot: 'bg-red-500', label: t('adash.empty') },
+    { key: 'IZIN', color: '#9ca3af', dot: 'bg-gray-400', label: t('adash.onLeave') },
+  ]
+  const chartWidth = 320
+  const chartHeight = 148
+  const chartPadding = { x: 10, y: 12 }
+  const chartPlotWidth = chartWidth - (chartPadding.x * 2)
+  const chartPlotHeight = chartHeight - (chartPadding.y * 2)
+  const trendPoints = key => evalTrend.map((week, index) => ({
+    x: chartPadding.x + (index * chartPlotWidth) / Math.max(evalTrend.length - 1, 1),
+    y: chartPadding.y + chartPlotHeight - ((week[key] || 0) / maxWeeklyEvaluation) * chartPlotHeight,
+    week,
+  }))
 
   if (loading) return (
     <div className="animate-fade-in">
@@ -262,12 +295,12 @@ export default function AdminDashboardPage() {
         )}
       </Card>
 
-      {/* Tren enam minggu: batang bertumpuk memperlihatkan jumlah sekaligus status evaluasi. */}
+      {/* Kurva status memperlihatkan arah tren lebih cepat daripada batang bertumpuk. */}
       <Card className="p-4 mb-6">
         <div className="flex items-center justify-between gap-3 mb-1">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
-              <BarChart3 size={18} className="text-brand-500" strokeWidth={1.75} />
+              <LineChart size={18} className="text-brand-500" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
               <h3 id="evaluation-trend-title" className="text-sm font-semibold text-gray-900">{t('adash.evalTrend')}</h3>
@@ -287,42 +320,31 @@ export default function AdminDashboardPage() {
           <p className="text-sm text-gray-400 text-center py-8">{t('adash.evalTrendEmpty')}</p>
         ) : (
           <figure className="mt-4" aria-labelledby="evaluation-trend-title">
-            <div className="flex flex-wrap gap-x-3 gap-y-1 mb-4 text-xs text-gray-500" aria-label={t('adash.evalTrendLegend')}>
-              {[
-                ['TERPENUHI', 'bg-green-500', t('adash.fulfilled')],
-                ['PROSES', 'bg-amber-500', t('adash.inProgress')],
-                ['KOSONG', 'bg-red-500', t('adash.empty')],
-                ['IZIN', 'bg-gray-400', t('adash.onLeave')],
-              ].map(([key, color, label]) => (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 mb-3 text-xs text-gray-500" aria-label={t('adash.evalTrendLegend')}>
+              {trendSeries.map(({ key, dot, label }) => (
                 <span key={key} className="inline-flex items-center gap-1.5">
-                  <span aria-hidden="true" className={`w-2.5 h-2.5 rounded-sm ${color}`} />
+                  <span aria-hidden="true" className={`w-4 h-0.5 rounded-full ${dot}`} />
                   {label}
                 </span>
               ))}
             </div>
 
-            <div role="img" className="h-44 flex items-end gap-2 sm:gap-4 border-b border-gray-200 pb-1" aria-label={t('adash.evalTrendA11y')}>
-              {evalTrend.map(week => {
-                const parts = [
-                  ['TERPENUHI', 'bg-green-500'], ['PROSES', 'bg-amber-500'],
-                  ['KOSONG', 'bg-red-500'], ['IZIN', 'bg-gray-400'],
-                ]
-                return (
-                  <div key={week.start} className="flex-1 min-w-0 h-full flex flex-col justify-end items-center gap-1.5">
-                    <span className="text-[11px] font-semibold tabular-nums text-gray-600">{week.total}</span>
-                    <div
-                      className="w-full max-w-10 rounded-t-md overflow-hidden flex flex-col-reverse bg-control"
-                      style={{ height: `${Math.max((week.total / maxWeeklyEvaluation) * 118, 4)}px` }}
-                      title={t('adash.evalTrendWeek', { date: weekLabel(week.start), fulfilled: week.TERPENUHI, progress: week.PROSES, empty: week.KOSONG, leave: week.IZIN })}
-                    >
-                      {parts.map(([key, color]) => week[key] > 0 && (
-                        <div key={key} className={color} style={{ height: `${(week[key] / week.total) * 100}%` }} />
-                      ))}
-                    </div>
-                    <span className="text-[10px] text-gray-400 whitespace-nowrap">{weekLabel(week.start)}</span>
-                  </div>
-                )
-              })}
+            <div className="border-b border-gray-200 pb-1">
+              <svg role="img" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none" className="w-full h-40" aria-label={t('adash.evalTrendA11y')}>
+                {[0.25, 0.5, 0.75].map(fraction => <line key={fraction} x1={chartPadding.x} x2={chartWidth - chartPadding.x} y1={chartPadding.y + chartPlotHeight * fraction} y2={chartPadding.y + chartPlotHeight * fraction} stroke="currentColor" strokeOpacity="0.12" strokeDasharray="3 4" />)}
+                {trendSeries.map(series => {
+                  const points = trendPoints(series.key)
+                  return <path key={series.key} d={smoothCurve(points)} fill="none" stroke={series.color} strokeWidth="2.5" strokeLinecap="round" />
+                })}
+                {trendSeries.flatMap(series => trendPoints(series.key).map(point => (
+                  <circle key={`${series.key}-${point.week.start}`} cx={point.x} cy={point.y} r="3.5" fill={series.color} stroke="var(--color-surface)" strokeWidth="2">
+                    <title>{t('adash.evalTrendWeek', { date: weekLabel(point.week.start), fulfilled: point.week.TERPENUHI, progress: point.week.PROSES, empty: point.week.KOSONG, leave: point.week.IZIN })}</title>
+                  </circle>
+                )))}
+              </svg>
+              <div className="grid grid-cols-6 gap-1 pt-1">
+                {evalTrend.map(week => <span key={week.start} className="text-center text-[10px] text-gray-400 whitespace-nowrap">{weekLabel(week.start)}</span>)}
+              </div>
             </div>
             <table className="sr-only">
               <caption>{t('adash.evalTrend')}</caption>
