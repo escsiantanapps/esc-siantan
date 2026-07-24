@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { HardDrive, Download, CheckCircle2, AlertTriangle, FileJson, FolderOpen, FolderCheck, Trash2, RefreshCw, File, ArchiveRestore, Upload, Package, ClipboardList } from 'lucide-react'
+import { HardDrive, Download, CheckCircle2, AlertTriangle, FileJson, FolderOpen, FolderCheck, Trash2, RefreshCw, File, ArchiveRestore, Upload, Package, ClipboardList, ChevronDown } from 'lucide-react'
 import JSZip from 'jszip'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/useToast'
@@ -509,44 +509,42 @@ export default function AdminBackupPage() {
         subtitle={t('backup.subtitle')}
       />
 
-      {/* Urutan ini mencegah sumber respons terhapus sebelum arsip lokal benar-benar dapat dibaca. */}
+      {/* Alur rinci dipadatkan agar aksi utama tetap terlihat pada layar ponsel. */}
       <Card className="mb-4 border-l-4 border-l-brand-500">
-        <div className="p-4">
-          <h2 className="text-sm font-semibold text-gray-900">{t('backup.guideTitle')}</h2>
-          <p className="text-xs text-gray-500 mt-1">{t('backup.guideDesc')}</p>
-          <ol className="mt-4 space-y-3">
-            {[
-              ['1', t('backup.guideStep1Title'), t('backup.guideStep1Desc')],
-              ['2', t('backup.guideStep2Title'), t('backup.guideStep2Desc')],
-              ['3', t('backup.guideStep3Title'), t('backup.guideStep3Desc')],
-              ['4', t('backup.guideStep4Title'), t('backup.guideStep4Desc')],
-              ['5', t('backup.guideStep5Title'), t('backup.guideStep5Desc')],
-            ].map(([number, title, desc]) => (
-              <li key={number} className="flex gap-3">
-                <span aria-hidden="true" className="w-6 h-6 rounded-full bg-brand-50 text-brand-600 text-xs font-bold inline-flex items-center justify-center shrink-0">{number}</span>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <div className="flex gap-2 mt-4 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
-            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-            <p>{t('backup.guideWarning')}</p>
+        <details className="group">
+          <summary className="cursor-pointer list-none p-4 [&::-webkit-details-marker]:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">{t('backup.guideTitle')}</h2>
+                <p className="text-xs text-gray-500 mt-1">{t('backup.guideDesc')}</p>
+              </div>
+              <span className="flex items-center gap-1 text-xs font-medium text-brand-600 shrink-0">{t('backup.guideSteps')}<ChevronDown size={15} className="transition-transform duration-200 group-open:rotate-180" /></span>
+            </div>
+          </summary>
+          <div className="px-4 pb-4 border-t border-gray-100">
+            <ol className="pt-4 space-y-3">
+              {[
+                ['1', t('backup.guideStep1Title'), t('backup.guideStep1Desc')],
+                ['2', t('backup.guideStep2Title'), t('backup.guideStep2Desc')],
+                ['3', t('backup.guideStep3Title'), t('backup.guideStep3Desc')],
+                ['4', t('backup.guideStep4Title'), t('backup.guideStep4Desc')],
+                ['5', t('backup.guideStep5Title'), t('backup.guideStep5Desc')],
+              ].map(([number, title, desc]) => (
+                <li key={number} className="flex gap-3">
+                  <span aria-hidden="true" className="w-6 h-6 rounded-full bg-brand-50 text-brand-600 text-xs font-bold inline-flex items-center justify-center shrink-0">{number}</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{title}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="flex gap-2 mt-4 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+              <p>{t('backup.guideWarning')}</p>
+            </div>
           </div>
-        </div>
-      </Card>
-
-      {/* Card tip */}
-      <Card className="mb-4 border-l-4 border-l-amber-400">
-        <div className="flex gap-3 p-4">
-          <HardDrive size={20} className="text-amber-500 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-gray-600">
-            <p className="font-medium text-gray-800 mb-1">{t('backup.tipTitle')}</p>
-            <p>{t('backup.tipBody')}</p>
-          </div>
-        </div>
+        </details>
       </Card>
 
       {/* Card folder Synology */}
@@ -576,6 +574,7 @@ export default function AdminBackupPage() {
               Setiap kali browser di-restart, kamu perlu klik <strong>Aktifkan Permission</strong> sekali
               untuk mengizinkan akses folder kembali. Ini batasan keamanan browser, bukan bug.
             </div>
+            <p className="text-xs text-gray-500 mb-3">{t('backup.tipBody')}</p>
 
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={handlePickFolder} disabled={exporting}>
@@ -660,12 +659,14 @@ export default function AdminBackupPage() {
             </div>
           )}
           {dirHandle && permGranted && folderFiles.filter(f => f.name.startsWith('ESC-Siantan-Respon-')).length > 0 && (
-            <div className="border-t border-gray-100 pt-3 space-y-2">
-              <p className="text-xs font-semibold text-gray-500">{t('backup.coldHistoryTitle')}</p>
-              {folderFiles.filter(f => f.name.startsWith('ESC-Siantan-Respon-')).slice(0, 5).map(file => (
-                <Button key={file.name} size="sm" variant="outline" className="w-full justify-start" onClick={() => openColdArchive(file.name)} disabled={coldBusy}><FileJson size={14} /> {file.name}</Button>
-              ))}
-            </div>
+            <details className="border-t border-gray-100 pt-3">
+              <summary className="cursor-pointer text-xs font-semibold text-gray-600">{t('backup.coldHistoryTitle')} ({folderFiles.filter(f => f.name.startsWith('ESC-Siantan-Respon-')).length})</summary>
+              <div className="pt-3 space-y-2">
+                {folderFiles.filter(f => f.name.startsWith('ESC-Siantan-Respon-')).slice(0, 5).map(file => (
+                  <Button key={file.name} size="sm" variant="outline" className="w-full justify-start" onClick={() => openColdArchive(file.name)} disabled={coldBusy}><FileJson size={14} /> {file.name}</Button>
+                ))}
+              </div>
+            </details>
           )}
           {coldHistory && (
             <div className="border-t border-gray-100 pt-4 space-y-3">
@@ -814,12 +815,12 @@ export default function AdminBackupPage() {
         </div>
       </Card>
 
-      <Card>
-        <div className="p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            {t('backup.includedData')}
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+      <Card className="mb-4">
+        <details className="group">
+          <summary className="cursor-pointer p-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            {t('backup.includedData')} ({BACKUP_TABLES.length})
+          </summary>
+          <div className="px-4 pb-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-3">
             {BACKUP_TABLES.map(({ table, sheet }) => (
               <div key={table} className="flex items-center gap-2 text-xs text-gray-600 py-1">
                 <div className="w-1.5 h-1.5 rounded-full bg-brand-400" />
@@ -827,21 +828,25 @@ export default function AdminBackupPage() {
               </div>
             ))}
           </div>
-        </div>
+        </details>
       </Card>
 
       {/* Card arsip storage */}
       <Card className="mb-4">
-        <div className="p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-              <Package size={20} className="text-emerald-500" />
+        <details className="group">
+          <summary className="cursor-pointer list-none p-5 [&::-webkit-details-marker]:hidden">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+                <Package size={20} className="text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{t('backup.archiveTitle')}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{t('backup.archiveDesc')}</p>
+              </div>
+              <ChevronDown size={18} className="ml-auto text-gray-400 shrink-0 transition-transform duration-200 group-open:rotate-180" />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Arsip File Storage</p>
-              <p className="text-xs text-gray-500">Download semua file jemaat (foto, dokumen, lampiran) sebagai ZIP lokal. File di Supabase tidak dihapus.</p>
-            </div>
-          </div>
+          </summary>
+          <div className="px-5 pb-5 border-t border-gray-100 pt-4">
 
           {/* Progress arsip */}
           {archiving && (
@@ -880,21 +885,26 @@ export default function AdminBackupPage() {
             <Download size={16} className="mr-1.5" />
             {archiving ? 'Mengarsipkan...' : 'Download Arsip Storage (ZIP)'}
           </Button>
-        </div>
+          </div>
+        </details>
       </Card>
 
       {/* Card restore */}
       <Card className="mb-4">
-        <div className="p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
-              <ArchiveRestore size={20} className="text-rose-500" />
+        <details className="group">
+          <summary className="cursor-pointer list-none p-5 [&::-webkit-details-marker]:hidden">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
+                <ArchiveRestore size={20} className="text-rose-500" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{t('backup.restoreTitle')}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{t('backup.restoreDesc')}</p>
+              </div>
+              <ChevronDown size={18} className="ml-auto text-gray-400 shrink-0 transition-transform duration-200 group-open:rotate-180" />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Restore Data dari Backup</p>
-              <p className="text-xs text-gray-500">Pulihkan semua tabel dari file JSON backup. Hanya gunakan saat data hilang atau perlu dipulihkan.</p>
-            </div>
-          </div>
+          </summary>
+          <div className="px-5 pb-5 border-t border-gray-100 pt-4">
 
           {/* Progress restore */}
           {restoring && (
@@ -952,7 +962,8 @@ export default function AdminBackupPage() {
             <Upload size={16} className="mr-1.5" />
             {restoring ? 'Memulihkan...' : 'Pilih File JSON & Restore'}
           </Button>
-        </div>
+          </div>
+        </details>
       </Card>
     </div>
   )
