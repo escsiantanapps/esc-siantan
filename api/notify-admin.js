@@ -47,51 +47,83 @@ export default async function handler(req, res) {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 
-    // Verifikasi pemanggil (bisa user biasa jika registrasi baru)
+    // Verifikasi pemanggil (bisa user biasa jika baru mendaftar), lalu ambil
+    // identitas dari DB. Nama/event tidak boleh dipercaya dari payload klien.
     const token = (req.headers.authorization || '').replace('Bearer ', '').trim()
     if (!token) return res.status(401).json({ error: 'Unauthorized' })
     const { data: userData, error: uErr } = await admin.auth.getUser(token)
     if (uErr || !userData?.user) return res.status(401).json({ error: 'Unauthorized' })
 
+    const { data: caller } = await admin
+      .from('users')
+      .select('user_id, name, status, created_at')
+      .eq('auth_id', userData.user.id)
+      .maybeSingle()
+    if (!caller) return res.status(403).json({ error: 'Forbidden' })
+
     const { checkRateLimit } = await import('./_lib/rate-limit.js')
     if (checkRateLimit(req, res, { endpoint: 'notify-admin', max: 10 })) return
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
-    const { type, payload } = body
+    const { type, referenceId } = body
     if (!type) return res.status(400).json({ error: 'Tipe notifikasi (type) wajib diisi.' })
 
-    // Tentukan admin mana yang akan dinotifikasi berdasarkan type
-    let allowedRoles = ['Super Admin', 'Admin']
+    const recent = (value, maxAgeMs = 10 * 60 * 1000) => {
+      const time = new Date(value).getTime()
+      return Number.isFinite(time) && Date.now() - time >= 0 && Date.now() - time <= maxAgeMs
+    }
+
+    // Pastikan notifikasi menunjuk aksi BARU yang benar-benar dibuat pemanggil.
+    // Ini mencegah akun login mengirim push admin palsu lewat endpoint langsung.
     let title = 'Pemberitahuan Admin'
     let message = ''
     let url = '/admin'
 
     if (type === 'new_user') {
+      if (caller.status !== 'Menunggu Persetujuan' || !recent(caller.created_at)) {
+        return res.status(403).json({ error: 'Pendaftaran baru tidak ditemukan.' })
+      }
       title = 'Pendaftaran Jemaat Baru'
-      message = `${payload?.name || 'Seseorang'} baru saja mendaftar dan menunggu persetujuan.`
+      message = `${caller.name || 'Seseorang'} baru saja mendaftar dan menunggu persetujuan.`
       url = '/admin/jemaat'
     } else if (type === 'new_class') {
-      allowedRoles.push('Admin Kelas')
+      if (typeof referenceId !== 'string' || !referenceId) {
+        return res.status(400).json({ error: 'Referensi pendaftaran kelas wajib diisi.' })
+      }
+      const { data: registration } = await admin
+        .from('class_registrations')
+        .select('registration_id, user_id, registered_at')
+        .eq('registration_id', referenceId)
+        .maybeSingle()
+      if (!registration || registration.user_id !== caller.user_id || !recent(registration.registered_at)) {
+        return res.status(403).json({ error: 'Pendaftaran kelas baru tidak ditemukan.' })
+      }
       title = 'Pendaftaran Kelas Baru'
-      message = `${payload?.name || 'Seseorang'} mendaftar ke kelas.`
+      message = `${caller.name || 'Seseorang'} mendaftar ke kelas.`
       url = '/admin/kelas'
     } else if (type === 'new_event') {
-      allowedRoles.push('Admin Kelas')
+      if (typeof referenceId !== 'string' || !referenceId) {
+        return res.status(400).json({ error: 'Referensi pendaftaran event wajib diisi.' })
+      }
+      const { data: registration } = await admin
+        .from('event_registrations')
+        .select('ticket_id, user_id, registered_at')
+        .eq('ticket_id', referenceId)
+        .maybeSingle()
+      if (!registration || registration.user_id !== caller.user_id || !recent(registration.registered_at)) {
+        return res.status(403).json({ error: 'Pendaftaran event baru tidak ditemukan.' })
+      }
       title = 'Pendaftaran Event Baru'
-      message = `${payload?.name || 'Seseorang'} mendaftar ke event.`
+      message = `${caller.name || 'Seseorang'} mendaftar ke event.`
       url = '/admin/events'
-    } else if (type === 'new_evaluation') {
-      allowedRoles.push('Admin Komsel')
-      title = 'Evaluasi Baru'
-      message = `Ada evaluasi/laporan baru yang masuk.`
-      url = '/admin/evaluasi'
     } else {
       return res.status(400).json({ error: 'Tipe tidak valid.' })
     }
 
-    // Cari semua admin dengan role yang diizinkan
+    // Cari admin aktif; tipe peran sintetis seperti "Admin Kelas" bukan
+    // bagian dari model role aplikasi dan tidak boleh dipakai sebagai target.
     const { data: admins } = await admin
-      .from('users').select('user_id').in('role', allowedRoles)
+      .from('users').select('user_id').in('role', ['Super Admin', 'Admin']).eq('status', 'Aktif')
     const adminIds = (admins || []).map(a => a.user_id)
     if (adminIds.length === 0) return res.status(200).json({ ok: true, reason: 'no-admins' })
 

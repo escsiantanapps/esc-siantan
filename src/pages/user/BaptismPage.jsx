@@ -47,7 +47,7 @@ export default function BaptismPage() {
 
   useEffect(() => {
     if (!profile) return
-    setForm(p => ({ ...p, full_name: profile.name || '', address: profile.address || '', nik: profile.nik || '' }))
+    setForm(p => ({ ...p, full_name: profile.name || '', address: profile.address || '' }))
     Promise.all([
       registrationService.getMyRegistrations(profile.user_id).catch(() => ({ baptism: [] })),
       classesService.getAll().catch(() => []),

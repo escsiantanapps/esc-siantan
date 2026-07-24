@@ -4,9 +4,10 @@ import JSZip from 'jszip'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { Card, PageHeader, Button } from '@/components/ui'
+import { Card, PageHeader, Button, Input } from '@/components/ui'
 import { BACKUP_TABLES } from '@/lib/backupTables'
 import { buildBackupWorkbook, buildBackupJson } from '@/lib/backupBuild'
+import { coldArchiveService } from '@/services/coldArchiveService'
 
 // File System Access API tersedia di Chrome/Edge — tidak di Firefox/Safari.
 const FS_SUPPORTED = typeof window !== 'undefined' && 'showDirectoryPicker' in window
@@ -49,7 +50,7 @@ async function saveToFolder(dirHandle, blob, filename) {
 async function listBackupFiles(dirHandle) {
   const files = []
   for await (const entry of dirHandle.values()) {
-    if (entry.kind === 'file' && entry.name.startsWith('ESC-Siantan-Backup-')) {
+    if (entry.kind === 'file' && (entry.name.startsWith('ESC-Siantan-Backup-') || entry.name.startsWith('ESC-Siantan-Respon-'))) {
       const file = await entry.getFile()
       files.push({ name: entry.name, size: file.size, lastModified: file.lastModified })
     }
@@ -85,6 +86,25 @@ async function downloadStorageFile(bucket, path) {
   return data.arrayBuffer()
 }
 
+function responseFilePaths(value, paths = new Set()) {
+  if (Array.isArray(value)) value.forEach(v => responseFilePaths(v, paths))
+  else if (value && typeof value === 'object') Object.values(value).forEach(v => responseFilePaths(v, paths))
+  else if (typeof value === 'string') {
+    const marker = '/storage/v1/object/public/task-files/'
+    const index = value.indexOf(marker)
+    if (index >= 0) {
+      const path = decodeURIComponent(value.slice(index + marker.length).split('?')[0])
+      if (path.startsWith('responses/')) paths.add(path)
+    }
+  }
+  return paths
+}
+
+async function sha256(blob) {
+  const hash = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 // Restore semua baris JSON ke Supabase menggunakan upsert per tabel.
 // Kembalikan { restored, errors } setelah semua tabel dicoba.
 async function restoreFromJson(json, onProgress) {
@@ -111,7 +131,7 @@ async function restoreFromJson(json, onProgress) {
 }
 
 export default function AdminBackupPage() {
-  const { toast } = useToast()
+  const { toast, confirm } = useToast()
   const { t } = useLang()
   const [exporting, setExporting] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0, label: '' })
@@ -129,6 +149,15 @@ export default function AdminBackupPage() {
   const [archiving, setArchiving] = useState(false)
   const [archiveProgress, setArchiveProgress] = useState({ current: 0, total: 0, label: '' })
   const [archiveResult, setArchiveResult] = useState(null)
+
+  // Arsip data dingin SOP: salin lokal dulu, hapus sumber pada aksi kedua.
+  const [coldCutoff, setColdCutoff] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().slice(0, 10)
+  })
+  const [coldPreview, setColdPreview] = useState(null)
+  const [coldBusy, setColdBusy] = useState(false)
+  const [coldResult, setColdResult] = useState(null)
+  const [coldHistory, setColdHistory] = useState(null)
 
   // State restore
   const restoreInputRef = useRef(null)
@@ -305,6 +334,91 @@ export default function AdminBackupPage() {
     }
   }
 
+  async function previewColdArchive() {
+    setColdBusy(true)
+    try {
+      const responses = await coldArchiveService.getResponsesBefore(coldCutoff)
+      const filePaths = [...new Set(responses.flatMap(row => [...responseFilePaths(row.data_json)]))]
+      setColdPreview({ responses, filePaths })
+      setColdResult(null)
+    } catch (err) {
+      toast.error(t('backup.coldPreviewError', { msg: err.message }))
+    } finally {
+      setColdBusy(false)
+    }
+  }
+
+  async function createColdArchive() {
+    if (!dirHandle || !permGranted) { toast.error(t('backup.coldFolderRequired')); return }
+    setColdBusy(true)
+    try {
+      const responses = coldPreview?.responses || await coldArchiveService.getResponsesBefore(coldCutoff)
+      if (!responses.length) { toast.info(t('backup.coldEmpty')); return }
+      const filePaths = [...new Set(responses.flatMap(row => [...responseFilePaths(row.data_json)]))]
+      const date = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const archiveId = `COLD-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
+      const filename = `ESC-Siantan-Respon-${coldCutoff}-${date}.zip`
+      const manifest = { archiveId, cutoffDate: coldCutoff, filename, responseIds: responses.map(r => r.response_id), filePaths, createdAt: new Date().toISOString() }
+      const zip = new JSZip()
+      zip.file('manifest.json', JSON.stringify(manifest, null, 2))
+      zip.file('form_responses.json', JSON.stringify(responses, null, 2))
+      for (const path of filePaths) {
+        const data = await coldArchiveService.downloadResponseFile(path)
+        zip.file(`task-files/${path}`, data)
+      }
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
+      await saveToFolder(dirHandle, blob, filename)
+      const recorded = { ...manifest, sha256: await sha256(blob) }
+      await coldArchiveService.record(archiveId, recorded)
+      await refreshFolderFiles(dirHandle)
+      setColdResult({ archiveId, filename, responses: responses.length, files: filePaths.length })
+      toast.success(t('backup.coldCreated'))
+    } catch (err) {
+      toast.error(t('backup.coldCreateError', { msg: err.message }))
+    } finally {
+      setColdBusy(false)
+    }
+  }
+
+  async function purgeColdSource() {
+    if (!coldResult) return
+    const ok = await confirm({ title: t('backup.coldPurgeTitle'), message: t('backup.coldPurgeMessage', { count: coldResult.responses }), confirmText: t('backup.coldPurgeBtn'), danger: true })
+    if (!ok) return
+    setColdBusy(true)
+    try {
+      const result = await coldArchiveService.purge(coldResult.archiveId)
+      setColdResult(prev => ({ ...prev, purged: result }))
+      setColdPreview(null)
+      toast.success(t('backup.coldPurged', { count: result.deletedResponses }))
+    } catch (err) {
+      toast.error(t('backup.coldPurgeError', { msg: err.message }))
+    } finally {
+      setColdBusy(false)
+    }
+  }
+
+  async function openColdArchive(filename) {
+    if (!dirHandle) return
+    setColdBusy(true)
+    try {
+      const handle = await dirHandle.getFileHandle(filename)
+      const zip = await JSZip.loadAsync(await (await handle.getFile()).arrayBuffer())
+      const manifestFile = zip.file('manifest.json')
+      const responsesFile = zip.file('form_responses.json')
+      if (!manifestFile || !responsesFile) throw new Error(t('backup.coldInvalidFile'))
+      const [manifest, responses] = await Promise.all([
+        manifestFile.async('string').then(JSON.parse),
+        responsesFile.async('string').then(JSON.parse),
+      ])
+      if (!Array.isArray(responses)) throw new Error(t('backup.coldInvalidFile'))
+      setColdHistory({ filename, manifest, responses })
+    } catch (err) {
+      toast.error(t('backup.coldOpenError', { msg: err.message }))
+    } finally {
+      setColdBusy(false)
+    }
+  }
+
   // Handler restore: baca file JSON backup lalu upsert ke semua tabel.
   async function handleRestore(e) {
     const file = e.target.files?.[0]
@@ -457,6 +571,41 @@ export default function AdminBackupPage() {
           </div>
         </Card>
       )}
+
+      <Card className="mb-4">
+        <div className="p-5 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{t('backup.coldTitle')}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('backup.coldDesc')}</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input label={t('backup.coldCutoff')} type="date" value={coldCutoff} onChange={e => { setColdCutoff(e.target.value); setColdPreview(null); setColdResult(null) }} />
+            <Button variant="outline" className="sm:self-end" onClick={previewColdArchive} loading={coldBusy}>{t('backup.coldPreviewBtn')}</Button>
+          </div>
+          {coldPreview && <div className="rounded-xl bg-control px-3 py-2 text-xs text-gray-600">{t('backup.coldPreviewResult', { responses: coldPreview.responses.length, files: coldPreview.filePaths.length })}</div>}
+          {!coldResult ? (
+            <Button className="w-full" onClick={createColdArchive} disabled={coldBusy || !coldPreview?.responses?.length}>{t('backup.coldCreateBtn')}</Button>
+          ) : (
+            <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700 space-y-2">
+              <p>{t('backup.coldCreatedResult', { file: coldResult.filename, responses: coldResult.responses })}</p>
+              {!coldResult.purged ? <Button variant="outline" className="w-full border-rose-200 text-rose-600" onClick={purgeColdSource} loading={coldBusy}>{t('backup.coldPurgeBtn')}</Button> : <p>{t('backup.coldPurged', { count: coldResult.purged.deletedResponses })}</p>}
+            </div>
+          )}
+          {dirHandle && permGranted && folderFiles.filter(f => f.name.startsWith('ESC-Siantan-Respon-')).length > 0 && (
+            <div className="border-t border-gray-100 pt-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-500">{t('backup.coldHistoryTitle')}</p>
+              {folderFiles.filter(f => f.name.startsWith('ESC-Siantan-Respon-')).slice(0, 5).map(file => (
+                <Button key={file.name} size="sm" variant="outline" className="w-full justify-start" onClick={() => openColdArchive(file.name)} disabled={coldBusy}><FileJson size={14} /> {file.name}</Button>
+              ))}
+            </div>
+          )}
+          {coldHistory && <div className="rounded-xl bg-control p-3 text-xs text-gray-600 space-y-1">
+            <p className="font-semibold text-gray-800">{coldHistory.filename}</p>
+            <p>{t('backup.coldHistoryResult', { count: coldHistory.responses.length, cutoff: coldHistory.manifest?.cutoffDate || '-' })}</p>
+            {coldHistory.responses.slice(0, 10).map(row => <p key={row.response_id} className="truncate">{row.submitted_at} · {row.response_id}</p>)}
+          </div>}
+        </div>
+      </Card>
 
       {/* Card export */}
       <Card className="mb-4">

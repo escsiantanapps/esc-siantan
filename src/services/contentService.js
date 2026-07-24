@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { sanitizeFilename } from '@/lib/utils'
+import { sensitiveIdentityService } from '@/services/sensitiveIdentityService'
 
 // ─── Events ──────────────────────────────────────────────
 export const eventsService = {
@@ -166,9 +167,11 @@ const REGISTRATION_TABLES = {
 
 export const registrationService = {
   async submitBaptism(data) {
+    const { nik, ...registration } = data
     const { data: result, error } = await supabase
-      .from('baptism_registrations').insert(data).select().single()
+      .from('baptism_registrations').insert(registration).select().single()
     if (error) throw error
+    if (nik) await sensitiveIdentityService.setNik('baptism', result.baptism_id, nik)
     return result
   },
 
@@ -180,9 +183,11 @@ export const registrationService = {
   },
 
   async submitDedication(data) {
+    const { nik, ...registration } = data
     const { data: result, error } = await supabase
-      .from('child_dedication_registrations').insert(data).select().single()
+      .from('child_dedication_registrations').insert(registration).select().single()
     if (error) throw error
+    if (nik) await sensitiveIdentityService.setNik('dedication', result.dedication_id, nik)
     return result
   },
 

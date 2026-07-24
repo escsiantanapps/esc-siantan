@@ -82,14 +82,14 @@ export const pushService = {
   },
 
   // Beri tahu Admin bahwa ada pendaftaran baru, kelas baru, dsb.
-  async notifyAdmin(type, payload = {}) {
+  async notifyAdmin(type, referenceId = null) {
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token
     if (!token) return
     await fetchApi('/api/notify-admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ type, payload }),
+      body: JSON.stringify({ type, referenceId }),
     }).catch(console.error)
   },
 
@@ -102,7 +102,9 @@ export const pushService = {
     const res = await fetchApi('/api/send-push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title, body, url, userIds }),
+      // Konteks halaman dipakai server untuk menegakkan Hak Akses Admin.
+      // Server tetap memvalidasi nilainya; browser tidak dianggap tepercaya.
+      body: JSON.stringify({ title, body, url, userIds, sourcePage: window.location.pathname }),
     })
     if (!res.ok) {
       const e = await res.json().catch(() => ({}))

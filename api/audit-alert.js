@@ -1,5 +1,5 @@
 // Penerima Database Webhook Supabase: dipanggil real-time saat ada baris baru di
-// `audit_log`. Bila aksinya SENSITIF (ubah role/NIK/is_pks, hapus akun, ubah Hak
+// `audit_log`. Bila aksinya SENSITIF (ubah role/is_pks, ubah NIK, hapus akun, ubah Hak
 // Akses admin, ubah rekening), kirim push ke semua Super Admin. Tujuan: aktivitas
 // berbahaya tidak lagi tenggelam di tabel audit yang pasif — Super Admin tahu SEKETIKA.
 //
@@ -22,8 +22,11 @@ function severity(r) {
   const cf = Array.isArray(r.changed_fields) ? r.changed_fields : []
   if (t === 'users' && a === 'DELETE') return 'Akun jemaat DIHAPUS'
   if (t === 'users' && a === 'UPDATE') {
-    const hit = cf.filter(c => ['role', 'role_secondary', 'nik', 'is_pks'].includes(c))
+    const hit = cf.filter(c => ['role', 'role_secondary', 'is_pks'].includes(c))
     if (hit.length) return `Ubah ${hit.join(', ')} pada akun jemaat`
+  }
+  if (['user_sensitive_identities', 'baptism_sensitive_identities', 'dedication_sensitive_identities'].includes(t)) {
+    return 'Data NIK diperbarui'
   }
   if (t === 'admin_user_permissions') return 'Hak Akses admin diubah'
   if (t === 'payment_accounts') return 'Rekening pembayaran diubah'

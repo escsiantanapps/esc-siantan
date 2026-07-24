@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Users, ChevronRight as Arrow, Plus, X, Copy } from 'lucide-react'
 import { usersService } from '@/services/usersService'
+import { sensitiveIdentityService } from '@/services/sensitiveIdentityService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useBackClose } from '@/hooks/useBackClose'
@@ -107,7 +108,10 @@ export default function AdminMembersPage() {
     if (!addForm.phone.trim()) { setAddError(t('amem.addPhoneRequired')); return }
     setAddSaving(true)
     try {
-      await usersService.create(addForm)
+      const created = await usersService.create(addForm)
+      if (canSetNik && addForm.nik) {
+        await sensitiveIdentityService.setNik('user', created.user_id, addForm.nik)
+      }
       setShowAddModal(false)
       toast.success(t('amem.addSuccess', { name: addForm.name }))
       setPage(1)

@@ -5,6 +5,7 @@ import { ArrowLeft, Trash2, Download } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { usersService } from '@/services/usersService'
+import { sensitiveIdentityService } from '@/services/sensitiveIdentityService'
 import { mediaService } from '@/services/contentService'
 import { Card, Avatar, Select, Textarea, Input, Button, Spinner, Checkbox, EmptyState, StatusBadge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
@@ -17,6 +18,7 @@ export default function AdminMemberDetailPage() {
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
   const isGembala = profile?.role === 'Gembala'
+  const isSuperAdmin = profile?.role === 'Super Admin'
   const canEditRole = ['Admin', 'Super Admin'].includes(profile?.role)
 
   const [member, setMember] = useState(null)
@@ -37,15 +39,16 @@ export default function AdminMemberDetailPage() {
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [qrLoading, setQrLoading] = useState(false)
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { load() }, [id, isSuperAdmin])
 
   async function load() {
     setLoading(true)
     try {
-      const [data, allMinistries, allKomsel] = await Promise.all([
+      const [data, allMinistries, allKomsel, nik] = await Promise.all([
         usersService.getById(id),
         usersService.getAllMinistries(),
         usersService.getAllKomsel(),
+        isSuperAdmin ? sensitiveIdentityService.getNik('user', id) : Promise.resolve(''),
       ])
       setMember(data)
       setMinistries(allMinistries)
@@ -68,7 +71,7 @@ export default function AdminMemberDetailPage() {
         birth_place: data.birth_place || '',
         address: data.address || '',
         blood_type: data.blood_type || '',
-        nik: data.nik || '',
+        nik,
         social_media: data.social_media || '',
         membership_card_url: data.membership_card_url || '',
         membership_card_issued_at: data.membership_card_issued_at || '',
@@ -105,7 +108,7 @@ export default function AdminMemberDetailPage() {
       const biodata = canEditRole ? {
         name, phone, email: email || null,
         gender: gender || null, birth_date: birth_date || null, birth_place: birth_place || null,
-        address: address || null, blood_type: blood_type || null, nik: nik || null,
+        address: address || null, blood_type: blood_type || null,
         social_media: social_media || null,
       } : {}
       const updated = await usersService.update(id, {
@@ -117,6 +120,7 @@ export default function AdminMemberDetailPage() {
         role_secondary: rest.role_secondary || null,
         komsel_id: rest.komsel_id || null,
       })
+      if (isSuperAdmin) await sensitiveIdentityService.setNik('user', id, nik)
       setMember(updated)
       setSuccess('Perubahan tersimpan.')
       toast.success('Perubahan tersimpan.')
@@ -305,7 +309,7 @@ export default function AdminMemberDetailPage() {
               <Input label="Tempat Lahir" value={form.birth_place} onChange={e => set('birth_place', e.target.value)} />
             </div>
             <Textarea label="Alamat Lengkap" rows={2} value={form.address} onChange={e => set('address', e.target.value)} />
-            <Input label="NIK" value={form.nik} onChange={e => set('nik', e.target.value)} />
+            {isSuperAdmin && <Input label="NIK" value={form.nik} onChange={e => set('nik', e.target.value)} />}
             <Input label="Instagram / Sosial Media" value={form.social_media} onChange={e => set('social_media', e.target.value)} />
             <p className="text-xs text-gray-400">Terdaftar: {formatDate(member.created_at)}</p>
           </div>
@@ -331,10 +335,10 @@ export default function AdminMemberDetailPage() {
               <p className="text-xs text-gray-400">Alamat</p>
               <p className="text-gray-700">{member.address || '-'}</p>
             </div>
-            <div>
+            {isSuperAdmin && <div>
               <p className="text-xs text-gray-400">NIK</p>
-              <p className="text-gray-700">{member.nik || '-'}</p>
-            </div>
+              <p className="text-gray-700">{form.nik || '-'}</p>
+            </div>}
             <div>
               <p className="text-xs text-gray-400">Terdaftar</p>
               <p className="text-gray-700">{formatDate(member.created_at)}</p>

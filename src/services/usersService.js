@@ -112,7 +112,6 @@ export const usersService = {
       birth_place: orNull(form.birth_place),
       address: orNull(form.address),
       blood_type: orNull(form.blood_type),
-      nik: orNull(form.nik),
       social_media: orNull(form.social_media),
       komsel_id: orNull(form.komsel_id),
     }

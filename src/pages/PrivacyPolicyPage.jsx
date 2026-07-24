@@ -40,7 +40,7 @@ export default function PrivacyPolicyPage() {
 
         <Section title="2. Data yang Kami Kumpulkan">
           <p><strong className="text-gray-800">a. Data identitas &amp; kontak</strong> — nama, email, nomor WhatsApp, jenis kelamin, tanggal &amp; tempat lahir, alamat, golongan darah, akun media sosial, foto profil.</p>
-          <p><strong className="text-gray-800">b. Data sensitif</strong> — NIK (Nomor Induk Kependudukan), khusus saat Anda mengajukan pendaftaran Baptisan atau Pemberkatan Nikah.</p>
+          <p><strong className="text-gray-800">b. Data sensitif</strong> — NIK (Nomor Induk Kependudukan), khusus saat Anda mengajukan pendaftaran Baptisan atau Penyerahan Anak.</p>
           <p><strong className="text-gray-800">c. Data keanggotaan &amp; pelayanan</strong> — komsel, ministry, riwayat kehadiran kelas/komsel/event (lewat scan QR), jawaban tugas/SOP pelayanan.</p>
           <p><strong className="text-gray-800">d. Data persembahan</strong> — kategori dan nominal persembahan yang Anda catat sendiri, beserta foto bukti transfer (jika diunggah).</p>
           <p><strong className="text-gray-800">e. Data teknis</strong> — token notifikasi push (jika Anda mengaktifkannya), agar kami bisa mengirim pengingat/notifikasi ke perangkat Anda.</p>

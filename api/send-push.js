@@ -28,7 +28,9 @@ export default async function handler(req, res) {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 
-    // Verifikasi pemanggil: harus user login dengan role Admin/Super Admin.
+    // Broadcast harus berasal dari halaman admin yang berwenang. Gembala
+    // hanya boleh dari Pesan Gembala; Admin biasa diverifikasi terhadap Hak
+    // Aksesnya di bawah, bukan cukup dengan menyatakan role "Admin".
     const token = (req.headers.authorization || '').replace('Bearer ', '').trim()
     if (!token) return res.status(401).json({ error: 'Unauthorized' })
     const { data: userData, error: uErr } = await admin.auth.getUser(token)
@@ -37,6 +39,51 @@ export default async function handler(req, res) {
       .from('users').select('role, user_id, last_push_sent_at').eq('auth_id', userData.user.id).single()
     if (!caller || !['Admin', 'Super Admin', 'Gembala'].includes(caller.role)) {
       return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const { title, body: message, url, userIds, sourcePage } = body
+    if (typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ error: 'title wajib diisi.' })
+    }
+    if (title.length > 500 || (message != null && (typeof message !== 'string' || message.length > 2000))) {
+      return res.status(400).json({ error: 'Isi notifikasi terlalu panjang.' })
+    }
+    if (userIds != null && (!Array.isArray(userIds) || userIds.some(id => typeof id !== 'string' || !id))) {
+      return res.status(400).json({ error: 'Daftar penerima tidak valid.' })
+    }
+    if (typeof url !== 'string' || !url.startsWith('/') || url.startsWith('//') || url.includes('\\')) {
+      return res.status(400).json({ error: 'Tautan notifikasi tidak valid.' })
+    }
+
+    const adminPages = [
+      '/admin/jemaat', '/admin/berita', '/admin/events', '/admin/kelas',
+      '/admin/baptisan', '/admin/nikah', '/admin/penyerahan-anak', '/admin/ktj',
+      '/admin/tugas', '/admin/respon', '/admin/evaluasi', '/admin/komsel',
+    ]
+    const requiredPage = typeof sourcePage === 'string'
+      ? adminPages.find(page => sourcePage === page || sourcePage.startsWith(`${page}/`))
+      : null
+    const isPastoralMessage = typeof sourcePage === 'string'
+      && (sourcePage === '/admin/pesan' || sourcePage.startsWith('/admin/pesan/'))
+
+    if (caller.role === 'Gembala' && !isPastoralMessage) {
+      return res.status(403).json({ error: 'Gembala hanya dapat mengirim dari Pesan Gembala.' })
+    }
+    if (caller.role === 'Admin') {
+      if (!requiredPage) return res.status(403).json({ error: 'Halaman sumber tidak diizinkan.' })
+      const { data: permission } = await admin
+        .from('admin_user_permissions')
+        .select('allowed_pages')
+        .eq('user_id', caller.user_id)
+        .maybeSingle()
+      const pages = permission?.allowed_pages
+      if (Array.isArray(pages) && !pages.includes(requiredPage)) {
+        return res.status(403).json({ error: 'Anda tidak memiliki hak akses untuk mengirim notifikasi dari halaman ini.' })
+      }
+    }
+    if (caller.role === 'Super Admin' && !requiredPage && !isPastoralMessage) {
+      return res.status(400).json({ error: 'Halaman sumber tidak valid.' })
     }
 
     // Rate-limit per-admin disimpan di DB agar berlaku lintas instance serverless.
@@ -49,10 +96,6 @@ export default async function handler(req, res) {
       .from('users')
       .update({ last_push_sent_at: new Date(now).toISOString() })
       .eq('user_id', caller.user_id)
-
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
-    const { title, body: message, url, userIds } = body
-    if (!title) return res.status(400).json({ error: 'title wajib diisi.' })
 
     let query = admin.from('push_subscriptions').select('*')
     if (Array.isArray(userIds) && userIds.length) query = query.in('user_id', userIds)

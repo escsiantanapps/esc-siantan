@@ -477,6 +477,8 @@ CREATE POLICY "templates_read_access" ON form_templates FOR SELECT USING (
   )
 );
 
+-- Catatan: blok isolasi NIK ditulis di akhir schema.sql agar tetap append-only.
+
 -- ── form_responses: user kelola miliknya; admin baca semua ──
 CREATE POLICY "responses_own" ON form_responses FOR ALL USING (
   volunteer_id IN (SELECT user_id FROM users WHERE auth_id = auth.uid())
@@ -3605,7 +3607,7 @@ CREATE POLICY "documents_general_insert" ON storage.objects
   );
 
 -- ══════════════════════════════════════════════════════════════════════
--- ── Migrasi v70: Pause/Resume Sesi Ibadah Minggu ──────────────────────
+-- ── Migrasi 30: Pause/Resume Sesi Ibadah Minggu ──────────────────────
 -- ══════════════════════════════════════════════════════════════════════
 -- KEPUTUSAN OPERATOR (2026-07-18):
 -- (a) QR Ibadah Minggu dapat digenerate di hari lain (bukan hanya hari H).
@@ -3832,3 +3834,194 @@ CREATE POLICY "templates_read_access" ON form_templates FOR SELECT USING (
     )
   )
 );
+
+-- ── Migrasi v73: Isolasi NIK ke penyimpanan khusus Super Admin ────────────
+-- TEMUAN (pentest 2026-07-23): policy production users_read_admin,
+-- users_read_pks, dan users_read_gembala memberi SELECT pada seluruh baris
+-- users. RLS PostgreSQL tidak dapat menyembunyikan satu kolom, sehingga NIK
+-- dapat diambil langsung lewat PostgREST meski UI tidak menampilkannya.
+-- KEPUTUSAN OPERATOR: NIK dipertahankan, tetapi dipindahkan dari tabel umum
+-- ke tabel privat dan hanya dapat dibaca Super Admin melalui RPC terjaga.
+
+CREATE TABLE IF NOT EXISTS user_sensitive_identities (
+  user_id TEXT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+  nik TEXT NOT NULL CHECK (char_length(nik) <= 64),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS baptism_sensitive_identities (
+  baptism_id TEXT PRIMARY KEY REFERENCES baptism_registrations(baptism_id) ON DELETE CASCADE,
+  nik TEXT NOT NULL CHECK (char_length(nik) <= 64),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS dedication_sensitive_identities (
+  dedication_id TEXT PRIMARY KEY REFERENCES child_dedication_registrations(dedication_id) ON DELETE CASCADE,
+  nik TEXT NOT NULL CHECK (char_length(nik) <= 64),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE user_sensitive_identities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE baptism_sensitive_identities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dedication_sensitive_identities ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON user_sensitive_identities FROM anon, authenticated;
+REVOKE ALL ON baptism_sensitive_identities FROM anon, authenticated;
+REVOKE ALL ON dedication_sensitive_identities FROM anon, authenticated;
+
+-- Salin bila kolom lama masih ada; blok tetap aman dijalankan ulang setelah
+-- kolom sumber dihapus.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'nik') THEN
+    EXECUTE $sql$
+      INSERT INTO user_sensitive_identities (user_id, nik)
+      SELECT user_id, btrim(nik) FROM users WHERE nik IS NOT NULL AND btrim(nik) <> ''
+      ON CONFLICT (user_id) DO UPDATE SET nik = EXCLUDED.nik, updated_at = now()
+      WHERE user_sensitive_identities.nik IS DISTINCT FROM EXCLUDED.nik
+    $sql$;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'baptism_registrations' AND column_name = 'nik') THEN
+    EXECUTE $sql$
+      INSERT INTO baptism_sensitive_identities (baptism_id, nik)
+      SELECT baptism_id, btrim(nik) FROM baptism_registrations WHERE nik IS NOT NULL AND btrim(nik) <> ''
+      ON CONFLICT (baptism_id) DO UPDATE SET nik = EXCLUDED.nik, updated_at = now()
+      WHERE baptism_sensitive_identities.nik IS DISTINCT FROM EXCLUDED.nik
+    $sql$;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'child_dedication_registrations' AND column_name = 'nik') THEN
+    EXECUTE $sql$
+      INSERT INTO dedication_sensitive_identities (dedication_id, nik)
+      SELECT dedication_id, btrim(nik) FROM child_dedication_registrations WHERE nik IS NOT NULL AND btrim(nik) <> ''
+      ON CONFLICT (dedication_id) DO UPDATE SET nik = EXCLUDED.nik, updated_at = now()
+      WHERE dedication_sensitive_identities.nik IS DISTINCT FROM EXCLUDED.nik
+    $sql$;
+  END IF;
+END $$;
+
+-- Trigger lama menyebut OLD/NEW.nik; perbarui sebelum kolom dijatuhkan.
+CREATE OR REPLACE FUNCTION guard_biodata_admin_edit() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS DISTINCT FROM OLD.auth_id AND auth_user_role() = 'Admin' THEN
+    IF NEW.name IS DISTINCT FROM OLD.name
+       OR NEW.phone IS DISTINCT FROM OLD.phone
+       OR NEW.email IS DISTINCT FROM OLD.email
+       OR NEW.gender IS DISTINCT FROM OLD.gender
+       OR NEW.birth_date IS DISTINCT FROM OLD.birth_date
+       OR NEW.birth_place IS DISTINCT FROM OLD.birth_place
+       OR NEW.address IS DISTINCT FROM OLD.address
+       OR NEW.blood_type IS DISTINCT FROM OLD.blood_type
+       OR NEW.social_media IS DISTINCT FROM OLD.social_media
+       OR NEW.photo_url IS DISTINCT FROM OLD.photo_url
+       OR NEW.nij IS DISTINCT FROM OLD.nij THEN
+      RAISE EXCEPTION 'Hanya Super Admin yang dapat mengubah biodata jemaat lain.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+ALTER TABLE users DROP COLUMN IF EXISTS nik;
+ALTER TABLE baptism_registrations DROP COLUMN IF EXISTS nik;
+ALTER TABLE child_dedication_registrations DROP COLUMN IF EXISTS nik;
+
+CREATE OR REPLACE FUNCTION get_sensitive_nik(p_scope text, p_subject_id text)
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_nik text;
+BEGIN
+  IF auth_user_role() IS DISTINCT FROM 'Super Admin' THEN
+    RAISE EXCEPTION 'NIK hanya dapat diakses Super Admin.' USING ERRCODE = '42501';
+  END IF;
+  CASE p_scope
+    WHEN 'user' THEN SELECT nik INTO v_nik FROM user_sensitive_identities WHERE user_id = p_subject_id;
+    WHEN 'baptism' THEN SELECT nik INTO v_nik FROM baptism_sensitive_identities WHERE baptism_id = p_subject_id;
+    WHEN 'dedication' THEN SELECT nik INTO v_nik FROM dedication_sensitive_identities WHERE dedication_id = p_subject_id;
+    ELSE RAISE EXCEPTION 'Jenis data sensitif tidak valid.' USING ERRCODE = '22023';
+  END CASE;
+  RETURN v_nik;
+END $$;
+
+CREATE OR REPLACE FUNCTION set_sensitive_nik(p_scope text, p_subject_id text, p_nik text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_role text := auth_user_role();
+  v_nik text := NULLIF(btrim(p_nik), '');
+  v_old text;
+  v_allowed boolean := false;
+  v_table text;
+  v_actor_name text;
+BEGIN
+  IF p_subject_id IS NULL OR btrim(p_subject_id) = '' THEN
+    RAISE EXCEPTION 'Referensi data wajib diisi.' USING ERRCODE = '22023';
+  END IF;
+  IF v_nik IS NOT NULL AND char_length(v_nik) > 64 THEN
+    RAISE EXCEPTION 'NIK terlalu panjang.' USING ERRCODE = '22023';
+  END IF;
+  CASE p_scope
+    WHEN 'user' THEN
+      SELECT nik INTO v_old FROM user_sensitive_identities WHERE user_id = p_subject_id;
+      v_allowed := v_role = 'Super Admin' AND EXISTS (SELECT 1 FROM users WHERE user_id = p_subject_id);
+      v_table := 'user_sensitive_identities';
+    WHEN 'baptism' THEN
+      SELECT nik INTO v_old FROM baptism_sensitive_identities WHERE baptism_id = p_subject_id;
+      v_allowed := v_role = 'Super Admin' OR EXISTS (SELECT 1 FROM baptism_registrations WHERE baptism_id = p_subject_id AND user_id = auth_user_id());
+      v_table := 'baptism_sensitive_identities';
+    WHEN 'dedication' THEN
+      SELECT nik INTO v_old FROM dedication_sensitive_identities WHERE dedication_id = p_subject_id;
+      v_allowed := v_role = 'Super Admin' OR EXISTS (SELECT 1 FROM child_dedication_registrations WHERE dedication_id = p_subject_id AND user_id = auth_user_id());
+      v_table := 'dedication_sensitive_identities';
+    ELSE RAISE EXCEPTION 'Jenis data sensitif tidak valid.' USING ERRCODE = '22023';
+  END CASE;
+  IF NOT v_allowed THEN RAISE EXCEPTION 'Tidak berwenang menyimpan NIK ini.' USING ERRCODE = '42501'; END IF;
+
+  IF v_nik IS NULL THEN
+    CASE p_scope
+      WHEN 'user' THEN DELETE FROM user_sensitive_identities WHERE user_id = p_subject_id;
+      WHEN 'baptism' THEN DELETE FROM baptism_sensitive_identities WHERE baptism_id = p_subject_id;
+      WHEN 'dedication' THEN DELETE FROM dedication_sensitive_identities WHERE dedication_id = p_subject_id;
+    END CASE;
+  ELSE
+    CASE p_scope
+      WHEN 'user' THEN INSERT INTO user_sensitive_identities (user_id, nik) VALUES (p_subject_id, v_nik) ON CONFLICT (user_id) DO UPDATE SET nik = EXCLUDED.nik, updated_at = now();
+      WHEN 'baptism' THEN INSERT INTO baptism_sensitive_identities (baptism_id, nik) VALUES (p_subject_id, v_nik) ON CONFLICT (baptism_id) DO UPDATE SET nik = EXCLUDED.nik, updated_at = now();
+      WHEN 'dedication' THEN INSERT INTO dedication_sensitive_identities (dedication_id, nik) VALUES (p_subject_id, v_nik) ON CONFLICT (dedication_id) DO UPDATE SET nik = EXCLUDED.nik, updated_at = now();
+    END CASE;
+  END IF;
+
+  -- Audit membuktikan perubahan tanpa menyimpan nilai NIK di audit_log.
+  IF v_old IS DISTINCT FROM v_nik THEN
+    SELECT name INTO v_actor_name FROM users WHERE user_id = auth_user_id();
+    INSERT INTO audit_log (actor_user_id, actor_name, actor_role, action, table_name, record_id, changed_fields, old_data, new_data)
+    VALUES (auth_user_id(), v_actor_name, v_role,
+      CASE WHEN v_old IS NULL THEN 'INSERT' WHEN v_nik IS NULL THEN 'DELETE' ELSE 'UPDATE' END,
+      v_table, p_subject_id, ARRAY['nik'],
+      jsonb_build_object('nik', '[disamarkan]'), jsonb_build_object('nik', '[disamarkan]'));
+  END IF;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION get_sensitive_nik(text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION set_sensitive_nik(text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION get_sensitive_nik(text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION set_sensitive_nik(text, text, text) TO authenticated;
+
+-- ── Migrasi v74: Manifest arsip data dingin respons SOP ───────────────────
+-- KEPUTUSAN OPERATOR: respons SOP lama dan lampiran `task-files/responses/`
+-- disalin dahulu ke folder lokal admin. Penghapusan sumber baru boleh melalui
+-- endpoint Super Admin setelah manifest arsip tercatat.
+CREATE TABLE IF NOT EXISTS cold_archives (
+  archive_id TEXT PRIMARY KEY,
+  archive_type TEXT NOT NULL CHECK (archive_type = 'form_responses'),
+  cutoff_date DATE NOT NULL,
+  response_ids JSONB NOT NULL DEFAULT '[]',
+  file_paths JSONB NOT NULL DEFAULT '[]',
+  local_filename TEXT NOT NULL,
+  sha256 TEXT,
+  status TEXT NOT NULL DEFAULT 'Siap Dihapus' CHECK (status IN ('Siap Dihapus', 'Dipindahkan')),
+  created_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  deleted_at TIMESTAMPTZ
+);
+ALTER TABLE cold_archives ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON cold_archives FROM anon, authenticated;
+CREATE INDEX IF NOT EXISTS cold_archives_created_idx ON cold_archives (created_at DESC);

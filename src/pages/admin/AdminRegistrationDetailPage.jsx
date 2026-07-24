@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, FileText, Printer } from 'lucide-react'
 import { registrationService } from '@/services/contentService'
 import { usersService } from '@/services/usersService'
+import { sensitiveIdentityService } from '@/services/sensitiveIdentityService'
 import { pushService } from '@/services/pushService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
@@ -50,6 +51,7 @@ export default function AdminRegistrationDetailPage() {
   const { toast, confirm } = useToast()
   const { profile } = useAuth()
   const isGembala = profile?.role === 'Gembala'
+  const isSuperAdmin = profile?.role === 'Super Admin'
   const type = pathname.startsWith('/admin/nikah')
     ? 'wedding'
     : pathname.startsWith('/admin/penyerahan-anak') ? 'dedication'
@@ -74,7 +76,7 @@ export default function AdminRegistrationDetailPage() {
 
   const [form, setForm] = useState({ status: 'Menunggu', admin_note: '', scheduled_at: '' })
 
-  useEffect(() => { load() }, [id, type])
+  useEffect(() => { load() }, [id, type, isSuperAdmin])
   // Untuk KTJ, ambil daftar komsel supaya bisa tampilkan nama (bukan komsel_id).
   useEffect(() => {
     if (type !== 'ktj') return
@@ -86,11 +88,16 @@ export default function AdminRegistrationDetailPage() {
     setLoading(true)
     try {
       const data = await registrationService.getById(type, id)
-      setReg(data)
+      const sensitiveScope = type === 'baptism' ? 'baptism' : type === 'dedication' ? 'dedication' : null
+      const nik = isSuperAdmin && sensitiveScope
+        ? await sensitiveIdentityService.getNik(sensitiveScope, id)
+        : ''
+      const complete = { ...data, nik }
+      setReg(complete)
       setForm({
-        status: data.status || 'Menunggu',
-        admin_note: data.admin_note || '',
-        scheduled_at: toDatetimeLocal(data.scheduled_at),
+        status: complete.status || 'Menunggu',
+        admin_note: complete.admin_note || '',
+        scheduled_at: toDatetimeLocal(complete.scheduled_at),
       })
     } catch (err) {
       setError(err.message || 'Gagal memuat data pendaftaran.')
@@ -199,7 +206,7 @@ export default function AdminRegistrationDetailPage() {
           ['Nama Lengkap', reg.full_name],
           ['Tanggal Lahir', reg.birth_date ? `${formatDate(reg.birth_date)} (${hitungUmur(reg.birth_date)})` : '-'],
           ['Tempat Lahir', reg.birth_place],
-          ['NIK', reg.nik],
+          ...(isSuperAdmin ? [['NIK', reg.nik]] : []),
           ['Nama Ayah', reg.father_name],
           ['Nama Ibu', reg.mother_name],
           ['Pembimbing', reg.supervisor],
@@ -216,7 +223,7 @@ export default function AdminRegistrationDetailPage() {
           ['Nama Anak', reg.child_name],
           ['Tanggal Lahir', reg.child_birth_date ? `${formatDate(reg.child_birth_date)} (${hitungUmur(reg.child_birth_date)})` : '-'],
           ['Tempat Lahir', reg.child_birth_place],
-          ['NIK (KK)', reg.nik],
+          ...(isSuperAdmin ? [['NIK (KK)', reg.nik]] : []),
           ['Nama Ayah', reg.father_name],
           ['Nama Ibu', reg.mother_name],
           ['Alamat', reg.address],
@@ -348,7 +355,7 @@ export default function AdminRegistrationDetailPage() {
             <Info label="Nama Lengkap" value={reg.full_name} />
             <Info label="Tanggal Lahir" value={reg.birth_date ? `${formatDate(reg.birth_date)} (${hitungUmur(reg.birth_date)})` : '-'} />
             <Info label="Tempat Lahir" value={reg.birth_place} />
-            <Info label="NIK" value={reg.nik} />
+            {isSuperAdmin && <Info label="NIK" value={reg.nik} />}
             <Info label="Nama Ayah" value={reg.father_name} />
             <Info label="Nama Ibu" value={reg.mother_name} />
             <Info label="Pembimbing" value={reg.supervisor} />
@@ -369,7 +376,7 @@ export default function AdminRegistrationDetailPage() {
             <Info label="Nama Anak" value={reg.child_name} />
             <Info label="Tanggal Lahir" value={reg.child_birth_date ? `${formatDate(reg.child_birth_date)} (${hitungUmur(reg.child_birth_date)})` : '-'} />
             <Info label="Tempat Lahir" value={reg.child_birth_place} />
-            <Info label="NIK (KK)" value={reg.nik} />
+            {isSuperAdmin && <Info label="NIK (KK)" value={reg.nik} />}
             <Info label="Nama Ayah" value={reg.father_name} />
             <Info label="Nama Ibu" value={reg.mother_name} />
             <div className="col-span-2"><Info label="Alamat" value={reg.address} /></div>
