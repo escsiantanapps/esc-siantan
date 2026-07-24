@@ -23,13 +23,36 @@ function Sheep({ className, tone = '#f8fafc' }) {
 // langit siang/malam, gunung tinggi, matahari/bulan, awan, burung, bintang,
 // bukit, rumah, pagar, gembala & domba. Salam + jam berjalan di kiri atas.
 // Domba: siang merumput di luar pagar; malam masuk ke dalam pagar (gembala pulang).
-export default function SkyTime() {
+export default function SkyTime({ name = '' }) {
   const { lang, t } = useLang()
   const [now, setNow] = useState(new Date())
+  const [sheepSaysHello, setSheepSaysHello] = useState(false)
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30 * 1000)
     return () => clearInterval(id)
+  }, [])
+
+  // Sapaan pendek dan berjeda acak membuat domba terasa hidup tanpa menutupi
+  // informasi profil terus-menerus. Preferensi reduced motion dihormati.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
+    let helloTimer
+    let hideTimer
+    const scheduleHello = () => {
+      helloTimer = window.setTimeout(() => {
+        setSheepSaysHello(true)
+        hideTimer = window.setTimeout(() => {
+          setSheepSaysHello(false)
+          scheduleHello()
+        }, 5200)
+      }, 14000 + Math.random() * 18000)
+    }
+    scheduleHello()
+    return () => {
+      window.clearTimeout(helloTimer)
+      window.clearTimeout(hideTimer)
+    }
   }, [])
 
   const h = now.getHours()
@@ -39,6 +62,8 @@ export default function SkyTime() {
     h < 15 ? t('greeting.noon') :
     h < 18 ? t('greeting.afternoon') : t('greeting.night')
   const time = now.toLocaleTimeString(lang === 'en' ? 'en-GB' : 'id-ID', { hour: '2-digit', minute: '2-digit' })
+  const sheepName = String(name || '').trim().split(' ')[0] || t('sky.sheepFriend')
+  const sheepGreeting = t('sky.sheepGreeting', { name: sheepName })
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -135,8 +160,15 @@ export default function SkyTime() {
       {/* Domba dalam pagar (malam) — digambar SEBELUM pagar agar tampak di dalam. */}
       {!isDay && (
         <>
-          <Sheep className="absolute bottom-2 right-[4rem] origin-bottom animate-[graze_5s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
-          <Sheep className="absolute bottom-1.5 right-[5.6rem] origin-bottom animate-[graze_5.6s_ease-in-out_infinite] [animation-delay:-2s] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" tone="#e2e8f0" />
+          <div className="absolute bottom-2 right-[4rem] sky-sheep-wander">
+            <div className={sheepSaysHello ? 'sky-sheep-hello relative' : 'relative'}>
+              {sheepSaysHello && <span aria-hidden="true" className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{sheepGreeting}</span>}
+              <Sheep className="origin-bottom sky-sheep-graze drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
+            </div>
+          </div>
+          <div className="absolute bottom-1.5 right-[5.6rem] sky-sheep-wander [animation-delay:-6s]">
+            <Sheep className="origin-bottom sky-sheep-graze [animation-delay:-2s] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" tone="#e2e8f0" />
+          </div>
         </>
       )}
 
@@ -155,8 +187,15 @@ export default function SkyTime() {
       {/* Siang: domba merumput di luar pagar + gembala menjaga */}
       {isDay && (
         <>
-          <Sheep className="absolute bottom-2 right-[8rem] origin-bottom animate-[graze_4s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
-          <Sheep className="absolute bottom-1.5 right-[11rem] origin-bottom animate-[graze_4.6s_ease-in-out_infinite] [animation-delay:-1.5s] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" tone="#f1f5f9" />
+          <div className="absolute bottom-2 right-[8rem] sky-sheep-wander">
+            <div className={sheepSaysHello ? 'sky-sheep-hello relative' : 'relative'}>
+              {sheepSaysHello && <span aria-hidden="true" className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{sheepGreeting}</span>}
+              <Sheep className="origin-bottom sky-sheep-graze drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
+            </div>
+          </div>
+          <div className="absolute bottom-1.5 right-[11rem] sky-sheep-wander [animation-delay:-7s]">
+            <Sheep className="origin-bottom sky-sheep-graze [animation-delay:-1.5s] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" tone="#f1f5f9" />
+          </div>
           <svg className="absolute bottom-2 right-[9.5rem] origin-bottom animate-[bobSoft_6s_ease-in-out_infinite] drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" width="20" height="33" viewBox="0 0 20 33" fill="none">
             <path d="M16 6 q2.7 0 2.7 2.7 q0 2.3 -2.5 2.5 M16 6 L15 31" stroke="#a16207" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M9.5 14 L4 31 L15 31 Z" fill="#2563eb" stroke="#1d4ed8" strokeWidth="0.6" />

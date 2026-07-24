@@ -305,6 +305,21 @@ h1, h2, h3 {
 /* Domba merumput (menunduk-naik halus) & gembala bergoyang lembut */
 @keyframes graze { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-1.5px) rotate(-4deg); } }
 @keyframes bobSoft { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+/* Domba menjelajah perlahan; sapaan membesar dari dasar agar terasa mendekat. */
+@keyframes sheepWander {
+  0%, 100% { transform: translateX(0); }
+  28% { transform: translateX(-22px); }
+  58% { transform: translateX(16px); }
+  78% { transform: translateX(-8px); }
+}
+@keyframes sheepHello {
+  0%, 100% { transform: translateY(0) scale(1); }
+  18%, 72% { transform: translateY(-7px) scale(1.7); }
+  45% { transform: translateY(-9px) scale(1.8); }
+}
+.sky-sheep-wander { animation: sheepWander 13s ease-in-out infinite; }
+.sky-sheep-graze { animation: graze 4.5s ease-in-out infinite; }
+.sky-sheep-hello { animation: sheepHello 5.2s cubic-bezier(0.16, 1, 0.3, 1) both; transform-origin: bottom center; }
 
 .animate-toast-in {
   animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -317,7 +332,10 @@ h1, h2, h3 {
   .animate-scale-in,
   .animate-nav-pop,
   .stagger-children > *,
-  .skeleton {
+  .skeleton,
+  .sky-sheep-wander,
+  .sky-sheep-graze,
+  .sky-sheep-hello {
     animation: none;
   }
   .card-lift,
