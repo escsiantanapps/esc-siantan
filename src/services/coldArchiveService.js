@@ -23,7 +23,7 @@ export const coldArchiveService = {
   async call(body) {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) throw new Error('Sesi tidak ditemukan.')
-    const res = await fetchApi('/api/cold-responses', {
+    const res = await fetchApi('/api/cron-backup?action=cold-response', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(body),
     })
     const json = await res.json().catch(() => ({}))
