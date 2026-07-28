@@ -390,6 +390,8 @@ export const translations = {
     'infoDetail.notFound': 'Informasi tidak ditemukan',
     'infoDetail.attachments': 'Berkas PDF',
     'infoDetail.openPdf': 'Buka',
+    'infoDetail.closePdf': 'Tutup PDF',
+    'infoDetail.loadingPdf': 'Memuat PDF...',
 
     // Detail Event
     'eventDetail.title': 'Detail Event',
@@ -1792,6 +1794,8 @@ export const translations = {
     'infoDetail.notFound': 'Information not found',
     'infoDetail.attachments': 'PDF Files',
     'infoDetail.openPdf': 'Open',
+    'infoDetail.closePdf': 'Close PDF',
+    'infoDetail.loadingPdf': 'Loading PDF...',
 
     // Event detail
     'eventDetail.title': 'Event Detail',

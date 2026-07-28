@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, MessageCircle, FileText, X, ExternalLink } from 'lucide-react'
+import { Bell, MessageCircle, FileText, X } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, waLink } from '@/lib/utils'
+
+function pdfEmbedUrl(url) {
+  const cleanUrl = String(url || '').split('#')[0]
+  return `${cleanUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`
+}
 
 export default function InformationDetailPage() {
   const { id } = useParams()
@@ -14,10 +19,33 @@ export default function InformationDetailPage() {
   const [news, setNews] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pdfViewer, setPdfViewer] = useState(null) // { url, name }
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   useEffect(() => {
     newsService.getById(id).then(setNews).catch(() => {}).finally(() => setLoading(false))
   }, [id])
+
+  useEffect(() => {
+    if (!pdfViewer) return undefined
+
+    const previousOverflow = document.body.style.overflow
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setPdfViewer(null)
+    }
+
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', closeOnEscape)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [pdfViewer])
+
+  function openPdf(file) {
+    setPdfLoading(true)
+    setPdfViewer({ url: file.url, name: file.name })
+  }
 
   return (
     <div className="pb-4">
@@ -53,7 +81,7 @@ export default function InformationDetailPage() {
                     <button
                       key={i}
                       type="button"
-                      onClick={() => setPdfViewer({ url: f.url, name: f.name })}
+                      onClick={() => openPdf(f)}
                       className="w-full flex items-center gap-2.5 rounded-xl border border-gray-100 bg-control px-3 py-2.5 hover:border-brand-300 transition-colors text-left"
                     >
                       <FileText size={18} className="text-red-500 shrink-0" />
@@ -81,36 +109,42 @@ export default function InformationDetailPage() {
         )}
       </div>
 
-      {/* PDF Viewer modal — dibungkus Google Docs Viewer agar tampil di semua mobile browser */}
+      {/* Viewer native menjaga pinch-zoom, sementara fragmen PDF menyembunyikan toolbar bawaan. */}
       {pdfViewer && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-gray-900" style={{paddingTop: 'var(--safe-top, 0px)'}}>
-          <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 shrink-0">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate flex-1">{pdfViewer.name}</p>
-            <div className="flex items-center gap-2 shrink-0">
-              <a
-                href={pdfViewer.url}
-                download={pdfViewer.name}
-                className="p-2 text-gray-500 hover:text-brand-500"
-                title="Unduh"
-              >
-                <ExternalLink size={18} />
-              </a>
-              <button
-                type="button"
-                onClick={() => setPdfViewer(null)}
-                className="p-2 text-gray-500 hover:text-red-500"
-                title="Tutup"
-              >
-                <X size={18} />
-              </button>
-            </div>
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-gray-950"
+          style={{ paddingTop: 'var(--safe-top, 0px)' }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={pdfViewer.name}
+        >
+          <div className="flex min-h-14 items-center gap-3 border-b border-white/10 bg-gray-900 px-3 shrink-0">
+            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{pdfViewer.name}</p>
+            <button
+              type="button"
+              onClick={() => setPdfViewer(null)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gray-200 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              title={t('infoDetail.closePdf')}
+              aria-label={t('infoDetail.closePdf')}
+            >
+              <X size={20} />
+            </button>
           </div>
-          {/* PDF iframe — dibungkus Google Docs Viewer agar tampil di semua mobile browser */}
-          <iframe
-            src={`https://docs.google.com/viewer?url=${encodeURIComponent(pdfViewer.url)}&embedded=true`}
-            title={pdfViewer.name}
-            className="flex-1 w-full bg-gray-100"
-          />
+          <div className="relative min-h-0 flex-1 bg-gray-800">
+            {pdfLoading && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-gray-900 text-gray-200">
+                <Spinner />
+                <p className="text-sm">{t('infoDetail.loadingPdf')}</p>
+              </div>
+            )}
+            <iframe
+              src={pdfEmbedUrl(pdfViewer.url)}
+              title={pdfViewer.name}
+              className="h-full w-full border-0 bg-gray-100"
+              style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
+              onLoad={() => setPdfLoading(false)}
+            />
+          </div>
         </div>
       )}
     </div>
