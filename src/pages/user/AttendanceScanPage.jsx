@@ -442,7 +442,7 @@ export default function AttendanceScanPage() {
           )}
           <Button
             variant="secondary"
-            className="w-full bg-white text-gray-900 hover:bg-gray-100"
+            className="scanner-gallery-button w-full"
             loading={galleryBusy}
             onClick={() => fileInputRef.current?.click()}
           >

@@ -452,3 +452,38 @@ h1, h2, h3 {
 .attendance-scanner-open .user-bottom-nav {
   display: none;
 }
+
+/* Tombol berada di atas kamera gelap, jadi warnanya sengaja tetap terang dan
+   tidak mengikuti remap gray dark mode agar teks/loading selalu terbaca. */
+.scanner-gallery-button {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+.scanner-gallery-button:hover {
+  background: #f3f4f6 !important;
+}
+
+/* Chrome viewer harus tetap gelap di kedua tema. Token gray proyek dibalik pada
+   dark mode, jadi toolbar PDF tidak boleh bergantung pada utility gray biasa. */
+.pdf-viewer-shell {
+  background: #030712;
+}
+
+.pdf-viewer-toolbar {
+  background: #111827;
+  color: #f9fafb;
+}
+
+.pdf-viewer-toolbar .text-gray-100,
+.pdf-viewer-toolbar .text-gray-200 {
+  color: #e5e7eb !important;
+}
+
+.pdf-viewer-stage {
+  background: #1f2937;
+}
+
+.pdf-viewer-message {
+  color: #f3f4f6;
+}

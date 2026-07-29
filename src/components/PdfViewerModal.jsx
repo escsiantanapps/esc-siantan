@@ -126,6 +126,7 @@ export default function PdfViewerModal({
   bottomPanel = null,
   initialPage = 1,
   onPageChange,
+  continuous = false,
 }) {
   const { t } = useLang()
   const dialogRef = useRef(null)
@@ -234,11 +235,13 @@ export default function PdfViewerModal({
   }
 
   function handleTouchStart(event) {
+    if (continuous) return
     const touch = event.touches[0]
     touchStartRef.current = { x: touch.clientX, y: touch.clientY }
   }
 
   function handleTouchEnd(event) {
+    if (continuous) return
     if (!touchStartRef.current) return
     if (zoom > 1) { touchStartRef.current = null; return }
     const touch = event.changedTouches[0]
@@ -251,6 +254,7 @@ export default function PdfViewerModal({
 
   useEffect(() => {
     const handlePageKeys = (event) => {
+      if (continuous) return
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return
       if (event.key === 'ArrowLeft') turnPage(-1)
       if (event.key === 'ArrowRight') turnPage(1)
@@ -262,14 +266,14 @@ export default function PdfViewerModal({
   return (
     <div
       ref={dialogRef}
-      className="fixed inset-0 z-[60] flex flex-col bg-gray-950"
+      className="pdf-viewer-shell fixed inset-0 z-[60] flex flex-col"
       style={{ paddingTop: 'var(--safe-top, 0px)' }}
       role="dialog"
       aria-modal="true"
       aria-label={file.name}
       aria-busy={loading}
     >
-      <div className="flex min-h-14 items-center gap-2 border-b border-white/10 bg-gray-900 px-2 shrink-0">
+      <div className="pdf-viewer-toolbar flex min-h-14 items-center gap-2 border-b border-white/10 px-2 shrink-0">
         <p className="min-w-0 flex-1 truncate px-1 text-sm font-semibold text-white">{file.name}</p>
         <button
           type="button"
@@ -306,15 +310,15 @@ export default function PdfViewerModal({
         </button>
       </div>
 
-      <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-gray-800">
+      <div ref={viewportRef} className="pdf-viewer-stage relative min-h-0 flex-1 overflow-auto overscroll-contain">
         {loading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-100">
+          <div className="pdf-viewer-message absolute inset-0 flex flex-col items-center justify-center gap-3">
             <Spinner />
             <p className="text-sm">{t('infoDetail.loadingPdf')}</p>
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center text-gray-100">
+          <div className="pdf-viewer-message absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
             <p className="text-sm">{t('infoDetail.pdfLoadFailed')}</p>
             <button
               type="button"
@@ -326,7 +330,24 @@ export default function PdfViewerModal({
             </button>
           </div>
         )}
-        {pdf && (
+        {pdf && continuous && (
+          <div className="flex min-h-full w-max min-w-full flex-col items-center gap-3 p-3">
+            {Array.from({ length: pdf.numPages }, (_, index) => index + 1).map((pageNumber) => (
+              <PdfPage
+                key={pageNumber}
+                pdf={pdf}
+                pageNumber={pageNumber}
+                zoom={zoom}
+                width={width}
+                scrollRoot={viewportRef.current}
+                label={t('infoDetail.pdfPage', { page: pageNumber })}
+                errorText={t('infoDetail.pdfPageFailed', { page: pageNumber })}
+                retryText={t('infoDetail.retryPdf')}
+              />
+            ))}
+          </div>
+        )}
+        {pdf && !continuous && (
           <div
             className="flex min-h-full min-w-full items-center justify-center p-3"
             onTouchStart={handleTouchStart}
@@ -350,8 +371,8 @@ export default function PdfViewerModal({
           </div>
         )}
       </div>
-      {pdf && (
-        <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-gray-900 px-3">
+      {pdf && !continuous && (
+        <div className="pdf-viewer-toolbar flex min-h-14 shrink-0 items-center justify-between gap-3 border-t border-white/10 px-3">
           <button
             type="button"
             onClick={() => turnPage(-1)}

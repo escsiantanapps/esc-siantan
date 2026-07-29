@@ -88,7 +88,7 @@ export default function InformationDetailPage() {
         )}
       </div>
 
-      {pdfViewer && <PdfViewerModal file={pdfViewer} onClose={closePdf} />}
+      {pdfViewer && <PdfViewerModal file={pdfViewer} onClose={closePdf} continuous />}
     </div>
   )
 }

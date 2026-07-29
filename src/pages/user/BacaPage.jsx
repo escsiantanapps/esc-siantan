@@ -217,7 +217,7 @@ export default function BacaPage() {
           })()}
           onPageChange={saveReadingPage}
           bottomPanel={(
-            <div className="border-t border-gray-200 bg-white">
+            <div className="border-t border-gray-200 bg-surface">
               <button
                 type="button"
                 onClick={() => setReaderPanelOpen((open) => !open)}
