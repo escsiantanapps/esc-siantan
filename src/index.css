@@ -411,3 +411,44 @@ h1, h2, h3 {
 .dark .gradient-text {
   -webkit-text-fill-color: transparent;
 }
+
+/* Pembaca PDF layar penuh mengambil alih navigasi aplikasi. */
+.pdf-viewer-open .user-bottom-nav {
+  display: none;
+}
+
+@keyframes pdf-page-turn-next {
+  from { opacity: 0; transform: perspective(900px) rotateY(-7deg) translateX(18px); }
+  to { opacity: 1; transform: perspective(900px) rotateY(0) translateX(0); }
+}
+
+@keyframes pdf-page-turn-previous {
+  from { opacity: 0; transform: perspective(900px) rotateY(7deg) translateX(-18px); }
+  to { opacity: 1; transform: perspective(900px) rotateY(0) translateX(0); }
+}
+
+.pdf-page-turn-next { animation: pdf-page-turn-next 220ms ease-out; transform-origin: left center; }
+.pdf-page-turn-previous { animation: pdf-page-turn-previous 220ms ease-out; transform-origin: right center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pdf-page-turn-next,
+  .pdf-page-turn-previous { animation: none; }
+}
+
+/* Kamera absensi dibuat penuh seperti pemindai perbankan; elemen video/canvas
+   dibuat oleh html5-qrcode sehingga ukurannya harus dikunci dari CSS global. */
+.attendance-qr-reader video,
+.attendance-qr-reader canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
+
+.attendance-qr-reader video {
+  display: block;
+}
+
+/* Mode scan mengambil seluruh viewport agar kamera tidak tertutup navigasi. */
+.attendance-scanner-open .user-bottom-nav {
+  display: none;
+}

@@ -35,7 +35,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        globPatterns: ['**/*.{js,mjs,css,html,svg,png,ico}'],
         // Impor handler push ke dalam service worker hasil generate Workbox
         importScripts: ['push-sw.js'],
         // Navigasi offline jatuh ke shell SPA yang sudah ter-precache,

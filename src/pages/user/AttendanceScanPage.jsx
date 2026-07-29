@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, XCircle, ScanLine, RotateCcw } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ImagePlus, XCircle, ScanLine, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { classesService, eventsService, komselService } from '@/services/contentService'
 import { ministryScheduleService } from '@/services/ministryScheduleService'
@@ -18,6 +18,7 @@ const SUNDAY_PREFIX = 'ESC-SUNDAY:'
 const REDEEM_PREFIX = 'ESC-REDEEM:'
 const MEMBER_PREFIX = 'ESC-MEMBER:'
 const VOLUNTEER_PREFIX = 'ESC-VOLUNTEER:'
+const KNOWN_PREFIXES = [CLASS_PREFIX, EVENT_PREFIX, KOMSEL_PREFIX, SUNDAY_PREFIX, REDEEM_PREFIX, MEMBER_PREFIX, VOLUNTEER_PREFIX]
 
 export default function AttendanceScanPage() {
   const { profile, isAdmin, isPKS } = useAuth()
@@ -27,14 +28,28 @@ export default function AttendanceScanPage() {
   const [result, setResult] = useState(null)
   const [errDetail, setErrDetail] = useState('')
   const [retryTick, setRetryTick] = useState(0)
+  const [galleryBusy, setGalleryBusy] = useState(false)
+  const fileInputRef = useRef(null)
   const scannerRef = useRef(null)
   const processingRef = useRef(false)
+
+  useEffect(() => {
+    document.body.classList.add('attendance-scanner-open')
+    return () => document.body.classList.remove('attendance-scanner-open')
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     setReady(false)
 
     ;(async () => {
+      // Instansiasi pemindai sebelum meminta izin kamera. Dengan begitu foto
+      // galeri tetap bisa dipindai ketika kamera tidak tersedia atau ditolak.
+      const { Html5Qrcode } = await import('html5-qrcode')
+      if (cancelled) return
+      const scanner = new Html5Qrcode('qr-reader', { verbose: false })
+      scannerRef.current = scanner
+
       // Pra-cek: HTTPS wajib untuk mengakses kamera (kecuali localhost). Chrome
       // memblokir tanpa error yang jelas kalau situs di-load via HTTP.
       if (typeof window !== 'undefined' && !window.isSecureContext) {
@@ -80,11 +95,6 @@ export default function AttendanceScanPage() {
         }
       }
       if (cancelled) return
-
-      const { Html5Qrcode } = await import('html5-qrcode')
-      if (cancelled) return
-      const scanner = new Html5Qrcode('qr-reader', { verbose: false })
-      scannerRef.current = scanner
 
       // TANPA qrbox: seluruh frame kamera jadi area pindai (full).
       const config = { fps: 10 }
@@ -149,8 +159,7 @@ export default function AttendanceScanPage() {
   async function handleScan(decodedText) {
     if (processingRef.current) return
     const text = (decodedText || '').trim()
-    const known = [CLASS_PREFIX, EVENT_PREFIX, KOMSEL_PREFIX, SUNDAY_PREFIX, REDEEM_PREFIX, MEMBER_PREFIX, VOLUNTEER_PREFIX]
-    if (!known.some(p => text.startsWith(p))) return
+    if (!KNOWN_PREFIXES.some(p => text.startsWith(p))) return
     processingRef.current = true
 
     if (text.startsWith(CLASS_PREFIX)) {
@@ -167,6 +176,37 @@ export default function AttendanceScanPage() {
       await handleMember(text.slice(MEMBER_PREFIX.length))
     } else {
       await handleRedeem(text.slice(REDEEM_PREFIX.length))
+    }
+  }
+
+  async function handleGalleryFile(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || galleryBusy) return
+
+    setGalleryBusy(true)
+    setErrDetail('')
+    try {
+      const scanner = scannerRef.current
+      if (!scanner) throw new Error('scanner_unavailable')
+      if (ready) {
+        try { await scanner.stop() } catch { /* kamera mungkin sudah berhenti */ }
+        setReady(false)
+      }
+      const decodedText = (await scanner.scanFile(file, false)).trim()
+      if (!KNOWN_PREFIXES.some(prefix => decodedText.startsWith(prefix))) {
+        processingRef.current = false
+        setResult({ type: 'error', message: t('scan.galleryInvalid') })
+        return
+      }
+      setResult(null)
+      processingRef.current = false
+      await handleScan(decodedText)
+    } catch {
+      processingRef.current = false
+      setResult({ type: 'error', message: t('scan.galleryNotDetected') })
+    } finally {
+      setGalleryBusy(false)
     }
   }
 
@@ -339,30 +379,95 @@ export default function AttendanceScanPage() {
   }
 
   return (
-    <div className="pb-4">
-      <GradientHeader title={t('scan.title')} subtitle={t('scan.subtitle')} back={() => navigate(-1)} />
+    <div className={result ? 'pb-4' : ''}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={handleGalleryFile}
+        aria-label={t('scan.galleryButton')}
+      />
 
-      <div className="px-4 pt-4 space-y-4">
-        <Card className={`p-3 overflow-hidden ${result ? 'hidden' : ''}`}>
-          <div
-            id="qr-reader"
-            className="rounded-xl overflow-hidden w-full"
-            style={{ minHeight: 260 }}
-          />
-          {!ready && (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
-              <Spinner />
-              <p className="text-xs text-gray-400">{t('scan.preparingCamera')}</p>
-            </div>
-          )}
-        </Card>
+      <div className={result ? 'hidden' : 'fixed inset-0 z-[60] overflow-hidden bg-gray-950'}>
+        <div
+          id="qr-reader"
+          className="attendance-qr-reader absolute inset-0 h-full w-full bg-gray-950"
+        />
 
-        {!result && ready && (
-          <p className="text-center text-sm text-gray-500 flex items-center justify-center gap-1.5">
-            <ScanLine size={15} /> {t('scan.aim')}
-          </p>
+        {!ready && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-gray-950 text-white">
+            <Spinner />
+            <p className="text-xs text-gray-300">{t('scan.preparingCamera')}</p>
+          </div>
         )}
 
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+          <div
+            className="aspect-square w-[min(72vw,18rem)] rounded-2xl border-2 border-white"
+            style={{ boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.48)' }}
+            aria-hidden="true"
+          />
+        </div>
+
+        <div
+          className="absolute inset-x-0 top-0 z-30 flex items-center gap-3 px-4 pb-4"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
+        >
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-colors hover:bg-black/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            aria-label={t('common.back')}
+          >
+            <ArrowLeft size={23} />
+          </button>
+          <div className="min-w-0 text-white">
+            <h1 className="truncate text-lg font-semibold">{t('scan.title')}</h1>
+            <p className="truncate text-xs text-white/75">{t('scan.subtitle')}</p>
+          </div>
+        </div>
+
+        <div
+          className="absolute inset-x-0 bottom-0 z-30 space-y-3 px-4 pt-10 text-center"
+          style={{
+            paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)',
+            background: 'linear-gradient(to top, rgba(0,0,0,.82), rgba(0,0,0,.48), transparent)',
+          }}
+        >
+          {ready && (
+            <p className="flex items-center justify-center gap-1.5 text-sm font-medium text-white">
+              <ScanLine size={17} /> {t('scan.aim')}
+            </p>
+          )}
+          <Button
+            variant="secondary"
+            className="w-full bg-white text-gray-900 hover:bg-gray-100"
+            loading={galleryBusy}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImagePlus size={18} /> {t('scan.galleryButton')}
+          </Button>
+        </div>
+      </div>
+
+      {result && (
+        <>
+          <GradientHeader title={t('scan.title')} subtitle={t('scan.subtitle')} back={() => navigate(-1)} />
+          <div className="space-y-4 px-4 pt-4">
+            {result.type === 'error' && errDetail && (
+              <div className="text-center space-y-1.5">
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  loading={galleryBusy}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImagePlus size={18} /> {t('scan.galleryButton')}
+                </Button>
+                <p className="text-xs text-gray-400">{t('scan.galleryHint')}</p>
+              </div>
+            )}
         {result && result.type === 'member' && (
           <Card className="p-5 flex flex-col items-center text-center gap-3 animate-fade-in-up">
             <Avatar name={result.member.name} src={result.member.photo_url} size="xl" />
@@ -416,7 +521,9 @@ export default function AttendanceScanPage() {
             </div>
           </Card>
         )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

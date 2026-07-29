@@ -86,7 +86,7 @@ export default function UserLayout() {
 
       {/* Bottom navigation — bar mengambang dengan tombol Scan menonjol (FAB) */}
       {!inPanel && (
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-surface/85 backdrop-blur-xl border-t border-gray-100/60 rounded-t-[1.75rem] shadow-[0_-4px_24px_rgba(2,32,71,0.08)] z-50 pb-[env(safe-area-inset-bottom)]">
+      <nav className="user-bottom-nav fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-surface/85 backdrop-blur-xl border-t border-gray-100/60 rounded-t-[1.75rem] shadow-[0_-4px_24px_rgba(2,32,71,0.08)] z-50 pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-end px-2">
           {LEFT_ITEMS.map(item => <NavItem key={item.to} {...item} />)}
 

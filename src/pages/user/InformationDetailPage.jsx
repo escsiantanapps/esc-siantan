@@ -1,16 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, MessageCircle, FileText, X } from 'lucide-react'
+import { Bell, MessageCircle, FileText } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
+import PdfViewerModal from '@/components/PdfViewerModal'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, waLink } from '@/lib/utils'
-
-function pdfEmbedUrl(url) {
-  const cleanUrl = String(url || '').split('#')[0]
-  return `${cleanUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`
-}
 
 export default function InformationDetailPage() {
   const { id } = useParams()
@@ -19,33 +15,16 @@ export default function InformationDetailPage() {
   const [news, setNews] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pdfViewer, setPdfViewer] = useState(null) // { url, name }
-  const [pdfLoading, setPdfLoading] = useState(false)
 
   useEffect(() => {
     newsService.getById(id).then(setNews).catch(() => {}).finally(() => setLoading(false))
   }, [id])
 
-  useEffect(() => {
-    if (!pdfViewer) return undefined
-
-    const previousOverflow = document.body.style.overflow
-    const closeOnEscape = (event) => {
-      if (event.key === 'Escape') setPdfViewer(null)
-    }
-
-    document.body.style.overflow = 'hidden'
-    document.addEventListener('keydown', closeOnEscape)
-
-    return () => {
-      document.body.style.overflow = previousOverflow
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [pdfViewer])
-
   function openPdf(file) {
-    setPdfLoading(true)
     setPdfViewer({ url: file.url, name: file.name })
   }
+
+  const closePdf = useCallback(() => setPdfViewer(null), [])
 
   return (
     <div className="pb-4">
@@ -73,7 +52,7 @@ export default function InformationDetailPage() {
               )}
               <MediaGallery photos={news.photo_urls} videos={news.video_urls} />
 
-              {/* Lampiran PDF — dibuka in-app (iframe) agar URL Supabase tidak terekspos */}
+              {/* Lampiran PDF dibuka melalui viewer PDF.js lokal di dalam aplikasi. */}
               {Array.isArray(news.pdf_files) && news.pdf_files.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-gray-500">{t('infoDetail.attachments')}</p>
@@ -109,44 +88,7 @@ export default function InformationDetailPage() {
         )}
       </div>
 
-      {/* Viewer native menjaga pinch-zoom, sementara fragmen PDF menyembunyikan toolbar bawaan. */}
-      {pdfViewer && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col bg-gray-950"
-          style={{ paddingTop: 'var(--safe-top, 0px)' }}
-          role="dialog"
-          aria-modal="true"
-          aria-label={pdfViewer.name}
-        >
-          <div className="flex min-h-14 items-center gap-3 border-b border-white/10 bg-gray-900 px-3 shrink-0">
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{pdfViewer.name}</p>
-            <button
-              type="button"
-              onClick={() => setPdfViewer(null)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gray-200 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              title={t('infoDetail.closePdf')}
-              aria-label={t('infoDetail.closePdf')}
-            >
-              <X size={20} />
-            </button>
-          </div>
-          <div className="relative min-h-0 flex-1 bg-gray-800">
-            {pdfLoading && (
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-gray-900 text-gray-200">
-                <Spinner />
-                <p className="text-sm">{t('infoDetail.loadingPdf')}</p>
-              </div>
-            )}
-            <iframe
-              src={pdfEmbedUrl(pdfViewer.url)}
-              title={pdfViewer.name}
-              className="h-full w-full border-0 bg-gray-100"
-              style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
-              onLoad={() => setPdfLoading(false)}
-            />
-          </div>
-        </div>
-      )}
+      {pdfViewer && <PdfViewerModal file={pdfViewer} onClose={closePdf} />}
     </div>
   )
 }
