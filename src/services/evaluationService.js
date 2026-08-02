@@ -16,6 +16,17 @@ export const evaluationService = {
 
   // baris evaluasi: user x form_template yang relevan untuknya
   async getEvaluation({ startDate, endDate, formId = '', ministryId = '', komselId = '', role = '' }) {
+    let queryStart = startDate
+    let queryEnd = endDate
+
+    // Jika input hanya YYYY-MM-DD, asumsikan batas hari di zona WIB (Asia/Jakarta)
+    if (typeof startDate === 'string' && startDate.length === 10) {
+      queryStart = new Date(`${startDate}T00:00:00+07:00`).toISOString()
+    }
+    if (typeof endDate === 'string' && endDate.length === 10) {
+      queryEnd = new Date(`${endDate}T23:59:59.999+07:00`).toISOString()
+    }
+
     // Pakai tasksService.getTemplates() supaya bentuk allowed_ministry &
     // category_ministry_ids KONSISTEN dgn semua tempat lain (TasksPage, dll).
     const allTemplates = await tasksService.getTemplates()
@@ -65,12 +76,19 @@ export const evaluationService = {
     const userIds = users.map(u => u.user_id)
     let responses = []
     if (formIds.length && userIds.length) {
-      const { data, error } = await supabase.from('form_responses')
-        .select('form_id, volunteer_id, submitted_at')
-        .in('form_id', formIds).in('volunteer_id', userIds)
-        .gte('submitted_at', startDate).lte('submitted_at', endDate)
-      if (error) throw error
-      responses = data
+      const limit = 1000
+      let from = 0
+      while (true) {
+        const { data, error } = await supabase.from('form_responses')
+          .select('form_id, volunteer_id, submitted_at')
+          .in('form_id', formIds).in('volunteer_id', userIds)
+          .gte('submitted_at', queryStart).lte('submitted_at', queryEnd)
+          .range(from, from + limit - 1)
+        if (error) throw error
+        responses = responses.concat(data)
+        if (data.length < limit) break
+        from += limit
+      }
     }
 
     // Anggota dengan izin DISETUJUI yang beririsan dengan periode evaluasi →
