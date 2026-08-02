@@ -885,7 +885,7 @@ export const certificatesService = {
 
   async getAll() {
     const { data, error } = await supabase
-      .from('certificates').select('*, users!user_id(name, phone)').order('issued_at', { ascending: false })
+      .from('certificates').select('*, users!certificates_user_id_fkey(name, phone)').order('issued_at', { ascending: false })
     if (error) throw error
     return data
   },
