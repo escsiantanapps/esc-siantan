@@ -45,7 +45,7 @@ export default function AttendanceScanPage() {
     ;(async () => {
       // Instansiasi pemindai sebelum meminta izin kamera. Dengan begitu foto
       // galeri tetap bisa dipindai ketika kamera tidak tersedia atau ditolak.
-      const { Html5Qrcode } = await import('html5-qrcode')
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
       if (cancelled) return
       const scanner = new Html5Qrcode('qr-reader', { verbose: false })
       scannerRef.current = scanner
@@ -97,22 +97,34 @@ export default function AttendanceScanPage() {
       if (cancelled) return
 
       // TANPA qrbox: seluruh frame kamera jadi area pindai (full).
-      const config = { fps: 10 }
+      // Tambahan: batasi hanya QR_CODE dan gunakan BarcodeDetector native (sangat membantu di iOS/Safari)
+      const config = { 
+        fps: 10,
+        useBarCodeDetectorIfSupported: true,
+        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+      }
 
       // Kandidat kamera, dicoba berurutan sampai ada yang berhasil start.
-      // Pilih lensa belakang UTAMA (1x) lebih dulu — HP multi-lensa sering
-      // memilih ultra-wide (0.5x). Hindari label ultra/tele/macro.
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document)
       const candidates = []
+      
+      // Di iOS Safari, meminta `deviceId` spesifik sering menyebabkan black screen
+      // atau freeze. Lebih aman membiarkan iOS memilih kamera default belakang lewat facingMode.
+      if (isIOS) {
+        candidates.push({ facingMode: 'environment' })
+      }
+
       try {
         const cams = await Html5Qrcode.getCameras()
         if (cams?.length) {
           const back = cams.filter(c => /back|rear|environment|belakang/i.test(c.label))
           const pool = back.length ? back : cams
           const main = pool.find(c => !/(ultra|0\.5|tele|macro|depth|monochrome|fisheye)/i.test(c.label)) || pool[0]
-          if (main?.id) candidates.push({ deviceId: { exact: main.id } })
+          if (main?.id && !isIOS) candidates.push({ deviceId: { exact: main.id } })
         }
       } catch { /* enumerasi gagal — fallback facingMode di bawah */ }
-      candidates.push({ facingMode: { ideal: 'environment' } })
+      
+      if (!isIOS) candidates.push({ facingMode: { ideal: 'environment' } })
       candidates.push({ facingMode: 'environment' })
       candidates.push({ facingMode: 'user' })
       candidates.push({}) // Fallback terakhir: kamera apa pun yang tersedia

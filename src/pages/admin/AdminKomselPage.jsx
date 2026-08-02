@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Users, Plus, Pencil, Trash2, X, Eye, Crown, Search, UserPlus, Tag, CalendarCheck, ChevronDown } from 'lucide-react'
+import { Users, Plus, Pencil, Trash2, X, Eye, Crown, Search, UserPlus, Tag, CalendarCheck, ChevronDown, Printer } from 'lucide-react'
 import { komselService, komselCategoriesService } from '@/services/contentService'
+import { printArchive } from '@/lib/printDoc'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { useAuth } from '@/hooks/useAuth'
@@ -423,10 +424,41 @@ export default function AdminKomselPage() {
       {/* ── Section: Rekap Absensi Sesi Komsel per Bulan ── */}
       {!loading && komsel.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1.5">
-            <CalendarCheck size={16} className="text-teal-500" /> Rekap Absensi Sesi Komsel
-          </h2>
-          <p className="text-xs text-gray-400 mb-3">Kehadiran anggota dari sesi absensi QR yang dibuat PKS, dirangkum per bulan.</p>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1.5">
+                <CalendarCheck size={16} className="text-teal-500" /> Rekap Absensi Sesi Komsel
+              </h2>
+              <p className="text-xs text-gray-400">Kehadiran anggota dari sesi absensi QR yang dibuat PKS, dirangkum per bulan.</p>
+            </div>
+            {recap && recap.sessions.length > 0 && (
+              <Button size="sm" variant="outline" onClick={() => {
+                const selKomsel = komsel.find(k => k.komsel_id === recapKomselId)
+                const monthLabel = formatDate(recapMonth + '-01', 'MMMM yyyy')
+                printArchive({
+                  title: 'Rekap Kehadiran Komsel',
+                  heading: selKomsel ? selKomsel.name : '',
+                  meta: [
+                    ['Bulan', monthLabel],
+                    ['Total Sesi', `${recap.sessions.length} Sesi`],
+                    ['Total Kehadiran', `${recap.total} Kehadiran`]
+                  ],
+                  sections: [
+                    {
+                      title: 'Daftar Hadir Anggota',
+                      tableHeaders: ['Nama Anggota', 'Jumlah Kehadiran', 'Persentase'],
+                      tableData: recap.byMember.map(m => {
+                        const pct = Math.round((m.count / recap.sessions.length) * 100)
+                        return [m.name, `${m.count} dari ${recap.sessions.length} sesi`, `${pct}%`]
+                      })
+                    }
+                  ]
+                })
+              }}>
+                <Printer size={15} className="mr-1.5" /> Cetak PDF
+              </Button>
+            )}
+          </div>
 
           <Card className="p-4 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

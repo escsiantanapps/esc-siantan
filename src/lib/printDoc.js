@@ -25,6 +25,10 @@ export function printArchive({ title, heading, meta = [], sections = [], documen
   const sectionsHtml = sections.map(s => `
     ${s.title ? `<h2>${esc(s.title)}</h2>` : ''}
     ${s.rows?.length ? `<table class="data">${s.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v || '-')}</td></tr>`).join('')}</table>` : ''}
+    ${s.tableData?.length ? `<table class="grid-table">
+      ${s.tableHeaders?.length ? `<thead><tr>${s.tableHeaders.map(th => `<th>${esc(th)}</th>`).join('')}</tr></thead>` : ''}
+      <tbody>${s.tableData.map(tr => `<tr>${tr.map(td => `<td>${esc(td)}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>` : ''}
     ${s.text ? `<p class="para">${esc(s.text)}</p>` : ''}
   `).join('')
 
@@ -51,6 +55,9 @@ export function printArchive({ title, heading, meta = [], sections = [], documen
   table.data { width: 100%; border-collapse: collapse; font-size: 12px; }
   table.data th, table.data td { border: 1px solid #e5e7eb; padding: 5px 8px; text-align: left; vertical-align: top; }
   table.data th { background: #f3f4f6; width: 38%; font-weight: 600; }
+  table.grid-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  table.grid-table th, table.grid-table td { border: 1px solid #e5e7eb; padding: 5px 8px; text-align: left; vertical-align: top; }
+  table.grid-table th { background: #f3f4f6; font-weight: 600; }
   .para { font-size: 12px; white-space: pre-line; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; }
   .docs { font-size: 12px; padding-left: 18px; }
   .docs a { color: #C62F14; word-break: break-all; }

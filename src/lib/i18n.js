@@ -22,6 +22,7 @@ export const translations = {
     'greeting.night': 'Selamat malam',
     'sky.sheepGreeting': 'Hai, {name}!',
     'sky.sheepFriend': 'teman',
+    'sky.sheepGreetingAction': 'Sapa domba',
 
     // Halaman profil
     'profile.settings': 'Pengaturan',
@@ -1447,6 +1448,7 @@ export const translations = {
     'greeting.night': 'Good night',
     'sky.sheepGreeting': 'Hi, {name}!',
     'sky.sheepFriend': 'friend',
+    'sky.sheepGreetingAction': 'Greet the sheep',
 
     'profile.settings': 'Settings',
     'profile.settingsDesc': 'Dark mode, notifications, change password',

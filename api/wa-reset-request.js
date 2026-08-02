@@ -64,7 +64,7 @@ export default async function handler(req, res) {
     const fr = await fetch('https://api.fonnte.com/send', {
       method: 'POST',
       headers: { Authorization: FONNTE_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ target, message, countryCode: '62' }),
+      body: new URLSearchParams({ target, message }),
     })
     const fj = await fr.json().catch(() => ({}))
     if (!fr.ok || fj.status === false) {

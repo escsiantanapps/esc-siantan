@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sun, Moon, Star } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
 
@@ -27,31 +27,17 @@ export default function SkyTime({ name = '' }) {
   const { lang, t } = useLang()
   const [now, setNow] = useState(new Date())
   const [sheepSaysHello, setSheepSaysHello] = useState(false)
+  const helloTimerRef = useRef(null)
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30 * 1000)
     return () => clearInterval(id)
   }, [])
 
-  // Sapaan pendek dan berjeda acak membuat domba terasa hidup tanpa menutupi
-  // informasi profil terus-menerus. Preferensi reduced motion dihormati.
+  // Bersihkan timer bila pengguna berpindah halaman sebelum sapaan berakhir.
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
-    let helloTimer
-    let hideTimer
-    const scheduleHello = () => {
-      helloTimer = window.setTimeout(() => {
-        setSheepSaysHello(true)
-        hideTimer = window.setTimeout(() => {
-          setSheepSaysHello(false)
-          scheduleHello()
-        }, 5200)
-      }, 14000 + Math.random() * 18000)
-    }
-    scheduleHello()
     return () => {
-      window.clearTimeout(helloTimer)
-      window.clearTimeout(hideTimer)
+      window.clearTimeout(helloTimerRef.current)
     }
   }, [])
 
@@ -64,6 +50,12 @@ export default function SkyTime({ name = '' }) {
   const time = now.toLocaleTimeString(lang === 'en' ? 'en-GB' : 'id-ID', { hour: '2-digit', minute: '2-digit' })
   const sheepName = String(name || '').trim().split(' ')[0] || t('sky.sheepFriend')
   const sheepGreeting = t('sky.sheepGreeting', { name: sheepName })
+
+  function handleSheepHello() {
+    window.clearTimeout(helloTimerRef.current)
+    setSheepSaysHello(true)
+    helloTimerRef.current = window.setTimeout(() => setSheepSaysHello(false), 4200)
+  }
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -161,8 +153,8 @@ export default function SkyTime({ name = '' }) {
       {!isDay && (
         <>
           <div className="absolute bottom-2 right-[4rem] sky-sheep-wander">
-            <div className={sheepSaysHello ? 'sky-sheep-hello relative' : 'relative'}>
-              {sheepSaysHello && <span aria-hidden="true" className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{sheepGreeting}</span>}
+            <div className="relative">
+              {sheepSaysHello && <span aria-hidden="true" className="sky-sheep-greeting absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{sheepGreeting}</span>}
               <Sheep className="origin-bottom sky-sheep-graze drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
             </div>
           </div>
@@ -188,8 +180,8 @@ export default function SkyTime({ name = '' }) {
       {isDay && (
         <>
           <div className="absolute bottom-2 right-[8rem] sky-sheep-wander">
-            <div className={sheepSaysHello ? 'sky-sheep-hello relative' : 'relative'}>
-              {sheepSaysHello && <span aria-hidden="true" className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{sheepGreeting}</span>}
+            <div className="relative">
+              {sheepSaysHello && <span aria-hidden="true" className="sky-sheep-greeting absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{sheepGreeting}</span>}
               <Sheep className="origin-bottom sky-sheep-graze drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
             </div>
           </div>
@@ -211,6 +203,8 @@ export default function SkyTime({ name = '' }) {
         <p className="text-xs font-medium text-white/90">{greeting}</p>
         <p className="text-2xl font-bold font-display tabular-nums leading-tight">{time}</p>
       </div>
+
+      <button type="button" onClick={handleSheepHello} className="absolute inset-0 pointer-events-auto cursor-pointer" aria-label={t('sky.sheepGreetingAction')} />
     </div>
   )
 }

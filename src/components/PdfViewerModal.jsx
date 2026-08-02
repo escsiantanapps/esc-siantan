@@ -142,6 +142,28 @@ export default function PdfViewerModal({
   const [turnDirection, setTurnDirection] = useState('next')
   const touchStartRef = useRef(null)
 
+  const [jumpPage, setJumpPage] = useState('')
+
+  useEffect(() => {
+    setJumpPage(String(currentPage))
+  }, [currentPage])
+
+  function handleJumpSubmit(e) {
+    e?.preventDefault?.()
+    let p = parseInt(jumpPage, 10)
+    if (isNaN(p)) {
+      setJumpPage(String(currentPage))
+      return
+    }
+    p = Math.min(Math.max(p, 1), pdf?.numPages || 1)
+    if (p !== currentPage) {
+      setTurnDirection(p > currentPage ? 'next' : 'previous')
+      setCurrentPage(p)
+    } else {
+      setJumpPage(String(currentPage))
+    }
+  }
+
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
     const previousFocus = document.activeElement
@@ -383,9 +405,22 @@ export default function PdfViewerModal({
             <ChevronLeft size={20} />
             <span className="hidden min-[360px]:inline">{t('infoDetail.previousPdfPage')}</span>
           </button>
-          <span className="text-sm font-semibold tabular-nums text-white" aria-live="polite">
-            {t('infoDetail.pdfPageOf', { page: currentPage, total: pdf.numPages })}
-          </span>
+          <form onSubmit={handleJumpSubmit} className="flex items-center justify-center shrink-0">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={pdf?.numPages || 1}
+              value={jumpPage}
+              onChange={(e) => setJumpPage(e.target.value)}
+              onBlur={handleJumpSubmit}
+              className="w-12 rounded bg-white/10 px-1 py-1 text-center text-sm font-semibold tabular-nums text-white focus:bg-white/20 focus:outline-none"
+              aria-label="Lompat ke halaman"
+              title="Ketik angka lalu tekan enter untuk lompat halaman"
+            />
+            <span className="px-1.5 text-sm font-semibold text-gray-400">/</span>
+            <span className="text-sm font-semibold tabular-nums text-white">{pdf.numPages}</span>
+          </form>
           <button
             type="button"
             onClick={() => turnPage(1)}
