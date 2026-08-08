@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Camera } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { Card } from '@/components/ui'
 
 // Terinstal ke layar utama (Add to Home Screen) via Chrome = WebAPK di Android.
@@ -11,6 +12,12 @@ import { Card } from '@/components/ui'
 // mempan" bagi user yang membuka app dari ikon layar utama, bukan dari tab
 // Chrome biasa. Jalur perbaikan yang benar utk kasus ini ada di OS, bukan
 // browser.
+function isIOSDevice() {
+  if (typeof navigator === 'undefined') return false
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.userAgent.includes('Mac') && 'ontouchend' in document)
+}
+
 function isStandalonePwa() {
   if (typeof window === 'undefined') return false
   return window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true
@@ -25,10 +32,12 @@ function isStandalonePwa() {
 //     kasih tahu cara mencabut manual)
 export default function CameraToggle() {
   const { toast } = useToast()
+  const { t } = useLang()
   const [state, setState] = useState('unknown') // 'granted' | 'denied' | 'prompt' | 'unsupported' | 'unknown'
   const [busy, setBusy] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [standalone] = useState(isStandalonePwa)
+  const [iosDevice] = useState(isIOSDevice)
 
   useEffect(() => {
     let cancelled = false
@@ -142,7 +151,15 @@ export default function CameraToggle() {
       {showHelp && (state === 'denied' || state === 'granted') && (
         <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-600">
           {state === 'denied' ? (
-            standalone ? (
+            iosDevice ? (
+              <>
+                <p className="font-semibold text-gray-800 mb-2">{t('scan.iosHelpTitle')}</p>
+                <p className="text-[11px]">{t('scan.iosSafariHelp')}</p>
+                {standalone && (
+                  <p className="text-[11px] mt-2">{t('scan.iosPwaHelp')}</p>
+                )}
+              </>
+            ) : standalone ? (
               <>
                 <p className="font-semibold text-gray-800 mb-2">Kenapa reset di Chrome tidak berpengaruh?</p>
                 <p className="text-[11px] mb-3">

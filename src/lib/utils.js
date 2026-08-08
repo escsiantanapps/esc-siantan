@@ -130,7 +130,7 @@ export function validateUpload(file, { maxMB = 5, image = false, allowedExts = n
 // Kompres + perkecil gambar di sisi klien sebelum upload (hemat storage).
 // Non-gambar (mis. PDF) dikembalikan apa adanya. Aman: kalau gagal/lebih besar,
 // kembalikan file asli.
-export async function compressImage(file, { maxDim = 1280, quality = 0.8 } = {}) {
+export async function compressImage(file, { maxDim = 1280, quality = 0.8, targetKB = 0 } = {}) {
   if (!file || !file.type?.startsWith('image/') || file.type === 'image/gif') return file
   try {
     const bitmap = await createImageBitmap(file)
@@ -146,9 +146,16 @@ export async function compressImage(file, { maxDim = 1280, quality = 0.8 } = {})
     ctx.drawImage(bitmap, 0, 0, width, height)
     bitmap.close?.()
 
-    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality))
+    let currentQuality = quality
+    let blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', currentQuality))
+    // Turunkan kualitas bertahap bila pemanggil menentukan ukuran target. Ini menjaga
+    // foto tetap layak dilihat tanpa membiarkan tiap barang memenuhi Storage.
+    while (blob && targetKB > 0 && blob.size > targetKB * 1024 && currentQuality > 0.5) {
+      currentQuality = Math.max(0.5, currentQuality - 0.08)
+      blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', currentQuality))
+    }
     if (!blob || blob.size >= file.size) return file // jangan perbesar
-    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' })
+    return new File([blob], file.name.replace(/[.][^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
   } catch {
     return file // browser lama / gagal decode → pakai file asli
   }

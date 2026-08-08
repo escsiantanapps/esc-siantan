@@ -55,6 +55,11 @@ export const BACKUP_TABLES = [
   { table: 'point_transactions', sheet: 'Transaksi Poin' },
   { table: 'redeemable_products', sheet: 'Produk Tukar Poin' },
   { table: 'redemption_tickets', sheet: 'Tiket Penukaran' },
+  // ── Inventory ──
+  { table: 'inventory_categories', sheet: 'Kategori Inventory' },
+  { table: 'inventory_items', sheet: 'Barang Inventory' },
+  { table: 'inventory_transactions', sheet: 'Transaksi Inventory' },
+  { table: 'inventory_loans', sheet: 'Peminjaman Inventory' },
   // ── Sistem ──
   { table: 'app_settings', sheet: 'Pengaturan App' },
   { table: 'admin_user_permissions', sheet: 'Hak Akses Admin' },

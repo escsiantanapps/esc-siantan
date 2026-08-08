@@ -15,6 +15,8 @@ function Spin({ light }) {
 export default function Uploader({
   kind = 'file', value, onFile, onClear, uploading,
   label, hint, accept, required, crop = false, aspect = 16 / 9,
+  uploadLabel = 'Unggah Foto', replaceLabel = 'Ganti Foto',
+  removeLabel = 'Hapus foto', uploadingLabel = 'Mengunggah...', imageAlt = '',
 }) {
   const inputRef = useRef(null)
   const [pendingFile, setPendingFile] = useState(null)
@@ -47,16 +49,16 @@ export default function Uploader({
       {kind === 'image' ? (
         value ? (
           <div className="relative h-40 rounded-2xl overflow-hidden border border-gray-100">
-            <img src={value} alt="" className="w-full h-full object-cover" />
+            <img src={value} alt={imageAlt} className="w-full h-full object-cover" />
             {uploading && (
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><Spin light /></div>
             )}
             <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 p-2 bg-gradient-to-t from-black/60 to-transparent">
               <button type="button" onClick={pick} className="text-xs font-medium text-white bg-white/20 hover:bg-white/30 backdrop-blur px-3 py-1.5 rounded-lg transition-colors">
-                Ganti Foto
+                {replaceLabel}
               </button>
               {onClear && (
-                <button type="button" onClick={onClear} aria-label="Hapus foto" className="w-7 h-7 rounded-lg bg-white/20 hover:bg-red-500/80 text-white flex items-center justify-center transition-colors">
+                <button type="button" onClick={onClear} aria-label={removeLabel} className="w-7 h-7 rounded-lg bg-white/20 hover:bg-red-500/80 text-white flex items-center justify-center transition-colors">
                   <X size={14} />
                 </button>
               )}
@@ -72,7 +74,7 @@ export default function Uploader({
                 <UploadCloud size={22} />
               </div>
             )}
-            <span className="text-sm font-medium text-gray-600">{uploading ? 'Mengunggah...' : 'Unggah Foto'}</span>
+            <span className="text-sm font-medium text-gray-600">{uploading ? uploadingLabel : uploadLabel}</span>
             <span className="text-xs text-gray-400">{hint || 'Ketuk untuk ambil/pilih foto'}</span>
           </button>
         )

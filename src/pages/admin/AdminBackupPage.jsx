@@ -329,7 +329,7 @@ export default function AdminBackupPage() {
     setArchiving(true)
     setArchiveResult(null)
     try {
-      const BUCKETS = ['profile-photos', 'task-files', 'documents']
+      const BUCKETS = ['profile-photos', 'task-files', 'documents', 'inventory-photos']
       const zip = new JSZip()
       let totalFiles = 0
       let failedFiles = 0
@@ -878,7 +878,7 @@ export default function AdminBackupPage() {
           )}
 
           <div className="bg-amber-50 rounded-xl px-3 py-2.5 mb-3 text-xs text-amber-700">
-            Bucket yang diarsipkan: <span className="font-medium">profile-photos</span>, <span className="font-medium">task-files</span>, <span className="font-medium">documents</span>. File besar — proses bisa memakan waktu beberapa menit tergantung koneksi.
+            Bucket yang diarsipkan: <span className="font-medium">profile-photos</span>, <span className="font-medium">task-files</span>, <span className="font-medium">documents</span>, <span className="font-medium">inventory-photos</span>. File besar — proses bisa memakan waktu beberapa menit tergantung koneksi.
           </div>
 
           <Button onClick={handleArchiveStorage} loading={archiving} disabled={archiving} variant="outline" className="w-full">

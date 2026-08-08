@@ -288,20 +288,32 @@ export default function AdminKomselPage() {
     setRecapLoading(true)
     setOpenSessionId(null)
     try {
-      const sessions = await komselService.getSessionsInMonth(komselId, ym)
+      const [sessions, members] = await Promise.all([
+        komselService.getSessionsInMonth(komselId, ym),
+        komselService.getMembers(komselId),
+      ])
       const rows = await komselService.getAttendanceForSessions(sessions.map(s => s.session_id))
-      // Hitung kehadiran per anggota + lampirkan daftar hadir ke tiap sesi.
-      const byMemberMap = new Map()
+      // Awali dari seluruh anggota aktif supaya laporan tetap menunjukkan anggota
+      // dengan nol kehadiran, bukan hanya anggota yang pernah memindai QR.
+      const byMemberMap = new Map(members.map(member => [
+        member.user_id,
+        { user_id: member.user_id, name: member.name || '-', photo_url: member.photo_url, count: 0 },
+      ]))
       const perSession = {}
       for (const r of rows) {
         (perSession[r.session_id] ||= []).push(r)
+        // Pertahankan data kehadiran historis bila orangnya sudah tidak tercatat
+        // sebagai anggota aktif pada saat laporan dibuka.
         const cur = byMemberMap.get(r.user_id) || { user_id: r.user_id, name: r.users?.name || '-', photo_url: r.users?.photo_url, count: 0 }
         cur.count += 1
         byMemberMap.set(r.user_id, cur)
       }
       const byMember = [...byMemberMap.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-      const withRows = sessions.map(s => ({ ...s, attendees: perSession[s.session_id] || [] }))
-      setRecap({ sessions: withRows, byMember, total: rows.length })
+      const withRows = sessions.map(s => ({
+        ...s,
+        attendees: (perSession[s.session_id] || []).sort((a, b) => (a.users?.name || '').localeCompare(b.users?.name || '')),
+      }))
+      setRecap({ sessions: withRows, byMember, total: rows.length, memberCount: members.length })
     } catch {
       setRecap(null)
     } finally {
@@ -320,10 +332,75 @@ export default function AdminKomselPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recapKomselId, recapMonth])
 
+  function printRecap() {
+    if (!recap || recap.sessions.length === 0) return
+
+    const selectedKomsel = komsel.find(item => item.komsel_id === recapKomselId)
+    const monthLabel = formatDate(recapMonth + '-01', 'MMMM yyyy')
+    const pksNames = leaderMap[recapKomselId]?.length
+      ? leaderMap[recapKomselId].join(', ')
+      : t('akom.pksNone')
+    const memberRows = recap.byMember.map((member, index) => {
+      const percentage = Math.round((member.count / recap.sessions.length) * 100)
+      return [
+        index + 1,
+        member.name,
+        t('akom.recapReportAttendanceValue', { count: member.count, total: recap.sessions.length }),
+        `${percentage}%`,
+      ]
+    })
+    const sessionSections = recap.sessions.map((session, index) => ({
+      title: t('akom.recapReportSessionTitle', { n: index + 1, title: session.title }),
+      rows: [
+        [t('akom.recapReportDate'), formatDate(session.session_date)],
+        [t('akom.recapReportTotalAttendees'), session.attendees.length],
+      ],
+      tableHeaders: session.attendees.length
+        ? [t('akom.recapReportNo'), t('akom.recapReportMemberName')]
+        : undefined,
+      tableData: session.attendees.length
+        ? session.attendees.map((row, attendeeIndex) => [attendeeIndex + 1, row.users?.name || '-'])
+        : undefined,
+      text: session.attendees.length === 0 ? t('akom.recapReportNoAttendees') : undefined,
+    }))
+
+    printArchive({
+      title: t('akom.recapReportTitle'),
+      heading: selectedKomsel?.name || '',
+      meta: [
+        [t('akom.recapReportMonth'), monthLabel],
+        [t('akom.recapReportPks'), pksNames],
+      ],
+      summary: [
+        { value: recap.sessions.length, label: t('akom.recapReportSessions') },
+        { value: recap.total, label: t('akom.recapReportAttendances') },
+        { value: recap.memberCount, label: t('akom.recapReportMembers') },
+      ],
+      sections: [
+        {
+          title: t('akom.recapReportMemberSection'),
+          tableHeaders: [
+            t('akom.recapReportNo'),
+            t('akom.recapReportMemberName'),
+            t('akom.recapReportAttendance'),
+            t('akom.recapReportPercentage'),
+          ],
+          tableData: memberRows,
+          text: memberRows.length === 0 ? t('akom.recapReportNoMembers') : undefined,
+        },
+        ...sessionSections,
+      ],
+      footer: t('akom.recapReportPrinted', {
+        date: formatDate(new Date(), 'd MMMM yyyy, HH:mm'),
+        n: recap.memberCount,
+      }),
+    })
+  }
+
   async function deleteSession(session) {
     const ok = await confirm({
-      title: 'Hapus sesi absensi?',
-      message: `Sesi "${session.title}" beserta data kehadirannya akan dihapus permanen.`,
+      title: t('akom.recapDeleteTitle'),
+      message: t('akom.recapDeleteMessage', { title: session.title }),
       confirmText: t('a.delete'), danger: true,
     })
     if (!ok) return
@@ -331,7 +408,7 @@ export default function AdminKomselPage() {
       await komselService.deleteSession(session.session_id)
       if (openSessionId === session.session_id) setOpenSessionId(null)
       loadRecap(recapKomselId, recapMonth)
-      toast.success('Sesi dihapus.')
+      toast.success(t('akom.recapDeleted'))
     } catch (err) {
       toast.error(err.message || t('akom.deleteFailed'))
     }
@@ -424,54 +501,36 @@ export default function AdminKomselPage() {
       {/* ── Section: Rekap Absensi Sesi Komsel per Bulan ── */}
       {!loading && komsel.length > 0 && (
         <div className="mt-8">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-3">
             <div>
               <h2 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1.5">
-                <CalendarCheck size={16} className="text-teal-500" /> Rekap Absensi Sesi Komsel
+                <CalendarCheck size={16} className="text-teal-500" /> {t('akom.recapTitle')}
               </h2>
-              <p className="text-xs text-gray-400">Kehadiran anggota dari sesi absensi QR yang dibuat PKS, dirangkum per bulan.</p>
+              <p className="text-xs text-gray-400">{t('akom.recapSubtitle')}</p>
             </div>
-            {recap && recap.sessions.length > 0 && (
-              <Button size="sm" variant="outline" onClick={() => {
-                const selKomsel = komsel.find(k => k.komsel_id === recapKomselId)
-                const monthLabel = formatDate(recapMonth + '-01', 'MMMM yyyy')
-                printArchive({
-                  title: 'Rekap Kehadiran Komsel',
-                  heading: selKomsel ? selKomsel.name : '',
-                  meta: [
-                    ['Bulan', monthLabel],
-                    ['Total Sesi', `${recap.sessions.length} Sesi`],
-                    ['Total Kehadiran', `${recap.total} Kehadiran`]
-                  ],
-                  sections: [
-                    {
-                      title: 'Daftar Hadir Anggota',
-                      tableHeaders: ['Nama Anggota', 'Jumlah Kehadiran', 'Persentase'],
-                      tableData: recap.byMember.map(m => {
-                        const pct = Math.round((m.count / recap.sessions.length) * 100)
-                        return [m.name, `${m.count} dari ${recap.sessions.length} sesi`, `${pct}%`]
-                      })
-                    }
-                  ]
-                })
-              }}>
-                <Printer size={15} className="mr-1.5" /> Cetak PDF
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="self-start shrink-0"
+              disabled={recapLoading || !recap || recap.sessions.length === 0}
+              onClick={printRecap}
+            >
+              <Printer size={15} /> {t('akom.recapPrint')}
+            </Button>
           </div>
 
           <Card className="p-4 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Select label="Komsel" value={recapKomselId} onChange={e => setRecapKomselId(e.target.value)}>
+              <Select label={t('akom.recapKomselLabel')} value={recapKomselId} onChange={e => setRecapKomselId(e.target.value)}>
                 {komsel.map(k => <option key={k.komsel_id} value={k.komsel_id}>{k.name}</option>)}
               </Select>
-              <Input label="Bulan" type="month" value={recapMonth} onChange={e => setRecapMonth(e.target.value)} />
+              <Input label={t('akom.recapMonthLabel')} type="month" value={recapMonth} onChange={e => setRecapMonth(e.target.value)} />
             </div>
 
             {recapLoading && <div className="flex justify-center py-8"><Spinner /></div>}
 
             {!recapLoading && recap && recap.sessions.length === 0 && (
-              <EmptyState icon={CalendarCheck} title="Belum ada sesi bulan ini" description="Tidak ada sesi absensi QR pada komsel & bulan ini." />
+              <EmptyState icon={CalendarCheck} title={t('akom.recapNoSessions')} description={t('akom.recapNoSessionsDesc')} />
             )}
 
             {!recapLoading && recap && recap.sessions.length > 0 && (
@@ -480,26 +539,28 @@ export default function AdminKomselPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="rounded-xl bg-teal-50 p-3 text-center">
                     <p className="text-2xl font-bold text-teal-600">{recap.sessions.length}</p>
-                    <p className="text-[11px] text-gray-500">sesi bulan ini</p>
+                    <p className="text-[11px] text-gray-500">{t('akom.recapSessionsThisMonth')}</p>
                   </div>
                   <div className="rounded-xl bg-brand-50 p-3 text-center">
                     <p className="text-2xl font-bold text-brand-600">{recap.total}</p>
-                    <p className="text-[11px] text-gray-500">total kehadiran</p>
+                    <p className="text-[11px] text-gray-500">{t('akom.recapTotalAttendance')}</p>
                   </div>
                 </div>
 
                 {/* Rekap per anggota */}
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-2">Kehadiran per Anggota</p>
+                  <p className="text-xs font-semibold text-gray-500 mb-2">{t('akom.recapAttendancePerMember')}</p>
                   {recap.byMember.length === 0 ? (
-                    <p className="text-xs text-gray-400">Belum ada anggota yang memindai sesi bulan ini.</p>
+                    <p className="text-xs text-gray-400">{t('akom.recapNoMembers')}</p>
                   ) : (
                     <div className="divide-y divide-gray-100">
                       {recap.byMember.map(m => (
                         <div key={m.user_id} className="flex items-center gap-3 py-2">
                           <Avatar name={m.name} src={m.photo_url} size="sm" />
                           <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                          <Badge color="green">{m.count}/{recap.sessions.length} hadir</Badge>
+                          <Badge color={m.count > 0 ? 'green' : 'gray'}>
+                            {t('akom.recapAttendanceCount', { count: m.count, total: recap.sessions.length })}
+                          </Badge>
                         </div>
                       ))}
                     </div>
@@ -508,7 +569,7 @@ export default function AdminKomselPage() {
 
                 {/* Daftar sesi (bisa dibuka utk lihat peserta) */}
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-2">Daftar Sesi</p>
+                  <p className="text-xs font-semibold text-gray-500 mb-2">{t('akom.recapSessionList')}</p>
                   <div className="space-y-2">
                     {recap.sessions.map(s => {
                       const open = openSessionId === s.session_id
@@ -519,7 +580,9 @@ export default function AdminKomselPage() {
                               <ChevronDown size={15} className={`text-gray-300 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
                               <div className="min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{s.title}</p>
-                                <p className="text-xs text-gray-400">{formatDate(s.session_date)} · {s.attendees.length} hadir</p>
+                                <p className="text-xs text-gray-400">
+                                  {t('akom.recapSessionAttendance', { date: formatDate(s.session_date), count: s.attendees.length })}
+                                </p>
                               </div>
                             </button>
                             {!isGembala && (
@@ -529,14 +592,14 @@ export default function AdminKomselPage() {
                           {open && (
                             <div className="px-3 pb-3 border-t border-gray-100 pt-2">
                               {s.attendees.length === 0 ? (
-                                <p className="text-xs text-gray-400 py-1">Belum ada anggota yang memindai sesi ini.</p>
+                                <p className="text-xs text-gray-400 py-1">{t('akom.recapNoSessionScans')}</p>
                               ) : (
                                 <div className="space-y-1.5">
                                   {s.attendees.map(r => (
                                     <div key={r.user_id} className="flex items-center gap-2.5">
                                       <Avatar name={r.users?.name} src={r.users?.photo_url} size="sm" />
                                       <p className="text-sm text-gray-800 truncate flex-1">{r.users?.name || '-'}</p>
-                                      <Badge color="green">Hadir</Badge>
+                                      <Badge color="green">{t('akom.recapPresent')}</Badge>
                                     </div>
                                   ))}
                                 </div>

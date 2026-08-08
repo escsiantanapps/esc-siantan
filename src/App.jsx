@@ -84,6 +84,7 @@ const AdminBooksPage = lazy(() => import('@/pages/admin/AdminBooksPage'))
 const AdminSundayPage = lazy(() => import('@/pages/admin/AdminSundayPage'))
 const AdminMessagesPage = lazy(() => import('@/pages/admin/AdminMessagesPage'))
 const AdminMinistrySchedulePage = lazy(() => import('@/pages/admin/AdminMinistrySchedulePage'))
+const AdminInventoryPage = lazy(() => import('@/pages/admin/AdminInventoryPage'))
 
 // Layouts
 import UserLayout from '@/layouts/UserLayout'
@@ -240,6 +241,7 @@ export default function App() {
             <Route path="ibadah-minggu"        element={<AdminSundayPage />} />
             <Route path="pelayanan"            element={<AdminMinistrySchedulePage />} />
             <Route path="pesan"                element={<AdminMessagesPage />} />
+            <Route path="inventory"            element={<AdminInventoryPage />} />
             <Route path="hak-akses"            element={<AdminPermissionsPage />} />
             <Route path="backup"               element={<AdminBackupPage />} />
             <Route path="audit"                element={<AdminAuditPage />} />

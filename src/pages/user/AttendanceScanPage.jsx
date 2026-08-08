@@ -20,8 +20,49 @@ const MEMBER_PREFIX = 'ESC-MEMBER:'
 const VOLUNTEER_PREFIX = 'ESC-VOLUNTEER:'
 const KNOWN_PREFIXES = [CLASS_PREFIX, EVENT_PREFIX, KOMSEL_PREFIX, SUNDAY_PREFIX, REDEEM_PREFIX, MEMBER_PREFIX, VOLUNTEER_PREFIX]
 
+function isIOSDevice() {
+  if (typeof navigator === 'undefined') return false
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.userAgent.includes('Mac') && 'ontouchend' in document)
+}
+
+function isStandalonePwa() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia?.('(display-mode: standalone)')?.matches
+    || window.navigator.standalone === true
+}
+
+function normalizeCameraError(error) {
+  const message = error?.message || String(error || '')
+  let name = error?.name || 'Error'
+  if (/notallowed|permission denied|permission dismissed/i.test(`${name} ${message}`)) name = 'NotAllowedError'
+  else if (/notfound|requested device not found/i.test(`${name} ${message}`)) name = 'NotFoundError'
+  else if (/notreadable|could not start video source|track starter failed/i.test(`${name} ${message}`)) name = 'NotReadableError'
+  return { name, message }
+}
+
+async function startCameraWithTimeout(scanner, camera, config, onSuccess, timeoutMs = 12000) {
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = window.setTimeout(() => {
+      const error = new Error('camera_start_timeout')
+      error.name = 'CameraTimeoutError'
+      reject(error)
+    }, timeoutMs)
+  })
+
+  try {
+    return await Promise.race([
+      scanner.start(camera, config, onSuccess, () => {}),
+      timeout,
+    ])
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 export default function AttendanceScanPage() {
-  const { profile, isAdmin, isPKS } = useAuth()
+  const { profile, isAdmin, isPKS, refreshProfile } = useAuth()
   const navigate = useNavigate()
   const { t } = useLang()
   const [ready, setReady] = useState(false)
@@ -43,91 +84,54 @@ export default function AttendanceScanPage() {
     setReady(false)
 
     ;(async () => {
-      // Instansiasi pemindai sebelum meminta izin kamera. Dengan begitu foto
-      // galeri tetap bisa dipindai ketika kamera tidak tersedia atau ditolak.
+      // Konfigurasi format dan decoder memang merupakan opsi constructor pada
+      // html5-qrcode 2.3.8, bukan opsi scanner.start().
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
       if (cancelled) return
-      const scanner = new Html5Qrcode('qr-reader', { verbose: false })
+      const scanner = new Html5Qrcode('qr-reader', {
+        verbose: false,
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        useBarCodeDetectorIfSupported: true,
+      })
       scannerRef.current = scanner
 
-      // Pra-cek: HTTPS wajib untuk mengakses kamera (kecuali localhost). Chrome
-      // memblokir tanpa error yang jelas kalau situs di-load via HTTP.
       if (typeof window !== 'undefined' && !window.isSecureContext) {
-        setErrDetail('Perlu HTTPS. Buka lewat https:// (bukan http://).')
+        setErrDetail(t('scan.cameraHttps'))
         setResult({ type: 'error', message: t('scan.cameraError') })
         return
       }
       if (!navigator?.mediaDevices?.getUserMedia) {
-        setErrDetail('Browser tidak mendukung akses kamera (getUserMedia).')
+        setErrDetail(t('scan.cameraUnsupported'))
         setResult({ type: 'error', message: t('scan.cameraError') })
         return
       }
 
-      try {
-        // Minta izin kamera LEBIH DULU lewat getUserMedia. Dua alasan: (1) di iOS
-        // Safari & sebagian Android, enumerateDevices() hanya mengembalikan label
-        // kamera setelah izin diberikan — tanpa langkah ini filter regex kita
-        // sering tak match apa pun; (2) memaksa prompt izin muncul sekali di
-        // awal, bukan setelah html5-qrcode mencoba start dan gagal senyap.
-        // Coba ideal environment (belakang) terlebih dahulu.
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false,
-        })
-        stream.getTracks().forEach(tr => tr.stop())
-      } catch (err) {
-        // Jika gagal karena constraint (seperti OverconstrainedError di desktop), coba video: true
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false,
-          })
-          stream.getTracks().forEach(tr => tr.stop())
-        } catch (err2) {
-          const name = err2?.name || 'Error'
-          let hint = err2?.message || ''
-          if (name === 'NotAllowedError') hint = 'Izin kamera ditolak. Aktifkan di pengaturan situs.'
-          else if (name === 'NotFoundError') hint = 'Tidak ada kamera terdeteksi.'
-          else if (name === 'NotReadableError') hint = 'Kamera sedang dipakai aplikasi lain.'
-          setErrDetail(`${name}: ${hint}`)
-          setResult({ type: 'error', message: t('scan.cameraError') })
-          return
-        }
-      }
-      if (cancelled) return
-
-      // TANPA qrbox: seluruh frame kamera jadi area pindai (full).
-      // Tambahan: batasi hanya QR_CODE dan gunakan BarcodeDetector native (sangat membantu di iOS/Safari)
-      const config = { 
-        fps: 10,
-        useBarCodeDetectorIfSupported: true,
-        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
-      }
-
-      // Kandidat kamera, dicoba berurutan sampai ada yang berhasil start.
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document)
+      // scanner.start() sendiri meminta izin kamera. Pra-panggilan getUserMedia()
+      // sengaja dihapus karena membuka-menutup stream lalu langsung membukanya
+      // lagi dapat membuat WebKit iPhone belum melepas perangkat kamera.
+      const config = { fps: 10 }
+      const iosDevice = isIOSDevice()
       const candidates = []
-      
-      // Di iOS Safari, meminta `deviceId` spesifik sering menyebabkan black screen
-      // atau freeze. Lebih aman membiarkan iOS memilih kamera default belakang lewat facingMode.
-      if (isIOS) {
-        candidates.push({ facingMode: 'environment' })
-      }
 
-      try {
-        const cams = await Html5Qrcode.getCameras()
-        if (cams?.length) {
-          const back = cams.filter(c => /back|rear|environment|belakang/i.test(c.label))
-          const pool = back.length ? back : cams
-          const main = pool.find(c => !/(ultra|0\.5|tele|macro|depth|monochrome|fisheye)/i.test(c.label)) || pool[0]
-          if (main?.id && !isIOS) candidates.push({ deviceId: { exact: main.id } })
-        }
-      } catch { /* enumerasi gagal — fallback facingMode di bawah */ }
-      
-      if (!isIOS) candidates.push({ facingMode: { ideal: 'environment' } })
-      candidates.push({ facingMode: 'environment' })
-      candidates.push({ facingMode: 'user' })
-      candidates.push({}) // Fallback terakhir: kamera apa pun yang tersedia
+      if (iosDevice) {
+        // Di iPhone jangan gunakan deviceId: WebKit lebih stabil bila memilih
+        // kamera melalui facingMode dan tidak melakukan enumerasi lebih dulu.
+        candidates.push({ facingMode: 'environment' })
+        candidates.push({ facingMode: 'user' })
+      } else {
+        try {
+          const cameras = await Html5Qrcode.getCameras()
+          if (cameras?.length) {
+            const backCameras = cameras.filter(camera => /back|rear|environment|belakang/i.test(camera.label))
+            const pool = backCameras.length ? backCameras : cameras
+            const mainCamera = pool.find(camera => !/(ultra|0\.5|tele|macro|depth|monochrome|fisheye)/i.test(camera.label)) || pool[0]
+            if (mainCamera?.id) candidates.push({ deviceId: { exact: mainCamera.id } })
+          }
+        } catch { /* scanner.start() tetap bisa meminta izin lewat facingMode */ }
+
+        candidates.push({ facingMode: 'environment' })
+        candidates.push({ facingMode: 'user' })
+      }
       if (cancelled) return
 
       let started = false
@@ -135,12 +139,24 @@ export default function AttendanceScanPage() {
       for (const cam of candidates) {
         if (cancelled) return
         try {
-          await scanner.start(cam, config, handleScan, () => {})
+          await startCameraWithTimeout(scanner, cam, config, handleScan)
+          const video = document.querySelector('#qr-reader video')
+          if (video) {
+            // Atribut ini sudah dipasang library, tetapi ditegaskan kembali agar
+            // Safari tidak memindahkan video ke pemutar layar penuh.
+            video.muted = true
+            video.setAttribute('muted', 'true')
+            video.setAttribute('playsinline', 'true')
+          }
           started = true
           break
         } catch (err) {
           lastErr = err
           try { await scanner.stop() } catch { /* belum berjalan */ }
+          const { name, message } = normalizeCameraError(err)
+          // Bila izin ditolak, mencoba kamera lain hanya mengulang kegagalan dan
+          // pada Safari dapat membuat prompt terasa macet.
+          if (name === 'NotAllowedError' || name === 'CameraTimeoutError' || /permission/i.test(message)) break
         }
       }
 
@@ -151,10 +167,14 @@ export default function AttendanceScanPage() {
       if (started) {
         setReady(true)
       } else {
-        const name = lastErr?.name || 'Error'
-        const msg = lastErr?.message || String(lastErr || '')
+        const { name, message } = normalizeCameraError(lastErr)
+        let hint = message
+        if (name === 'NotAllowedError') hint = t('scan.cameraDenied')
+        else if (name === 'NotFoundError') hint = t('scan.cameraNotFound')
+        else if (name === 'NotReadableError') hint = t('scan.cameraBusy')
+        else if (name === 'CameraTimeoutError') hint = t(isIOSDevice() ? 'scan.iosCameraTimeout' : 'scan.cameraTimeout')
         console.error('[scan] gagal memulai kamera:', lastErr)
-        setErrDetail(`${name}: ${msg}`)
+        setErrDetail(`${name}: ${hint}`)
         setResult({ type: 'error', message: t('scan.cameraError') })
       }
     })()
@@ -512,7 +532,7 @@ export default function AttendanceScanPage() {
                 tab Chrome biasa) ada satu tempat di panel
                 "Izin Kamera" pada Pengaturan (lihat CameraToggle.jsx), supaya
                 tidak ada 2 versi panduan yang bisa berbeda/basi. */}
-            {result.type === 'error' && errDetail.includes('NotAllowed') && (
+            {result.type === 'error' && errDetail.includes('NotAllowed') && !isIOSDevice() && (
               <div className="w-full mt-2 rounded-xl bg-amber-50 border border-amber-100 p-3 text-left">
                 <p className="text-xs font-semibold text-amber-900 mb-1">Izin kamera ditolak</p>
                 <p className="text-[11px] text-amber-900 mb-2">
@@ -520,6 +540,16 @@ export default function AttendanceScanPage() {
                   sesuai cara Anda membuka aplikasi ini.
                 </p>
                 <Button size="sm" onClick={() => navigate('/pengaturan')}>Buka Pengaturan</Button>
+              </div>
+            )}
+
+            {result.type === 'error' && errDetail && isIOSDevice() && (
+              <div className="w-full mt-2 rounded-xl bg-amber-50 border border-amber-100 p-3 text-left">
+                <p className="text-xs font-semibold text-amber-900 mb-1">{t('scan.iosHelpTitle')}</p>
+                <p className="text-[11px] text-amber-900">{t('scan.iosSafariHelp')}</p>
+                {isStandalonePwa() && (
+                  <p className="text-[11px] text-amber-900 mt-2">{t('scan.iosPwaHelp')}</p>
+                )}
               </div>
             )}
 

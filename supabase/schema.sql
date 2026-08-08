@@ -4072,3 +4072,311 @@ BEGIN
 END $$;
 REVOKE EXECUTE ON FUNCTION super_admin_grant_points(TEXT, INT, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION super_admin_grant_points(TEXT, INT, TEXT) TO authenticated;
+-- ── Migrasi v76: Inventory admin dengan riwayat stok dan peminjaman ──
+-- TEMUAN (2026-08-08): aturan stok yang hanya dijaga di UI dapat dilewati
+-- melalui PostgREST langsung dan membuat saldo stok berbeda dari riwayat.
+-- KEPUTUSAN OPERATOR: inventory hanya dibaca Admin/Super Admin. Mutasi mengikuti
+-- Hak Akses /admin/inventory dan stok/peminjaman wajib lewat RPC atomik.
+
+CREATE TABLE IF NOT EXISTS inventory_categories (
+  category_id TEXT PRIMARY KEY DEFAULT 'ICAT-' || replace(gen_random_uuid()::text, '-', ''),
+  name TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS inventory_categories_name_unique
+  ON inventory_categories (lower(name));
+
+CREATE TABLE IF NOT EXISTS inventory_items (
+  item_id TEXT PRIMARY KEY DEFAULT 'ITEM-' || replace(gen_random_uuid()::text, '-', ''),
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  category_id TEXT REFERENCES inventory_categories(category_id) ON DELETE SET NULL,
+  item_type TEXT NOT NULL DEFAULT 'Habis Pakai' CHECK (item_type IN ('Habis Pakai', 'Aset')),
+  unit TEXT NOT NULL DEFAULT 'pcs',
+  stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
+  minimum_stock INT NOT NULL DEFAULT 0 CHECK (minimum_stock >= 0),
+  location TEXT,
+  item_condition TEXT NOT NULL DEFAULT 'Baik' CHECK (item_condition IN ('Baik', 'Perlu Perbaikan', 'Rusak')),
+  notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  updated_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS inventory_items_code_unique ON inventory_items (lower(code));
+CREATE INDEX IF NOT EXISTS inventory_items_category_idx ON inventory_items (category_id);
+
+CREATE TABLE IF NOT EXISTS inventory_transactions (
+  transaction_id TEXT PRIMARY KEY DEFAULT 'ITRX-' || replace(gen_random_uuid()::text, '-', ''),
+  item_id TEXT NOT NULL REFERENCES inventory_items(item_id) ON DELETE RESTRICT,
+  transaction_type TEXT NOT NULL CHECK (transaction_type IN ('Masuk', 'Keluar', 'Penyesuaian')),
+  quantity_change INT NOT NULL CHECK (quantity_change <> 0),
+  stock_before INT NOT NULL CHECK (stock_before >= 0),
+  stock_after INT NOT NULL CHECK (stock_after >= 0),
+  notes TEXT,
+  created_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS inventory_transactions_item_created_idx
+  ON inventory_transactions (item_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS inventory_loans (
+  loan_id TEXT PRIMARY KEY DEFAULT 'ILOAN-' || replace(gen_random_uuid()::text, '-', ''),
+  item_id TEXT NOT NULL REFERENCES inventory_items(item_id) ON DELETE RESTRICT,
+  borrower_name TEXT NOT NULL,
+  borrower_contact TEXT,
+  quantity INT NOT NULL CHECK (quantity > 0),
+  returned_quantity INT NOT NULL DEFAULT 0 CHECK (returned_quantity BETWEEN 0 AND quantity),
+  loan_date DATE NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Jakarta')::date,
+  due_date DATE,
+  status TEXT NOT NULL DEFAULT 'Dipinjam' CHECK (status IN ('Dipinjam', 'Dikembalikan')),
+  condition_out TEXT NOT NULL DEFAULT 'Baik' CHECK (condition_out IN ('Baik', 'Perlu Perbaikan', 'Rusak')),
+  condition_in TEXT CHECK (condition_in IS NULL OR condition_in IN ('Baik', 'Perlu Perbaikan', 'Rusak')),
+  notes TEXT,
+  return_notes TEXT,
+  created_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  returned_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  returned_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (due_date IS NULL OR due_date >= loan_date)
+);
+CREATE INDEX IF NOT EXISTS inventory_loans_item_status_idx ON inventory_loans (item_id, status);
+CREATE INDEX IF NOT EXISTS inventory_loans_due_idx ON inventory_loans (due_date) WHERE status = 'Dipinjam';
+
+ALTER TABLE inventory_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_loans ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "inventory_categories_admin_read" ON inventory_categories;
+CREATE POLICY "inventory_categories_admin_read" ON inventory_categories FOR SELECT
+  USING (auth_user_role() IN ('Admin', 'Super Admin'));
+DROP POLICY IF EXISTS "inventory_categories_admin_write" ON inventory_categories;
+CREATE POLICY "inventory_categories_admin_write" ON inventory_categories FOR ALL
+  USING (auth_admin_can('/admin/inventory')) WITH CHECK (auth_admin_can('/admin/inventory'));
+
+DROP POLICY IF EXISTS "inventory_items_admin_read" ON inventory_items;
+CREATE POLICY "inventory_items_admin_read" ON inventory_items FOR SELECT
+  USING (auth_user_role() IN ('Admin', 'Super Admin'));
+DROP POLICY IF EXISTS "inventory_items_admin_write" ON inventory_items;
+DROP POLICY IF EXISTS "inventory_items_admin_insert" ON inventory_items;
+CREATE POLICY "inventory_items_admin_insert" ON inventory_items FOR INSERT
+  WITH CHECK (auth_admin_can('/admin/inventory'));
+DROP POLICY IF EXISTS "inventory_items_admin_update" ON inventory_items;
+CREATE POLICY "inventory_items_admin_update" ON inventory_items FOR UPDATE
+  USING (auth_admin_can('/admin/inventory')) WITH CHECK (auth_admin_can('/admin/inventory'));
+
+DROP POLICY IF EXISTS "inventory_transactions_admin_read" ON inventory_transactions;
+CREATE POLICY "inventory_transactions_admin_read" ON inventory_transactions FOR SELECT
+  USING (auth_user_role() IN ('Admin', 'Super Admin'));
+DROP POLICY IF EXISTS "inventory_loans_admin_read" ON inventory_loans;
+CREATE POLICY "inventory_loans_admin_read" ON inventory_loans FOR SELECT
+  USING (auth_user_role() IN ('Admin', 'Super Admin'));
+
+CREATE OR REPLACE FUNCTION inventory_prepare_category() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  NEW.name := btrim(NEW.name);
+  IF NEW.name = '' THEN RAISE EXCEPTION 'category_name_required' USING ERRCODE = '22023'; END IF;
+  IF TG_OP = 'UPDATE' THEN NEW.updated_at := now(); END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_inventory_prepare_category ON inventory_categories;
+CREATE TRIGGER trg_inventory_prepare_category BEFORE INSERT OR UPDATE ON inventory_categories
+  FOR EACH ROW EXECUTE FUNCTION inventory_prepare_category();
+
+CREATE OR REPLACE FUNCTION inventory_prepare_item() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_actor TEXT := auth_user_id();
+BEGIN
+  NEW.code := upper(btrim(NEW.code));
+  NEW.name := btrim(NEW.name);
+  NEW.unit := btrim(NEW.unit);
+  IF NEW.code = '' OR NEW.name = '' OR NEW.unit = '' THEN
+    RAISE EXCEPTION 'item_required_fields' USING ERRCODE = '22023';
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF auth_user_role() IS NOT NULL THEN NEW.stock := 0; END IF;
+    IF v_actor IS NOT NULL THEN NEW.created_by := v_actor; NEW.updated_by := v_actor; END IF;
+  ELSE
+    NEW.updated_at := now();
+    IF v_actor IS NOT NULL THEN NEW.updated_by := v_actor; END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_inventory_prepare_item ON inventory_items;
+CREATE TRIGGER trg_inventory_prepare_item BEFORE INSERT OR UPDATE ON inventory_items
+  FOR EACH ROW EXECUTE FUNCTION inventory_prepare_item();
+
+CREATE OR REPLACE FUNCTION guard_inventory_stock() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.stock IS DISTINCT FROM OLD.stock AND auth_user_role() IS NOT NULL
+     AND COALESCE(current_setting('app.inventory_stock_write', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'stock_must_use_rpc' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_guard_inventory_stock ON inventory_items;
+CREATE TRIGGER trg_guard_inventory_stock BEFORE UPDATE OF stock ON inventory_items
+  FOR EACH ROW EXECUTE FUNCTION guard_inventory_stock();
+
+CREATE OR REPLACE FUNCTION adjust_inventory_stock(
+  p_item_id TEXT, p_transaction_type TEXT, p_quantity INT, p_notes TEXT DEFAULT NULL
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_before INT; v_after INT; v_change INT; v_notes TEXT := btrim(COALESCE(p_notes, ''));
+BEGIN
+  IF NOT auth_admin_can('/admin/inventory') THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  IF char_length(v_notes) < 3 THEN RAISE EXCEPTION 'notes_required' USING ERRCODE = '22023'; END IF;
+  IF p_transaction_type NOT IN ('Masuk', 'Keluar', 'Penyesuaian') THEN
+    RAISE EXCEPTION 'invalid_transaction_type' USING ERRCODE = '22023';
+  END IF;
+  SELECT stock INTO v_before FROM inventory_items
+    WHERE item_id = p_item_id AND is_active = true FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'item_not_found_or_inactive' USING ERRCODE = '22023'; END IF;
+
+  IF p_transaction_type = 'Penyesuaian' THEN
+    IF p_quantity IS NULL OR p_quantity < 0 THEN RAISE EXCEPTION 'invalid_target_stock' USING ERRCODE = '22023'; END IF;
+    v_after := p_quantity; v_change := v_after - v_before;
+    IF v_change = 0 THEN RAISE EXCEPTION 'stock_unchanged' USING ERRCODE = '22023'; END IF;
+  ELSE
+    IF p_quantity IS NULL OR p_quantity <= 0 THEN RAISE EXCEPTION 'invalid_quantity' USING ERRCODE = '22023'; END IF;
+    v_change := CASE WHEN p_transaction_type = 'Masuk' THEN p_quantity ELSE -p_quantity END;
+    v_after := v_before + v_change;
+    IF v_after < 0 THEN RAISE EXCEPTION 'insufficient_stock' USING ERRCODE = '22023'; END IF;
+  END IF;
+
+  PERFORM set_config('app.inventory_stock_write', 'on', true);
+  UPDATE inventory_items SET stock = v_after, updated_by = auth_user_id(), updated_at = now()
+    WHERE item_id = p_item_id;
+  INSERT INTO inventory_transactions
+    (item_id, transaction_type, quantity_change, stock_before, stock_after, notes, created_by)
+  VALUES (p_item_id, p_transaction_type, v_change, v_before, v_after,
+    v_notes, auth_user_id());
+  RETURN jsonb_build_object('ok', true, 'stock_before', v_before, 'stock_after', v_after);
+END $$;
+REVOKE EXECUTE ON FUNCTION adjust_inventory_stock(TEXT, TEXT, INT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION adjust_inventory_stock(TEXT, TEXT, INT, TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION create_inventory_loan(
+  p_item_id TEXT, p_borrower_name TEXT, p_borrower_contact TEXT, p_quantity INT,
+  p_loan_date DATE, p_due_date DATE, p_condition_out TEXT, p_notes TEXT DEFAULT NULL
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_stock INT; v_type TEXT; v_outstanding INT; v_loan_id TEXT;
+BEGIN
+  IF NOT auth_admin_can('/admin/inventory') THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  IF btrim(COALESCE(p_borrower_name, '')) = '' OR p_quantity IS NULL OR p_quantity <= 0 THEN
+    RAISE EXCEPTION 'invalid_loan_data' USING ERRCODE = '22023';
+  END IF;
+  IF p_condition_out NOT IN ('Baik', 'Perlu Perbaikan', 'Rusak') THEN RAISE EXCEPTION 'invalid_condition' USING ERRCODE = '22023'; END IF;
+  IF p_loan_date IS NULL OR (p_due_date IS NOT NULL AND p_due_date < p_loan_date) THEN
+    RAISE EXCEPTION 'invalid_loan_date' USING ERRCODE = '22023';
+  END IF;
+  SELECT stock, item_type INTO v_stock, v_type FROM inventory_items
+    WHERE item_id = p_item_id AND is_active = true FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'item_not_found_or_inactive' USING ERRCODE = '22023'; END IF;
+  IF v_type <> 'Aset' THEN RAISE EXCEPTION 'item_not_loanable' USING ERRCODE = '22023'; END IF;
+  SELECT COALESCE(sum(quantity - returned_quantity), 0)::INT INTO v_outstanding
+    FROM inventory_loans WHERE item_id = p_item_id AND status = 'Dipinjam';
+  IF p_quantity > v_stock - v_outstanding THEN RAISE EXCEPTION 'insufficient_available_stock' USING ERRCODE = '22023'; END IF;
+
+  INSERT INTO inventory_loans
+    (item_id, borrower_name, borrower_contact, quantity, loan_date, due_date, condition_out, notes, created_by)
+  VALUES (p_item_id, btrim(p_borrower_name), NULLIF(btrim(COALESCE(p_borrower_contact, '')), ''),
+    p_quantity, p_loan_date, p_due_date, p_condition_out, NULLIF(btrim(COALESCE(p_notes, '')), ''), auth_user_id())
+  RETURNING loan_id INTO v_loan_id;
+  RETURN jsonb_build_object('ok', true, 'loan_id', v_loan_id, 'available_after', v_stock - v_outstanding - p_quantity);
+END $$;
+REVOKE EXECUTE ON FUNCTION create_inventory_loan(TEXT, TEXT, TEXT, INT, DATE, DATE, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION create_inventory_loan(TEXT, TEXT, TEXT, INT, DATE, DATE, TEXT, TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION return_inventory_loan(
+  p_loan_id TEXT, p_quantity INT, p_condition_in TEXT, p_notes TEXT DEFAULT NULL
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_quantity INT; v_returned INT; v_new_returned INT;
+BEGIN
+  IF NOT auth_admin_can('/admin/inventory') THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  IF p_quantity IS NULL OR p_quantity <= 0 THEN RAISE EXCEPTION 'invalid_quantity' USING ERRCODE = '22023'; END IF;
+  IF p_condition_in NOT IN ('Baik', 'Perlu Perbaikan', 'Rusak') THEN RAISE EXCEPTION 'invalid_condition' USING ERRCODE = '22023'; END IF;
+  SELECT quantity, returned_quantity INTO v_quantity, v_returned FROM inventory_loans
+    WHERE loan_id = p_loan_id AND status = 'Dipinjam' FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'loan_not_found_or_returned' USING ERRCODE = '22023'; END IF;
+  IF p_quantity > v_quantity - v_returned THEN RAISE EXCEPTION 'return_exceeds_outstanding' USING ERRCODE = '22023'; END IF;
+  v_new_returned := v_returned + p_quantity;
+  UPDATE inventory_loans SET
+    returned_quantity = v_new_returned,
+    status = CASE WHEN v_new_returned = v_quantity THEN 'Dikembalikan' ELSE 'Dipinjam' END,
+    condition_in = p_condition_in,
+    return_notes = NULLIF(btrim(COALESCE(p_notes, '')), ''),
+    returned_by = auth_user_id(),
+    returned_at = CASE WHEN v_new_returned = v_quantity THEN now() ELSE NULL END,
+    updated_at = now()
+  WHERE loan_id = p_loan_id;
+  RETURN jsonb_build_object('ok', true, 'returned_quantity', v_new_returned, 'outstanding', v_quantity - v_new_returned);
+END $$;
+REVOKE EXECUTE ON FUNCTION return_inventory_loan(TEXT, INT, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION return_inventory_loan(TEXT, INT, TEXT, TEXT) TO authenticated;
+-- ── Migrasi v77: Foto barang inventory ──
+-- TEMUAN (2026-08-08): menumpang folder profile-photos akan mewarisi policy
+-- UPDATE lama yang berlaku luas untuk seluruh Admin dan tidak mengikuti Hak Akses
+-- Inventory. KEPUTUSAN OPERATOR: foto barang memakai bucket publik terpisah,
+-- non-sensitif, dengan semua mutasi digerbang auth_admin_can('/admin/inventory').
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS photo_url TEXT;
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'inventory-photos',
+  'inventory-photos',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- Policy additive-only dengan nama baru; tidak mengganti policy bucket lama.
+DROP POLICY IF EXISTS "inventory_photos_admin_read" ON storage.objects;
+CREATE POLICY "inventory_photos_admin_read" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'inventory-photos'
+    AND auth_user_role() IN ('Admin', 'Super Admin')
+  );
+
+DROP POLICY IF EXISTS "inventory_photos_admin_insert" ON storage.objects;
+CREATE POLICY "inventory_photos_admin_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'inventory-photos'
+    AND name LIKE 'items/ITEM-%/main'
+    AND auth_admin_can('/admin/inventory')
+  );
+
+DROP POLICY IF EXISTS "inventory_photos_admin_update" ON storage.objects;
+CREATE POLICY "inventory_photos_admin_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'inventory-photos'
+    AND name LIKE 'items/ITEM-%/main'
+    AND auth_admin_can('/admin/inventory')
+  )
+  WITH CHECK (
+    bucket_id = 'inventory-photos'
+    AND name LIKE 'items/ITEM-%/main'
+    AND auth_admin_can('/admin/inventory')
+  );
+
+DROP POLICY IF EXISTS "inventory_photos_admin_delete" ON storage.objects;
+CREATE POLICY "inventory_photos_admin_delete" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'inventory-photos'
+    AND name LIKE 'items/ITEM-%/main'
+    AND auth_admin_can('/admin/inventory')
+  );

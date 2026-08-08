@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 // Bucket yang dipakai aplikasi. 'documents' bisa privat (tanpa policy baca),
 // sehingga sumnya mungkin 0 dari sisi klien — itu wajar, indikator ini bersifat
 // perkiraan untuk memantau agar storage tidak penuh.
-const BUCKETS = ['profile-photos', 'task-files', 'documents']
+const BUCKETS = ['profile-photos', 'task-files', 'documents', 'inventory-photos']
 
 const PAGE = 100
 

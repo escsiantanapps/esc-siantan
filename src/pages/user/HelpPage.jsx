@@ -569,6 +569,7 @@ const PANDUAN_ADMIN = `
 - **Pemberkatan Nikah** - Kelola pernikahan
 - **Penyerahan Anak** - Kelola penyerahan
 - **KTJ** - Kelola kartu jemaat
+- **Inventory** - Kelola barang, stok, dan peminjaman aset
 - **Sertifikat** - Terbitkan sertifikat
 - **Pelayanan** - Kelola jadwal ministry
 
@@ -803,6 +804,92 @@ Filter berdasarkan tanggal, user, aksi.
 
 ---
 
+## Inventory
+
+Inventory hanya tersedia untuk **Admin** dan **Super Admin**. Hak untuk mengubah data mengikuti pengaturan halaman Inventory di menu **Hak Akses**.
+
+### Mengenal Ringkasan dan Tab
+
+- **Barang aktif** - Jumlah jenis barang yang masih digunakan
+- **Total unit** - Seluruh stok fisik yang tercatat
+- **Stok menipis** - Barang yang menyentuh batas minimum
+- **Sedang dipinjam** - Peminjaman yang belum selesai
+- **Barang** - Master barang dan stok tersedia
+- **Transaksi** - Riwayat barang masuk, keluar, dan penyesuaian
+- **Peminjaman** - Aset yang dipinjam, terlambat, atau sudah kembali
+
+### Menyiapkan Kategori
+
+1. Buka **Inventory**
+2. Ketuk **Kelola Kategori**
+3. Isi nama dan deskripsi kategori
+4. Ketuk **Tambah**
+5. Gunakan ikon pensil untuk mengedit atau ikon tempat sampah untuk menghapus
+
+Menghapus kategori tidak menghapus barang. Barang tersebut tetap tersimpan sebagai **Tanpa kategori**.
+
+### Menambah Barang
+
+1. Ketuk **Tambah Barang**
+2. Isi kode unik dan nama barang
+3. Pilih jenis:
+   - **Habis Pakai** untuk barang yang berkurang saat digunakan
+   - **Aset** untuk barang yang dapat dipinjamkan
+4. Tambahkan foto barang bila tersedia (JPG, PNG, WebP, atau GIF; maksimal 5 MB). Foto otomatis diperkecil dan dikompresi sebelum disimpan
+5. Isi kategori, satuan, batas stok minimum, lokasi, kondisi, dan catatan
+6. Simpan
+
+Barang baru selalu dimulai dari stok **0** agar saldo awal tercatat dalam riwayat transaksi. Foto dapat diganti atau dihapus kembali melalui menu **Edit** pada kartu barang.
+
+### Mencatat Stok
+
+1. Pada kartu barang, buka menu tiga titik
+2. Pilih **Catat Stok**
+3. Pilih jenis transaksi:
+   - **Barang Masuk** - Menambah stok
+   - **Barang Keluar** - Mengurangi stok
+   - **Penyesuaian Fisik** - Menyamakan stok aplikasi dengan hasil hitung fisik
+4. Isi jumlah atau stok fisik baru
+5. Isi alasan minimal 3 karakter
+6. Simpan
+
+Stok keluar yang melebihi saldo akan ditolak. Jangan mengubah stok dengan cara lain karena setiap perubahan wajib memiliki riwayat.
+
+### Mencatat Peminjaman Aset
+
+1. Pastikan barang berjenis **Aset** dan memiliki stok tersedia
+2. Buka menu tiga titik lalu pilih **Pinjamkan**
+3. Isi nama dan kontak peminjam
+4. Isi jumlah, tanggal pinjam, dan batas pengembalian
+5. Catat kondisi barang saat keluar
+6. Simpan
+
+Jumlah yang dipinjam tidak boleh melebihi stok tersedia.
+
+### Mencatat Pengembalian
+
+1. Buka tab **Peminjaman**
+2. Cari peminjam atau nama aset
+3. Ketuk **Kembali**
+4. Isi jumlah yang dikembalikan dan kondisi barang
+5. Tambahkan catatan bila diperlukan
+6. Simpan
+
+Pengembalian boleh dilakukan sebagian. Sisa barang tetap berstatus **Dipinjam**. Sistem memberi label **Terlambat** ketika batas pengembalian sudah lewat.
+
+### Mengarsipkan Barang
+
+Gunakan **Arsipkan** bila barang tidak lagi dipakai. Barang tidak dihapus agar riwayat stok dan peminjaman tetap utuh. Barang dapat diaktifkan kembali melalui menu **Aktifkan**.
+
+### Pencarian dan Laporan
+
+- Gunakan pencarian untuk kode, nama barang, lokasi, atau peminjam
+- Filter barang berdasarkan kategori dan jenis
+- Filter peminjaman berdasarkan status
+- Ketuk **Excel** untuk mengunduh rekap spreadsheet
+- Ketuk **PDF** untuk mencetak atau menyimpan rekap sebagai PDF
+
+---
 ## Tips untuk Admin
 
 ### Manajemen Data

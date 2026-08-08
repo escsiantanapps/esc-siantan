@@ -484,3 +484,9 @@ h1, h2, h3 {
 .pdf-viewer-message {
   color: #f3f4f6;
 }
+
+/* Satu jari tetap untuk scroll; pinch browser dimatikan agar dua jari mengatur
+   skala render PDF di dalam viewer, bukan memperbesar seluruh aplikasi. */
+.pdf-viewer-stage-pinch {
+  touch-action: pan-x pan-y;
+}

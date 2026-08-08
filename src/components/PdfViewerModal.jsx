@@ -141,6 +141,7 @@ export default function PdfViewerModal({
   const [currentPage, setCurrentPage] = useState(Math.max(Number(initialPage) || 1, 1))
   const [turnDirection, setTurnDirection] = useState('next')
   const touchStartRef = useRef(null)
+  const pinchRef = useRef(null)
 
   const [jumpPage, setJumpPage] = useState('')
 
@@ -274,6 +275,33 @@ export default function PdfViewerModal({
     turnPage(deltaX < 0 ? 1 : -1)
   }
 
+
+  function pinchDistance(touches) {
+    const deltaX = touches[0].clientX - touches[1].clientX
+    const deltaY = touches[0].clientY - touches[1].clientY
+    return Math.hypot(deltaX, deltaY)
+  }
+
+  function handlePinchStart(event) {
+    if (!continuous || event.touches.length !== 2) return
+    pinchRef.current = {
+      distance: pinchDistance(event.touches),
+      zoom,
+    }
+  }
+
+  function handlePinchMove(event) {
+    if (!continuous || event.touches.length !== 2 || !pinchRef.current) return
+    event.preventDefault()
+    const scale = pinchDistance(event.touches) / pinchRef.current.distance
+    const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinchRef.current.zoom * scale))
+    setZoom(Math.round(nextZoom * 100) / 100)
+  }
+
+  function handlePinchEnd(event) {
+    if (event.touches.length < 2) pinchRef.current = null
+  }
+
   useEffect(() => {
     const handlePageKeys = (event) => {
       if (continuous) return
@@ -297,29 +325,33 @@ export default function PdfViewerModal({
     >
       <div className="pdf-viewer-toolbar flex min-h-14 items-center gap-2 border-b border-white/10 px-2 shrink-0">
         <p className="min-w-0 flex-1 truncate px-1 text-sm font-semibold text-white">{file.name}</p>
-        <button
-          type="button"
-          onClick={() => setZoom((value) => Math.max(MIN_ZOOM, value - ZOOM_STEP))}
-          disabled={zoom <= MIN_ZOOM}
-          className="flex h-12 w-12 items-center justify-center rounded-full text-gray-200 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-30"
-          aria-label={t('infoDetail.zoomOutPdf')}
-          title={t('infoDetail.zoomOutPdf')}
-        >
-          <Minus size={19} />
-        </button>
-        <span className="w-9 text-center text-xs font-medium tabular-nums text-gray-200" aria-live="polite">
-          {Math.round(zoom * 100)}%
-        </span>
-        <button
-          type="button"
-          onClick={() => setZoom((value) => Math.min(MAX_ZOOM, value + ZOOM_STEP))}
-          disabled={zoom >= MAX_ZOOM}
-          className="flex h-12 w-12 items-center justify-center rounded-full text-gray-200 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-30"
-          aria-label={t('infoDetail.zoomInPdf')}
-          title={t('infoDetail.zoomInPdf')}
-        >
-          <Plus size={19} />
-        </button>
+        {!continuous && (
+          <>
+            <button
+              type="button"
+              onClick={() => setZoom((value) => Math.max(MIN_ZOOM, value - ZOOM_STEP))}
+              disabled={zoom <= MIN_ZOOM}
+              className="flex h-12 w-12 items-center justify-center rounded-full text-gray-200 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-30"
+              aria-label={t('infoDetail.zoomOutPdf')}
+              title={t('infoDetail.zoomOutPdf')}
+            >
+              <Minus size={19} />
+            </button>
+            <span className="w-9 text-center text-xs font-medium tabular-nums text-gray-200" aria-live="polite">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoom((value) => Math.min(MAX_ZOOM, value + ZOOM_STEP))}
+              disabled={zoom >= MAX_ZOOM}
+              className="flex h-12 w-12 items-center justify-center rounded-full text-gray-200 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-30"
+              aria-label={t('infoDetail.zoomInPdf')}
+              title={t('infoDetail.zoomInPdf')}
+            >
+              <Plus size={19} />
+            </button>
+          </>
+        )}
         <button
           ref={closeButtonRef}
           type="button"
@@ -332,7 +364,14 @@ export default function PdfViewerModal({
         </button>
       </div>
 
-      <div ref={viewportRef} className="pdf-viewer-stage relative min-h-0 flex-1 overflow-auto overscroll-contain">
+      <div
+        ref={viewportRef}
+        className={`pdf-viewer-stage relative min-h-0 flex-1 overflow-auto overscroll-contain ${continuous ? 'pdf-viewer-stage-pinch' : ''}`}
+        onTouchStart={handlePinchStart}
+        onTouchMove={handlePinchMove}
+        onTouchEnd={handlePinchEnd}
+        onTouchCancel={handlePinchEnd}
+      >
         {loading && (
           <div className="pdf-viewer-message absolute inset-0 flex flex-col items-center justify-center gap-3">
             <Spinner />

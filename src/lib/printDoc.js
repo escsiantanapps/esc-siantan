@@ -13,24 +13,31 @@ function esc(s) {
  * @param {string} o.title     Judul dokumen
  * @param {string} [o.heading] Nama utama (mis. nama calon baptis)
  * @param {Array<[string,string]>} [o.meta]  Pasangan label/nilai ringkas
+ * @param {Array<{value:string|number,label:string}>} [o.summary] Ringkasan angka utama
  * @param {Array<{title?:string, rows?:Array<[string,string]>, text?:string}>} [o.sections]
  * @param {Array<{label:string, url:string}>} [o.documents] Lampiran (tautan terpisah)
  * @param {string} [o.footer]
  */
-export function printArchive({ title, heading, meta = [], sections = [], documents = [], footer }) {
+export function printArchive({ title, heading, meta = [], summary = [], sections = [], documents = [], footer }) {
   const metaHtml = meta.length
     ? `<table class="meta">${meta.map(([k, v]) => `<tr><td>${esc(k)}</td><td>: ${esc(v)}</td></tr>`).join('')}</table>`
     : ''
 
-  const sectionsHtml = sections.map(s => `
+  const summaryHtml = summary.length ? `
+    <div class="summary">
+      ${summary.map(item => `<div><b>${esc(item.value)}</b><span>${esc(item.label)}</span></div>`).join('')}
+    </div>
+  ` : ''
+
+  const sectionsHtml = sections.map(s => `<section class="report-section">
     ${s.title ? `<h2>${esc(s.title)}</h2>` : ''}
-    ${s.rows?.length ? `<table class="data">${s.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v || '-')}</td></tr>`).join('')}</table>` : ''}
+    ${s.rows?.length ? `<table class="data">${s.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v === '' || v == null ? '-' : v)}</td></tr>`).join('')}</table>` : ''}
     ${s.tableData?.length ? `<table class="grid-table">
       ${s.tableHeaders?.length ? `<thead><tr>${s.tableHeaders.map(th => `<th>${esc(th)}</th>`).join('')}</tr></thead>` : ''}
       <tbody>${s.tableData.map(tr => `<tr>${tr.map(td => `<td>${esc(td)}</td>`).join('')}</tr>`).join('')}</tbody>
     </table>` : ''}
     ${s.text ? `<p class="para">${esc(s.text)}</p>` : ''}
-  `).join('')
+  </section>`).join('')
 
   const docsHtml = documents.length ? `
     <h2>Dokumen Terlampir (file terpisah)</h2>
@@ -52,12 +59,19 @@ export function printArchive({ title, heading, meta = [], sections = [], documen
   .meta { width: 100%; border-collapse: collapse; margin: 6px 0 4px; font-size: 12px; }
   .meta td { padding: 2px 8px; }
   .meta td:first-child { color: #6b7280; width: 150px; }
+  .summary { display: flex; gap: 10px; margin: 14px 0 16px; }
+  .summary div { flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; text-align: center; }
+  .summary b { display: block; font-size: 22px; color: #c62f14; }
+  .summary span { display: block; margin-top: 2px; font-size: 11px; color: #6b7280; }
+  .report-section { break-inside: avoid-page; page-break-inside: avoid; }
   table.data { width: 100%; border-collapse: collapse; font-size: 12px; }
   table.data th, table.data td { border: 1px solid #e5e7eb; padding: 5px 8px; text-align: left; vertical-align: top; }
   table.data th { background: #f3f4f6; width: 38%; font-weight: 600; }
   table.grid-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
   table.grid-table th, table.grid-table td { border: 1px solid #e5e7eb; padding: 5px 8px; text-align: left; vertical-align: top; }
   table.grid-table th { background: #f3f4f6; font-weight: 600; }
+  table.grid-table thead { display: table-header-group; }
+  table.grid-table tr { break-inside: avoid; page-break-inside: avoid; }
   .para { font-size: 12px; white-space: pre-line; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; }
   .docs { font-size: 12px; padding-left: 18px; }
   .docs a { color: #C62F14; word-break: break-all; }
@@ -69,6 +83,7 @@ export function printArchive({ title, heading, meta = [], sections = [], documen
   <div class="sub">ESC Siantan</div>
   ${heading ? `<div class="heading">${esc(heading)}</div>` : ''}
   ${metaHtml}
+  ${summaryHtml}
   ${sectionsHtml}
   ${docsHtml}
   <div class="foot">${esc(footer || '')}</div>
