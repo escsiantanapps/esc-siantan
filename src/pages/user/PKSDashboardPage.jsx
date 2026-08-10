@@ -6,7 +6,7 @@ import { startOfMonth } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { komselService, komselOfferingsService } from '@/services/contentService'
-import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsService'
+import { offeringsService, OFFERING_CATEGORIES, normalizeOfferingCategory } from '@/services/offeringsService'
 import { birthdayService } from '@/services/birthdayService'
 import { evaluationService } from '@/services/evaluationService'
 import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, Select, Input, Textarea, Button } from '@/components/ui'
@@ -734,7 +734,7 @@ export default function PKSDashboardPage() {
                       <div key={o.id} className="flex items-center gap-3 p-3.5">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-gray-900">{formatRupiah(o.amount)}</p>
-                          <p className="text-xs text-gray-400 truncate">{o.category} · {formatDate(o.created_at)}</p>
+                          <p className="text-xs text-gray-400 truncate">{normalizeOfferingCategory(o.category)} · {formatDate(o.created_at)}</p>
                           {o.note && <p className="text-xs text-gray-500 mt-0.5">{o.note}</p>}
                         </div>
                         <StatusBadge status={o.status} />

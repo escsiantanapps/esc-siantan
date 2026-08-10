@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { QrCode, Copy, Check, HandCoins, Building2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
-import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsService'
+import { offeringsService, OFFERING_CATEGORIES, normalizeOfferingCategory } from '@/services/offeringsService'
 import { Card, Spinner, GradientHeader, Button, Input, Select, Textarea, StatusBadge, EmptyState } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
@@ -185,7 +185,7 @@ export default function PersembahanPage() {
                     <div key={o.offering_id} className="flex items-center gap-3 p-3.5">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900">{formatRupiah(o.amount)}</p>
-                        <p className="text-xs text-gray-400">{o.category} · {formatDate(o.created_at)}</p>
+                        <p className="text-xs text-gray-400">{normalizeOfferingCategory(o.category)} · {formatDate(o.created_at)}</p>
                       </div>
                       <StatusBadge status={o.status} />
                     </div>

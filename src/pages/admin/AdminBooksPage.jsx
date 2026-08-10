@@ -1,21 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, Plus, Trash2, Pencil, X, FileSpreadsheet, ChevronDown, ChevronRight, BarChart3, FileText, Upload } from 'lucide-react'
+import { BookOpen, Plus, Trash2, Pencil, X, FileSpreadsheet, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { booksService } from '@/services/booksService'
-import { mediaService } from '@/services/contentService'
 import { Card, PageHeader, Input, Textarea, Button, Spinner, EmptyState, Badge, Avatar, Checkbox } from '@/components/ui'
 import { downloadXlsx } from '@/lib/exportXlsx'
 import { formatDate } from '@/lib/utils'
-import { createPdfCoverFile } from '@/lib/pdfCover'
-import PdfCover from '@/components/PdfCover'
 
 // Disiplin Baca (Admin) — kelola buku program & rekap progres anggota (halaman
 // tercapai + catatan poin bacaan). Hardcode ID mengikuti pola halaman admin.
 const TABS = [{ key: 'buku', label: 'Buku' }, { key: 'rekap', label: 'Rekap' }]
-const EMPTY = { title: '', author: '', total_pages: '', description: '', cover_url: '', pdf_url: '', is_active: true }
-const MAX_PDF_MB = 25
+const EMPTY = { title: '', author: '', total_pages: '', description: '', is_active: true }
 
 export default function AdminBooksPage() {
   const { profile } = useAuth()
@@ -29,8 +25,6 @@ export default function AdminBooksPage() {
   const [editing, setEditing] = useState(null) // book_id sedang diedit
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [uploadingPdf, setUploadingPdf] = useState(false)
-  const [generatingCover, setGeneratingCover] = useState(false)
 
   function load() {
     setLoading(true)
@@ -41,52 +35,22 @@ export default function AdminBooksPage() {
   function openNew() { setEditing(null); setForm(EMPTY); setShowForm(true) }
   function openEdit(b) {
     setEditing(b.book_id)
-    setForm({ title: b.title, author: b.author || '', total_pages: b.total_pages || '', description: b.description || '', cover_url: b.cover_url || '', pdf_url: b.pdf_url || '', is_active: b.is_active })
+    setForm({ title: b.title, author: b.author || '', total_pages: b.total_pages || '', description: b.description || '', is_active: b.is_active })
     setShowForm(true)
   }
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
-  async function uploadPdf(file) {
-    if (!file) return
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { toast.error(t('abook.pdfTypeError')); return }
-    if (file.size > MAX_PDF_MB * 1024 * 1024) { toast.error(t('abook.pdfSizeError', { max: MAX_PDF_MB })); return }
-    setUploadingPdf(true)
-    try {
-      // Cover dibuat dari file lokal, jadi tidak menambah egress Supabase.
-      const coverFile = await createPdfCoverFile(file, file.name)
-      const [{ url }, coverUrl] = await Promise.all([
-        mediaService.uploadPdf('books', file),
-        mediaService.uploadBookCover(coverFile),
-      ])
-      setForm((current) => ({ ...current, pdf_url: url, cover_url: coverUrl }))
-      toast.success(t('abook.pdfAndCoverUploaded'))
-    } catch { toast.error(t('abook.pdfUploadFailed')) }
-    finally { setUploadingPdf(false) }
-  }
-
-  async function generateExistingCover() {
-    if (!form.pdf_url) return
-    setGeneratingCover(true)
-    try {
-      const coverFile = await createPdfCoverFile(form.pdf_url, form.title || 'buku')
-      const coverUrl = await mediaService.uploadBookCover(coverFile)
-      set('cover_url', coverUrl)
-      toast.success(t('abook.coverGenerated'))
-    } catch { toast.error(t('abook.coverGenerateFailed')) }
-    finally { setGeneratingCover(false) }
-  }
   async function save() {
-    if (uploadingPdf || generatingCover) return
     if (!form.title.trim()) { toast.error('Judul buku wajib diisi.'); return }
     setSaving(true)
     try {
       const payload = {
         title: form.title.trim(), author: form.author.trim() || null,
         total_pages: form.total_pages ? Number(form.total_pages) : null,
-        description: form.description.trim() || null, cover_url: form.cover_url || null, pdf_url: form.pdf_url || null, is_active: form.is_active,
+        description: form.description.trim() || null, is_active: form.is_active,
       }
       if (editing) await booksService.updateBook(editing, payload)
-      else await booksService.createBook({ ...payload, totalPages: payload.total_pages, coverUrl: payload.cover_url, pdfUrl: payload.pdf_url, createdBy: profile.user_id })
+      else await booksService.createBook({ ...payload, totalPages: payload.total_pages, createdBy: profile.user_id })
       toast.success('Buku tersimpan.')
       setShowForm(false); load()
     } catch (err) { toast.error(err.message || 'Gagal menyimpan buku.') }
@@ -122,10 +86,12 @@ export default function AdminBooksPage() {
               <Card className="divide-y divide-gray-100">
                 {books.map(b => (
                   <div key={b.book_id} className="flex items-center gap-3 p-3.5">
-                    <PdfCover url={b.cover_url} label={t('baca.coverAlt', { title: b.title })} className="w-9" />
+                    <div className="flex h-11 w-9 shrink-0 items-center justify-center rounded-lg bg-control text-brand-500">
+                      <BookOpen size={18} aria-hidden="true" />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{b.title}</p>
-                      <p className="text-[11px] text-gray-400 truncate">{b.author || '—'} · {b.total_pages || '?'} hal{b.pdf_url && ' · PDF'}{!b.is_active && ' · nonaktif'}</p>
+                      <p className="text-[11px] text-gray-400 truncate">{b.author || '—'} · {b.total_pages || '?'} hal{!b.is_active && ' · nonaktif'}</p>
                     </div>
                     {!isGembala && <button onClick={() => openEdit(b)} className="flex h-11 w-11 items-center justify-center text-gray-400 hover:text-brand-500" aria-label={t('abook.editAria', { title: b.title })}><Pencil size={15} /></button>}
                     {!isGembala && <button onClick={() => remove(b)} className="flex h-11 w-11 items-center justify-center text-gray-400 hover:text-red-500" aria-label={t('abook.deleteAria', { title: b.title })}><Trash2 size={15} /></button>}
@@ -151,76 +117,10 @@ export default function AdminBooksPage() {
             <Input label="Total Halaman" type="number" min="1" value={form.total_pages} onChange={e => set('total_pages', e.target.value)} />
             <Textarea label="Deskripsi" rows={2} value={form.description} onChange={e => set('description', e.target.value)} />
 
-            {/* PDF dan cover berada di prefix Storage buku yang sudah diizinkan. */}
-            <div>
-              <label className="text-sm text-gray-600 font-medium">{t('abook.pdfLabel', { max: MAX_PDF_MB })}</label>
-              {form.pdf_url ? (
-                <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-control px-3 py-2">
-                  <FileText size={16} className="text-brand-500 shrink-0" />
-                  <a href={form.pdf_url} target="_blank" rel="noreferrer" className="text-sm text-brand-600 truncate flex-1">{t('abook.viewPdf')}</a>
-                  <button
-                    type="button"
-                    onClick={() => setForm((current) => ({ ...current, pdf_url: '', cover_url: '' }))}
-                    className="flex h-11 w-11 items-center justify-center text-gray-400 hover:text-red-500"
-                    aria-label={t('abook.removePdf')}
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
-              ) : (
-                <label className={`mt-1 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-dashed border-gray-300 bg-control px-3 py-3 text-sm text-gray-600 ${uploadingPdf ? 'cursor-wait opacity-60' : 'cursor-pointer hover:bg-control-hover'}`}>
-                  {uploadingPdf ? <Spinner size="sm" /> : <Upload size={16} />}
-                  {uploadingPdf ? t('abook.preparingPdf') : t('abook.choosePdf')}
-                  <input
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    className="hidden"
-                    disabled={uploadingPdf}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0]
-                      event.target.value = ''
-                      uploadPdf(file)
-                    }}
-                  />
-                </label>
-              )}
-            </div>
-
-            {form.pdf_url && (
-              <div className="rounded-xl border border-gray-200 bg-control p-3">
-                <div className="flex items-center gap-3">
-                  <PdfCover
-                    url={form.cover_url}
-                    label={t('baca.coverAlt', { title: form.title || t('abook.untitled') })}
-                    className="w-16"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-800">
-                      {form.cover_url ? t('abook.coverReady') : t('abook.coverMissing')}
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-gray-500">
-                      {form.cover_url ? t('abook.coverReadyHint') : t('abook.coverMissingHint')}
-                    </p>
-                    {!form.cover_url && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        loading={generatingCover}
-                        onClick={generateExistingCover}
-                      >
-                        <BookOpen size={15} /> {t('abook.generateCover')}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <Checkbox checked={form.is_active} onChange={e => set('is_active', e.target.checked)} /> Aktif (tampil untuk jemaat)
             </label>
-            <Button className="w-full" loading={saving || uploadingPdf || generatingCover} onClick={save}>Simpan</Button>
+            <Button className="w-full" loading={saving} onClick={save}>Simpan</Button>
           </Card>
         </div>
       )}

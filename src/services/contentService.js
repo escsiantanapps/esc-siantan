@@ -978,15 +978,4 @@ export const mediaService = {
     return { name: file.name, url }
   },
 
-  // Cover buku berukuran kecil disimpan pada prefix yang sudah diizinkan untuk
-  // media buku. Ini menghindari perubahan policy Storage production.
-  async uploadBookCover(file) {
-    const path = `books/pdf/covers/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`
-    const { error } = await supabase.storage.from('task-files').upload(path, file, {
-      contentType: 'image/jpeg',
-      cacheControl: '31536000',
-    })
-    if (error) throw error
-    return supabase.storage.from('task-files').getPublicUrl(path).data.publicUrl
-  },
 }

@@ -3,7 +3,7 @@ import { HandCoins, Plus, Pencil, Trash2, X, Printer, FileSpreadsheet, Check, Bu
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { offeringsService, OFFERING_CATEGORIES } from '@/services/offeringsService'
+import { offeringsService, OFFERING_CATEGORIES, normalizeOfferingCategory } from '@/services/offeringsService'
 import { komselOfferingsService } from '@/services/contentService'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, StatusBadge, Avatar, Badge } from '@/components/ui'
@@ -149,7 +149,7 @@ export default function AdminOfferingsPage() {
         title: t('aoff.arcList'),
         rows: items.map(o => [
           `${formatDate(o.created_at)} · ${o.users?.name || '-'}`,
-          `${o.category} — ${formatRupiah(o.amount)} (${o.status})`,
+          `${normalizeOfferingCategory(o.category)} — ${formatRupiah(o.amount)} (${o.status})`,
         ]),
       }],
       documents,
@@ -268,7 +268,7 @@ export default function AdminOfferingsPage() {
                     <Avatar name={o.users?.name} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900">{formatRupiah(o.amount)}</p>
-                      <p className="text-xs text-gray-400 truncate">{o.users?.name || '-'} · {o.category} · {formatDate(o.created_at)}</p>
+                      <p className="text-xs text-gray-400 truncate">{o.users?.name || '-'} · {normalizeOfferingCategory(o.category)} · {formatDate(o.created_at)}</p>
                     </div>
                     <StatusBadge status={o.status} />
                   </div>
@@ -306,7 +306,7 @@ export default function AdminOfferingsPage() {
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900">{formatRupiah(o.amount)}</p>
-                      <p className="text-xs text-gray-400 truncate">{o.komsel?.name || '-'} · {o.category} · {formatDate(o.created_at)}</p>
+                      <p className="text-xs text-gray-400 truncate">{o.komsel?.name || '-'} · {normalizeOfferingCategory(o.category)} · {formatDate(o.created_at)}</p>
                     </div>
                     <StatusBadge status={o.status} />
                   </div>

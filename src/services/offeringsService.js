@@ -3,12 +3,29 @@ import { sanitizeFilename } from '@/lib/utils'
 
 export const OFFERING_CATEGORIES = [
   'Perpuluhan',
-  'Persembahan',
+  'Persembahan Pagi',
+  'Persembahan Kids',
+  'Persembahan NextGen',
   'Persembahan Syukur',
   'Diakonia',
-  'Pembangunan',
+  'Pembangunan/Janji Iman',
+  'Perehapan',
+  'Buah Sulung',
   'Lainnya',
 ]
+
+const OFFERING_CATEGORY_ALIASES = {
+  'Persembahan Pagi': ['Persembahan Pagi', 'Persembahan'],
+  'Pembangunan/Janji Iman': ['Pembangunan/Janji Iman', 'Pembangunan'],
+}
+
+// Data lama tidak diubah massal. Normalisasi ini membuat label dan filter
+// historis tetap menyatu dengan nama kategori penggantinya.
+export function normalizeOfferingCategory(category) {
+  if (category === 'Persembahan') return 'Persembahan Pagi'
+  if (category === 'Pembangunan') return 'Pembangunan/Janji Iman'
+  return category
+}
 
 export const offeringsService = {
   // ── Rekening / QRIS gereja ───────────────────────────────
@@ -67,7 +84,10 @@ export const offeringsService = {
     let q = supabase.from('offerings').select('*, users(name, phone)').order('created_at', { ascending: false })
     if (startDate) q = q.gte('created_at', startDate)
     if (endDate) q = q.lte('created_at', endDate)
-    if (category) q = q.eq('category', category)
+    if (category) {
+      const values = OFFERING_CATEGORY_ALIASES[category]
+      q = values ? q.in('category', values) : q.eq('category', category)
+    }
     if (status) q = q.eq('status', status)
     const { data, error } = await q
     if (error) throw error
