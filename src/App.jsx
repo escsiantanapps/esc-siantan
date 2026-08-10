@@ -43,7 +43,6 @@ import PersembahanPage from '@/pages/user/PersembahanPage'
 import UserLeavePage from '@/pages/user/UserLeavePage'
 import SettingsPage from '@/pages/user/SettingsPage'
 import PointsPage from '@/pages/user/PointsPage'
-import BacaPage from '@/pages/user/BacaPage'
 import PesanPage from '@/pages/user/PesanPage'
 import HelpPage from '@/pages/user/HelpPage'
 
@@ -80,7 +79,6 @@ const AdminAuditPage = lazy(() => import('@/pages/admin/AdminAuditPage'))
 const AdminRoadmapPage = lazy(() => import('@/pages/admin/AdminRoadmapPage'))
 const AdminRedeemPage = lazy(() => import('@/pages/admin/AdminRedeemPage'))
 const AdminPointsLogPage = lazy(() => import('@/pages/admin/AdminPointsLogPage'))
-const AdminBooksPage = lazy(() => import('@/pages/admin/AdminBooksPage'))
 const AdminSundayPage = lazy(() => import('@/pages/admin/AdminSundayPage'))
 const AdminMessagesPage = lazy(() => import('@/pages/admin/AdminMessagesPage'))
 const AdminMinistrySchedulePage = lazy(() => import('@/pages/admin/AdminMinistrySchedulePage'))
@@ -196,7 +194,7 @@ export default function App() {
             <Route path="status-pendaftaran"   element={<RegistrationStatusPage />} />
             <Route path="persembahan"          element={<PersembahanPage />} />
             <Route path="poin"                 element={<PointsPage />} />
-            <Route path="baca"                 element={<BacaPage />} />
+            <Route path="baca"                 element={<Navigate to="/" replace />} />
             <Route path="pesan"                element={<PesanPage />} />
             <Route path="panduan"              element={<HelpPage />} />
             <Route path="izin"                 element={<UserLeavePage />} />
@@ -237,7 +235,7 @@ export default function App() {
             <Route path="roadmap"              element={<AdminRoadmapPage />} />
             <Route path="tukar-poin"           element={<AdminRedeemPage />} />
             <Route path="distribusi-poin"      element={<AdminPointsLogPage />} />
-            <Route path="baca"                 element={<AdminBooksPage />} />
+            <Route path="baca"                 element={<Navigate to="/admin" replace />} />
             <Route path="ibadah-minggu"        element={<AdminSundayPage />} />
             <Route path="pelayanan"            element={<AdminMinistrySchedulePage />} />
             <Route path="pesan"                element={<AdminMessagesPage />} />

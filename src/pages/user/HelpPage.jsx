@@ -132,20 +132,6 @@ Kelas pembinaan dan pelatihan:
 
 ---
 
-## Buku (Disiplin Baca)
-
-Program ini dipakai untuk mencatat progres buku rohani yang dibaca secara fisik atau melalui sumber di luar aplikasi. Aplikasi tidak menyediakan file PDF buku.
-
-### Mencatat Progres
-1. Buka buku yang sedang dibaca
-2. Masukkan halaman terakhir yang dicapai
-3. Tulis poin, pelajaran, atau refleksi dari bacaan
-4. Ketuk "Setor"
-
-Progres otomatis diperbarui berdasarkan halaman tertinggi yang pernah dicatat.
-
----
-
 ## Pendaftaran Sakramen
 
 ### Baptisan
@@ -653,17 +639,6 @@ Sama seperti Events, plus:
 - Generate QR per sesi
 - Lihat kehadiran per pertemuan
 - Export rekap
-
----
-
-### Buku (Disiplin Baca)
-
-1. Ketuk "Tambah Buku" atau edit buku yang sudah ada
-2. Isi judul, penulis, total halaman, dan deskripsi
-3. Aktifkan buku agar tampil untuk jemaat, lalu simpan
-4. Gunakan tab "Rekap" untuk melihat progres dan mengekspor catatan jemaat
-
-Aplikasi tidak menyimpan atau menayangkan PDF buku. Jemaat membaca dari buku fisik atau sumber lain, kemudian mencatat halaman dan refleksinya di aplikasi.
 
 ---
 
