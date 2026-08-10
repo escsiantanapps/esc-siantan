@@ -13,10 +13,11 @@ export const booksService = {
     return data || []
   },
 
-  async createBook({ title, author, totalPages, description, pdfUrl, createdBy }) {
+  async createBook({ title, author, totalPages, description, coverUrl, pdfUrl, createdBy }) {
     const { data, error } = await supabase.from('books').insert({
       title, author: author || null, total_pages: totalPages || null,
-      description: description || null, pdf_url: pdfUrl || null, created_by: createdBy,
+      description: description || null, cover_url: coverUrl || null,
+      pdf_url: pdfUrl || null, created_by: createdBy,
     }).select().single()
     if (error) throw error
     return data

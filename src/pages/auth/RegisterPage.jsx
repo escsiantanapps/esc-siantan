@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Check } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { fetchApi } from '@/lib/utils'
+import { compressImage, fetchApi } from '@/lib/utils'
 import { Button, Input, Select, GradientHeader } from '@/components/ui'
+import Uploader from '@/components/Uploader'
 
 async function postJson(url, payload) {
   const res = await fetchApi(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -13,61 +15,121 @@ async function postJson(url, payload) {
 }
 
 export default function RegisterPage() {
-  const { register, refreshProfile } = useAuth()
+  const { register, completeRegistrationPhoto, refreshProfile } = useAuth()
   const { t } = useLang()
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [photoFile, setPhotoFile] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState('')
+  const [processingPhoto, setProcessingPhoto] = useState(false)
+  const [accountCreated, setAccountCreated] = useState(false)
   const [form, setForm] = useState({
     name: '', email: '', phone: '', password: '', confirmPassword: '',
     gender: '', birth_date: '', birth_place: '', address: '',
     blood_type: '', social_media: '',
   })
 
+  useEffect(() => () => {
+    if (photoPreview.startsWith('blob:')) URL.revokeObjectURL(photoPreview)
+  }, [photoPreview])
+
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
 
+  function beforePhoto(file) {
+    setError('')
+    if (!file.type?.startsWith('image/')) {
+      setError(t('auth.photoTypeError'))
+      return false
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setError(t('auth.photoSizeError'))
+      return false
+    }
+    return true
+  }
+
+  async function handlePhoto(file) {
+    setError('')
+    setProcessingPhoto(true)
+    try {
+      const compressed = await compressImage(file, { maxDim: 720, quality: 0.76, targetKB: 250 })
+      setPhotoFile(compressed)
+      setPhotoPreview(URL.createObjectURL(compressed))
+    } catch {
+      setError(t('auth.photoProcessError'))
+    } finally {
+      setProcessingPhoto(false)
+    }
+  }
+
+  function clearPhoto() {
+    setPhotoFile(null)
+    setPhotoPreview('')
+    setError('')
+  }
+
   async function handleSubmit() {
-    if (form.password !== form.confirmPassword) { setError(t('auth.pwMismatch')); return }
-    if (form.password.length < 8 || !/[a-zA-Z]/.test(form.password) || !/\d/.test(form.password)) {
-      setError(t('auth.pwMin8')); return
+    if (!photoFile) { setError(t('auth.photoRequired')); setStep(2); return }
+    if (form.password !== form.confirmPassword) { setError(t('auth.pwMismatch')); setStep(1); return }
+    if (form.password.length < 8 || !/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password)) {
+      setError(t('auth.pwMin8')); setStep(1); return
     }
     setError(''); setLoading(true)
     try {
-      // Cek nomor/email: apakah sudah terdaftar di sistem (jemaat lama atau akun aktif).
-      const chk = await postJson('/api/check-phone', { phone: form.phone, email: form.email }).catch(() => null)
+      if (!accountCreated) {
+        // Cek nomor/email sebelum membuat akun agar foto tidak diproses untuk data duplikat.
+        const chk = await postJson('/api/check-phone', { phone: form.phone, email: form.email }).catch(() => null)
 
-      if (chk?.needsActivation || chk?.hasLogin || chk?.phoneTaken) {
-        setError(t('auth.phoneTaken'))
-        setStep(1)
-        return
+        if (chk?.needsActivation || chk?.hasLogin || chk?.phoneTaken) {
+          setError(t('auth.phoneTaken'))
+          setStep(1)
+          return
+        }
+        if (chk?.emailTaken) {
+          setError(t('auth.emailTaken'))
+          setStep(1)
+          return
+        }
+        await register({ ...form, photo: photoFile })
+      } else {
+        try {
+          await completeRegistrationPhoto(photoFile)
+        } catch (cause) {
+          const retryError = new Error('PROFILE_PHOTO_UPLOAD_FAILED')
+          retryError.code = 'PROFILE_PHOTO_UPLOAD_FAILED'
+          retryError.cause = cause
+          throw retryError
+        }
       }
-      if (chk?.emailTaken) {
-        setError(t('auth.emailTaken'))
-        setStep(1)
-        return
-      }
 
-      await register(form)
-
-      // Muat ulang profil (kini baris users pending sudah ada) supaya gate
-      // menampilkan status "menunggu persetujuan" yang benar — bukan layar
-      // nonaktif akibat race fetchProfile saat signUp. Gagal-aman: gate tetap
-      // fail-closed walau ini gagal.
+      // Muat profil setelah URL foto tersimpan agar layar pending langsung
+      // menampilkan avatar yang baru dipilih.
       await refreshProfile().catch(() => {})
 
-      // Kirim notifikasi web push ke Admin
+      // Notifikasi bukan bagian transaksi registrasi. Gangguan push tidak boleh
+      // membuat pengguna mengulang signUp yang sebenarnya sudah berhasil.
       const { pushService } = await import('@/services/pushService')
-      await pushService.notifyAdmin('new_user')
+      await pushService.notifyAdmin('new_user').catch(() => {})
 
-      navigate('/') // gate PrivateRoute → AccountStatusPage (menunggu persetujuan)
+      navigate('/')
     } catch (err) {
-      setError(
-        err.message === 'PHONE_TAKEN' ? t('auth.phoneTaken')
-        : err.message === 'EMAIL_TAKEN' ? t('auth.emailTaken')
-        : (err.message || t('auth.registerFailed'))
-      )
-      setStep(1)
+      if (err.code === 'PROFILE_PHOTO_UPLOAD_FAILED' || err.message === 'PROFILE_PHOTO_UPLOAD_FAILED') {
+        setAccountCreated(true)
+        setError(t('auth.photoUploadRetry'))
+        setStep(3)
+      } else if (err.message === 'PROFILE_PHOTO_REQUIRED') {
+        setError(t('auth.photoRequired'))
+        setStep(2)
+      } else {
+        setError(
+          err.message === 'PHONE_TAKEN' ? t('auth.phoneTaken')
+          : err.message === 'EMAIL_TAKEN' ? t('auth.emailTaken')
+          : (err.message || t('auth.registerFailed'))
+        )
+        setStep(1)
+      }
     } finally {
       setLoading(false)
     }
@@ -79,7 +141,7 @@ export default function RegisterPage() {
         <GradientHeader
           title={t('auth.createAccount')}
           subtitle={t('auth.createSubtitle')}
-          back={step > 1 ? () => setStep(s => s - 1) : undefined}
+          back={step > 1 && !accountCreated ? () => setStep(s => s - 1) : undefined}
         />
 
         {/* Step indicator */}
@@ -88,7 +150,7 @@ export default function RegisterPage() {
             <div key={s} className="flex items-center gap-2 flex-1">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0
                 ${s < step ? 'gradient-main text-white' : s === step ? 'border-2 border-brand-500 text-brand-500' : 'border-2 border-gray-200 text-gray-300'}`}>
-                {s < step ? '✓' : s}
+                {s < step ? <Check size={13} aria-hidden="true" /> : s}
               </div>
               <span className={`text-xs ${s === step ? 'text-brand-500 font-medium' : 'text-gray-400'}`}>
                 {[t('auth.stepAccount'), t('auth.stepData'), t('auth.stepDone')][s - 1]}
@@ -122,6 +184,15 @@ export default function RegisterPage() {
 
           {step === 2 && (
             <div className="space-y-4">
+              <Uploader
+                kind="image" crop aspect={1} required value={photoPreview}
+                label={t('auth.profilePhoto')} hint={t('auth.profilePhotoHint')}
+                accept="image/*" uploading={processingPhoto}
+                imageAlt={t('auth.photoPreviewAlt')}
+                uploadLabel={t('auth.choosePhoto')} replaceLabel={t('auth.replacePhoto')}
+                removeLabel={t('auth.removePhoto')} uploadingLabel={t('auth.processingPhoto')}
+                beforeFile={beforePhoto} onFile={handlePhoto} onClear={clearPhoto}
+              />
               <Select label={t('auth.gender')} value={form.gender} onChange={e => set('gender', e.target.value)}>
                 <option value="">{t('auth.choose')}</option>
                 <option value="Laki-laki">{t('gender.male')}</option>
@@ -135,7 +206,10 @@ export default function RegisterPage() {
                 {['A','B','AB','O'].map(b => <option key={b}>{b}</option>)}
               </Select>
               <Input label={t('auth.socialMedia')} placeholder="@username" value={form.social_media} onChange={e => set('social_media', e.target.value)} />
-              <Button className="w-full mt-2" size="lg" onClick={() => { setStep(3) }}>
+              <Button className="w-full mt-2" size="lg" loading={processingPhoto} onClick={() => {
+                if (!photoFile) { setError(t('auth.photoRequired')); return }
+                setError(''); setStep(3)
+              }}>
                 {t('auth.next')}
               </Button>
             </div>
@@ -143,8 +217,9 @@ export default function RegisterPage() {
 
           {step === 3 && (
             <div className="flex flex-col items-center text-center py-8">
-              <div className="w-20 h-20 rounded-full gradient-main flex items-center justify-center mb-4 text-4xl">✓</div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">{t('auth.readyTitle')}</h2>
+              <img src={photoPreview} alt={t('auth.photoPreviewAlt')} width="96" height="96"
+                className="w-24 h-24 rounded-full object-cover border-4 border-brand-100 mb-4" />
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">{t(accountCreated ? 'auth.photoRetryTitle' : 'auth.readyTitle')}</h2>
               <p className="text-sm text-gray-500 mb-2">{t('auth.name')}: <strong className="text-gray-800">{form.name}</strong></p>
               <p className="text-sm text-gray-500 mb-6">{t('auth.email')}: <strong className="text-gray-800">{form.email}</strong></p>
               <p className="text-xs text-gray-400 mb-4">
@@ -152,7 +227,7 @@ export default function RegisterPage() {
                 <Link to="/kebijakan-privasi" className="text-brand-500 font-medium" target="_blank">{t('auth.privacyPolicy')}</Link>.
               </p>
               <Button className="w-full" size="lg" loading={loading} onClick={handleSubmit}>
-                {t('auth.registerSubmit')}
+                {t(accountCreated ? 'auth.retryPhotoSubmit' : 'auth.registerSubmit')}
               </Button>
             </div>
           )}

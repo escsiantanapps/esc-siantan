@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Move, ZoomIn } from 'lucide-react'
 import { Button } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 
 // Pemotong/pembingkai foto: admin mengatur posisi & zoom foto di dalam bingkai
 // rasio tetap SEBELUM diunggah, supaya tidak terpotong sembarangan saat tampil
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui'
 // Model: pada zoom=1 foto "menutupi" (cover) bingkai; user bisa geser & zoom
 // lebih dekat. Hasil dipotong ke rasio bingkai dan dikirim sebagai File JPEG.
 export default function ImageCropper({ file, aspect = 16 / 9, onCancel, onCropped }) {
+  const { t } = useLang()
   const V_W = 300
   const V_H = Math.round(V_W / aspect)
 
@@ -86,9 +88,9 @@ export default function ImageCropper({ file, aspect = 16 / 9, onCancel, onCroppe
       <div className="w-full max-w-sm bg-surface rounded-2xl p-4 space-y-4">
         <div className="flex items-center gap-1.5">
           <Move size={15} className="text-brand-500" />
-          <h2 className="text-sm font-semibold text-gray-900">Atur Posisi Foto</h2>
+          <h2 className="text-sm font-semibold text-gray-900">{t('uploader.cropTitle')}</h2>
         </div>
-        <p className="text-xs text-gray-400 -mt-2">Geser untuk memindahkan, gunakan slider untuk memperbesar. Bagian dalam bingkai yang akan tampil.</p>
+        <p className="text-xs text-gray-400 -mt-2">{t('uploader.cropHint')}</p>
 
         <div
           className="relative mx-auto rounded-xl overflow-hidden bg-gray-100 touch-none select-none cursor-move"
@@ -97,11 +99,11 @@ export default function ImageCropper({ file, aspect = 16 / 9, onCancel, onCroppe
         >
           {img ? (
             <img
-              src={url} alt="" draggable="false"
+              src={url} alt={t('uploader.cropImageAlt')} draggable="false"
               style={{ position: 'absolute', width: dispW, height: dispH, left: offset.x, top: offset.y, maxWidth: 'none' }}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">Memuat…</div>
+            <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">{t('uploader.loading')}</div>
           )}
         </div>
 
@@ -109,14 +111,15 @@ export default function ImageCropper({ file, aspect = 16 / 9, onCancel, onCroppe
           <ZoomIn size={15} className="text-gray-400 shrink-0" />
           <input
             type="range" min="1" max="3" step="0.01" value={zoom}
+            aria-label={t('uploader.zoomLabel')}
             onChange={e => setZoom(Number(e.target.value))}
             className="flex-1 accent-brand-500"
           />
         </div>
 
         <div className="flex gap-2 pt-1">
-          <Button variant="ghost" className="flex-1" onClick={onCancel}>Batal</Button>
-          <Button className="flex-1" onClick={done} disabled={!img}>Gunakan Foto</Button>
+          <Button variant="ghost" className="flex-1" onClick={onCancel}>{t('a.cancel')}</Button>
+          <Button className="flex-1" onClick={done} disabled={!img}>{t('uploader.usePhoto')}</Button>
         </div>
       </div>
     </div>

@@ -16,8 +16,10 @@ const PANDUAN_JEMAAT = `
 **Mendaftar Akun Baru:**
 1. Buka aplikasi di browser (https://escsiantan.my.id)
 2. Ketuk "Daftar" di halaman login
-3. Isi data diri lengkap
-4. Tunggu persetujuan admin
+3. Isi data akun dan data diri
+4. Tambahkan foto profil; foto wajib dipilih dan akan dikompresi otomatis
+5. Periksa ringkasan lalu ketuk "Daftar Sekarang"
+6. Tunggu persetujuan admin
 
 **Login:**
 - Gunakan email atau nomor HP yang sudah terdaftar
@@ -656,6 +658,17 @@ Sama seperti Events, plus:
 - Generate QR per sesi
 - Lihat kehadiran per pertemuan
 - Export rekap
+
+---
+
+### Buku (Disiplin Baca)
+
+1. Ketuk "Tambah Buku" atau edit buku yang sudah ada
+2. Pilih file PDF; cover halaman pertama dibuat dan dikompresi otomatis
+3. Periksa status "Cover hemat data siap", lalu simpan buku
+4. Untuk PDF lama yang belum memiliki cover, ketuk "Buat Cover dari PDF" satu kali
+
+Cover kecil ditampilkan pada daftar buku. File PDF baru dimuat ketika jemaat menekan tombol baca agar penggunaan data tetap hemat.
 
 ---
 

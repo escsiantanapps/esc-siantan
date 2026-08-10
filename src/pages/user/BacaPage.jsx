@@ -104,7 +104,7 @@ export default function BacaPage() {
                 <Card key={bk.book_id} className="p-4" onClick={() => openBook(bk)} role="button">
                   <div className="flex items-start gap-3">
                     <PdfCover
-                      url={bk.pdf_url}
+                      url={bk.cover_url}
                       label={t('baca.coverAlt', { title: bk.title })}
                     />
                     <div className="flex-1 min-w-0">
@@ -153,7 +153,7 @@ export default function BacaPage() {
             {active.pdf_url && (
               <div className="flex justify-center">
                 <PdfCover
-                  url={active.pdf_url}
+                  url={active.cover_url}
                   label={t('baca.coverAlt', { title: active.title })}
                   className="w-28"
                 />

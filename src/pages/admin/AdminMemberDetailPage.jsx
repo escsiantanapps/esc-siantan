@@ -4,6 +4,7 @@ import QRCode from 'qrcode'
 import { ArrowLeft, Trash2, Download } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { usersService } from '@/services/usersService'
 import { sensitiveIdentityService } from '@/services/sensitiveIdentityService'
 import { mediaService } from '@/services/contentService'
@@ -17,6 +18,7 @@ export default function AdminMemberDetailPage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { toast, confirm } = useToast()
+  const { t } = useLang()
   const isGembala = profile?.role === 'Gembala'
   const isSuperAdmin = profile?.role === 'Super Admin'
   const canEditRole = ['Admin', 'Super Admin'].includes(profile?.role)
@@ -163,8 +165,11 @@ export default function AdminMemberDetailPage() {
       setSuccess(msg)
       toast.success(msg)
     } catch (err) {
-      setError(err.message || 'Gagal memperbarui status.')
-      toast.error(err.message || 'Gagal memperbarui status.')
+      const message = err.message?.includes('profile_photo_required_for_approval')
+        ? t('amem.photoRequiredApprovalError')
+        : (err.message || 'Gagal memperbarui status.')
+      setError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
@@ -231,6 +236,8 @@ export default function AdminMemberDetailPage() {
 
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
 
+  const approvalBlocked = member?.registration_photo_required === true && !member?.photo_url
+
   if (!member) {
     return (
       <div>
@@ -260,11 +267,14 @@ export default function AdminMemberDetailPage() {
         <Card className="p-4 mb-4 border-brand-200 bg-brand-50 flex items-center justify-between gap-3 flex-wrap">
           <div>
             <p className="text-sm font-semibold text-brand-700">Menunggu persetujuan pendaftaran</p>
-            <p className="text-xs text-brand-600">Setujui agar jemaat ini bisa mengakses akunnya.</p>
+            <p className="text-xs text-brand-600">
+              {approvalBlocked ? t('amem.photoRequiredApproval') : 'Setujui agar jemaat ini bisa mengakses akunnya.'}
+            </p>
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant="danger" loading={saving} onClick={() => handleApproval('Ditolak')}>Tolak</Button>
-            <Button size="sm" loading={saving} onClick={() => handleApproval('Aktif')}>Setujui</Button>
+            <Button size="sm" loading={saving} disabled={approvalBlocked}
+              onClick={() => handleApproval('Aktif')}>Setujui</Button>
           </div>
         </Card>
       )}

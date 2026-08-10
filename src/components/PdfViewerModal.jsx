@@ -222,7 +222,14 @@ export default function PdfViewerModal({
 
     import('pdfjs-dist').then(({ GlobalWorkerOptions, getDocument }) => {
       GlobalWorkerOptions.workerSrc = pdfWorkerUrl
-      loadingTask = getDocument(file.url)
+      // Streaming dimatikan bersama auto-fetch agar PDF.js hanya meminta chunk
+      // yang dibutuhkan halaman aktif, bukan meneruskan unduhan seluruh buku.
+      loadingTask = getDocument({
+        url: file.url,
+        disableStream: true,
+        disableAutoFetch: true,
+        rangeChunkSize: 64 * 1024,
+      })
       return loadingTask.promise
     }).then((document) => {
       if (!cancelled) setPdf(document)

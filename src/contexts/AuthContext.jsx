@@ -1,6 +1,7 @@
 import { createContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchApi } from '@/lib/utils'
+import { usersService } from '@/services/usersService'
 
 export const AuthContext = createContext(null)
 
@@ -111,6 +112,8 @@ export function AuthProvider({ children }) {
   }
 
   async function register(formData) {
+    if (!formData.photo) throw new Error('PROFILE_PHOTO_REQUIRED')
+
     // Cek duplikat nomor HP DAN email sebelum membuat akun (gagal-aman:
     // lanjut bila endpoint bermasalah — signUp tetap menolak email ganda di
     // auth.users sebagai jaring pengaman terakhir).
@@ -143,7 +146,7 @@ export function AuthProvider({ children }) {
     // email) sebagai jaring pengaman. Kalau auto-create itu menang balapan,
     // INSERT biasa di sini akan gagal (auth_id UNIQUE) dan biodata step-2 HILANG.
     // Dengan upsert, biodata lengkap tetap tertulis (menimpa baris minimal itu).
-    const { error: profileError } = await supabase.from('users').upsert({
+    const { data: profileRow, error: profileError } = await supabase.from('users').upsert({
       auth_id: data.user.id,
       name: formData.name,
       email: formData.email,
@@ -157,9 +160,46 @@ export function AuthProvider({ children }) {
       address: orNull(formData.address),
       blood_type: orNull(formData.blood_type),
       social_media: orNull(formData.social_media),
-    }, { onConflict: 'auth_id' })
+    }, { onConflict: 'auth_id' }).select('user_id').single()
     if (profileError) throw profileError
+
+    try {
+      const photoUrl = await usersService.uploadAvatar(profileRow.user_id, formData.photo)
+      const { error: photoProfileError } = await supabase
+        .from('users')
+        .update({ photo_url: photoUrl })
+        .eq('auth_id', data.user.id)
+      if (photoProfileError) throw photoProfileError
+    } catch (cause) {
+      // Akun dan profil sudah terbentuk. Tandai khusus agar UI mengulang tahap
+      // foto saja, bukan signUp lagi yang pasti ditolak sebagai email duplikat.
+      const photoError = new Error('PROFILE_PHOTO_UPLOAD_FAILED')
+      photoError.code = 'PROFILE_PHOTO_UPLOAD_FAILED'
+      photoError.cause = cause
+      throw photoError
+    }
     return data
+  }
+
+  async function completeRegistrationPhoto(file) {
+    if (!file) throw new Error('PROFILE_PHOTO_REQUIRED')
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+    if (authError || !authUser) throw authError || new Error('SESSION_NOT_FOUND')
+
+    const { data: profileRow, error: profileError } = await supabase
+      .from('users')
+      .select('user_id')
+      .eq('auth_id', authUser.id)
+      .single()
+    if (profileError) throw profileError
+
+    const photoUrl = await usersService.uploadAvatar(profileRow.user_id, file)
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ photo_url: photoUrl })
+      .eq('auth_id', authUser.id)
+    if (updateError) throw updateError
+    return photoUrl
   }
 
   async function logout() {
@@ -210,7 +250,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading,
-      login, register, logout, updateProfile, refreshProfile,
+      login, register, completeRegistrationPhoto, logout, updateProfile, refreshProfile,
       resetPassword, verifyResetOtp, updatePassword,
       isAdmin, isPKS, isVolunteer, isGembala,
     }}>

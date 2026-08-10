@@ -16,7 +16,7 @@ export default function Uploader({
   kind = 'file', value, onFile, onClear, uploading,
   label, hint, accept, required, crop = false, aspect = 16 / 9,
   uploadLabel = 'Unggah Foto', replaceLabel = 'Ganti Foto',
-  removeLabel = 'Hapus foto', uploadingLabel = 'Mengunggah...', imageAlt = '',
+  removeLabel = 'Hapus foto', uploadingLabel = 'Mengunggah...', imageAlt = '', beforeFile,
 }) {
   const inputRef = useRef(null)
   const [pendingFile, setPendingFile] = useState(null)
@@ -25,6 +25,7 @@ export default function Uploader({
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f) return
+    if (beforeFile && beforeFile(f) === false) return
     if (crop && kind === 'image') setPendingFile(f)
     else onFile(f)
   }

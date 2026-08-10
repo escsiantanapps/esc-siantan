@@ -4380,3 +4380,48 @@ CREATE POLICY "inventory_photos_admin_delete" ON storage.objects
     AND name LIKE 'items/ITEM-%/main'
     AND auth_admin_can('/admin/inventory')
   );
+-- ── Migrasi v78: Foto profil wajib untuk registrasi baru ──
+-- TEMUAN (2026-08-09): validasi foto yang hanya ada di RegisterPage dapat
+-- dilewati lewat auth.signUp/PostgREST langsung. Profil pending tanpa foto
+-- kemudian masih berpotensi disetujui Admin.
+-- KEPUTUSAN OPERATOR: registrasi baru melalui akun sendiri wajib memiliki foto.
+-- Akun aktif dan pendaftar lama tidak diubah; penanda hanya dipasang otomatis
+-- pada profil pending yang dibuat sendiri setelah migrasi ini dijalankan.
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS registration_photo_required BOOLEAN NOT NULL DEFAULT false;
+
+CREATE OR REPLACE FUNCTION enforce_registration_profile_photo() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF auth.uid() IS NOT NULL
+       AND NEW.auth_id = auth.uid()
+       AND NEW.status = 'Menunggu Persetujuan' THEN
+      NEW.registration_photo_required := true;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- Penanda ditentukan database. Semua pemanggil authenticated, termasuk Admin,
+  -- tidak dapat mematikannya lewat payload PostgREST; SQL Editor/service role
+  -- (auth.uid() NULL) tetap menjadi jalur pemulihan operator.
+  IF auth.uid() IS NOT NULL
+     AND NEW.registration_photo_required IS DISTINCT FROM OLD.registration_photo_required THEN
+    NEW.registration_photo_required := OLD.registration_photo_required;
+  END IF;
+
+  IF OLD.registration_photo_required = true
+     AND NEW.status = 'Aktif'
+     AND OLD.status IS DISTINCT FROM 'Aktif'
+     AND NULLIF(btrim(COALESCE(NEW.photo_url, '')), '') IS NULL THEN
+    RAISE EXCEPTION 'profile_photo_required_for_approval' USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_enforce_registration_profile_photo ON users;
+CREATE TRIGGER trg_enforce_registration_profile_photo
+  BEFORE INSERT OR UPDATE ON users
+  FOR EACH ROW EXECUTE FUNCTION enforce_registration_profile_photo();
