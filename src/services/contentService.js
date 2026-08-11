@@ -736,7 +736,7 @@ export const komselService = {
   async getAttendanceForSessions(sessionIds) {
     if (!sessionIds || sessionIds.length === 0) return []
     const { data, error } = await supabase.from('komsel_attendance')
-      .select('session_id, user_id, users(name, photo_url)')
+      .select('session_id, user_id, users!user_id(name, photo_url)')
       .in('session_id', sessionIds)
     if (error) throw error
     return data
@@ -768,37 +768,25 @@ export const komselService = {
   // Kehadiran satu sesi (untuk PKS memantau siapa saja yang sudah scan).
   async getSessionAttendance(sessionId) {
     const { data, error } = await supabase.from('komsel_attendance')
-      .select('*, users(name, photo_url)').eq('session_id', sessionId)
+      .select('*, users!user_id(name, photo_url)').eq('session_id', sessionId)
       .order('created_at', { ascending: false })
     if (error) throw error
     return data
   },
 
   // Jemaat mencatat kehadirannya sendiri lewat scan QR sesi.
-  async checkInSession(session, userId) {
-    const { data, error } = await supabase.from('komsel_attendance')
-      .insert({
-        komsel_id: session.komsel_id,
-        user_id: userId,
-        session_id: session.session_id,
-        attendance_date: session.session_date,
-        status: 'Hadir',
-      }).select().single()
-    if (error) {
-      if (error.code === '23505') throw new Error('Kehadiran sesi ini sudah tercatat.')
-      throw error
-    }
-    // points_awarded di-set trigger AFTER INSERT (award_attendance_point) — nilai
-    // pada `data` masih false, jadi dibaca ulang. Poin komsel bersyarat: 0 untuk
-    // pemimpin komsel & bila sudah dapat poin komsel hari ini (Migrasi v59).
-    const { data: fresh } = await supabase.from('komsel_attendance')
-      .select('points_awarded').eq('attendance_id', data.attendance_id).maybeSingle()
-    return { ...data, points_awarded: fresh?.points_awarded ?? false }
+  async checkInSession(sessionId) {
+    // Identitas dan pemberian poin diputuskan atomik oleh RPC tepercaya.
+    const { data, error } = await supabase.rpc('check_in_komsel_session', {
+      p_session_id: sessionId,
+    })
+    if (error) throw error
+    return data
   },
 
   async getAttendanceHistory(komselId) {
     const { data, error } = await supabase
-      .from('komsel_attendance').select('*, users(name)')
+      .from('komsel_attendance').select('*, users!user_id(name)')
       .eq('komsel_id', komselId).order('attendance_date', { ascending: false })
     if (error) throw error
     return data
@@ -806,7 +794,7 @@ export const komselService = {
 
   async getAllAttendance() {
     const { data, error } = await supabase
-      .from('komsel_attendance').select('*, users(name), komsel(name)')
+      .from('komsel_attendance').select('*, users!user_id(name), komsel(name)')
       .order('attendance_date', { ascending: false })
     if (error) throw error
     return data

@@ -88,10 +88,13 @@ export default function AttendanceScanPage() {
       // html5-qrcode 2.3.8, bukan opsi scanner.start().
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
       if (cancelled) return
+      const iosDevice = isIOSDevice()
       const scanner = new Html5Qrcode('qr-reader', {
         verbose: false,
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-        useBarCodeDetectorIfSupported: true,
+        // Implementasi BarcodeDetector WebKit berbeda-beda antar versi iOS.
+        // Decoder ZXing bawaan lebih konsisten untuk QR panjang sesi ibadah.
+        useBarCodeDetectorIfSupported: !iosDevice,
       })
       scannerRef.current = scanner
 
@@ -109,8 +112,15 @@ export default function AttendanceScanPage() {
       // scanner.start() sendiri meminta izin kamera. Pra-panggilan getUserMedia()
       // sengaja dihapus karena membuka-menutup stream lalu langsung membukanya
       // lagi dapat membuat WebKit iPhone belum melepas perangkat kamera.
-      const config = { fps: 10 }
-      const iosDevice = isIOSDevice()
+      const config = {
+        fps: 10,
+        // Crop dekode mengikuti kotak panduan. Di iPhone ini jauh lebih ringan
+        // daripada memproses seluruh frame kamera portrait pada setiap iterasi.
+        qrbox: (width, height) => {
+          const edge = Math.floor(Math.min(width * 0.72, height * 0.9, 288))
+          return { width: Math.max(180, edge), height: Math.max(180, edge) }
+        },
+      }
       const candidates = []
 
       if (iosDevice) {
@@ -310,30 +320,47 @@ export default function AttendanceScanPage() {
   async function handleKomsel(sessionId) {
     try {
       const session = await komselService.getSessionById(sessionId)
-      
-      // Proteksi: Pastikan user yang scan benar-benar anggota dari komsel ini
+      const name = session.komsel?.name || t('scan.komselFallback')
+
+      // Pra-cek untuk pesan cepat; RPC v79 tetap menjadi gerbang sebenarnya.
       if (profile.komsel_id !== session.komsel_id) {
-        setResult({ 
-          type: 'error', 
-          message: `Gagal absen: Sesi ini untuk "${session.komsel?.name || 'Komsel Lain'}", sedangkan Anda terdaftar di komsel yang berbeda. Beri tahu PKS Anda!` 
+        setResult({ type: 'error', message: t('scan.komselWrongGroup', { name }) })
+        return
+      }
+
+      const rec = await komselService.checkInSession(session.session_id)
+      if (!rec?.ok) {
+        const keyByReason = {
+          duplicate: 'scan.komselDuplicate',
+          wrong_komsel: 'scan.komselWrongGroup',
+          expired_session: 'scan.komselExpired',
+          invalid_session: 'scan.komselInvalid',
+          account_inactive: 'scan.komselInactive',
+          not_authenticated: 'scan.komselNotAuthenticated',
+        }
+        const key = keyByReason[rec?.reason] || 'scan.komselFailed'
+        setResult({
+          type: rec?.reason === 'duplicate' ? 'duplicate' : 'error',
+          message: t(key, { name }),
         })
         return
       }
 
-      try {
-        const rec = await komselService.checkInSession(session, profile.user_id)
-        const nm = session.komsel?.name || ''
-        setResult({
-          type: 'success',
-          message: rec.points_awarded
-            ? `Kehadiran komsel "${nm}" tercatat. +1 poin! 🎉`
-            : `Kehadiran komsel "${nm}" tercatat. ✅ (tanpa poin — sebagai pemimpin atau sudah dapat poin komsel hari ini)`,
-        })
-      } catch (err) {
-        setResult({ type: 'duplicate', message: err.message || 'Kehadiran sesi ini sudah tercatat.' })
-      }
-    } catch {
-      setResult({ type: 'error', message: 'Sesi komsel tidak ditemukan atau sudah berakhir.' })
+      const key = rec.points_awarded
+        ? 'scan.komselSuccess'
+        : rec.reason === 'leader'
+          ? 'scan.komselLeaderNoPoint'
+          : rec.reason === 'already_today'
+            ? 'scan.komselAlreadyToday'
+            : 'scan.komselNotAwarded'
+      setResult({
+        type: rec.reason === 'not_awarded' ? 'error' : 'success',
+        message: t(key, { name }),
+      })
+      if (refreshProfile) refreshProfile()
+    } catch (err) {
+      console.error('[scan] gagal mencatat absensi komsel:', err)
+      setResult({ type: 'error', message: t('scan.komselFailed') })
     }
   }
 

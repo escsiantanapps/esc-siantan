@@ -4425,3 +4425,239 @@ DROP TRIGGER IF EXISTS trg_enforce_registration_profile_photo ON users;
 CREATE TRIGGER trg_enforce_registration_profile_photo
   BEFORE INSERT OR UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION enforce_registration_profile_photo();
+
+-- ── Migrasi v79: Self-scan komsel tepercaya dan jejak sumber absensi ──
+-- TEMUAN (2026-08-10): kasus Belva menunjukkan baris kehadiran dapat tampil
+-- berhasil tanpa jejak yang cukup untuk membuktikan apakah asalnya self-scan,
+-- absensi manual, atau kehadiran otomatis pemimpin. Identitas self-scan lama
+-- juga berasal dari `user_id` kiriman klien dan dibedakan di AFTER trigger
+-- memakai konteks auth; bila baris kemudian dihapus, sumber/pelakunya hilang.
+-- Production policy + trigger sudah didump operator sebelum perubahan ini.
+--
+-- KEPUTUSAN OPERATOR: self-scan komsel dipindahkan ke RPC SECURITY DEFINER yang
+-- selalu mengambil user_id dari auth_user_id(), memvalidasi keanggotaan dan
+-- minggu sesi di database, mencatat sumber/pelaku, serta mengembalikan alasan
+-- pasti bila poin tidak diberikan. Jalur INSERT self-scan PostgREST lama ditutup;
+-- absensi manual PKS/Admin tetap memakai policy existing dan tetap tanpa poin.
+
+ALTER TABLE komsel_attendance
+  ADD COLUMN IF NOT EXISTS attendance_source TEXT NOT NULL DEFAULT 'legacy';
+ALTER TABLE komsel_attendance
+  ADD COLUMN IF NOT EXISTS recorded_by TEXT REFERENCES users(user_id) ON DELETE SET NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'komsel_attendance_source_check'
+      AND conrelid = 'komsel_attendance'::regclass
+  ) THEN
+    ALTER TABLE komsel_attendance
+      ADD CONSTRAINT komsel_attendance_source_check
+      CHECK (attendance_source IN ('legacy', 'self_scan', 'manual', 'leader_auto'));
+  END IF;
+END $$;
+
+-- Metadata hanya boleh ditentukan kode database. Insert langsung yang sah dari
+-- PKS/Admin selalu dicap manual; restore lewat service role/SQL Editor tetap
+-- boleh mempertahankan metadata eksplisit karena auth.uid() bernilai NULL.
+CREATE OR REPLACE FUNCTION guard_komsel_attendance_metadata() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF COALESCE(current_setting('app.allow_komsel_attendance_meta', true), '') = '1' THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF auth.uid() IS NOT NULL THEN
+      NEW.recorded_by := auth_user_id();
+      -- Trigger pembuka sesi membuat kehadiran pemimpin pada transaksi/detik
+      -- yang sama. Selain pola itu, insert langsung authenticated = manual.
+      IF NEW.session_id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM komsel_sessions s
+        WHERE s.session_id = NEW.session_id
+          AND s.created_by = NEW.user_id
+          AND abs(extract(epoch FROM (now() - s.created_at))) <= 5
+      ) THEN
+        NEW.attendance_source := 'leader_auto';
+      ELSE
+        NEW.attendance_source := 'manual';
+      END IF;
+    END IF;
+  ELSIF auth.uid() IS NOT NULL THEN
+    NEW.attendance_source := OLD.attendance_source;
+    NEW.recorded_by := OLD.recorded_by;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_komsel_attendance_meta ON komsel_attendance;
+CREATE TRIGGER trg_guard_komsel_attendance_meta
+  BEFORE INSERT OR UPDATE ON komsel_attendance
+  FOR EACH ROW EXECUTE FUNCTION guard_komsel_attendance_metadata();
+
+-- created_by sesi tidak lagi dipercaya dari payload klien. Admin/PKS yang
+-- membuka sesi selalu dicatat dari JWT; backend tepercaya tetap bisa restore.
+CREATE OR REPLACE FUNCTION stamp_komsel_session_created_by() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL THEN
+    IF TG_OP = 'INSERT' THEN
+      NEW.created_by := auth_user_id();
+      IF NEW.created_by IS NULL THEN
+        RAISE EXCEPTION 'authenticated_user_profile_not_found' USING ERRCODE = '42501';
+      END IF;
+    ELSE
+      NEW.created_by := OLD.created_by;
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_stamp_komsel_session_creator ON komsel_sessions;
+CREATE TRIGGER trg_stamp_komsel_session_creator
+  BEFORE INSERT OR UPDATE ON komsel_sessions
+  FOR EACH ROW EXECUTE FUNCTION stamp_komsel_session_created_by();
+
+-- Hanya baris yang dicap self_scan oleh RPC di bawah yang boleh memberi poin.
+-- Cabang kelas/event/ibadah dipertahankan persis dari definisi production v59.
+CREATE OR REPLACE FUNCTION award_attendance_point() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'komsel_attendance' THEN
+    IF NEW.session_id IS NULL
+       OR NEW.status IS DISTINCT FROM 'Hadir'
+       OR NEW.attendance_source IS DISTINCT FROM 'self_scan'
+       OR NEW.user_id IS DISTINCT FROM auth_user_id()
+       OR auth_leads_komsel(NEW.komsel_id) THEN
+      RETURN NEW;
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM point_transactions
+      WHERE user_id = NEW.user_id
+        AND description = 'Kehadiran komsel'
+        AND (created_at AT TIME ZONE 'Asia/Jakarta')::date
+            = (now() AT TIME ZONE 'Asia/Jakarta')::date
+    ) THEN
+      RETURN NEW;
+    END IF;
+    PERFORM apply_points(NEW.user_id, 1, 'Kehadiran komsel');
+    PERFORM set_config('app.allow_komsel_points_awarded', '1', true);
+    UPDATE komsel_attendance SET points_awarded = true WHERE attendance_id = NEW.attendance_id;
+    PERFORM set_config('app.allow_komsel_points_awarded', '', true);
+    RETURN NEW;
+  END IF;
+  PERFORM apply_points(NEW.user_id, 1,
+    CASE TG_TABLE_NAME
+      WHEN 'class_attendance'    THEN 'Kehadiran kelas'
+      WHEN 'event_attendance'    THEN 'Kehadiran event'
+      WHEN 'sunday_attendance'   THEN 'Kehadiran ibadah minggu'
+      WHEN 'ministry_attendance' THEN 'Absen Pelayanan Minggu'
+      ELSE 'Kehadiran'
+    END);
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION check_in_komsel_session(p_session_id TEXT) RETURNS jsonb
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user_id       TEXT;
+  v_user_komsel   TEXT;
+  v_user_status   TEXT;
+  v_session       komsel_sessions%ROWTYPE;
+  v_attendance_id TEXT;
+  v_awarded       BOOLEAN := false;
+  v_is_leader     BOOLEAN := false;
+  v_already_today BOOLEAN := false;
+BEGIN
+  v_user_id := auth_user_id();
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'not_authenticated');
+  END IF;
+
+  SELECT komsel_id, status INTO v_user_komsel, v_user_status
+  FROM users WHERE user_id = v_user_id;
+  IF v_user_status IS DISTINCT FROM 'Aktif' THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'account_inactive');
+  END IF;
+
+  SELECT * INTO v_session FROM komsel_sessions WHERE session_id = p_session_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'invalid_session');
+  END IF;
+  IF v_user_komsel IS NULL OR v_user_komsel IS DISTINCT FROM v_session.komsel_id THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'wrong_komsel');
+  END IF;
+  IF date_trunc('week', v_session.session_date::timestamp)::date
+     IS DISTINCT FROM date_trunc('week', now() AT TIME ZONE 'Asia/Jakarta')::date THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'expired_session');
+  END IF;
+
+  SELECT attendance_id, points_awarded INTO v_attendance_id, v_awarded
+  FROM komsel_attendance
+  WHERE session_id = v_session.session_id AND user_id = v_user_id;
+  IF FOUND THEN
+    RETURN jsonb_build_object(
+      'ok', false, 'reason', 'duplicate', 'attendance_id', v_attendance_id,
+      'points_awarded', COALESCE(v_awarded, false)
+    );
+  END IF;
+
+  v_is_leader := auth_leads_komsel(v_session.komsel_id);
+  SELECT EXISTS (
+    SELECT 1 FROM point_transactions
+    WHERE user_id = v_user_id
+      AND description = 'Kehadiran komsel'
+      AND (created_at AT TIME ZONE 'Asia/Jakarta')::date
+          = (now() AT TIME ZONE 'Asia/Jakarta')::date
+  ) INTO v_already_today;
+
+  PERFORM set_config('app.allow_komsel_attendance_meta', '1', true);
+  BEGIN
+    INSERT INTO komsel_attendance
+      (komsel_id, user_id, session_id, attendance_date, status,
+       attendance_source, recorded_by)
+    VALUES
+      (v_session.komsel_id, v_user_id, v_session.session_id,
+       v_session.session_date, 'Hadir', 'self_scan', v_user_id)
+    RETURNING attendance_id INTO v_attendance_id;
+  EXCEPTION WHEN unique_violation THEN
+    PERFORM set_config('app.allow_komsel_attendance_meta', '', true);
+    RETURN jsonb_build_object('ok', false, 'reason', 'duplicate');
+  END;
+  PERFORM set_config('app.allow_komsel_attendance_meta', '', true);
+
+  SELECT points_awarded INTO v_awarded FROM komsel_attendance
+  WHERE attendance_id = v_attendance_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'attendance_id', v_attendance_id,
+    'points_awarded', COALESCE(v_awarded, false),
+    'reason', CASE
+      WHEN v_awarded THEN 'awarded'
+      WHEN v_is_leader THEN 'leader'
+      WHEN v_already_today THEN 'already_today'
+      ELSE 'not_awarded'
+    END
+  );
+END $$;
+
+REVOKE EXECUTE ON FUNCTION check_in_komsel_session(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION check_in_komsel_session(TEXT) TO authenticated;
+
+-- Self-scan langsung via PostgREST ditutup setelah RPC pengganti tersedia.
+-- Policy lain hasil dump production tidak disentuh untuk menghindari drift.
+DROP POLICY IF EXISTS "komsel_att_self_scan" ON komsel_attendance;
+
+-- Tambahkan jejak immutable untuk pergantian pemimpin dan penghapusan absensi;
+-- audit_log tetap hanya dapat dibaca Super Admin dan ditulis trigger definer.
+DROP TRIGGER IF EXISTS audit_komsel_leaders ON komsel_leaders;
+CREATE TRIGGER audit_komsel_leaders
+  AFTER INSERT OR DELETE ON komsel_leaders
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+
+DROP TRIGGER IF EXISTS audit_komsel_attendance_delete ON komsel_attendance;
+CREATE TRIGGER audit_komsel_attendance_delete
+  AFTER DELETE ON komsel_attendance
+  FOR EACH ROW EXECUTE FUNCTION record_audit();

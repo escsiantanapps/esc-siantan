@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Home, Newspaper, ClipboardList, User, ScanLine } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
@@ -45,6 +45,9 @@ export default function UserLayout() {
   const { toast } = useToast()
   const { t } = useLang()
   const { profile } = useAuth()
+  const [roadmapChecking, setRoadmapChecking] = useState(true)
+  const roadmapCheckStarted = useRef(false)
+  const roadmapCheckMounted = useRef(false)
 
   // Heartbeat kehadiran online: perbarui last_seen_at saat app dibuka lalu
   // tiap 2 menit selama app aktif. Dipakai indikator online/offline di admin.
@@ -59,17 +62,32 @@ export default function UserLayout() {
   // back dari tab kembali ke Beranda dulu, baru dari Beranda minta konfirmasi.
   useExitConfirm(location.pathname === '/', () => toast.info(t('app.exitConfirm')))
 
-  // Roadmap Pemuridan "selalu muncul saat membuka aplikasi" selama jumlah
-  // tayang di perangkat masih di bawah batas admin — dicek sekali per sesi
-  // browser (login lewat LoginPage sudah punya cek sendiri).
+  // Roadmap Pemuridan diperiksa dari satu tempat saja. Selama keputusan belum
+  // selesai, tahan render halaman agar Beranda tidak sempat muncul lalu lompat
+  // ke onboarding. Ref juga mencegah effect ganda React menjalankan request 2x.
   useEffect(() => {
+    roadmapCheckMounted.current = true
+    if (roadmapCheckStarted.current) {
+      return () => { roadmapCheckMounted.current = false }
+    }
+    roadmapCheckStarted.current = true
+
     try {
-      if (sessionStorage.getItem(ROADMAP_SESSION_CHECK)) return
+      if (sessionStorage.getItem(ROADMAP_SESSION_CHECK)) {
+        setRoadmapChecking(false)
+        return
+      }
       sessionStorage.setItem(ROADMAP_SESSION_CHECK, '1')
-    } catch { return }
+    } catch { /* private mode: tetap lakukan pengecekan in-memory */ }
+
     shouldShowOnboarding()
-      .then(show => { if (show) navigate('/onboarding') })
-      .catch(() => {})
+      .then(show => {
+        if (!roadmapCheckMounted.current) return
+        if (show) navigate('/onboarding', { replace: true })
+        else setRoadmapChecking(false)
+      })
+      .catch(() => { if (roadmapCheckMounted.current) setRoadmapChecking(false) })
+    return () => { roadmapCheckMounted.current = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -77,10 +95,18 @@ export default function UserLayout() {
   // admin. Kembali ke app jemaat lewat tombol back di header panel.
   const inPanel = location.pathname.startsWith('/pks')
 
+  if (roadmapChecking) {
+    return (
+      <div className="min-h-svh bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto relative">
       {/* Main content */}
-      <main className={`flex-1 overflow-y-auto ${inPanel ? 'pb-6' : 'pb-24'}`}>
+      <main className={`flex-1 overflow-y-auto ${inPanel ? 'pb-6' : 'pb-[calc(7.5rem+env(safe-area-inset-bottom))]'}`}>
         <Outlet />
       </main>
 

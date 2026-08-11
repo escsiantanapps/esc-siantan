@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { shouldShowOnboarding } from '@/pages/OnboardingPage'
 import { Mail, Lock, Eye, EyeOff, Check } from 'lucide-react'
 
 const REMEMBER_KEY = 'esc-remember-email'
@@ -25,10 +24,9 @@ export default function LoginPage() {
       await login(form.email, form.password)
       if (remember) localStorage.setItem(REMEMBER_KEY, form.email)
       else localStorage.removeItem(REMEMBER_KEY)
-      // Roadmap Pemuridan tampil selama jumlah tayang di perangkat ini masih
-      // di bawah batas yang diatur admin (roadmap_show_count, default 1).
-      const showRoadmap = await shouldShowOnboarding().catch(() => false)
-      navigate(showRoadmap ? '/onboarding' : '/')
+      // UserLayout menjadi satu-satunya gerbang roadmap supaya perubahan state
+      // auth dan request setting tidak memicu onboarding dua kali.
+      navigate('/', { replace: true })
     } catch {
       setError(t('auth.loginError'))
     } finally {

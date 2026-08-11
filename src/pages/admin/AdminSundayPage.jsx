@@ -31,7 +31,12 @@ export default function AdminSundayPage() {
   // Render QR dari session_id sesi aktif.
   useEffect(() => {
     if (!session) { setQr(''); return }
-    QRCode.toDataURL(`ESC-SUNDAY:${session.session_id}`, { width: 320, margin: 1 })
+    QRCode.toDataURL(`ESC-SUNDAY:${session.session_id}`, {
+      width: 512,
+      margin: 4,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#111827', light: '#FFFFFF' },
+    })
       .then(setQr).catch(() => setQr(''))
   }, [session])
 
@@ -124,7 +129,7 @@ export default function AdminSundayPage() {
           </div>
         ) : (
           <div className="flex flex-col items-center text-center gap-3">
-            {qr ? <img src={qr} alt="QR Ibadah" className="w-56 rounded-xl border border-gray-100" /> : <Spinner />}
+            {qr ? <img src={qr} alt="QR Ibadah" className="w-64 max-w-full rounded-xl border border-gray-100 [image-rendering:pixelated]" /> : <Spinner />}
             <Badge color={session.is_paused ? 'yellow' : 'green'}>
               {session.is_paused ? 'Sesi dijeda — scan ditolak' : 'Sesi aktif — jemaat bisa scan'}
             </Badge>
