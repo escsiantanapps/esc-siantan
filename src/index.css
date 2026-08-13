@@ -128,6 +128,23 @@ body {
   color: var(--color-gray-900);
   transition: background-color 0.25s ease, color 0.25s ease;
 }
+.sky-time-hero {
+  height: 8rem;
+}
+
+.sky-time-greeting {
+  top: 1rem;
+}
+
+@media (max-width: 767px) {
+  .sky-time-hero {
+    height: calc(8rem + var(--safe-top, env(safe-area-inset-top, 0px)));
+  }
+
+  .sky-time-greeting {
+    top: calc(1rem + var(--safe-top, env(safe-area-inset-top, 0px)));
+  }
+}
 
 /* Beranda tidak memakai GradientHeader, jadi ruang untuk notch/Dynamic Island
    perlu diberikan pada AppBar-nya sendiri. Hanya layar ponsel yang mendapat

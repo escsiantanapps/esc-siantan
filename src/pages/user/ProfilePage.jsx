@@ -60,7 +60,7 @@ export default function ProfilePage() {
   return (
     <div className="pb-6">
       {/* Hero banner ala Stitch + animasi langit (jam, matahari/bulan) */}
-      <div className="gradient-main h-32 rounded-b-[2rem] relative overflow-hidden">
+      <div className="sky-time-hero gradient-main rounded-b-[2rem] relative overflow-hidden">
         <SkyTime name={profile.name} />
       </div>
       <div className="px-4 -mt-14 relative z-10">

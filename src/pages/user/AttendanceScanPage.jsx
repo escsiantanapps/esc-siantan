@@ -74,6 +74,9 @@ export default function AttendanceScanPage() {
   const [galleryBusy, setGalleryBusy] = useState(false)
   const fileInputRef = useRef(null)
   const scannerRef = useRef(null)
+  const frameScannerRef = useRef(null)
+  const frameScanTimerRef = useRef(null)
+  const frameScanBusyRef = useRef(false)
   const scannerCleanupRef = useRef(Promise.resolve())
   const processingRef = useRef(false)
 
@@ -104,6 +107,15 @@ export default function AttendanceScanPage() {
         useBarCodeDetectorIfSupported: !iosDevice,
       })
       scannerRef.current = scanner
+      if (iosDevice) {
+        frameScannerRef.current = new Html5Qrcode('qr-frame-reader', {
+          verbose: false,
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+          // scanFile() memakai jalur dekode robust yang terbukti dapat membaca
+          // frame kamera iPhone ketika loop kamera real-time WebKit gagal.
+          useBarCodeDetectorIfSupported: false,
+        })
+      }
       setScannerPrepared(true)
 
       // Safari/PWA iPhone jauh lebih konsisten saat akses kamera diawali dari
@@ -212,15 +224,66 @@ export default function AttendanceScanPage() {
 
     return () => {
       cancelled = true
+      stopIOSFrameFallback()
       if (scanner) {
         scannerCleanupRef.current = scanner.stop().catch(() => {}).then(() => {
           try { scanner.clear() } catch { /* noop */ }
+          try { frameScannerRef.current?.clear() } catch { /* noop */ }
+          frameScannerRef.current = null
         })
         if (scannerRef.current === scanner) scannerRef.current = null
         setScannerPrepared(false)
       }
     }
   }, [retryTick, t])
+
+  function stopIOSFrameFallback() {
+    if (frameScanTimerRef.current) {
+      window.clearInterval(frameScanTimerRef.current)
+      frameScanTimerRef.current = null
+    }
+    frameScanBusyRef.current = false
+  }
+
+  function startIOSFrameFallback() {
+    if (!isIOSDevice() || frameScanTimerRef.current) return
+
+    // Jalur live html5-qrcode di WebKit kadang tidak memicu callback meskipun
+    // QR tajam. Snapshot berkala diproses lewat scanFile() yang memakai decoder
+    // robust; interval dibuat longgar agar tidak membebani iPhone.
+    frameScanTimerRef.current = window.setInterval(async () => {
+      if (frameScanBusyRef.current || processingRef.current) return
+      const video = document.querySelector('#qr-reader video')
+      const frameScanner = frameScannerRef.current
+      if (!video || !frameScanner || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return
+
+      frameScanBusyRef.current = true
+      try {
+        const maxEdge = 960
+        const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(video.videoWidth * scale)
+        canvas.height = Math.round(video.videoHeight * scale)
+        const context = canvas.getContext('2d', { willReadFrequently: true })
+        if (!context) return
+        context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.88))
+        if (!blob) return
+        const decodedText = (await frameScanner.scanFile(
+          new File([blob], 'ios-camera-frame.jpg', { type: blob.type }),
+          false,
+        )).trim()
+        if (KNOWN_PREFIXES.some(prefix => decodedText.startsWith(prefix))) {
+          await handleScan(decodedText)
+        }
+      } catch {
+        // Tidak menemukan QR pada satu frame adalah kondisi normal.
+      } finally {
+        frameScanBusyRef.current = false
+      }
+    }, 750)
+  }
 
   async function handleScan(decodedText) {
     if (processingRef.current) return
@@ -251,6 +314,7 @@ export default function AttendanceScanPage() {
     if (!file || galleryBusy) return
 
     setGalleryBusy(true)
+    stopIOSFrameFallback()
     setErrDetail('')
     try {
       const scanner = scannerRef.current
@@ -513,6 +577,7 @@ export default function AttendanceScanPage() {
           await video.play().catch(() => {})
         }
         setReady(true)
+        startIOSFrameFallback()
         return
       } catch (err) {
         lastErr = err
@@ -549,6 +614,7 @@ export default function AttendanceScanPage() {
           id="qr-reader"
           className="attendance-qr-reader absolute inset-0 h-full w-full bg-gray-950"
         />
+        <div id="qr-frame-reader" className="hidden" aria-hidden="true" />
 
         {!cameraRequested && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-gray-950 px-6 text-center text-white">

@@ -199,7 +199,7 @@ export default function SkyTime({ name = '' }) {
       )}
 
       {/* Salam + jam */}
-      <div className="absolute top-4 left-4 text-white [text-shadow:_0_1px_4px_rgb(0_0_0_/_35%)]">
+      <div className="sky-time-greeting absolute left-4 text-white [text-shadow:_0_1px_4px_rgb(0_0_0_/_35%)]">
         <p className="text-xs font-medium text-white/90">{greeting}</p>
         <p className="text-2xl font-bold font-display tabular-nums leading-tight">{time}</p>
       </div>
