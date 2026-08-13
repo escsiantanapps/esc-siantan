@@ -472,6 +472,7 @@ export default function AttendanceScanPage() {
       }
       await pointsService.checkInSunday(profile.user_id, sessionId)
       setResult({ type: 'success', message: 'Kehadiran ibadah minggu tercatat. +1 poin! 🎉' })
+      if (refreshProfile) await refreshProfile().catch(() => {})
     } catch (err) {
       const dup = /sudah tercatat/i.test(err.message || '')
       setResult({ type: dup ? 'duplicate' : 'error', message: err.message || 'Gagal mencatat kehadiran ibadah.' })

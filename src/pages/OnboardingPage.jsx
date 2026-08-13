@@ -159,11 +159,11 @@ export default function OnboardingPage() {
       onTouchEnd={onTouchEnd}
     >
       {/* Skip */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-1 shrink-0">
+      <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-[calc(var(--safe-top,env(safe-area-inset-top,0px))+0.75rem)] md:pt-4">
         <span className="text-xs font-bold tracking-widest uppercase text-white/60">Roadmap Pemuridan</span>
         <button
           onClick={finish}
-          className="text-sm text-white/70 hover:text-white transition px-3 py-1.5 rounded-full hover:bg-white/10"
+          className="flex min-h-11 items-center rounded-full px-3 text-sm text-white/70 transition hover:bg-white/10 hover:text-white"
         >
           Lewati
         </button>
