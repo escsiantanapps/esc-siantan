@@ -14,6 +14,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { appSettingsService } from '@/services/contentService'
+import SheepLoader from '@/components/SheepLoader'
 
 export const ONBOARDING_KEY = 'esc-onboarding-done'          // legacy (pra-v28)
 export const ROADMAP_SEEN_KEY = 'esc-roadmap-seen-count'
@@ -115,11 +116,7 @@ export default function OnboardingPage() {
 
   // Tampilkan loading sampai data siap (mencegah flash konten default).
   if (!stages) {
-    return (
-      <div className="h-svh flex items-center justify-center bg-gradient-to-br from-sky-600 to-blue-800">
-        <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
+    return <SheepLoader fullScreen size="xl" className="bg-gradient-to-br from-sky-600 to-blue-800" labelClassName="text-white/85" />
   }
 
   const slide = stages[index]

@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import OfflineBanner from '@/components/OfflineBanner'
 import InstallPrompt from '@/components/InstallPrompt'
+import SheepLoader from '@/components/SheepLoader'
 
 // Onboarding
 import OnboardingPage from '@/pages/OnboardingPage'
@@ -90,11 +91,7 @@ import AdminLayout from '@/layouts/AdminLayout'
 
 function PrivateRoute({ children }) {
   const { user, profile, loading } = useAuth()
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
+  if (loading) return <SheepLoader fullScreen size="xl" />
   if (!user) return <Navigate to="/login" replace />
   // Admin murni (tanpa peran kedua) tidak punya keperluan di app mobile.
   // Admin yang juga PKS atau Volunteer (role_secondary) tetap boleh masuk.
@@ -115,11 +112,7 @@ function PrivateRoute({ children }) {
 
 function AdminRoute({ children }) {
   const { user, profile, loading } = useAuth()
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
+  if (loading) return <SheepLoader fullScreen size="xl" />
   if (!user) return <Navigate to="/login" replace />
   if (!['Admin', 'Super Admin', 'Gembala'].includes(profile?.role)) return <Navigate to="/" replace />
   if (profile && profile.status !== 'Aktif') return <AccountStatusPage />
@@ -128,11 +121,7 @@ function AdminRoute({ children }) {
 
 function PKSRoute({ children }) {
   const { user, profile, loading } = useAuth()
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
+  if (loading) return <SheepLoader fullScreen size="xl" />
   if (!user) return <Navigate to="/login" replace />
   if (!(profile?.is_pks === true || profile?.role === 'PKS')) return <Navigate to="/" replace />
   return children
@@ -154,11 +143,7 @@ export default function App() {
         <ToastProvider>
         <OfflineBanner />
         <InstallPrompt />
-        <Suspense fallback={
-          <div className="flex items-center justify-center h-screen">
-            <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        }>
+        <Suspense fallback={<SheepLoader fullScreen size="xl" />}>
         <Routes>
           <Route path="/onboarding"      element={<OnboardingPage />} />
           <Route path="/kebijakan-privasi" element={<PrivacyPolicyPage />} />

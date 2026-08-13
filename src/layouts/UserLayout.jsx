@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
 import { usersService } from '@/services/usersService'
 import { shouldShowOnboarding } from '@/pages/OnboardingPage'
+import SheepLoader from '@/components/SheepLoader'
 
 const ROADMAP_SESSION_CHECK = 'esc-roadmap-checked'
 
@@ -96,11 +97,7 @@ export default function UserLayout() {
   const inPanel = location.pathname.startsWith('/pks')
 
   if (roadmapChecking) {
-    return (
-      <div className="min-h-svh bg-gray-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
+    return <SheepLoader fullScreen size="xl" />
   }
 
   return (

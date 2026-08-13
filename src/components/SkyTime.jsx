@@ -152,14 +152,14 @@ export default function SkyTime({ name = '' }) {
       {/* Domba dalam pagar (malam) — digambar SEBELUM pagar agar tampak di dalam. */}
       {!isDay && (
         <>
-          <div className="absolute bottom-2 right-[4rem] sky-sheep-wander">
+          <div className="absolute bottom-2 right-[4rem]">
             <div className="relative">
               {sheepSaysHello && <span aria-hidden="true" className="sky-sheep-greeting absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{sheepGreeting}</span>}
-              <Sheep className="origin-bottom sky-sheep-graze drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
+              <Sheep className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
             </div>
           </div>
-          <div className="absolute bottom-1.5 right-[5.6rem] sky-sheep-wander [animation-delay:-6s]">
-            <Sheep className="origin-bottom sky-sheep-graze [animation-delay:-2s] drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" tone="#e2e8f0" />
+          <div className="absolute bottom-1.5 right-[5.6rem]">
+            <Sheep className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" tone="#e2e8f0" />
           </div>
         </>
       )}

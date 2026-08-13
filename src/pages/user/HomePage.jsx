@@ -4,7 +4,7 @@ import { Bell, Calendar, BookOpen, Droplets, Heart, Baby, Church, HandCoins, Wif
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { newsService, appSettingsService } from '@/services/contentService'
-import { Skeleton, SkeletonCard, SectionHeader, EmptyState } from '@/components/ui'
+import { Skeleton, SkeletonCard, SectionHeader, EmptyState, Spinner } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
 import SopNudgeCard from '@/components/SopNudgeCard'
@@ -64,7 +64,7 @@ export default function HomePage() {
     <div className="pb-4">
       {/* Top AppBar ala Stitch */}
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur-md border-b border-gray-100">
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="app-top-safe flex items-center justify-between px-4 pb-3 pt-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-full gradient-main flex items-center justify-center text-white">
               <Church size={18} />
@@ -126,6 +126,7 @@ export default function HomePage() {
         {/* Skeleton berbentuk konten selama data dimuat */}
         {loading && (
           <div className="animate-fade-in">
+            <div className="flex justify-center mb-2"><Spinner size="lg" /></div>
             <Skeleton className="h-40 rounded-3xl mb-5" />
             <div className="grid grid-cols-3 gap-3 mb-6">
               {Array.from({ length: 6 }).map((_, i) => (

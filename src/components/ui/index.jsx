@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Sun, Moon, ArrowLeft, ChevronRight, MoreVertical } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import { useLang } from '@/hooks/useLang'
+import SheepLoader from '@/components/SheepLoader'
 
 // ─── Button ──────────────────────────────────────────────
 export function Button({ children, variant = 'primary', size = 'md', loading, className = '', ...props }) {
@@ -243,8 +244,10 @@ export function EmptyState({ icon: Icon, title, description, action }) {
 
 // ─── Loading Spinner ─────────────────────────────────────
 export function Spinner({ size = 'md' }) {
-  const s = { sm: 'w-4 h-4', md: 'w-6 h-6', lg: 'w-10 h-10' }
-  return <div className={`${s[size]} border-2 border-brand-500 border-t-transparent rounded-full animate-spin`} />
+  if (size === 'sm') {
+    return <span className="inline-block w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+  }
+  return <SheepLoader size={size} />
 }
 
 // ─── GradientHeader ──────────────────────────────────────

@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['church-icon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['church-icon.svg', 'apple-touch-icon.png', 'animations/bouncing-sheep.lottie'],
       manifest: {
         id: '/',
         scope: '/',

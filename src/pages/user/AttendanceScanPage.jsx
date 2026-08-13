@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, ImagePlus, XCircle, ScanLine, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Camera, CheckCircle2, ImagePlus, XCircle, ScanLine, RotateCcw } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { classesService, eventsService, komselService } from '@/services/contentService'
 import { ministryScheduleService } from '@/services/ministryScheduleService'
@@ -69,9 +69,11 @@ export default function AttendanceScanPage() {
   const [result, setResult] = useState(null)
   const [errDetail, setErrDetail] = useState('')
   const [retryTick, setRetryTick] = useState(0)
+  const [cameraRequested, setCameraRequested] = useState(() => !isIOSDevice())
   const [galleryBusy, setGalleryBusy] = useState(false)
   const fileInputRef = useRef(null)
   const scannerRef = useRef(null)
+  const scannerCleanupRef = useRef(Promise.resolve())
   const processingRef = useRef(false)
 
   useEffect(() => {
@@ -81,15 +83,19 @@ export default function AttendanceScanPage() {
 
   useEffect(() => {
     let cancelled = false
+    let scanner
     setReady(false)
 
     ;(async () => {
+      await scannerCleanupRef.current
+      if (cancelled) return
+
       // Konfigurasi format dan decoder memang merupakan opsi constructor pada
       // html5-qrcode 2.3.8, bukan opsi scanner.start().
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
       if (cancelled) return
       const iosDevice = isIOSDevice()
-      const scanner = new Html5Qrcode('qr-reader', {
+      scanner = new Html5Qrcode('qr-reader', {
         verbose: false,
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
         // Implementasi BarcodeDetector WebKit berbeda-beda antar versi iOS.
@@ -97,6 +103,11 @@ export default function AttendanceScanPage() {
         useBarCodeDetectorIfSupported: !iosDevice,
       })
       scannerRef.current = scanner
+
+      // Safari/PWA iPhone jauh lebih konsisten saat akses kamera diawali dari
+      // sentuhan langsung. Scanner tetap dibuat agar pemindaian dari galeri
+      // dapat dipakai sebelum kamera diaktifkan.
+      if (!cameraRequested) return
 
       if (typeof window !== 'undefined' && !window.isSecureContext) {
         setErrDetail(t('scan.cameraHttps'))
@@ -126,6 +137,9 @@ export default function AttendanceScanPage() {
       if (iosDevice) {
         // Di iPhone jangan gunakan deviceId: WebKit lebih stabil bila memilih
         // kamera melalui facingMode dan tidak melakukan enumerasi lebih dulu.
+        // Minta kamera belakang secara exact lebih dahulu supaya iPhone tidak
+        // memilih kamera depan yang fokusnya kurang cocok untuk QR layar.
+        candidates.push({ facingMode: { exact: 'environment' } })
         candidates.push({ facingMode: 'environment' })
         candidates.push({ facingMode: 'user' })
       } else {
@@ -157,6 +171,11 @@ export default function AttendanceScanPage() {
             video.muted = true
             video.setAttribute('muted', 'true')
             video.setAttribute('playsinline', 'true')
+            video.setAttribute('autoplay', 'true')
+            // Safari kadang sudah membuat elemen video tetapi belum memutarnya
+            // ketika route selesai berganti. Pemanggilan ini aman bila video
+            // sudah berjalan dan mencegah tampilan kamera hitam di iPhone.
+            await video.play().catch(() => {})
           }
           started = true
           break
@@ -191,12 +210,14 @@ export default function AttendanceScanPage() {
 
     return () => {
       cancelled = true
-      const scanner = scannerRef.current
       if (scanner) {
-        scanner.stop().catch(() => {}).then(() => { try { scanner.clear() } catch { /* noop */ } })
+        scannerCleanupRef.current = scanner.stop().catch(() => {}).then(() => {
+          try { scanner.clear() } catch { /* noop */ }
+        })
+        if (scannerRef.current === scanner) scannerRef.current = null
       }
     }
-  }, [retryTick])
+  }, [retryTick, cameraRequested, t])
 
   async function handleScan(decodedText) {
     if (processingRef.current) return
@@ -437,6 +458,16 @@ export default function AttendanceScanPage() {
     if (!ready) setRetryTick(t => t + 1)
   }
 
+  function requestCamera() {
+    setErrDetail('')
+    setResult(null)
+    processingRef.current = false
+    setCameraRequested(true)
+    // Bila user pernah menutup prompt atau kamera gagal dimulai, ulangi seluruh
+    // lifecycle scanner dari satu ketukan yang benar-benar berasal dari user.
+    setRetryTick(t => t + 1)
+  }
+
   return (
     <div className={result ? 'pb-4' : ''}>
       <input
@@ -454,7 +485,22 @@ export default function AttendanceScanPage() {
           className="attendance-qr-reader absolute inset-0 h-full w-full bg-gray-950"
         />
 
-        {!ready && (
+        {!cameraRequested && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-gray-950 px-6 text-center text-white">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/15">
+              <Camera size={27} aria-hidden="true" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-base font-semibold">{t('scan.startCameraTitle')}</p>
+              <p className="text-xs leading-relaxed text-gray-300">{t('scan.startCameraHint')}</p>
+            </div>
+            <Button onClick={requestCamera} className="min-h-11 px-5">
+              <Camera size={18} /> {t('scan.startCameraButton')}
+            </Button>
+          </div>
+        )}
+
+        {cameraRequested && !ready && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-gray-950 text-white">
             <Spinner />
             <p className="text-xs text-gray-300">{t('scan.preparingCamera')}</p>

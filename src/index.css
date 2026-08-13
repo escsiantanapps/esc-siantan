@@ -129,6 +129,15 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+/* Beranda tidak memakai GradientHeader, jadi ruang untuk notch/Dynamic Island
+   perlu diberikan pada AppBar-nya sendiri. Hanya layar ponsel yang mendapat
+   inset ini; tata letak desktop tetap rapat seperti sebelumnya. */
+@media (max-width: 767px) {
+  .app-top-safe {
+    padding-top: calc(var(--safe-top, env(safe-area-inset-top, 0px)) + 0.75rem) !important;
+  }
+}
+
 /* Heading pakai display font Plus Jakarta Sans (gaya Stitch) */
 h1, h2, h3 {
   font-family: var(--font-display);
