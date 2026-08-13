@@ -70,6 +70,7 @@ export default function AttendanceScanPage() {
   const [errDetail, setErrDetail] = useState('')
   const [retryTick, setRetryTick] = useState(0)
   const [cameraRequested, setCameraRequested] = useState(() => !isIOSDevice())
+  const [scannerPrepared, setScannerPrepared] = useState(false)
   const [galleryBusy, setGalleryBusy] = useState(false)
   const fileInputRef = useRef(null)
   const scannerRef = useRef(null)
@@ -103,11 +104,12 @@ export default function AttendanceScanPage() {
         useBarCodeDetectorIfSupported: !iosDevice,
       })
       scannerRef.current = scanner
+      setScannerPrepared(true)
 
       // Safari/PWA iPhone jauh lebih konsisten saat akses kamera diawali dari
       // sentuhan langsung. Scanner tetap dibuat agar pemindaian dari galeri
       // dapat dipakai sebelum kamera diaktifkan.
-      if (!cameraRequested) return
+      if (iosDevice) return
 
       if (typeof window !== 'undefined' && !window.isSecureContext) {
         setErrDetail(t('scan.cameraHttps'))
@@ -215,9 +217,10 @@ export default function AttendanceScanPage() {
           try { scanner.clear() } catch { /* noop */ }
         })
         if (scannerRef.current === scanner) scannerRef.current = null
+        setScannerPrepared(false)
       }
     }
-  }, [retryTick, cameraRequested, t])
+  }, [retryTick, t])
 
   async function handleScan(decodedText) {
     if (processingRef.current) return
@@ -455,17 +458,79 @@ export default function AttendanceScanPage() {
     // tidak pernah start — reset UI saja tidak cukup. Picu ulang seluruh alur
     // permintaan izin + start kamera, supaya user yang baru saja mengizinkan
     // lewat pengaturan browser bisa langsung coba lagi tanpa reload halaman.
-    if (!ready) setRetryTick(t => t + 1)
+    if (!ready) {
+      if (isIOSDevice()) requestCamera()
+      else setRetryTick(t => t + 1)
+    }
   }
 
-  function requestCamera() {
+  async function requestCamera() {
     setErrDetail('')
     setResult(null)
     processingRef.current = false
     setCameraRequested(true)
-    // Bila user pernah menutup prompt atau kamera gagal dimulai, ulangi seluruh
-    // lifecycle scanner dari satu ketukan yang benar-benar berasal dari user.
-    setRetryTick(t => t + 1)
+    setReady(false)
+
+    const scanner = scannerRef.current
+    if (!scanner) return
+
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setErrDetail(t('scan.cameraHttps'))
+      setResult({ type: 'error', message: t('scan.cameraError') })
+      return
+    }
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setErrDetail(t('scan.cameraUnsupported'))
+      setResult({ type: 'error', message: t('scan.cameraError') })
+      return
+    }
+
+    // scanner.start() harus terpanggil di dalam event klik ini. Jika menunggu
+    // effect React, Safari iPhone dapat menganggapnya bukan aksi pengguna.
+    const config = {
+      fps: 10,
+      qrbox: (width, height) => {
+        const edge = Math.floor(Math.min(width * 0.72, height * 0.9, 288))
+        return { width: Math.max(180, edge), height: Math.max(180, edge) }
+      },
+    }
+    const candidates = [
+      { facingMode: { exact: 'environment' } },
+      { facingMode: 'environment' },
+      { facingMode: 'user' },
+    ]
+    let lastErr = null
+
+    for (const camera of candidates) {
+      try {
+        await startCameraWithTimeout(scanner, camera, config, handleScan)
+        const video = document.querySelector('#qr-reader video')
+        if (video) {
+          video.muted = true
+          video.setAttribute('muted', 'true')
+          video.setAttribute('playsinline', 'true')
+          video.setAttribute('autoplay', 'true')
+          await video.play().catch(() => {})
+        }
+        setReady(true)
+        return
+      } catch (err) {
+        lastErr = err
+        try { await scanner.stop() } catch { /* belum berjalan */ }
+        const { name, message } = normalizeCameraError(err)
+        if (name === 'NotAllowedError' || name === 'CameraTimeoutError' || /permission/i.test(message)) break
+      }
+    }
+
+    const { name, message } = normalizeCameraError(lastErr)
+    let hint = message
+    if (name === 'NotAllowedError') hint = t('scan.cameraDenied')
+    else if (name === 'NotFoundError') hint = t('scan.cameraNotFound')
+    else if (name === 'NotReadableError') hint = t('scan.cameraBusy')
+    else if (name === 'CameraTimeoutError') hint = t('scan.iosCameraTimeout')
+    console.error('[scan] gagal memulai kamera:', lastErr)
+    setErrDetail(`${name}: ${hint}`)
+    setResult({ type: 'error', message: t('scan.cameraError') })
   }
 
   return (
@@ -494,7 +559,7 @@ export default function AttendanceScanPage() {
               <p className="text-base font-semibold">{t('scan.startCameraTitle')}</p>
               <p className="text-xs leading-relaxed text-gray-300">{t('scan.startCameraHint')}</p>
             </div>
-            <Button onClick={requestCamera} className="min-h-11 px-5">
+            <Button onClick={requestCamera} disabled={!scannerPrepared} className="min-h-11 px-5">
               <Camera size={18} /> {t('scan.startCameraButton')}
             </Button>
           </div>
