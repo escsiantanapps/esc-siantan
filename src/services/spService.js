@@ -74,33 +74,55 @@ export const spService = {
   async getAllWithActiveSP(categoryId = null) {
     let query = supabase
       .from('sp_letters')
-      .select(`
-        *,
-        category:sp_categories(category_id, name, level),
-        user:users!sp_letters_user_id_fkey(user_id, name, photo_url, role)
-      `)
+      .select('letter_id, user_id, category_id, notes, issued_at')
       .eq('is_active', true)
 
     if (categoryId) {
       query = query.eq('category_id', categoryId)
     }
 
-    const { data, error } = await query.order('issued_at', { ascending: false })
+    const { data: letters, error } = await query.order('issued_at', { ascending: false })
     if (error) throw error
+    if (!letters?.length) return []
+
+    // Query terpisah tidak bergantung pada nama FK di schema cache PostgREST,
+    // karena constraint production dapat berbeda dari schema repo.
+    const userIds = [...new Set(letters.map(letter => letter.user_id))]
+    const categoryIds = [...new Set(letters.map(letter => letter.category_id))]
+    const [usersResult, categoriesResult] = await Promise.all([
+      supabase
+        .from('users')
+        .select('user_id, name, photo_url, role')
+        .in('user_id', userIds),
+      supabase
+        .from('sp_categories')
+        .select('category_id, name, level')
+        .in('category_id', categoryIds),
+    ])
+    if (usersResult.error) throw usersResult.error
+    if (categoriesResult.error) throw categoriesResult.error
+
+    const userById = new Map(usersResult.data.map(user => [user.user_id, user]))
+    const categoryById = new Map(categoriesResult.data.map(category => [category.category_id, category]))
+
 
     // Group by user (karena satu user bisa punya multiple SP aktif dengan kategori berbeda)
     // Ambil SP dengan level tertinggi per user
     const userMap = new Map()
-    data.forEach(sp => {
-      const userId = sp.user.user_id
+    letters.forEach(letter => {
+      const user = userById.get(letter.user_id)
+      const category = categoryById.get(letter.category_id)
+      if (!user || !category) throw new Error('sp_reference_unavailable')
+
+      const userId = user.user_id
       const existing = userMap.get(userId)
-      if (!existing || sp.category.level > existing.category.level) {
+      if (!existing || category.level > existing.sp_category.level) {
         userMap.set(userId, {
-          ...sp.user,
-          sp_level: sp.category.name,
-          sp_notes: sp.notes,
-          sp_issued_at: sp.issued_at,
-          sp_category: sp.category,
+          ...user,
+          sp_level: category.name,
+          sp_notes: letter.notes,
+          sp_issued_at: letter.issued_at,
+          sp_category: category,
         })
       }
     })
@@ -143,30 +165,40 @@ export const spService = {
    * Ambil statistik SP: jumlah jemaat per kategori SP aktif.
    */
   async getStats() {
-    const { data, error } = await supabase
+    const { data: letters, error } = await supabase
       .from('sp_letters')
-      .select(`
-        category_id,
-        user_id,
-        category:sp_categories(name, level)
-      `)
+      .select('category_id, user_id')
       .eq('is_active', true)
 
     if (error) throw error
+    if (!letters?.length) return []
+
+    const categoryIds = [...new Set(letters.map(letter => letter.category_id))]
+    const { data: categories, error: categoriesError } = await supabase
+      .from('sp_categories')
+      .select('category_id, name, level')
+      .in('category_id', categoryIds)
+    if (categoriesError) throw categoriesError
+
+    const categoryById = new Map(categories.map(category => [category.category_id, category]))
+
 
     // Group by category, hitung unique user_id per kategori
     const categoryMap = new Map()
-    data.forEach(sp => {
-      const catId = sp.category_id
+    letters.forEach(letter => {
+      const category = categoryById.get(letter.category_id)
+      if (!category) throw new Error('sp_category_unavailable')
+
+      const catId = letter.category_id
       if (!categoryMap.has(catId)) {
         categoryMap.set(catId, {
           category_id: catId,
-          name: sp.category.name,
-          level: sp.category.level,
+          name: category.name,
+          level: category.level,
           users: new Set(),
         })
       }
-      categoryMap.get(catId).users.add(sp.user_id)
+      categoryMap.get(catId).users.add(letter.user_id)
     })
 
     return Array.from(categoryMap.values()).map(cat => ({

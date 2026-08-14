@@ -85,7 +85,8 @@ export default function AdminSPPage() {
         setMembers(members)
         setStats(stats)
       })
-      .catch(() => {
+      .catch(error => {
+        console.error('Gagal memuat data SP:', error)
         setMembers([])
         setStats([])
         setLoadError(true)

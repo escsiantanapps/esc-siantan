@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
-import { DotLottieReact } from '@lottiefiles/dotlottie-react'
+import { DotLottieReact, setWasmUrl } from '@lottiefiles/dotlottie-react'
+import dotLottieWasmUrl from '@lottiefiles/dotlottie-web/dotlottie-player.wasm?url'
 import { useLang } from '@/hooks/useLang'
 
+setWasmUrl(dotLottieWasmUrl)
+
 const SHEEP_ANIMATION = '/animations/bouncing-sheep.lottie'
+const SHEEP_ANIMATION_ID = '0bbc0269-6507-4216-a41c-594a4eda94b0'
 const SIZE_CLASSES = {
   sm: 'h-7 w-7',
   md: 'h-14 w-14',
@@ -43,6 +47,7 @@ export default function SheepLoader({
     <>
       <DotLottieReact
         src={SHEEP_ANIMATION}
+        animationId={SHEEP_ANIMATION_ID}
         loop={!reducedMotion}
         autoplay={!reducedMotion}
         className={`${SIZE_CLASSES[size] || SIZE_CLASSES.md} drop-shadow-[0_8px_16px_rgba(244,81,30,0.18)]`}
