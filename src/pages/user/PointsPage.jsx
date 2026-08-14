@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sparkles, Trophy, Gift, History, ScanLine, Medal } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useLang } from '@/hooks/useLang'
 import { pointsService } from '@/services/pointsService'
 import { Card, Spinner, GradientHeader, EmptyState, Avatar, Button } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
+
+const LEADERBOARD_LIMIT = 10
 
 const TABS = [
   { key: 'katalog', label: 'Tukar Poin', icon: Gift },
@@ -14,11 +17,12 @@ const TABS = [
 
 export default function PointsPage() {
   const { profile } = useAuth()
+  const { t } = useLang()
   const navigate = useNavigate()
   const [tab, setTab] = useState('katalog')
   const [points, setPoints] = useState(profile?.points ?? 0)
   const [products, setProducts] = useState([])
-  const [leaderboard, setLeaderboard] = useState([])
+  const [rankingRows, setRankingRows] = useState([])
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -27,14 +31,18 @@ export default function PointsPage() {
     Promise.all([
       pointsService.getMyPoints(profile.user_id).then(setPoints).catch(() => {}),
       pointsService.getProducts().then(setProducts).catch(() => {}),
-      pointsService.getLeaderboard(10).then(setLeaderboard).catch(() => {}),
+      pointsService.getLeaderboardWithMe(LEADERBOARD_LIMIT).then(setRankingRows).catch(() => {}),
       pointsService.getMyTransactions(profile.user_id).then(setTransactions).catch(() => {}),
     ]).finally(() => setLoading(false))
   }, [profile?.user_id])
 
-  const myRank = useMemo(
-    () => leaderboard.findIndex(u => u.user_id === profile?.user_id),
-    [leaderboard, profile?.user_id]
+  const topLeaderboard = useMemo(
+    () => rankingRows.filter(u => Number(u.rank_number) <= LEADERBOARD_LIMIT),
+    [rankingRows]
+  )
+  const myStanding = useMemo(
+    () => rankingRows.find(u => u.user_id === profile?.user_id) || null,
+    [rankingRows, profile?.user_id]
   )
 
   return (
@@ -112,46 +120,65 @@ export default function PointsPage() {
 
         {/* Leaderboard */}
         {!loading && tab === 'peringkat' && (
-          leaderboard.length === 0 ? (
+          topLeaderboard.length === 0 ? (
             <EmptyState icon={Trophy} title="Belum ada peringkat" />
           ) : (
             <Card className="divide-y divide-gray-100">
-              {leaderboard.map((u, i) => {
+              {topLeaderboard.map((u, i) => {
+                const rank = Number(u.rank_number) || i + 1
                 const isMe = u.user_id === profile?.user_id
-                const medal = ['text-amber-500', 'text-gray-400', 'text-orange-400'][i]
+                const medal = ['text-amber-500', 'text-gray-400', 'text-orange-400'][rank - 1]
                 return (
-                  <div key={u.user_id} className={`flex items-center gap-3 p-3.5 ${isMe ? 'bg-brand-50' : ''}`}>
-                    <div className="w-7 flex justify-center shrink-0">
-                      {i < 3
+                  <div
+                    key={u.user_id}
+                    aria-current={isMe ? 'true' : undefined}
+                    className={isMe
+                      ? 'flex items-center gap-3 p-3.5 bg-brand-50'
+                      : 'flex items-center gap-3 p-3.5'}
+                  >
+                    <div className="w-9 flex justify-center shrink-0">
+                      {rank <= 3
                         ? <Medal size={20} className={medal} />
-                        : <span className="text-sm font-bold text-gray-400">{i + 1}</span>}
+                        : <span className="text-sm font-bold text-gray-400 tabular-nums">{rank}</span>}
                     </div>
                     <Avatar name={u.name} src={u.photo_url} size="sm" />
                     <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate">
-                      {u.name}{isMe && <span className="text-brand-500"> (Anda)</span>}
+                      {u.name}{isMe && <span className="text-brand-500"> ({t('points.you')})</span>}
                     </p>
                     <div className="flex items-center gap-1 shrink-0">
                       <Sparkles size={13} className="text-brand-500" />
-                      <span className="text-sm font-bold text-brand-600">{u.points}</span>
+                      <span className="text-sm font-bold text-brand-600 tabular-nums">{u.points}</span>
                     </div>
                   </div>
                 )
               })}
-              {myRank === -1 && (
-                <div className="flex items-center gap-3 p-3.5 bg-brand-50">
-                  <div className="w-7 flex justify-center shrink-0"><span className="text-sm font-bold text-gray-400">—</span></div>
-                  <Avatar name={profile?.name} src={profile?.photo_url} size="sm" />
-                  <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate">{profile?.name} <span className="text-brand-500">(Anda)</span></p>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Sparkles size={13} className="text-brand-500" />
-                    <span className="text-sm font-bold text-brand-600">{points}</span>
+              {myStanding && Number(myStanding.rank_number) > LEADERBOARD_LIMIT && (
+                <>
+                  <div className="px-3.5 py-2 bg-control">
+                    <p className="text-xs font-semibold text-gray-600">{t('points.yourRank')}</p>
                   </div>
-                </div>
+                  <div
+                    aria-current="true"
+                    aria-label={t('points.rankAria', { rank: myStanding.rank_number })}
+                    className="flex items-center gap-3 p-3.5 bg-brand-50"
+                  >
+                    <div className="w-9 flex justify-center shrink-0">
+                      <span className="text-sm font-extrabold text-brand-600 tabular-nums">#{myStanding.rank_number}</span>
+                    </div>
+                    <Avatar name={myStanding.name} src={myStanding.photo_url} size="sm" />
+                    <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate">
+                      {myStanding.name} <span className="text-brand-500">({t('points.you')})</span>
+                    </p>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Sparkles size={13} className="text-brand-500" />
+                      <span className="text-sm font-bold text-brand-600 tabular-nums">{myStanding.points}</span>
+                    </div>
+                  </div>
+                </>
               )}
             </Card>
           )
         )}
-
         {/* Riwayat transaksi poin */}
         {!loading && tab === 'riwayat' && (
           transactions.length === 0 ? (

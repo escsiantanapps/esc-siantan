@@ -80,7 +80,7 @@ export default function AdminLayout() {
   const [allowedPages, setAllowedPages] = useState(null)
   const [permLoading, setPermLoading] = useState(!isSuperAdmin && !isGembala)
   const [pendingCounts, setPendingCounts] = useState({
-    pendingUsers: 0, pendingClasses: 0, pendingEvents: 0, pendingEvaluations: 0
+    pendingUsers: 0, pendingClasses: 0, pendingEvents: 0
   })
 
   useEffect(() => {
@@ -221,7 +221,6 @@ export default function AdminLayout() {
             if (to === '/admin/jemaat') badge = pendingCounts.pendingUsers
             else if (to === '/admin/kelas') badge = pendingCounts.pendingClasses
             else if (to === '/admin/events') badge = pendingCounts.pendingEvents
-            else if (to === '/admin/evaluasi') badge = pendingCounts.pendingEvaluations
 
             return (
               <NavLink key={to} to={to} end={exact}

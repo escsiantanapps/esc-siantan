@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Archive, ArchiveRestore, ArrowDownToLine, ArrowUpFromLine, Boxes, FileSpreadsheet,
+  Archive, ArchiveRestore, ArrowDownToLine, ArrowUpFromLine, Boxes, ChevronDown, ChevronUp, FileSpreadsheet,
   Handshake, History, Package, Pencil, Plus, Printer, RotateCcw, Search, Tags, Trash2, X,
 } from 'lucide-react'
 import { inventoryService } from '@/services/inventoryService'
@@ -60,6 +60,7 @@ export default function AdminInventoryPage() {
   const [loanFilter, setLoanFilter] = useState('')
   const [itemModal, setItemModal] = useState(null)
   const [itemForm, setItemForm] = useState(emptyItem)
+  const [showItemAdvanced, setShowItemAdvanced] = useState(false)
   const [photoFile, setPhotoFile] = useState(null)
   const [photoPreview, setPhotoPreview] = useState('')
   const [photoRemoved, setPhotoRemoved] = useState(false)
@@ -88,11 +89,11 @@ export default function AdminInventoryPage() {
   }
 
   function closeItemModal() {
-    setItemModal(null); resetPhoto(); setFormError('')
+    setItemModal(null); setShowItemAdvanced(false); resetPhoto(); setFormError('')
   }
 
   function closeOverlays() {
-    setItemModal(null); resetPhoto(); setStockItem(null); setLoanItem(null)
+    setItemModal(null); setShowItemAdvanced(false); resetPhoto(); setStockItem(null); setLoanItem(null)
     setReturningLoan(null); setCategoryModal(false); setFormError('')
   }
 
@@ -126,6 +127,9 @@ export default function AdminInventoryPage() {
       loan_not_found_or_returned: 'inventory.errorLoanClosed',
       invalid_loan_date: 'inventory.errorLoanDate',
       notes_required: 'inventory.errorNotesRequired',
+      item_has_stock: 'inventory.errorDeleteStock',
+      item_has_history: 'inventory.errorDeleteHistory',
+      item_not_found: 'inventory.errorItemNotFound',
     }
     const match = Object.entries(errors).find(([token]) => message.includes(token))
     return match ? t(match[1]) : (message || t('inventory.errorGeneric'))
@@ -172,7 +176,7 @@ export default function AdminInventoryPage() {
   })
 
   function openCreateItem() {
-    setItemForm(emptyItem); resetPhoto(); setItemModal({}); setFormError('')
+    setItemForm(emptyItem); setShowItemAdvanced(false); resetPhoto(); setItemModal({}); setFormError('')
   }
   function openEditItem(item) {
     setItemForm({
@@ -181,6 +185,7 @@ export default function AdminInventoryPage() {
       minimum_stock: String(item.minimum_stock ?? 0), location: item.location || '',
       item_condition: item.item_condition || 'Baik', notes: item.notes || '',
     })
+    setShowItemAdvanced(true)
     resetPhoto(item.photo_url || '')
     setItemModal(item); setFormError('')
   }
@@ -214,7 +219,7 @@ export default function AdminInventoryPage() {
   async function saveItem() {
     setFormError('')
     if (processingPhoto) return
-    if (!itemForm.code.trim() || !itemForm.name.trim() || !itemForm.unit.trim()) {
+    if (!itemForm.name.trim() || !itemForm.category_id || !itemForm.location.trim()) {
       setFormError(t('inventory.errorRequired')); return
     }
     setSaving(true)
@@ -270,6 +275,36 @@ export default function AdminInventoryPage() {
       toast.success(t(nextActive ? 'inventory.activated' : 'inventory.archived'))
       await load()
     } catch (error) { toast.error(friendlyError(error)) }
+  }
+
+  async function deleteItem(item) {
+    const ok = await confirm({
+      title: t('inventory.deleteItemTitle'),
+      message: t('inventory.deleteItemMessage', { name: item.name }),
+      confirmText: t('inventory.deleteItem'),
+      danger: true,
+    })
+    if (!ok) return
+
+    setSaving(true)
+    try {
+      await inventoryService.deleteItem(item.item_id)
+      let photoError = false
+      if (item.photo_url) {
+        try {
+          await inventoryService.removeItemPhoto(item.item_id)
+        } catch {
+          photoError = true
+        }
+      }
+      await load()
+      if (photoError) toast.error(t('inventory.itemDeletedPhotoFailed'))
+      else toast.success(t('inventory.itemDeleted'))
+    } catch (error) {
+      toast.error(friendlyError(error))
+    } finally {
+      setSaving(false)
+    }
   }
 
   function openStock(item) {
@@ -493,6 +528,8 @@ export default function AdminInventoryPage() {
                       <ActionItem icon={item.is_active ? Archive : ArchiveRestore}
                         label={t(item.is_active ? 'inventory.archive' : 'inventory.activate')}
                         onClick={() => toggleItem(item)} danger={item.is_active} />
+                      <ActionItem icon={Trash2} label={t('inventory.deleteItem')}
+                        onClick={() => deleteItem(item)} danger />
                     </ActionMenu>
                   </div>
                   <div className="grid grid-cols-3 gap-2 mt-3">
@@ -589,6 +626,7 @@ export default function AdminInventoryPage() {
       {itemModal && (
         <Modal title={t(itemModal.item_id ? 'inventory.editItem' : 'inventory.addItem')} onClose={closeItemModal}>
           <ErrorBox message={formError} />
+          <p className="text-sm text-gray-500">{t('inventory.simpleFormHint')}</p>
           <Uploader
             kind="image" crop aspect={1} value={photoPreview}
             label={t('inventory.photo')} hint={t('inventory.photoHint')}
@@ -599,43 +637,60 @@ export default function AdminInventoryPage() {
             removeLabel={t('inventory.removePhoto')} uploadingLabel={t('inventory.processingPhoto')}
             onFile={handlePhoto} onClear={clearPhoto}
           />
-          <div className="grid grid-cols-2 gap-3">
-            <Input label={t('inventory.code')} required value={itemForm.code}
-              onChange={event => setItemForm(prev => ({ ...prev, code: event.target.value }))} />
-            <Select label={t('inventory.itemType')} required value={itemForm.item_type}
-              onChange={event => setItemForm(prev => ({ ...prev, item_type: event.target.value }))}>
-              {ITEM_TYPES.map(type => <option key={type} value={type}>{t(type === 'Aset' ? 'inventory.typeAsset' : 'inventory.typeConsumable')}</option>)}
-            </Select>
-          </div>
           <Input label={t('inventory.name')} required value={itemForm.name}
             onChange={event => setItemForm(prev => ({ ...prev, name: event.target.value }))} />
-          <div className="grid grid-cols-2 gap-3">
-            <Select label={t('inventory.category')} value={itemForm.category_id}
-              onChange={event => setItemForm(prev => ({ ...prev, category_id: event.target.value }))}>
-              <option value="">{t('inventory.noCategory')}</option>
-              {categories.map(category => <option key={category.category_id} value={category.category_id}>{category.name}</option>)}
-            </Select>
-            <Input label={t('inventory.unit')} required value={itemForm.unit}
-              onChange={event => setItemForm(prev => ({ ...prev, unit: event.target.value }))} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label={t('inventory.minimumStock')} type="number" min="0" value={itemForm.minimum_stock}
-              onChange={event => setItemForm(prev => ({ ...prev, minimum_stock: event.target.value }))} />
-            <Select label={t('inventory.condition')} value={itemForm.item_condition}
-              onChange={event => setItemForm(prev => ({ ...prev, item_condition: event.target.value }))}>
-              {CONDITIONS.map(condition => <option key={condition} value={condition}>{conditionLabel(condition)}</option>)}
-            </Select>
-          </div>
-          <Input label={t('inventory.location')} value={itemForm.location}
+          <Select label={t('inventory.category')} required value={itemForm.category_id}
+            onChange={event => setItemForm(prev => ({ ...prev, category_id: event.target.value }))}>
+            <option value="">{t('inventory.selectCategory')}</option>
+            {categories.map(category => <option key={category.category_id} value={category.category_id}>{category.name}</option>)}
+          </Select>
+          <Input label={t('inventory.location')} required value={itemForm.location}
             onChange={event => setItemForm(prev => ({ ...prev, location: event.target.value }))} />
-          <Textarea label={t('inventory.notes')} value={itemForm.notes}
-            onChange={event => setItemForm(prev => ({ ...prev, notes: event.target.value }))} />
-          <p className="text-xs text-gray-400">{t('inventory.initialStockHint')}</p>
+
+          <Button
+            variant="outline"
+            className="w-full justify-between"
+            aria-expanded={showItemAdvanced}
+            aria-controls="inventory-advanced-fields"
+            onClick={() => setShowItemAdvanced(value => !value)}
+          >
+            <span>{t(showItemAdvanced ? 'inventory.hideAdvancedOptions' : 'inventory.advancedOptions')}</span>
+            {showItemAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </Button>
+
+          {showItemAdvanced && (
+            <div id="inventory-advanced-fields" className="space-y-3 rounded-xl bg-control p-3">
+              {itemModal.item_id && (
+                <p className="text-xs text-gray-500">
+                  {t('inventory.code')}: <span className="font-semibold text-gray-700">{itemForm.code}</span>
+                </p>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Select label={t('inventory.itemType')} value={itemForm.item_type}
+                  onChange={event => setItemForm(prev => ({ ...prev, item_type: event.target.value }))}>
+                  {ITEM_TYPES.map(type => <option key={type} value={type}>{t(type === 'Aset' ? 'inventory.typeAsset' : 'inventory.typeConsumable')}</option>)}
+                </Select>
+                <Input label={t('inventory.unit')} value={itemForm.unit}
+                  onChange={event => setItemForm(prev => ({ ...prev, unit: event.target.value }))} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input label={t('inventory.minimumStock')} type="number" min="0" value={itemForm.minimum_stock}
+                  onChange={event => setItemForm(prev => ({ ...prev, minimum_stock: event.target.value }))} />
+                <Select label={t('inventory.condition')} value={itemForm.item_condition}
+                  onChange={event => setItemForm(prev => ({ ...prev, item_condition: event.target.value }))}>
+                  {CONDITIONS.map(condition => <option key={condition} value={condition}>{conditionLabel(condition)}</option>)}
+                </Select>
+              </div>
+              <Textarea label={t('inventory.notes')} value={itemForm.notes}
+                onChange={event => setItemForm(prev => ({ ...prev, notes: event.target.value }))} />
+            </div>
+          )}
+
+          {!itemModal.item_id && <p className="text-xs text-gray-400">{t('inventory.initialStockHint')}</p>}
           <ModalActions onCancel={closeItemModal} onSave={saveItem} saving={saving || processingPhoto}
             saveLabel={t(itemModal.item_id ? 'a.save' : 'a.add')} />
         </Modal>
       )}
-
       {stockItem && (
         <Modal title={t('inventory.adjustStockFor', { name: stockItem.name })} onClose={() => setStockItem(null)}>
           <ErrorBox message={formError} />

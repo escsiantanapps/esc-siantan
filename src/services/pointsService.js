@@ -77,10 +77,10 @@ export const pointsService = {
     return data
   },
 
-  // Top-N jemaat dengan poin terbanyak (via fungsi definer — RLS users
-  // tidak mengizinkan jemaat membaca baris jemaat lain).
-  async getLeaderboard(limit = 10) {
-    const { data, error } = await supabase.rpc('get_points_leaderboard', { p_limit: limit })
+  // Top-N jemaat + posisi pemanggil bila berada di luar Top-N. RPC definer
+  // menghitung peringkat global tanpa membuka seluruh data poin ke klien.
+  async getLeaderboardWithMe(limit = 10) {
+    const { data, error } = await supabase.rpc('get_points_leaderboard_with_me', { p_limit: limit })
     if (error) throw error
     return data || []
   },

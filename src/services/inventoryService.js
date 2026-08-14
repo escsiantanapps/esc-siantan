@@ -9,6 +9,12 @@ function pickItemFields(value) {
   return Object.fromEntries(ITEM_FIELDS.filter(key => key in value).map(key => [key, value[key]]))
 }
 
+function createItemCode() {
+  const random = globalThis.crypto?.randomUUID?.().slice(0, 6)
+    || Math.random().toString(36).slice(2, 8)
+  return ('INV-' + Date.now().toString(36) + '-' + random).toUpperCase()
+}
+
 export const inventoryService = {
   async getCategories() {
     const { data, error } = await supabase
@@ -58,9 +64,11 @@ export const inventoryService = {
   },
 
   async createItem(payload) {
+    const item = pickItemFields(payload)
+    if (!item.code?.trim()) item.code = createItemCode()
     const { data, error } = await supabase
       .from('inventory_items')
-      .insert(pickItemFields(payload))
+      .insert(item)
       .select('*, inventory_categories(category_id, name)')
       .single()
     if (error) throw error
@@ -80,6 +88,12 @@ export const inventoryService = {
 
   async setItemActive(id, isActive) {
     return this.updateItem(id, { is_active: isActive })
+  },
+
+  async deleteItem(id) {
+    const { data, error } = await supabase.rpc('delete_inventory_item', { p_item_id: id })
+    if (error) throw error
+    return data
   },
 
   async uploadItemPhoto(itemId, file) {

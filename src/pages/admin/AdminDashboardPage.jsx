@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake, Database, LineChart } from 'lucide-react'
+import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake, Database, BarChart3 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
@@ -9,23 +9,6 @@ import { storageService } from '@/services/storageService'
 import { Card, PageHeader, Spinner, Skeleton, StatusBadge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import MemberStats from '@/components/MemberStats'
-
-function smoothCurve(points) {
-  if (points.length < 2) return ''
-  let path = `M ${points[0].x} ${points[0].y}`
-  for (let index = 0; index < points.length - 1; index++) {
-    const previous = points[index - 1] || points[index]
-    const current = points[index]
-    const next = points[index + 1]
-    const after = points[index + 2] || next
-    const control1X = current.x + (next.x - previous.x) / 6
-    const control1Y = current.y + (next.y - previous.y) / 6
-    const control2X = next.x - (after.x - current.x) / 6
-    const control2Y = next.y - (after.y - current.y) / 6
-    path += ` C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${next.x} ${next.y}`
-  }
-  return path
-}
 
 export default function AdminDashboardPage() {
   const { profile } = useAuth()
@@ -130,26 +113,19 @@ export default function AdminDashboardPage() {
     amber: { bar: 'bg-amber-500', text: 'text-amber-600', bg: 'bg-amber-50', icon: 'text-amber-500', msg: t('adash.storageWarn') },
     red:   { bar: 'bg-red-500',   text: 'text-red-600',   bg: 'bg-red-50',   icon: 'text-red-500',   msg: t('adash.storageFull') },
   }[storageColor]
-  const maxWeeklyEvaluation = Math.max(...evalTrend.map(week => week.total), 1)
+  const maxWeeklyEvaluation = Math.max(
+    ...evalTrend.flatMap(week => [week.TERPENUHI, week.PROSES, week.KOSONG, week.IZIN].map(value => Number(value) || 0)),
+    1,
+  )
   const weekLabel = start => new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'id-ID', {
     day: 'numeric', month: 'short',
   }).format(new Date(start))
   const trendSeries = [
-    { key: 'TERPENUHI', color: '#22c55e', dot: 'bg-green-500', label: t('adash.fulfilled') },
-    { key: 'PROSES', color: '#f59e0b', dot: 'bg-amber-500', label: t('adash.inProgress') },
-    { key: 'KOSONG', color: '#ef4444', dot: 'bg-red-500', label: t('adash.empty') },
-    { key: 'IZIN', color: '#9ca3af', dot: 'bg-gray-400', label: t('adash.onLeave') },
+    { key: 'TERPENUHI', bar: 'bg-green-500', label: t('adash.fulfilled') },
+    { key: 'PROSES', bar: 'bg-amber-500', label: t('adash.inProgress') },
+    { key: 'KOSONG', bar: 'bg-red-500', label: t('adash.empty') },
+    { key: 'IZIN', bar: 'bg-gray-400', label: t('adash.onLeave') },
   ]
-  const chartWidth = 320
-  const chartHeight = 148
-  const chartPadding = { x: 10, y: 12 }
-  const chartPlotWidth = chartWidth - (chartPadding.x * 2)
-  const chartPlotHeight = chartHeight - (chartPadding.y * 2)
-  const trendPoints = key => evalTrend.map((week, index) => ({
-    x: chartPadding.x + (index * chartPlotWidth) / Math.max(evalTrend.length - 1, 1),
-    y: chartPadding.y + chartPlotHeight - ((week[key] || 0) / maxWeeklyEvaluation) * chartPlotHeight,
-    week,
-  }))
 
   if (loading) return (
     <div className="animate-fade-in">
@@ -295,12 +271,12 @@ export default function AdminDashboardPage() {
         )}
       </Card>
 
-      {/* Kurva status memperlihatkan arah tren lebih cepat daripada batang bertumpuk. */}
+      {/* Batang berkelompok memudahkan admin membandingkan setiap status per minggu. */}
       <Card className="p-4 mb-6">
         <div className="flex items-center justify-between gap-3 mb-1">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
-              <LineChart size={18} className="text-brand-500" strokeWidth={1.75} />
+              <BarChart3 size={18} className="text-brand-500" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
               <h3 id="evaluation-trend-title" className="text-sm font-semibold text-gray-900">{t('adash.evalTrend')}</h3>
@@ -321,27 +297,50 @@ export default function AdminDashboardPage() {
         ) : (
           <figure className="mt-4" aria-labelledby="evaluation-trend-title">
             <div className="flex flex-wrap gap-x-3 gap-y-1 mb-3 text-xs text-gray-500" aria-label={t('adash.evalTrendLegend')}>
-              {trendSeries.map(({ key, dot, label }) => (
+              {trendSeries.map(({ key, bar, label }) => (
                 <span key={key} className="inline-flex items-center gap-1.5">
-                  <span aria-hidden="true" className={`w-4 h-0.5 rounded-full ${dot}`} />
+                  <span aria-hidden="true" className={['w-2.5 h-3 rounded-sm', bar].join(' ')} />
                   {label}
                 </span>
               ))}
             </div>
 
             <div className="border-b border-gray-200 pb-1">
-              <svg role="img" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none" className="w-full h-40" aria-label={t('adash.evalTrendA11y')}>
-                {[0.25, 0.5, 0.75].map(fraction => <line key={fraction} x1={chartPadding.x} x2={chartWidth - chartPadding.x} y1={chartPadding.y + chartPlotHeight * fraction} y2={chartPadding.y + chartPlotHeight * fraction} stroke="currentColor" strokeOpacity="0.12" strokeDasharray="3 4" />)}
-                {trendSeries.map(series => {
-                  const points = trendPoints(series.key)
-                  return <path key={series.key} d={smoothCurve(points)} fill="none" stroke={series.color} strokeWidth="2.5" strokeLinecap="round" />
-                })}
-                {trendSeries.flatMap(series => trendPoints(series.key).map(point => (
-                  <circle key={`${series.key}-${point.week.start}`} cx={point.x} cy={point.y} r="3.5" fill={series.color} stroke="var(--color-surface)" strokeWidth="2">
-                    <title>{t('adash.evalTrendWeek', { date: weekLabel(point.week.start), fulfilled: point.week.TERPENUHI, progress: point.week.PROSES, empty: point.week.KOSONG, leave: point.week.IZIN })}</title>
-                  </circle>
-                )))}
-              </svg>
+              <div role="img" aria-label={t('adash.evalTrendA11y')} className="relative h-44 px-1">
+                <div aria-hidden="true" className="absolute inset-x-1 top-1/4 border-t border-dashed border-gray-200" />
+                <div aria-hidden="true" className="absolute inset-x-1 top-1/2 border-t border-dashed border-gray-200" />
+                <div aria-hidden="true" className="absolute inset-x-1 top-3/4 border-t border-dashed border-gray-200" />
+                <div className="relative z-10 grid h-full grid-cols-6 gap-1 sm:gap-3">
+                  {evalTrend.map(week => (
+                    <div
+                      key={week.start}
+                      className="flex h-full items-end gap-0.5 sm:gap-1"
+                      title={t('adash.evalTrendWeek', { date: weekLabel(week.start), fulfilled: week.TERPENUHI, progress: week.PROSES, empty: week.KOSONG, leave: week.IZIN })}
+                    >
+                      {trendSeries.map(series => {
+                        const value = Number(week[series.key]) || 0
+                        const height = value === 0 ? 0 : Math.max((value / maxWeeklyEvaluation) * 84, 4)
+                        return (
+                          <div key={series.key} className="relative h-full min-w-0 flex-1">
+                            <span
+                              aria-hidden="true"
+                              className="absolute left-1/2 hidden -translate-x-1/2 text-[10px] font-medium tabular-nums text-gray-500 sm:block"
+                              style={{ bottom: String(height + 2) + '%' }}
+                            >
+                              {value}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className={['absolute inset-x-0 bottom-0 mx-auto w-full max-w-5 rounded-t-sm transition-[height] duration-300 motion-reduce:transition-none', series.bar].join(' ')}
+                              style={{ height: String(height) + '%' }}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-6 gap-1 pt-1">
                 {evalTrend.map(week => <span key={week.start} className="text-center text-[10px] text-gray-400 whitespace-nowrap">{weekLabel(week.start)}</span>)}
               </div>
@@ -354,7 +353,6 @@ export default function AdminDashboardPage() {
           </figure>
         )}
       </Card>
-
       <div className="grid lg:grid-cols-2 gap-4">
         {/* Jemaat terbaru */}
         <Card className="p-4">

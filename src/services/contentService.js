@@ -469,6 +469,25 @@ export const ministriesService = {
     const { error } = await supabase.from('ministries').delete().eq('ministry_id', id)
     if (error) throw error
   },
+
+  async getMembers(id) {
+    const { data: links, error: linksError } = await supabase
+      .from('user_ministries').select('user_id').eq('ministry_id', id)
+    if (linksError) throw linksError
+
+    const userIds = (links || []).map(link => link.user_id)
+    if (userIds.length === 0) return []
+
+    // Daftar ini sengaja hanya mengambil identitas ringkas; data pribadi
+    // seperti NIK, telepon, alamat, dan biodata lain tidak diperlukan.
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id, name, photo_url, role, status')
+      .in('user_id', userIds)
+      .order('name')
+    if (error) throw error
+    return data || []
+  },
 }
 
 // ─── Komsel (CRUD + anggota + absensi) ──────────────────────

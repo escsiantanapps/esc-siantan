@@ -4697,3 +4697,100 @@ WHERE u.sp_level IS NOT NULL
     SELECT 1 FROM sp_letters l
     WHERE l.user_id = u.user_id AND l.is_active = true
   );
+
+-- ── Migrasi v81: Peringkat poin pengguna di luar 10 besar ──────────────
+-- Leaderboard publik tetap dibatasi ke Top-N, tetapi pemanggil yang login
+-- juga menerima baris miliknya sendiri beserta nomor peringkat global.
+-- SECURITY DEFINER diperlukan karena RLS users tidak mengizinkan jemaat
+-- membaca poin jemaat lain untuk menghitung posisi; hasil tambahan hanya
+-- membuka nama/foto/poin milik pemanggil sendiri.
+CREATE OR REPLACE FUNCTION get_points_leaderboard_with_me(p_limit INT DEFAULT 10)
+  RETURNS TABLE (
+    user_id TEXT,
+    name TEXT,
+    photo_url TEXT,
+    points INT,
+    rank_number BIGINT
+  )
+  LANGUAGE sql
+  SECURITY DEFINER
+  STABLE
+  SET search_path = public
+AS $$
+  WITH ranked AS (
+    SELECT
+      u.user_id,
+      u.name,
+      u.photo_url,
+      COALESCE(u.points, 0) AS points,
+      ROW_NUMBER() OVER (
+        ORDER BY COALESCE(u.points, 0) DESC, u.name ASC, u.user_id ASC
+      ) AS rank_number
+    FROM users u
+    WHERE u.status = 'Aktif'
+  )
+  SELECT
+    r.user_id,
+    r.name,
+    r.photo_url,
+    r.points,
+    r.rank_number
+  FROM ranked r
+  WHERE r.rank_number <= LEAST(GREATEST(COALESCE(p_limit, 10), 1), 100)
+     OR r.user_id = auth_user_id()
+  ORDER BY r.rank_number;
+$$;
+
+REVOKE EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) TO authenticated;
+
+-- ── Migrasi v82: Hapus aman barang inventory tanpa riwayat ─────────────
+-- KEPUTUSAN OPERATOR (2026-08-14): Admin membutuhkan fungsi hapus permanen
+-- untuk item yang salah/duplikat. Item yang sudah memiliki stok, transaksi,
+-- atau peminjaman tetap tidak boleh dihapus agar audit inventory tetap utuh;
+-- gunakan Arsipkan untuk item tersebut.
+CREATE OR REPLACE FUNCTION delete_inventory_item(p_item_id TEXT)
+  RETURNS jsonb
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path = public
+AS $$
+DECLARE
+  v_stock INT;
+  v_photo_url TEXT;
+BEGIN
+  IF NOT auth_admin_can('/admin/inventory') THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT stock, photo_url
+  INTO v_stock, v_photo_url
+  FROM inventory_items
+  WHERE item_id = p_item_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'item_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_stock <> 0 THEN
+    RAISE EXCEPTION 'item_has_stock' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM inventory_transactions WHERE item_id = p_item_id
+  ) OR EXISTS (
+    SELECT 1 FROM inventory_loans WHERE item_id = p_item_id
+  ) THEN
+    RAISE EXCEPTION 'item_has_history' USING ERRCODE = '22023';
+  END IF;
+
+  DELETE FROM inventory_items WHERE item_id = p_item_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'item_id', p_item_id,
+    'photo_url', v_photo_url
+  );
+END $$;
+
+REVOKE EXECUTE ON FUNCTION delete_inventory_item(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION delete_inventory_item(TEXT) TO authenticated;
