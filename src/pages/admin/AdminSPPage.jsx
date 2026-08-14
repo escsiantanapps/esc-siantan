@@ -28,6 +28,7 @@ export default function AdminSPPage() {
   const [stats, setStats] = useState([])
   const [selectedCategory, setSelectedCategory] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   
   // State untuk issue SP form
   const [showIssueModal, setShowIssueModal] = useState(false)
@@ -74,6 +75,7 @@ export default function AdminSPPage() {
   }, [])
 
   function loadList() {
+    setLoadError(false)
     setLoading(true)
     Promise.all([
       spService.getAllWithActiveSP(selectedCategory),
@@ -83,7 +85,12 @@ export default function AdminSPPage() {
         setMembers(members)
         setStats(stats)
       })
-      .catch(() => {})
+      .catch(() => {
+        setMembers([])
+        setStats([])
+        setLoadError(true)
+        toast.error(t('asp.loadError'))
+      })
       .finally(() => setLoading(false))
   }
 
@@ -283,7 +290,16 @@ export default function AdminSPPage() {
 
           {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
-          {!loading && members.length === 0 && (
+          {!loading && loadError && (
+            <EmptyState
+              icon={AlertTriangle}
+              title={t('asp.loadError')}
+              description={t('asp.loadErrorDesc')}
+              action={<Button size="sm" onClick={loadList}>{t('asp.retry')}</Button>}
+            />
+          )}
+
+          {!loading && !loadError && members.length === 0 && (
             <EmptyState 
               icon={AlertTriangle} 
               title="Belum ada jemaat dengan SP aktif" 

@@ -1298,6 +1298,10 @@ export const translations = {
     'asp.none': 'Tidak ada jemaat dengan SP',
     'asp.noneDesc': 'Semua jemaat dalam status aman.',
 
+    'asp.loadError': 'Data SP gagal dimuat',
+    'asp.loadErrorDesc': 'Data peserta tidak dihapus. Periksa koneksi atau hak akses, lalu coba lagi.',
+    'asp.retry': 'Coba lagi',
+
     // Admin — Ministry
     'amin.title': 'Kelola Ministry',
     'amin.subtitle': '{count} ministry',
@@ -2914,6 +2918,10 @@ export const translations = {
     'asp.all': 'All',
     'asp.none': 'No members with a warning',
     'asp.noneDesc': 'All members are in safe status.',
+
+    'asp.loadError': 'Failed to load warning data',
+    'asp.loadErrorDesc': 'Participant data was not deleted. Check the connection or access rights, then try again.',
+    'asp.retry': 'Try again',
 
     // Admin — Ministry
     'amin.title': 'Manage Ministry',

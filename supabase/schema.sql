@@ -4661,3 +4661,39 @@ DROP TRIGGER IF EXISTS audit_komsel_attendance_delete ON komsel_attendance;
 CREATE TRIGGER audit_komsel_attendance_delete
   AFTER DELETE ON komsel_attendance
   FOR EACH ROW EXECUTE FUNCTION record_audit();
+
+-- ── Migrasi v80: Pulihkan status SP legacy yang belum masuk riwayat ──
+-- TEMUAN (2026-08-14): halaman SP lama menulis dan membaca users.sp_level,
+-- sedangkan halaman admin-managed membaca sp_letters. Perangkat dengan bundle
+-- PWA lama masih dapat meninggalkan status SP aktif hanya di kolom legacy
+-- setelah Migrasi v71 selesai, sehingga bundle baru menampilkan 0 peserta.
+-- Error pembacaan di klien juga sebelumnya ditelan dan tampak sebagai data kosong.
+--
+-- KEPUTUSAN OPERATOR: status SP legacy yang masih aktif harus dipertahankan dan
+-- dipindahkan kembali ke riwayat tanpa menghapus atau menimpa sp_letters existing.
+-- Penerbit pemulihan memakai Super Admin pertama, atau Admin bila Super Admin
+-- tidak tersedia, karena sp_letters.issued_by wajib berisi user yang valid.
+
+WITH recovery_issuer AS (
+  SELECT user_id
+  FROM users
+  WHERE role IN ('Super Admin', 'Admin')
+  ORDER BY
+    CASE role WHEN 'Super Admin' THEN 0 ELSE 1 END,
+    created_at NULLS LAST,
+    user_id
+  LIMIT 1
+)
+INSERT INTO sp_letters
+  (user_id, category_id, issued_by, notes, issued_at, is_active)
+SELECT
+  u.user_id, c.category_id, i.user_id, u.sp_notes, now(), true
+FROM users u
+JOIN sp_categories c ON c.name = u.sp_level
+CROSS JOIN recovery_issuer i
+WHERE u.sp_level IS NOT NULL
+  AND u.sp_level <> 'Aman'
+  AND NOT EXISTS (
+    SELECT 1 FROM sp_letters l
+    WHERE l.user_id = u.user_id AND l.is_active = true
+  );
