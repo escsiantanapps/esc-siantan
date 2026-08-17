@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, FileText, UploadCloud, X } from 'lucide-react'
+import { ArrowLeft, Eye, FileText, UploadCloud, X } from 'lucide-react'
 import { newsService, mediaService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useAuth } from '@/hooks/useAuth'
@@ -9,7 +9,9 @@ import { useLang } from '@/hooks/useLang'
 import { Card, Input, Textarea, Button, Spinner } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import MediaListUploader from '@/components/MediaListUploader'
+import NewsPortraitPreview from '@/components/NewsPortraitPreview'
 import { validateUpload, compressImage } from '@/lib/utils'
+import { useBackClose } from '@/hooks/useBackClose'
 
 export default function AdminNewsFormPage() {
   const { id } = useParams()
@@ -29,6 +31,7 @@ export default function AdminNewsFormPage() {
   const [deleting, setDeleting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+  const [showPreview, setShowPreview] = useState(false)
 
   const [form, setForm] = useState({
     title: '', content: '', contact_wa: '', thumbnail_url: '',
@@ -37,6 +40,7 @@ export default function AdminNewsFormPage() {
   const [mediaBusy, setMediaBusy] = useState(false)
   const [pdfBusy, setPdfBusy] = useState(false)
   const pdfInputRef = useRef(null)
+  useBackClose(showPreview, () => setShowPreview(false))
 
   useEffect(() => {
     if (!isEdit) return
@@ -204,7 +208,12 @@ export default function AdminNewsFormPage() {
       {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>}
 
       <Card className="p-4 mb-4 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-900">{t('anf.section')}</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-gray-900">{t('anf.section')}</h2>
+          <Button type="button" size="sm" variant="secondary" className="min-h-11 shrink-0" onClick={() => setShowPreview(true)}>
+            <Eye size={15} /> {t('anf.previewPortrait')}
+          </Button>
+        </div>
 
         <Uploader
           kind="image" crop aspect={16 / 9} label={t('anf.cover')} hint={t('anf.coverHint')}
@@ -263,6 +272,14 @@ export default function AdminNewsFormPage() {
           {isEdit ? t('anf.saveChanges') : t('anf.addNews')}
         </Button>
       </div>
+      {showPreview && (
+        <NewsPortraitPreview
+          title={form.title}
+          content={form.content}
+          thumbnailUrl={form.thumbnail_url}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   )
 }
