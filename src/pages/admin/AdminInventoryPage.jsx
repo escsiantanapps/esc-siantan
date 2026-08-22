@@ -115,6 +115,7 @@ export default function AdminInventoryPage() {
 
   function friendlyError(error) {
     const message = error?.message || ''
+    if (error?.code === 'PGRST202' || /Could not find the function.*delete_inventory_item/i.test(message)) return t('inventory.errorDeleteMigration')
     if (error?.code === '23505') return t('inventory.errorDuplicate')
     const errors = {
       not_authorized: 'inventory.errorUnauthorized',

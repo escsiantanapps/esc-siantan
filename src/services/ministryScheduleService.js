@@ -15,6 +15,14 @@ function monthRange(ym) {
   return [start, end]
 }
 
+
+function monthDateRange(ym) {
+  const [y, m] = ym.split('-').map(Number)
+  const start = `${ym}-01`
+  const end = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10)
+  return [start, end]
+}
+
 export const ministryScheduleService = {
   // Jadwal pada satu tanggal (semua ministry).
   async listByDate(date) {
@@ -117,6 +125,184 @@ export const ministryScheduleService = {
     return data || []
   },
 
+  // Rekap semua sesi pada satu tanggal. Status terlambat tetap memakai nilai
+  // dari database; halaman hanya menyusun data lintas sesi untuk kebutuhan
+  // pemantauan Admin dan tidak menghitung ulang aturan grace period di klien.
+  async getDateRecap(date) {
+    const schedules = await this.listByDate(date)
+    if (schedules.length === 0) {
+      return {
+        schedules: [],
+        rows: [],
+        lateRows: [],
+        notYetRows: [],
+        stats: { sessions: 0, assigned: 0, attended: 0, onTime: 0, late: 0, notYet: 0 },
+      }
+    }
+
+    const scheduleIds = schedules.map(s => s.schedule_id)
+    const [{ data: assignments, error: assignmentError }, { data: attendance, error: attendanceError }] = await Promise.all([
+      supabase
+        .from('ministry_schedule_assignments')
+        .select('schedule_id, user_id, users(name, photo_url)')
+        .in('schedule_id', scheduleIds),
+      supabase
+        .from('ministry_attendance')
+        .select('attendance_id, schedule_id, user_id, scanned_at, status, users(name, photo_url)')
+        .in('schedule_id', scheduleIds)
+        .order('scanned_at', { ascending: true }),
+    ])
+    if (assignmentError) throw assignmentError
+    if (attendanceError) throw attendanceError
+
+    const scheduleMap = Object.fromEntries(schedules.map(s => [s.schedule_id, s]))
+    const attendanceRows = attendance || []
+    const attendanceMap = Object.fromEntries(
+      attendanceRows.map(row => [`${row.schedule_id}:${row.user_id}`, row]),
+    )
+
+    const assignedRows = (assignments || []).map(row => ({
+      ...row,
+      schedule: scheduleMap[row.schedule_id],
+      attendance: attendanceMap[`${row.schedule_id}:${row.user_id}`] || null,
+      user: row.users,
+    }))
+
+    // Penugasan dapat diganti setelah scan. Kehadiran historis tetap perlu
+    // terlihat di daftar telat walaupun baris penugasannya sudah dihapus.
+    const assignedKeys = new Set(assignedRows.map(row => `${row.schedule_id}:${row.user_id}`))
+    const historicalRows = attendanceRows
+      .filter(row => !assignedKeys.has(`${row.schedule_id}:${row.user_id}`))
+      .map(row => ({
+        ...row,
+        schedule: scheduleMap[row.schedule_id],
+        attendance: row,
+        user: row.users,
+      }))
+    const rows = [...assignedRows, ...historicalRows]
+    const lateRows = attendanceRows
+      .filter(row => row.status === 'Terlambat')
+      .map(row => ({ ...row, schedule: scheduleMap[row.schedule_id], user: row.users }))
+    const notYetRows = assignedRows.filter(row => !row.attendance)
+
+    return {
+      schedules,
+      rows,
+      lateRows,
+      notYetRows,
+      stats: {
+        sessions: schedules.length,
+        assigned: (assignments || []).length,
+        attended: attendanceRows.length,
+        onTime: attendanceRows.filter(row => row.status === 'Tepat Waktu').length,
+        late: lateRows.length,
+        notYet: notYetRows.length,
+      },
+    }
+  },
+
+  // Rekap bulanan berdasarkan tanggal pelayanan. Sumber periode adalah
+  // ministry_schedules.service_date, bukan waktu scan, agar sesi yang jatuh
+  // pada bulan tersebut tetap masuk walau timestamp disimpan UTC.
+  async getMonthlyRecap(ym) {
+    const [start, end] = monthDateRange(ym)
+    const { data: schedules, error: scheduleError } = await supabase
+      .from('ministry_schedules')
+      .select('*, ministries(name)')
+      .gte('service_date', start)
+      .lt('service_date', end)
+      .order('service_date', { ascending: true })
+      .order('start_time', { ascending: true })
+    if (scheduleError) throw scheduleError
+    if (!schedules || schedules.length === 0) {
+      return {
+        schedules: [], rows: [], lateRows: [], notYetRows: [], lateLeaders: [],
+        stats: { sessions: 0, assigned: 0, attended: 0, onTime: 0, late: 0, notYet: 0 },
+      }
+    }
+
+    const scheduleIds = schedules.map(s => s.schedule_id)
+    const [{ data: assignments, error: assignmentError }, { data: attendance, error: attendanceError }] = await Promise.all([
+      supabase
+        .from('ministry_schedule_assignments')
+        .select('schedule_id, user_id, users(name, photo_url)')
+        .in('schedule_id', scheduleIds),
+      supabase
+        .from('ministry_attendance')
+        .select('attendance_id, schedule_id, user_id, scanned_at, status, users(name, photo_url)')
+        .in('schedule_id', scheduleIds)
+        .order('scanned_at', { ascending: true }),
+    ])
+    if (assignmentError) throw assignmentError
+    if (attendanceError) throw attendanceError
+
+    const scheduleMap = Object.fromEntries(schedules.map(s => [s.schedule_id, s]))
+    const attendanceRows = attendance || []
+    const attendanceMap = Object.fromEntries(
+      attendanceRows.map(row => [`${row.schedule_id}:${row.user_id}`, row]),
+    )
+    const assignedRows = (assignments || []).map(row => ({
+      ...row,
+      schedule: scheduleMap[row.schedule_id],
+      attendance: attendanceMap[`${row.schedule_id}:${row.user_id}`] || null,
+      user: row.users,
+    }))
+    const assignedKeys = new Set(assignedRows.map(row => `${row.schedule_id}:${row.user_id}`))
+    const historicalRows = attendanceRows
+      .filter(row => !assignedKeys.has(`${row.schedule_id}:${row.user_id}`))
+      .map(row => ({ ...row, schedule: scheduleMap[row.schedule_id], attendance: row, user: row.users }))
+    const rows = [...assignedRows, ...historicalRows]
+    const lateRows = attendanceRows
+      .filter(row => row.status === 'Terlambat')
+      .map(row => ({ ...row, schedule: scheduleMap[row.schedule_id], user: row.users }))
+    const notYetRows = assignedRows.filter(row => !row.attendance)
+
+    const leaderMap = {}
+    function getLeader(userId, user) {
+      if (!leaderMap[userId]) {
+        leaderMap[userId] = {
+          user_id: userId, user: user || { name: '-', photo_url: null },
+          assignedCount: 0, attendedCount: 0, lateCount: 0, lateSessions: [],
+        }
+      } else if (!leaderMap[userId].user?.name && user?.name) {
+        leaderMap[userId].user = user
+      }
+      return leaderMap[userId]
+    }
+    for (const row of assignedRows) {
+      const leader = getLeader(row.user_id, row.user)
+      leader.assignedCount += 1
+      if (!row.attendance) continue
+      leader.attendedCount += 1
+      if (row.attendance.status === 'Terlambat') {
+        leader.lateCount += 1
+        leader.lateSessions.push({ label: row.schedule?.label || '-', date: row.schedule?.service_date })
+      }
+    }
+    for (const row of historicalRows) {
+      const leader = getLeader(row.user_id, row.user)
+      leader.attendedCount += 1
+      if (row.attendance.status === 'Terlambat') {
+        leader.lateCount += 1
+        leader.lateSessions.push({ label: row.schedule?.label || '-', date: row.schedule?.service_date })
+      }
+    }
+
+    const lateLeaders = Object.values(leaderMap)
+      .filter(row => row.lateCount > 0)
+      .sort((a, b) => b.lateCount - a.lateCount || a.user.name.localeCompare(b.user.name, 'id'))
+      .slice(0, 10)
+
+    return {
+      schedules, rows, lateRows, notYetRows, lateLeaders,
+      stats: {
+        sessions: schedules.length, assigned: (assignments || []).length,
+        attended: attendanceRows.length,
+        onTime: attendanceRows.filter(row => row.status === 'Tepat Waktu').length,
+        late: lateRows.length, notYet: notYetRows.length,
+      },
+    }
+  },
   // Peta { user_id: jumlahTerlambat } dalam bulan `ym` ('YYYY-MM') — untuk
   // badge merah "3x telat" (reset per bulan berjalan, keputusan operator).
   async getMonthlyLateCounts(ym) {
