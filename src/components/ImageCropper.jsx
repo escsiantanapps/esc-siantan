@@ -64,8 +64,10 @@ export default function ImageCropper({ file, aspect = 16 / 9, onCancel, onCroppe
 
   function done() {
     if (!img) return
-    const O_W = 1280
-    const O_H = Math.round(O_W / aspect)
+    // Batasi sisi terpanjang 1280px. Portrait 9:16 menjadi 720x1280,
+    // supaya canvas tidak terlalu besar saat diproses di perangkat mobile.
+    const O_W = aspect < 1 ? Math.round(1280 * aspect) : 1280
+    const O_H = aspect < 1 ? 1280 : Math.round(1280 / aspect)
     const canvas = document.createElement('canvas')
     canvas.width = O_W
     canvas.height = O_H

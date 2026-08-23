@@ -49,7 +49,10 @@ export default function Uploader({
 
       {kind === 'image' ? (
         value ? (
-          <div className="relative h-40 rounded-2xl overflow-hidden border border-gray-100">
+          <div
+            className={`relative rounded-2xl overflow-hidden border border-gray-100 ${crop ? 'max-w-xs mx-auto min-h-40' : 'h-40'}`}
+            style={crop ? { aspectRatio: String(aspect) } : undefined}
+          >
             <img src={value} alt={imageAlt} className="w-full h-full object-cover" />
             {uploading && (
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><Spin light /></div>
@@ -68,7 +71,8 @@ export default function Uploader({
         ) : (
           <button
             type="button" onClick={pick} disabled={uploading}
-            className="w-full h-40 rounded-2xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50/40 transition-colors flex flex-col items-center justify-center gap-2 disabled:opacity-60"
+            className={`w-full rounded-2xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50/40 transition-colors flex flex-col items-center justify-center gap-2 disabled:opacity-60 ${crop ? 'max-w-xs mx-auto min-h-40' : 'h-40'}`}
+            style={crop ? { aspectRatio: String(aspect) } : undefined}
           >
             {uploading ? <Spin /> : (
               <div className="w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center text-brand-500">
