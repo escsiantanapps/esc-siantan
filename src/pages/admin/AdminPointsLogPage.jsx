@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Coins, TrendingUp, TrendingDown, Search, History, Wallet, Network, BookOpen, ShieldAlert, Trash2, Gift } from 'lucide-react'
+import { Coins, TrendingUp, TrendingDown, Search, History, Wallet, Network, BookOpen, ShieldAlert, Trash2, Gift, Check } from 'lucide-react'
 import { pointsService } from '@/services/pointsService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { Card, PageHeader, Input, Textarea, Select, Button, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
+import { Card, PageHeader, Input, Textarea, Button, Spinner, EmptyState, Avatar, Badge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
 // Distribusi Poin (Admin) — audit ke mana saja poin bergerak. Tersusun dalam
@@ -62,10 +62,21 @@ export default function AdminPointsLogPage() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [busyId, setBusyId] = useState(null)
-  const [grantUserId, setGrantUserId] = useState('')
+  const [grantUserIds, setGrantUserIds] = useState([])
+  const [grantUserQuery, setGrantUserQuery] = useState('')
   const [grantAmount, setGrantAmount] = useState('')
   const [grantReason, setGrantReason] = useState('')
   const [granting, setGranting] = useState(false)
+
+  const selectedGrantUsers = useMemo(
+    () => users.filter(user => grantUserIds.includes(user.user_id)),
+    [users, grantUserIds],
+  )
+  const filteredGrantUsers = useMemo(() => {
+    const search = grantUserQuery.trim().toLowerCase()
+    if (!search) return users
+    return users.filter(user => (user.name || '').toLowerCase().includes(search))
+  }, [users, grantUserQuery])
 
   function loadAll() {
     return Promise.all([
@@ -103,6 +114,14 @@ export default function AdminPointsLogPage() {
     return tx.filter(t => (t.users?.name || '').toLowerCase().includes(s))
   }, [tx, q])
 
+  function toggleGrantUser(userId) {
+    setGrantUserIds(current => (
+      current.includes(userId)
+        ? current.filter(id => id !== userId)
+        : [...current, userId]
+    ))
+  }
+
   async function handleRevoke(t) {
     const ok = await confirm({
       title: 'Hapus poin ini?',
@@ -127,25 +146,44 @@ export default function AdminPointsLogPage() {
   async function handleGrant(e) {
     e.preventDefault()
     const amount = Number(grantAmount)
-    const user = users.find(item => item.user_id === grantUserId)
+    const selectedUsers = selectedGrantUsers
     const reason = grantReason.trim()
 
-    if (!user) return toast.error(t('apoints.grantUserRequired'))
+    if (selectedUsers.length === 0) return toast.error(t('apoints.grantUserRequired'))
     if (!Number.isInteger(amount) || amount <= 0 || amount > 100000) return toast.error(t('apoints.grantAmountInvalid'))
     if (reason.length < 3 || reason.length > 300) return toast.error(t('apoints.grantReasonInvalid'))
 
     const ok = await confirm({
       title: t('apoints.grantConfirmTitle'),
-      message: t('apoints.grantConfirmMessage', { name: user.name, amount, reason }),
+      message: t('apoints.grantConfirmMessage', {
+        count: selectedUsers.length,
+        names: selectedUsers.slice(0, 3).map(user => user.name).join(', '),
+        amount,
+        reason,
+      }),
       confirmText: t('apoints.grantButton'),
     })
     if (!ok) return
 
     setGranting(true)
     try {
-      const result = await pointsService.grantPoints(user.user_id, amount, reason)
-      toast.success(t('apoints.grantSuccess', { name: user.name, balance: result.balance }))
-      setGrantUserId('')
+      const results = await Promise.allSettled(
+        selectedUsers.map(user => pointsService.grantPoints(user.user_id, amount, reason)),
+      )
+      const successCount = results.filter(result => result.status === 'fulfilled').length
+      const failedCount = results.length - successCount
+
+      if (successCount > 0) toast.success(t('apoints.grantSuccess', { count: successCount }))
+      if (failedCount > 0) {
+        toast.error(t(successCount > 0 ? 'apoints.grantPartialSuccess' : 'apoints.grantFailed', {
+          success: successCount,
+          failed: failedCount,
+          total: results.length,
+        }))
+      }
+
+      setGrantUserIds([])
+      setGrantUserQuery('')
       setGrantAmount('')
       setGrantReason('')
       await loadAll()
@@ -177,13 +215,57 @@ export default function AdminPointsLogPage() {
             </div>
           </div>
           <form onSubmit={handleGrant} className="space-y-3">
-            <Select label={t('apoints.grantUser')} required value={grantUserId} onChange={e => setGrantUserId(e.target.value)}>
-              <option value="">{t('apoints.grantUserPlaceholder')}</option>
-              {users.map(user => <option key={user.user_id} value={user.user_id}>{user.name} ({t('apoints.currentBalance', { points: user.points || 0 })})</option>)}
-            </Select>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm text-gray-600 font-medium">
+                  {t('apoints.grantUser')}<span className="text-red-500 ml-0.5">*</span>
+                </label>
+                <span className="text-xs text-gray-400">
+                  {t('apoints.grantUserSelected', { count: selectedGrantUsers.length })}
+                </span>
+              </div>
+              <Input
+                icon={Search}
+                aria-label={t('apoints.grantUserSearchLabel')}
+                placeholder={t('apoints.grantUserSearchPlaceholder')}
+                value={grantUserQuery}
+                onChange={e => setGrantUserQuery(e.target.value)}
+              />
+              <div
+                role="listbox"
+                aria-label={t('apoints.grantUserSearchLabel')}
+                aria-multiselectable="true"
+                className="max-h-56 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-1"
+              >
+                {filteredGrantUsers.length === 0 ? (
+                  <p className="px-3 py-4 text-center text-xs text-gray-400">{t('apoints.grantUserEmpty')}</p>
+                ) : filteredGrantUsers.map(user => {
+                  const selected = grantUserIds.includes(user.user_id)
+                  return (
+                    <button
+                      key={user.user_id}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => toggleGrantUser(user.user_id)}
+                      className={`w-full min-h-11 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors ${selected ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-control'}`}
+                    >
+                      <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-gray-300 bg-surface text-transparent'}`}>
+                        <Check size={13} strokeWidth={2.5} />
+                      </span>
+                      <Avatar name={user.name} src={user.photo_url} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{user.name}</span>
+                        <span className="block truncate text-[11px] text-gray-400">{t('apoints.currentBalance', { points: user.points || 0 })}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <Input label={t('apoints.grantAmount')} required type="number" min="1" max="100000" step="1" value={grantAmount} onChange={e => setGrantAmount(e.target.value)} placeholder={t('apoints.grantAmountPlaceholder')} />
             <Textarea label={t('apoints.grantReason')} required rows={2} maxLength={300} value={grantReason} onChange={e => setGrantReason(e.target.value)} placeholder={t('apoints.grantReasonPlaceholder')} />
-            <Button type="submit" loading={granting} className="w-full">{t('apoints.grantButton')}</Button>
+            <Button type="submit" loading={granting} disabled={granting || selectedGrantUsers.length === 0} className="w-full">{t('apoints.grantButton')}</Button>
           </form>
         </Card>
       )}
