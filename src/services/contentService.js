@@ -488,6 +488,40 @@ export const ministriesService = {
     if (error) throw error
     return data || []
   },
+
+  async getAvailableMembers(id) {
+    const [{ data: links, error: linksError }, { data: users, error: usersError }] = await Promise.all([
+      supabase.from('user_ministries').select('user_id').eq('ministry_id', id),
+      supabase.from('users')
+        .select('user_id, name, photo_url, role, status')
+        .eq('status', 'Aktif')
+        .order('name'),
+    ])
+    if (linksError) throw linksError
+    if (usersError) throw usersError
+
+    const memberIds = new Set((links || []).map(link => link.user_id))
+    return (users || []).filter(user => !memberIds.has(user.user_id))
+  },
+
+  async addMember(ministryId, userId) {
+    const { data, error } = await supabase
+      .from('user_ministries')
+      .insert({ ministry_id: ministryId, user_id: userId })
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async removeMember(ministryId, userId) {
+    const { error } = await supabase
+      .from('user_ministries')
+      .delete()
+      .eq('ministry_id', ministryId)
+      .eq('user_id', userId)
+    if (error) throw error
+  },
 }
 
 // ─── Komsel (CRUD + anggota + absensi) ──────────────────────

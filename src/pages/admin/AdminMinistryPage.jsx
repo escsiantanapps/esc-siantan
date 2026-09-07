@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Church, Plus, Pencil, Trash2, X, Users, Search, RefreshCw } from 'lucide-react'
+import { Church, Plus, Pencil, Trash2, X, Users, Search, RefreshCw, UserPlus, UserMinus } from 'lucide-react'
 import { ministriesService } from '@/services/contentService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
@@ -26,12 +26,22 @@ export default function AdminMinistryPage() {
   const [membersLoading, setMembersLoading] = useState(false)
   const [membersError, setMembersError] = useState(false)
   const [memberSearch, setMemberSearch] = useState('')
+  const [availableMembers, setAvailableMembers] = useState([])
+  const [availableMembersLoading, setAvailableMembersLoading] = useState(false)
+  const [availableMemberSearch, setAvailableMemberSearch] = useState('')
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [memberActionId, setMemberActionId] = useState(null)
 
   function closeMembers() {
     setMembersView(null)
     setMembers([])
+    setAvailableMembers([])
     setMembersError(false)
     setMemberSearch('')
+    setAvailableMemberSearch('')
+    setShowAddMember(false)
+    setAvailableMembersLoading(false)
+    setMemberActionId(null)
   }
 
   useBackClose(showModal, () => setShowModal(false))
@@ -63,15 +73,61 @@ export default function AdminMinistryPage() {
   async function openMembers(item, resetSearch = true) {
     setMembersView(item)
     setMembers([])
+    setAvailableMembers([])
     setMembersError(false)
     if (resetSearch) setMemberSearch('')
+    setAvailableMemberSearch('')
+    setShowAddMember(false)
     setMembersLoading(true)
+    setAvailableMembersLoading(true)
     try {
-      setMembers(await ministriesService.getMembers(item.ministry_id))
+      const [currentMembers, candidates] = await Promise.all([
+        ministriesService.getMembers(item.ministry_id),
+        ministriesService.getAvailableMembers(item.ministry_id),
+      ])
+      setMembers(currentMembers)
+      setAvailableMembers(candidates)
     } catch {
       setMembersError(true)
     } finally {
       setMembersLoading(false)
+      setAvailableMembersLoading(false)
+    }
+  }
+
+  async function handleAddMember(member) {
+    if (!membersView) return
+    setMemberActionId(`add:${member.user_id}`)
+    try {
+      await ministriesService.addMember(membersView.ministry_id, member.user_id)
+      toast.success(t('amin.memberAdded', { name: member.name, ministry: membersView.name }))
+      await openMembers(membersView, false)
+    } catch (err) {
+      toast.error(err.message || t('amin.memberActionFailed'))
+    } finally {
+      setMemberActionId(null)
+    }
+  }
+
+  async function handleRemoveMember(member) {
+    if (!membersView) return
+    const ok = await confirm({
+      title: t('amin.removeMemberTitle'),
+      message: t('amin.removeMemberMsg', { name: member.name, ministry: membersView.name }),
+      confirmText: t('amin.removeMember'),
+      danger: true,
+    })
+    if (!ok) return
+
+    setMemberActionId(`remove:${member.user_id}`)
+    try {
+      await ministriesService.removeMember(membersView.ministry_id, member.user_id)
+      toast.success(t('amin.memberRemoved', { name: member.name, ministry: membersView.name }))
+      await openMembers(membersView, false)
+    } catch (err) {
+      toast.error(err.message || t('amin.memberActionFailed'))
+    } finally {
+      setMemberActionId(null)
     }
   }
 
@@ -117,6 +173,10 @@ export default function AdminMinistryPage() {
   const filteredMembers = normalizedSearch
     ? members.filter(member => member.name?.toLocaleLowerCase().includes(normalizedSearch))
     : members
+  const normalizedAvailableSearch = availableMemberSearch.trim().toLocaleLowerCase()
+  const filteredAvailableMembers = normalizedAvailableSearch
+    ? availableMembers.filter(member => member.name?.toLocaleLowerCase().includes(normalizedAvailableSearch))
+    : availableMembers
 
   return (
     <div>
@@ -225,6 +285,19 @@ export default function AdminMinistryPage() {
                   <p className="text-xs text-gray-500 mt-0.5">{t('amin.memberCount', { count: members.length })}</p>
                 )}
               </div>
+              {!membersLoading && !membersError && (
+                <Button
+                  size="sm"
+                  variant={showAddMember ? 'primary' : 'secondary'}
+                  className="min-h-11 px-2.5 shrink-0"
+                  onClick={() => setShowAddMember(value => !value)}
+                  aria-expanded={showAddMember}
+                  aria-label={t('amin.addMember')}
+                >
+                  <UserPlus size={16} />
+                  <span className="hidden sm:inline">{t('amin.addMember')}</span>
+                </Button>
+              )}
               <button
                 onClick={closeMembers}
                 className="w-11 h-11 -mr-2 rounded-xl text-gray-500 hover:bg-control hover:text-gray-700 transition-colors flex items-center justify-center cursor-pointer shrink-0"
@@ -233,6 +306,50 @@ export default function AdminMinistryPage() {
                 <X size={19} />
               </button>
             </div>
+
+            {showAddMember && !membersLoading && !membersError && (
+              <div className="border-b border-gray-100 bg-gray-50 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{t('amin.addMemberTitle')}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{t('amin.addMemberHint')}</p>
+                </div>
+                <Input
+                  label={t('amin.searchAvailableMembers')}
+                  icon={Search}
+                  value={availableMemberSearch}
+                  onChange={event => setAvailableMemberSearch(event.target.value)}
+                  placeholder={t('amin.searchAvailableMembersPlaceholder')}
+                />
+                {availableMembersLoading && <div className="flex justify-center py-4"><Spinner size="sm" /></div>}
+                {!availableMembersLoading && availableMembers.length === 0 && (
+                  <p className="text-xs text-gray-500 text-center py-2">{t('amin.noAvailableMembers')}</p>
+                )}
+                {!availableMembersLoading && availableMembers.length > 0 && filteredAvailableMembers.length === 0 && (
+                  <p className="text-xs text-gray-500 text-center py-2">{t('amin.noAvailableMemberResults')}</p>
+                )}
+                {!availableMembersLoading && filteredAvailableMembers.length > 0 && (
+                  <div className="max-h-52 overflow-y-auto space-y-1">
+                    {filteredAvailableMembers.map(member => (
+                      <button
+                        key={member.user_id}
+                        type="button"
+                        disabled={memberActionId !== null}
+                        onClick={() => handleAddMember(member)}
+                        className="w-full min-h-11 flex items-center gap-3 rounded-xl p-2.5 text-left bg-surface hover:bg-control transition-colors disabled:opacity-50"
+                        aria-label={t('amin.addMemberAria', { name: member.name })}
+                      >
+                        <Avatar name={member.name} src={member.photo_url} size="sm" />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-medium text-gray-900 truncate">{member.name}</span>
+                          <span className="block text-xs text-gray-500 mt-0.5">{t('role.' + member.role)}</span>
+                        </span>
+                        {memberActionId === `add:${member.user_id}` ? <Spinner size="sm" /> : <UserPlus size={17} className="text-brand-500 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {!membersLoading && !membersError && members.length > 0 && (
               <div className="p-4 border-b border-gray-100">
@@ -284,6 +401,18 @@ export default function AdminMinistryPage() {
                         <p className="text-xs text-gray-500 mt-0.5">{t('role.' + member.role)}</p>
                       </div>
                       <StatusBadge status={member.status} />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-11 px-2.5 text-red-600 hover:bg-red-50 hover:text-red-700 shrink-0"
+                        loading={memberActionId === `remove:${member.user_id}`}
+                        disabled={memberActionId !== null}
+                        onClick={() => handleRemoveMember(member)}
+                        aria-label={t('amin.removeMemberAria', { name: member.name })}
+                      >
+                        <UserMinus size={16} />
+                        <span className="hidden sm:inline">{t('amin.removeMember')}</span>
+                      </Button>
                     </div>
                   ))}
                 </div>
