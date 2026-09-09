@@ -4794,3 +4794,201 @@ END $$;
 
 REVOKE EXECUTE ON FUNCTION delete_inventory_item(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION delete_inventory_item(TEXT) TO authenticated;
+
+-- ── Migrasi v83: Izinkan nama kategori SP dinamis di status pengguna ───
+-- TEMUAN (2026-09-09): Migrasi v71 membuat kategori SP fleksibel, tetapi
+-- constraint lama users_sp_level_check masih membatasi nilai ke Aman/SP 1/2/3.
+-- Saat trigger sync_user_sp_from_letters menyimpan kategori seperti
+-- "SP 1 Pelayanan", pembaruan users gagal dan penerbitan SP ikut dibatalkan.
+--
+-- KEPUTUSAN OPERATOR: users.sp_level adalah cache kompatibilitas dari kategori
+-- aktif di sp_letters, sehingga boleh menyimpan nama kategori apa pun yang
+-- dikelola Admin. Nilai kosong tetap dilarang; nilai Aman tetap dipakai saat
+-- tidak ada SP aktif.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_sp_level_check;
+ALTER TABLE users ADD CONSTRAINT users_sp_level_check
+  CHECK (sp_level IS NULL OR btrim(sp_level) <> '');
+
+-- ── Migrasi v84: Kategori SP fleksibel dengan tingkat SP 1–3 ─────────
+-- TEMUAN (2026-09-09): sp_categories.level awalnya sekaligus dipakai untuk
+-- nama kategori dan tingkat surat. Kategori seperti Pelayanan atau Pacaran
+-- kemudian tidak dapat disimpan sebagai users.sp_level karena kolom tersebut
+-- secara historis hanya menerima Aman/SP 1/SP 2/SP 3.
+--
+-- KEPUTUSAN OPERATOR: kategori dan tingkat surat dipisahkan. Kategori tetap
+-- bebas dikelola Admin, sedangkan setiap surat WAJIB memilih SP 1, SP 2, atau
+-- SP 3. users.sp_level tetap cache kompatibilitas dengan empat nilai lama.
+-- Blok ini juga menggantikan arah Migrasi v83 yang belum dijalankan di
+-- production; bila v83 sempat dijalankan pada environment lain, constraint
+-- lama dipulihkan di bawah.
+
+ALTER TABLE sp_letters ADD COLUMN IF NOT EXISTS sp_number SMALLINT;
+
+-- Riwayat lama membawa level pada kategori. Gunakan nilainya sebagai tingkat
+-- awal dan jepit ke rentang SP 1-3 agar semua surat lama tetap valid.
+UPDATE sp_letters l
+SET sp_number = GREATEST(1, LEAST(3, COALESCE(c.level, 1)))::SMALLINT
+FROM sp_categories c
+WHERE c.category_id = l.category_id
+  AND (l.sp_number IS NULL OR l.sp_number NOT BETWEEN 1 AND 3);
+
+ALTER TABLE sp_letters ALTER COLUMN sp_number SET DEFAULT 1;
+ALTER TABLE sp_letters ALTER COLUMN sp_number SET NOT NULL;
+ALTER TABLE sp_letters DROP CONSTRAINT IF EXISTS sp_letters_sp_number_check;
+ALTER TABLE sp_letters ADD CONSTRAINT sp_letters_sp_number_check
+  CHECK (sp_number BETWEEN 1 AND 3);
+
+-- Production function diverifikasi 2026-09-09 sebelum diganti. Sekarang
+-- tingkat surat (bukan nama kategori) menentukan status ringkas user.
+CREATE OR REPLACE FUNCTION sync_user_sp_from_letters() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user_id text;
+  v_latest record;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_user_id := OLD.user_id;
+  ELSE
+    v_user_id := NEW.user_id;
+  END IF;
+
+  SELECT l.sp_number, l.notes
+  INTO v_latest
+  FROM sp_letters l
+  WHERE l.user_id = v_user_id AND l.is_active = true
+  ORDER BY l.sp_number DESC, l.issued_at DESC
+  LIMIT 1;
+
+  IF v_latest IS NOT NULL THEN
+    UPDATE users
+    SET sp_level = 'SP ' || v_latest.sp_number::text,
+        sp_notes = v_latest.notes
+    WHERE user_id = v_user_id;
+  ELSE
+    UPDATE users
+    SET sp_level = 'Aman',
+        sp_notes = NULL
+    WHERE user_id = v_user_id;
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+-- Pulihkan nilai cache yang mungkin sudah memakai nama kategori bila v83
+-- pernah dijalankan di environment lain, sebelum constraint legacy dipasang.
+UPDATE users u
+SET sp_level = 'SP ' || (
+      SELECT l.sp_number::text
+      FROM sp_letters l
+      WHERE l.user_id = u.user_id AND l.is_active = true
+      ORDER BY l.sp_number DESC, l.issued_at DESC
+      LIMIT 1
+    ),
+    sp_notes = (
+      SELECT l.notes
+      FROM sp_letters l
+      WHERE l.user_id = u.user_id AND l.is_active = true
+      ORDER BY l.sp_number DESC, l.issued_at DESC
+      LIMIT 1
+    )
+WHERE u.sp_level IS NOT NULL
+  AND u.sp_level NOT IN ('Aman', 'SP 1', 'SP 2', 'SP 3')
+  AND EXISTS (
+    SELECT 1 FROM sp_letters l
+    WHERE l.user_id = u.user_id AND l.is_active = true
+  );
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_sp_level_check;
+ALTER TABLE users ADD CONSTRAINT users_sp_level_check
+  CHECK (sp_level IS NULL OR sp_level IN ('Aman', 'SP 1', 'SP 2', 'SP 3'));
+
+-- ── Migrasi v85: Perbaiki urutan migrasi tingkat SP 1–3 ─────────────
+-- TEMUAN (2026-09-09): saat backfill sp_number pada Migrasi v84, trigger
+-- lama sync_user_sp_from_letters masih mencoba menyimpan nama kategori ke
+-- users.sp_level. Constraint legacy menolaknya sebelum fungsi baru sempat
+-- dipasang, sehingga migrasi berhenti.
+--
+-- PERBAIKAN: lepaskan constraint sementara SEBELUM backfill memicu trigger
+-- lama, pasang fungsi sinkronisasi baru, normalisasi cache users, lalu pasang
+-- kembali constraint Aman/SP 1/SP 2/SP 3. Aman dijalankan setelah v84 gagal
+-- sebagian maupun dari kondisi awal production.
+
+ALTER TABLE sp_letters ADD COLUMN IF NOT EXISTS sp_number SMALLINT;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_sp_level_check;
+
+UPDATE sp_letters l
+SET sp_number = GREATEST(1, LEAST(3, COALESCE(c.level, 1)))::SMALLINT
+FROM sp_categories c
+WHERE c.category_id = l.category_id
+  AND (l.sp_number IS NULL OR l.sp_number NOT BETWEEN 1 AND 3);
+
+ALTER TABLE sp_letters ALTER COLUMN sp_number SET DEFAULT 1;
+ALTER TABLE sp_letters ALTER COLUMN sp_number SET NOT NULL;
+ALTER TABLE sp_letters DROP CONSTRAINT IF EXISTS sp_letters_sp_number_check;
+ALTER TABLE sp_letters ADD CONSTRAINT sp_letters_sp_number_check
+  CHECK (sp_number BETWEEN 1 AND 3);
+
+CREATE OR REPLACE FUNCTION sync_user_sp_from_letters() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user_id text;
+  v_latest record;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_user_id := OLD.user_id;
+  ELSE
+    v_user_id := NEW.user_id;
+  END IF;
+
+  SELECT l.sp_number, l.notes
+  INTO v_latest
+  FROM sp_letters l
+  WHERE l.user_id = v_user_id AND l.is_active = true
+  ORDER BY l.sp_number DESC, l.issued_at DESC
+  LIMIT 1;
+
+  IF v_latest IS NOT NULL THEN
+    UPDATE users
+    SET sp_level = 'SP ' || v_latest.sp_number::text,
+        sp_notes = v_latest.notes
+    WHERE user_id = v_user_id;
+  ELSE
+    UPDATE users
+    SET sp_level = 'Aman',
+        sp_notes = NULL
+    WHERE user_id = v_user_id;
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+-- Normalisasi cache yang mungkin sempat memakai nama kategori sebelum
+-- constraint lama dipasang lagi.
+UPDATE users u
+SET sp_level = COALESCE((
+      SELECT 'SP ' || l.sp_number::text
+      FROM sp_letters l
+      WHERE l.user_id = u.user_id AND l.is_active = true
+      ORDER BY l.sp_number DESC, l.issued_at DESC
+      LIMIT 1
+    ), 'Aman'),
+    sp_notes = (
+      SELECT l.notes
+      FROM sp_letters l
+      WHERE l.user_id = u.user_id AND l.is_active = true
+      ORDER BY l.sp_number DESC, l.issued_at DESC
+      LIMIT 1
+    )
+WHERE EXISTS (
+    SELECT 1 FROM sp_letters l
+    WHERE l.user_id = u.user_id AND l.is_active = true
+  )
+  OR (
+    u.sp_level IS NOT NULL
+    AND u.sp_level NOT IN ('Aman', 'SP 1', 'SP 2', 'SP 3')
+  );
+
+ALTER TABLE users ADD CONSTRAINT users_sp_level_check
+  CHECK (sp_level IS NULL OR sp_level IN ('Aman', 'SP 1', 'SP 2', 'SP 3'));

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Users, ChevronRight as Arrow, Plus, X, Copy } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Users, ChevronRight as Arrow, Plus, X, Copy, AlertCircle } from 'lucide-react'
 import { usersService } from '@/services/usersService'
 import { sensitiveIdentityService } from '@/services/sensitiveIdentityService'
 import { useAuth } from '@/hooks/useAuth'
@@ -46,6 +46,16 @@ export default function AdminMembersPage() {
   const [komselList, setKomselList] = useState([])
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+
+  // Klik badge saat sudah berada di halaman ini tetap harus menerapkan filter
+  // akun menunggu, bukan hanya mengubah URL.
+  useEffect(() => {
+    const requestedStatus = searchParams.get('status')
+    if (requestedStatus) {
+      setStatus(requestedStatus)
+      setPage(1)
+    }
+  }, [searchParams])
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [addForm, setAddForm] = useState(emptyAddForm)
@@ -135,6 +145,16 @@ export default function AdminMembersPage() {
         subtitle={t('amem.subtitle', { count })}
         action={!isGembala && <Button size="sm" onClick={openAddModal}><Plus size={15} /> {t('amem.addBtn')}</Button>}
       />
+
+      {searchParams.get('pengingat') === 'akun' && status === 'Menunggu Persetujuan' && (
+        <div role="status" className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3">
+          <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">{t('arem.accountsTitle', { count })}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-700">{t('arem.accountsHint')}</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-3 gap-3 mb-4">
         <div className="sm:col-span-1">

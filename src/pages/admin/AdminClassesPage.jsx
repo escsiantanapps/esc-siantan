@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { BookOpen, Plus, Pencil, Trash2, X, QrCode, ClipboardCheck, Download, Users, FileSpreadsheet } from 'lucide-react'
+import { BookOpen, Plus, Pencil, Trash2, X, QrCode, ClipboardCheck, Download, Users, FileSpreadsheet, AlertCircle } from 'lucide-react'
 import { classesService, mediaService } from '@/services/contentService'
 import { classAttendanceService } from '@/services/attendanceService'
 import { pushService } from '@/services/pushService'
@@ -14,6 +15,7 @@ import Uploader from '@/components/Uploader'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
 import { prerequisiteService } from '@/services/contentService'
+import { notificationService } from '@/services/notificationService'
 
 const PREREQ_FIELD_TYPES = [
   { value: 'text', label: 'Teks Singkat' },
@@ -44,6 +46,7 @@ export default function AdminClassesPage() {
   const { toast, confirm } = useToast()
   const { t } = useLang()
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   const isGembala = profile?.role === 'Gembala'
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -72,8 +75,9 @@ export default function AdminClassesPage() {
   const [attLoading, setAttLoading] = useState(false)
   const [mediaBusy, setMediaBusy] = useState(false)
   const [thumbUploading, setThumbUploading] = useState(false)
+  const [pendingByClass, setPendingByClass] = useState({})
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); loadPendingReminders() }, [])
 
   // Render QR sesuai kelas + sesi terpilih.
   useEffect(() => {
@@ -134,6 +138,11 @@ export default function AdminClassesPage() {
     setSubmissions(list)
   }
 
+  function loadPendingReminders() {
+    notificationService.getPendingPrerequisiteCounts('class_id')
+      .then(setPendingByClass).catch(() => setPendingByClass({}))
+  }
+
   async function handleRemoveRegistrant(r) {
     const ok = await confirm({
       title: 'Hapus peserta?',
@@ -165,6 +174,7 @@ export default function AdminClassesPage() {
       toast.success('Peserta disetujui.')
       await reloadSubmissions()
       loadRegistrants()
+      loadPendingReminders()
     } catch (err) {
       toast.error(err.message || 'Gagal menyetujui.')
     } finally {
@@ -186,6 +196,7 @@ export default function AdminClassesPage() {
       toast.success('Peserta ditolak.')
       setRejectingId(null); setRejectNote('')
       await reloadSubmissions()
+      loadPendingReminders()
     } catch (err) {
       toast.error(err.message || 'Gagal menolak.')
     } finally {
@@ -206,6 +217,7 @@ export default function AdminClassesPage() {
       toast.success('Pengajuan dihapus.')
       await reloadSubmissions()
       loadRegistrants()
+      loadPendingReminders()
     } catch (err) {
       toast.error(err.message || 'Gagal menghapus.')
     } finally {
@@ -409,6 +421,8 @@ export default function AdminClassesPage() {
     })
   }
 
+  const pendingTotal = Object.values(pendingByClass).reduce((total, count) => total + count, 0)
+
   return (
     <div>
       <PageHeader
@@ -416,6 +430,16 @@ export default function AdminClassesPage() {
         subtitle={t('acls.subtitle', { count: classes.length })}
         action={!isGembala ? <Button size="sm" onClick={openCreate}><Plus size={15} /> {t('acls.add')}</Button> : null}
       />
+
+      {searchParams.get('pengingat') === 'kelas' && pendingTotal > 0 && (
+        <div role="status" className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3">
+          <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">{t('arem.classesTitle', { count: pendingTotal })}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-700">{t('arem.classesHint')}</p>
+          </div>
+        </div>
+      )}
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
@@ -435,6 +459,9 @@ export default function AdminClassesPage() {
                 {cls.schedule && <p className="text-xs text-gray-400 mt-0.5 truncate">{cls.schedule}</p>}
                 {cls.teacher && <p className="text-xs text-gray-400 mt-0.5 truncate">{t('acls.teacherLabel', { name: cls.teacher })}</p>}
               </div>
+              {(pendingByClass[cls.class_id] || 0) > 0 && (
+                <Badge color="amber" className="shrink-0">{t('arem.itemCount', { count: pendingByClass[cls.class_id] })}</Badge>
+              )}
               <StatusBadge status={cls.status} />
               <ActionMenu>
                 <ActionItem icon={Users} label={t('acls.registrants')} onClick={() => setRegModal(cls)} />

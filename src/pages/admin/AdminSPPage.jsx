@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ChevronRight, Plus, X, FileText, Pencil, Trash2, Tag } from 'lucide-react'
+import { AlertTriangle, ChevronRight, Plus, X, FileText, Pencil, Trash2, Tag, ShieldCheck } from 'lucide-react'
 import { spService } from '@/services/spService'
 import { spCategoriesService } from '@/services/spCategoriesService'
 import { usersService } from '@/services/usersService'
@@ -11,7 +11,7 @@ import { Card, PageHeader, Spinner, EmptyState, StatusBadge, Avatar, Button, Inp
 import { useLang } from '@/hooks/useLang'
 import { truncate } from '@/lib/utils'
 
-const emptyCategoryForm = { name: '', level: 1, description: '' }
+const emptyCategoryForm = { name: '', description: '' }
 
 export default function AdminSPPage() {
   const { t } = useLang()
@@ -36,7 +36,7 @@ export default function AdminSPPage() {
   const [searchUser, setSearchUser] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
-  const [form, setForm] = useState({ category_id: '', notes: '' })
+  const [form, setForm] = useState({ category_id: '', sp_number: 1, notes: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   
@@ -47,9 +47,17 @@ export default function AdminSPPage() {
   const [categorySaving, setCategorySaving] = useState(false)
   const [categoryError, setCategoryError] = useState('')
   const [categoriesLoading, setCategoriesLoading] = useState(false)
+
+  // Edit dan pemutihan SP aktif.
+  const [showEditLetterModal, setShowEditLetterModal] = useState(false)
+  const [editingLetter, setEditingLetter] = useState(null)
+  const [editLetterForm, setEditLetterForm] = useState({ category_id: '', sp_number: 1, notes: '' })
+  const [editLetterSaving, setEditLetterSaving] = useState(false)
+  const [editLetterError, setEditLetterError] = useState('')
   
   useBackClose(showIssueModal, () => setShowIssueModal(false))
   useBackClose(showCategoryModal, () => setShowCategoryModal(false))
+  useBackClose(showEditLetterModal, () => setShowEditLetterModal(false))
 
   // Load data untuk list view
   useEffect(() => {
@@ -65,10 +73,8 @@ export default function AdminSPPage() {
     spCategoriesService.getAll()
       .then(cats => {
         setCategories(cats)
-        // Set default category ke yang level terendah (bukan Aman)
-        const nonAman = cats.filter(c => c.name !== 'Aman')
-        if (nonAman.length > 0 && !form.category_id) {
-          setForm(p => ({ ...p, category_id: nonAman[0].category_id }))
+        if (cats.length > 0 && !form.category_id) {
+          setForm(p => ({ ...p, category_id: cats[0].category_id }))
         }
       })
       .catch(() => {})
@@ -115,7 +121,8 @@ export default function AdminSPPage() {
     setSearchUser('')
     setSearchResults([])
     setForm({ 
-      category_id: categories.filter(c => c.name !== 'Aman')[0]?.category_id || '', 
+      category_id: categories[0]?.category_id || '',
+      sp_number: 1,
       notes: '' 
     })
     setError('')
@@ -138,6 +145,7 @@ export default function AdminSPPage() {
       await spService.issue({
         user_id: selectedUser.user_id,
         category_id: form.category_id,
+        sp_number: Number(form.sp_number),
         notes: form.notes.trim(),
         issued_by: profile.user_id,
       })
@@ -149,6 +157,58 @@ export default function AdminSPPage() {
       toast.error(err.message || 'Gagal menerbitkan SP.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  function openEditLetter(member) {
+    setEditingLetter(member)
+    setEditLetterForm({
+      category_id: member.category_id || '',
+      sp_number: member.sp_number || 1,
+      notes: member.sp_notes || '',
+    })
+    setEditLetterError('')
+    setShowEditLetterModal(true)
+  }
+
+  async function handleUpdateLetter() {
+    setEditLetterError('')
+    if (!editLetterForm.category_id) { setEditLetterError(t('asp.categoryRequired')); return }
+    if (!editLetterForm.notes.trim()) { setEditLetterError(t('asp.notesRequired')); return }
+
+    setEditLetterSaving(true)
+    try {
+      await spService.update(editingLetter.letter_id, {
+        category_id: editLetterForm.category_id,
+        sp_number: Number(editLetterForm.sp_number),
+        notes: editLetterForm.notes.trim(),
+      })
+      setShowEditLetterModal(false)
+      toast.success(t('asp.updated'))
+      loadList()
+    } catch (err) {
+      setEditLetterError(err.message || t('asp.updateFailed'))
+      toast.error(err.message || t('asp.updateFailed'))
+    } finally {
+      setEditLetterSaving(false)
+    }
+  }
+
+  async function handleWhiten(member) {
+    const ok = await confirm({
+      title: t('asp.whitenTitle'),
+      message: t('asp.whitenMsg', { name: member.name }),
+      confirmText: t('asp.whiten'),
+      danger: true,
+    })
+    if (!ok) return
+
+    try {
+      await spService.whitenUser(member.user_id)
+      toast.success(t('asp.whitened', { name: member.name }))
+      loadList()
+    } catch (err) {
+      toast.error(err.message || t('asp.whitenFailed'))
     }
   }
 
@@ -177,7 +237,6 @@ export default function AdminSPPage() {
     setEditingCategory(item)
     setCategoryForm({ 
       name: item.name || '', 
-      level: item.level || 1, 
       description: item.description || '' 
     })
     setCategoryError('')
@@ -187,7 +246,6 @@ export default function AdminSPPage() {
   async function handleSubmitCategory() {
     setCategoryError('')
     if (!categoryForm.name.trim()) { setCategoryError('Nama kategori SP wajib diisi.'); return }
-    if (!categoryForm.level || categoryForm.level < 0) { setCategoryError('Level harus diisi dengan angka positif.'); return }
     setCategorySaving(true)
     try {
       if (editingCategory) {
@@ -311,21 +369,45 @@ export default function AdminSPPage() {
           {!loading && members.length > 0 && (
             <Card className="divide-y divide-gray-100">
               {members.map(m => (
-                <Link 
-                  key={m.user_id} 
-                  to={`/admin/jemaat/${m.user_id}`} 
-                  className="flex items-center gap-3 p-3.5 hover:bg-gray-50 transition-colors"
-                >
-                  <Avatar name={m.name} src={m.photo_url} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {m.sp_notes ? truncate(m.sp_notes, 60) : t(`role.${m.role}`)}
+                <div key={m.user_id} className="flex items-center gap-1.5 p-1.5">
+                  <Link
+                    to={`/admin/jemaat/${m.user_id}`}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-2 hover:bg-control transition-colors"
+                  >
+                    <Avatar name={m.name} src={m.photo_url} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                      <p className="text-xs text-gray-400 truncate">
+                      {m.sp_category?.name ? t('asp.categorySp', { category: m.sp_category.name, number: m.sp_number }) : t('role.' + m.role)}
                     </p>
-                  </div>
-                  <StatusBadge status={m.sp_level} />
-                  <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
-                </Link>
+                    {m.sp_notes && <p className="text-xs text-gray-400 truncate mt-0.5">{truncate(m.sp_notes, 60)}</p>}
+                    </div>
+                    <StatusBadge status={m.sp_level} />
+                    <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
+                  </Link>
+                  {!isGembala && (
+                    <div className="flex shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openEditLetter(m)}
+                        aria-label={t('asp.editAria', { name: m.name })}
+                        title={t('asp.edit')}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-500 hover:bg-control hover:text-brand-600 transition-colors"
+                      >
+                        <Pencil size={17} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleWhiten(m)}
+                        aria-label={t('asp.whitenAria', { name: m.name })}
+                        title={t('asp.whiten')}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl text-amber-700 hover:bg-amber-50 transition-colors"
+                      >
+                        <ShieldCheck size={18} />
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
             </Card>
           )}
@@ -403,11 +485,20 @@ export default function AdminSPPage() {
                     onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))}
                   >
                     <option value="">Pilih kategori...</option>
-                    {categories.filter(c => c.name !== 'Aman').map(c => (
-                      <option key={c.category_id} value={c.category_id}>
-                        {c.name} (Level {c.level})
-                      </option>
-                    ))}
+                  {categories.map(c => (
+                    <option key={c.category_id} value={c.category_id}>
+                        {c.name}
+                    </option>
+                  ))}
+                </Select>
+
+                  <Select
+                    label={t('asp.numberLabel')}
+                    required
+                    value={form.sp_number}
+                    onChange={e => setForm(p => ({ ...p, sp_number: Number(e.target.value) }))}
+                  >
+                    {[1, 2, 3].map(number => <option key={number} value={number}>{t('asp.numberOption', { number })}</option>)}
                   </Select>
 
                   {/* Notes */}
@@ -431,6 +522,57 @@ export default function AdminSPPage() {
                 </div>
               </>
             )}
+          </Card>
+        </div>
+      )}
+
+      {/* Modal: Edit SP aktif — riwayat tetap sama, hanya detailnya diperbarui. */}
+      {showEditLetterModal && editingLetter && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-4 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">{t('asp.editTitle')}</h2>
+                <p className="text-xs text-gray-400 mt-0.5">{editingLetter.name}</p>
+              </div>
+              <button onClick={() => setShowEditLetterModal(false)} aria-label={t('common.close')} className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-400 hover:bg-control hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            {editLetterError && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{editLetterError}</div>}
+
+            <Select
+              label={t('asp.categoryLabel')}
+              required
+              value={editLetterForm.category_id}
+              onChange={e => setEditLetterForm(p => ({ ...p, category_id: e.target.value }))}
+            >
+              <option value="">{t('asp.categoryPlaceholder')}</option>
+              {categories.map(c => (
+                <option key={c.category_id} value={c.category_id}>{c.name}</option>
+              ))}
+            </Select>
+            <Select
+              label={t('asp.numberLabel')}
+              required
+              value={editLetterForm.sp_number}
+              onChange={e => setEditLetterForm(p => ({ ...p, sp_number: Number(e.target.value) }))}
+            >
+              {[1, 2, 3].map(number => <option key={number} value={number}>{t('asp.numberOption', { number })}</option>)}
+            </Select>
+            <Textarea
+              label={t('asp.notesLabel')}
+              required
+              rows={4}
+              value={editLetterForm.notes}
+              onChange={e => setEditLetterForm(p => ({ ...p, notes: e.target.value }))}
+            />
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="ghost" className="flex-1" onClick={() => setShowEditLetterModal(false)}>{t('a.cancel')}</Button>
+              <Button className="flex-1" loading={editLetterSaving} onClick={handleUpdateLetter}>{t('a.save')}</Button>
+            </div>
           </Card>
         </div>
       )}
@@ -464,7 +606,7 @@ export default function AdminSPPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      Level {item.level} {item.description && `· ${item.description}`}
+                      {item.description || t('asp.categoryNoDescription')}
                     </p>
                   </div>
                   <button onClick={() => openEditCategory(item)} className="p-2 text-gray-400 hover:text-brand-500 shrink-0">
@@ -501,15 +643,6 @@ export default function AdminSPPage() {
               placeholder="cth. SP 1, SP 2, Peringatan Keras" 
               value={categoryForm.name} 
               onChange={e => setCatForm('name', e.target.value)} 
-            />
-
-            <Input 
-              label="Level (semakin tinggi = semakin parah)" 
-              type="number" 
-              required 
-              placeholder="1" 
-              value={categoryForm.level} 
-              onChange={e => setCatForm('level', parseInt(e.target.value) || 1)} 
             />
 
             <Textarea 

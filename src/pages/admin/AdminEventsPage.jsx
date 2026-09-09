@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { Calendar, MapPin, Plus, Pencil, QrCode, Users, X, Download, FileSpreadsheet, Trash2 } from 'lucide-react'
+import { Calendar, MapPin, Plus, Pencil, QrCode, Users, X, Download, FileSpreadsheet, Trash2, AlertCircle } from 'lucide-react'
 import { eventsService, prerequisiteService } from '@/services/contentService'
 import { eventAttendanceService } from '@/services/attendanceService'
 import { pushService } from '@/services/pushService'
@@ -12,11 +12,13 @@ import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { formatDate } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
+import { notificationService } from '@/services/notificationService'
 
 export default function AdminEventsPage() {
   const { t } = useLang()
   const { toast, confirm } = useToast()
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   const isGembala = profile?.role === 'Gembala'
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -32,10 +34,12 @@ export default function AdminEventsPage() {
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectNote, setRejectNote] = useState('')
   const [prereqBusy, setPrereqBusy] = useState(null)
+  const [pendingByEvent, setPendingByEvent] = useState({})
   useBackClose(!!qrModal || !!rekapModal, () => { setQrModal(null); setRekapModal(null) })
 
   useEffect(() => {
     eventsService.getAll().then(setEvents).catch(() => {}).finally(() => setLoading(false))
+    loadPendingReminders()
   }, [])
 
   // Render QR absensi event.
@@ -86,6 +90,11 @@ export default function AdminEventsPage() {
     setSubmissions(list)
   }
 
+  function loadPendingReminders() {
+    notificationService.getPendingPrerequisiteCounts('event_id')
+      .then(setPendingByEvent).catch(() => setPendingByEvent({}))
+  }
+
   async function handleRemoveRegistrant(r) {
     const ok = await confirm({
       title: 'Hapus peserta?', message: `Peserta "${r.name}" akan dihapus dari event ini.`,
@@ -114,6 +123,7 @@ export default function AdminEventsPage() {
       toast.success('Peserta disetujui.')
       await reloadSubmissions()
       loadRekap()
+      loadPendingReminders()
     } catch (err) {
       toast.error(err.message || 'Gagal menyetujui.')
     } finally {
@@ -133,6 +143,7 @@ export default function AdminEventsPage() {
       toast.success('Peserta ditolak.')
       setRejectingId(null); setRejectNote('')
       await reloadSubmissions()
+      loadPendingReminders()
     } catch (err) {
       toast.error(err.message || 'Gagal menolak.')
     } finally {
@@ -153,6 +164,7 @@ export default function AdminEventsPage() {
       toast.success('Pengajuan dihapus.')
       await reloadSubmissions()
       loadRekap()
+      loadPendingReminders()
     } catch (err) {
       toast.error(err.message || 'Gagal menghapus.')
     } finally {
@@ -171,6 +183,7 @@ export default function AdminEventsPage() {
   }
 
   const presentCount = rekap.filter(r => r.present).length
+  const pendingTotal = Object.values(pendingByEvent).reduce((total, count) => total + count, 0)
 
   return (
     <div>
@@ -179,6 +192,16 @@ export default function AdminEventsPage() {
         subtitle={t('aevt.subtitle', { count: events.length })}
         action={!isGembala && <Link to="/admin/events/baru"><Button size="sm"><Plus size={15} /> {t('aevt.add')}</Button></Link>}
       />
+
+      {searchParams.get('pengingat') === 'event' && pendingTotal > 0 && (
+        <div role="status" className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3">
+          <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">{t('arem.eventsTitle', { count: pendingTotal })}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-700">{t('arem.eventsHint')}</p>
+          </div>
+        </div>
+      )}
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
@@ -204,6 +227,9 @@ export default function AdminEventsPage() {
                   <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1"><MapPin size={11} /> {ev.location}</p>
                 )}
               </div>
+              {(pendingByEvent[ev.event_id] || 0) > 0 && (
+                <Badge color="amber" className="shrink-0">{t('arem.itemCount', { count: pendingByEvent[ev.event_id] })}</Badge>
+              )}
               <StatusBadge status={ev.status} />
               <ActionMenu>
                 <ActionItem icon={Users} label={t('aevt.rekap')} onClick={() => { setRekapDate(''); setRekapModal(ev) }} />

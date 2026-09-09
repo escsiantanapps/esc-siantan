@@ -221,9 +221,14 @@ export default function AdminLayout() {
             if (to === '/admin/jemaat') badge = pendingCounts.pendingUsers
             else if (to === '/admin/kelas') badge = pendingCounts.pendingClasses
             else if (to === '/admin/events') badge = pendingCounts.pendingEvents
+            const reminderTo = badge > 0
+              ? to === '/admin/jemaat' ? '/admin/jemaat?status=Menunggu+Persetujuan&pengingat=akun'
+                : to === '/admin/kelas' ? '/admin/kelas?pengingat=kelas'
+                  : to === '/admin/events' ? '/admin/events?pengingat=event' : to
+              : to
 
             return (
-              <NavLink key={to} to={to} end={exact}
+              <NavLink key={to} to={reminderTo} end={exact}
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
                   `relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200

@@ -11,7 +11,7 @@ export const spService = {
    * Terbitkan SP baru ke jemaat.
    * Trigger DB akan otomatis sync users.sp_level & sp_notes dari sp_letters terbaru.
    * 
-   * @param {Object} payload - { user_id, category_id, notes, issued_by }
+   * @param {Object} payload - { user_id, category_id, sp_number, notes, issued_by }
    */
   async issue(payload) {
     const { data, error } = await supabase
@@ -19,7 +19,7 @@ export const spService = {
       .insert(payload)
       .select(`
         *,
-        category:sp_categories(category_id, name, level),
+        category:sp_categories(category_id, name),
         user:users!sp_letters_user_id_fkey(user_id, name, photo_url),
         issuer:users!sp_letters_issued_by_fkey(user_id, name)
       `)
@@ -38,7 +38,7 @@ export const spService = {
       .from('sp_letters')
       .select(`
         *,
-        category:sp_categories(category_id, name, level, description),
+        category:sp_categories(category_id, name, description),
         issuer:users!sp_letters_issued_by_fkey(user_id, name, photo_url)
       `)
       .eq('user_id', userId)
@@ -55,7 +55,7 @@ export const spService = {
       .from('sp_letters')
       .select(`
         *,
-        category:sp_categories(category_id, name, level, description),
+        category:sp_categories(category_id, name, description),
         issuer:users!sp_letters_issued_by_fkey(user_id, name)
       `)
       .eq('user_id', userId)
@@ -74,7 +74,7 @@ export const spService = {
   async getAllWithActiveSP(categoryId = null) {
     let query = supabase
       .from('sp_letters')
-      .select('letter_id, user_id, category_id, notes, issued_at')
+      .select('letter_id, user_id, category_id, sp_number, notes, issued_at')
       .eq('is_active', true)
 
     if (categoryId) {
@@ -96,7 +96,7 @@ export const spService = {
         .in('user_id', userIds),
       supabase
         .from('sp_categories')
-        .select('category_id, name, level')
+        .select('category_id, name')
         .in('category_id', categoryIds),
     ])
     if (usersResult.error) throw usersResult.error
@@ -106,8 +106,7 @@ export const spService = {
     const categoryById = new Map(categoriesResult.data.map(category => [category.category_id, category]))
 
 
-    // Group by user (karena satu user bisa punya multiple SP aktif dengan kategori berbeda)
-    // Ambil SP dengan level tertinggi per user
+    // Group by user; tingkat surat tertinggi yang menentukan status SP 1-3.
     const userMap = new Map()
     letters.forEach(letter => {
       const user = userById.get(letter.user_id)
@@ -116,10 +115,13 @@ export const spService = {
 
       const userId = user.user_id
       const existing = userMap.get(userId)
-      if (!existing || category.level > existing.sp_category.level) {
+      if (!existing || letter.sp_number > existing.sp_number) {
         userMap.set(userId, {
           ...user,
-          sp_level: category.name,
+          letter_id: letter.letter_id,
+          category_id: letter.category_id,
+          sp_number: letter.sp_number,
+          sp_level: 'SP ' + letter.sp_number,
           sp_notes: letter.notes,
           sp_issued_at: letter.issued_at,
           sp_category: category,
@@ -145,6 +147,34 @@ export const spService = {
       .single()
     if (error) throw error
     return data
+  },
+
+  // Perbarui detail surat yang aktif. Trigger DB tetap menyinkronkan status
+  // ringkas di users.sp_level dan users.sp_notes.
+  async update(letterId, payload) {
+    const { data, error } = await supabase
+      .from('sp_letters')
+      .update({
+        category_id: payload.category_id,
+        sp_number: payload.sp_number,
+        notes: payload.notes,
+      })
+      .eq('letter_id', letterId)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  // Pemutihan tidak menghapus riwayat: semua SP aktif dinonaktifkan agar
+  // trigger mengembalikan status pengguna ke Aman.
+  async whitenUser(userId) {
+    const { error } = await supabase
+      .from('sp_letters')
+      .update({ is_active: false })
+      .eq('user_id', userId)
+      .eq('is_active', true)
+    if (error) throw error
   },
 
   /**
@@ -176,7 +206,7 @@ export const spService = {
     const categoryIds = [...new Set(letters.map(letter => letter.category_id))]
     const { data: categories, error: categoriesError } = await supabase
       .from('sp_categories')
-      .select('category_id, name, level')
+      .select('category_id, name')
       .in('category_id', categoryIds)
     if (categoriesError) throw categoriesError
 
@@ -194,7 +224,6 @@ export const spService = {
         categoryMap.set(catId, {
           category_id: catId,
           name: category.name,
-          level: category.level,
           users: new Set(),
         })
       }
@@ -204,8 +233,7 @@ export const spService = {
     return Array.from(categoryMap.values()).map(cat => ({
       category_id: cat.category_id,
       name: cat.name,
-      level: cat.level,
       count: cat.users.size,
-    })).sort((a, b) => a.level - b.level)
+    })).sort((a, b) => a.name.localeCompare(b.name, 'id'))
   },
 }

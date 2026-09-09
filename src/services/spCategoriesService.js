@@ -2,19 +2,19 @@ import { supabase } from '@/lib/supabase'
 
 /**
  * Service untuk mengelola kategori SP (Surat Peringatan).
- * Admin dapat membuat/edit/hapus kategori SP yang akan digunakan
- * saat menerbitkan SP kepada jemaat.
+ * Admin dapat membuat/edit/hapus kategori SP yang digunakan saat menerbitkan
+ * surat. Tingkat SP 1-3 dipilih terpisah pada surat, bukan pada kategori.
  */
 
 export const spCategoriesService = {
   /**
-   * Ambil semua kategori SP, diurutkan berdasarkan level (ascending).
+   * Ambil semua kategori SP berdasarkan nama.
    */
   async getAll() {
     const { data, error } = await supabase
       .from('sp_categories')
       .select('*')
-      .order('level', { ascending: true })
+      .order('name', { ascending: true })
     if (error) throw error
     return data
   },
@@ -34,12 +34,12 @@ export const spCategoriesService = {
 
   /**
    * Buat kategori SP baru.
-   * @param {Object} payload - { name, level, description }
+   * @param {Object} payload - { name, description }
    */
   async create(payload) {
     const { data, error } = await supabase
       .from('sp_categories')
-      .insert(payload)
+      .insert({ name: payload.name, description: payload.description || null })
       .select()
       .single()
     if (error) throw error
@@ -49,12 +49,12 @@ export const spCategoriesService = {
   /**
    * Update kategori SP.
    * @param {string} categoryId
-   * @param {Object} payload - { name, level, description }
+   * @param {Object} payload - { name, description }
    */
   async update(categoryId, payload) {
     const { data, error } = await supabase
       .from('sp_categories')
-      .update({ ...payload, updated_at: new Date().toISOString() })
+      .update({ name: payload.name, description: payload.description || null, updated_at: new Date().toISOString() })
       .eq('category_id', categoryId)
       .select()
       .single()

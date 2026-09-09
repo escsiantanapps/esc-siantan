@@ -17,6 +17,17 @@ async function countPendingPrerequisites(targetColumn) {
   return count || 0
 }
 
+async function getPendingPrerequisiteCounts(targetColumn) {
+  const { data, error } = await supabase.from('registration_prerequisites')
+    .select(targetColumn).eq('status', 'Menunggu').not(targetColumn, 'is', null)
+  if (error) throw error
+  return (data || []).reduce((counts, row) => {
+    const targetId = row[targetColumn]
+    counts[targetId] = (counts[targetId] || 0) + 1
+    return counts
+  }, {})
+}
+
 export const notificationService = {
   // Mengambil total item yang membutuhkan perhatian berdasarkan role admin
   async getAdminPendingCounts(role) {
@@ -49,5 +60,10 @@ export const notificationService = {
     }
 
     return counts
-  }
+  },
+
+  // Menandai item mana yang perlu ditinjau, bukan sekadar total sidebar.
+  async getPendingPrerequisiteCounts(targetColumn) {
+    return getPendingPrerequisiteCounts(targetColumn)
+  },
 }
