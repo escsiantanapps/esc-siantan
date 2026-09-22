@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, MessageCircle, FileText } from 'lucide-react'
+import { Bell, MessageCircle, FileText, GraduationCap } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
@@ -49,6 +49,11 @@ export default function InformationDetailPage() {
               </div>
               {news.content && (
                 <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{news.content}</p>
+              )}
+              {news.linked_class_id && (
+                <Button variant="outline" className="w-full" onClick={() => navigate(`/kelas/${news.linked_class_id}`)}>
+                  <GraduationCap size={17} /> {t('infoDetail.openClass')}
+                </Button>
               )}
               <MediaGallery photos={news.photo_urls} videos={news.video_urls} />
 

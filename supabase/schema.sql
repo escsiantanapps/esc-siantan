@@ -4992,3 +4992,15 @@ WHERE EXISTS (
 
 ALTER TABLE users ADD CONSTRAINT users_sp_level_check
   CHECK (sp_level IS NULL OR sp_level IN ('Aman', 'SP 1', 'SP 2', 'SP 3'));
+
+-- ── Migrasi v86: Informasi dapat menautkan halaman kelas ─────────────
+-- Admin dapat memilih satu kelas sebagai tujuan dari Informasi. Saat kelas
+-- dihapus, tautannya dilepas otomatis supaya halaman Informasi tetap aman
+-- dibuka dan riwayat pengumuman tidak ikut hilang.
+
+ALTER TABLE news ADD COLUMN IF NOT EXISTS linked_class_id TEXT
+  REFERENCES classes(class_id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_news_linked_class_id
+  ON news(linked_class_id)
+  WHERE linked_class_id IS NOT NULL;

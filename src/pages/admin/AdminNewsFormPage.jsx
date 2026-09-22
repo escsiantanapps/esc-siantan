@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Eye, FileText, UploadCloud, X } from 'lucide-react'
-import { newsService, mediaService } from '@/services/contentService'
+import { newsService, mediaService, classesService } from '@/services/contentService'
 import { pushService } from '@/services/pushService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { Card, Input, Textarea, Button, Spinner } from '@/components/ui'
+import { Card, Input, Textarea, Select, Button, Spinner } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import MediaListUploader from '@/components/MediaListUploader'
 import NewsPortraitPreview from '@/components/NewsPortraitPreview'
@@ -35,12 +35,17 @@ export default function AdminNewsFormPage() {
 
   const [form, setForm] = useState({
     title: '', content: '', contact_wa: '', thumbnail_url: '',
-    photo_urls: [], video_urls: [], pdf_files: [],
+    photo_urls: [], video_urls: [], pdf_files: [], linked_class_id: '',
   })
+  const [classes, setClasses] = useState([])
   const [mediaBusy, setMediaBusy] = useState(false)
   const [pdfBusy, setPdfBusy] = useState(false)
   const pdfInputRef = useRef(null)
   useBackClose(showPreview, () => setShowPreview(false))
+
+  useEffect(() => {
+    classesService.getAll().then(setClasses).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!isEdit) return
@@ -53,6 +58,7 @@ export default function AdminNewsFormPage() {
         photo_urls: item.photo_urls || [],
         video_urls: item.video_urls || [],
         pdf_files: item.pdf_files || [],
+        linked_class_id: item.linked_class_id || '',
       }))
       .catch(err => setError(err.message || t('anf.loadFailed')))
       .finally(() => setLoading(false))
@@ -133,6 +139,9 @@ export default function AdminNewsFormPage() {
     if (!form.title.trim()) { setError(t('anf.titleRequired')); return }
     setSaving(true)
     try {
+      // Select HTML mengembalikan string kosong; FK PostgreSQL butuh NULL
+      // untuk informasi yang sengaja tidak ditautkan ke kelas mana pun.
+      const newsPayload = { ...form, linked_class_id: form.linked_class_id || null }
       // Helper: kirim broadcast lalu tampilkan hasilnya secara eksplisit.
       // Sebelumnya kegagalan/broadcast kosong ditelan diam-diam sehingga admin
       // tak tahu kenapa notifikasi tidak sampai. Sekarang selalu ada toast
@@ -153,14 +162,14 @@ export default function AdminNewsFormPage() {
       }
 
       if (isEdit) {
-        await newsService.update(id, form)
+        await newsService.update(id, newsPayload)
         pushService.broadcast({
           title: t('anf.pushUpdated'),
           body: form.title,
           url: `/informasi/${id}`,
         }).then(reportPush).catch(reportPushError)
       } else {
-        const created = await newsService.create(form)
+        const created = await newsService.create(newsPayload)
         pushService.broadcast({
           title: t('anf.pushNew'),
           body: form.title,
@@ -223,6 +232,13 @@ export default function AdminNewsFormPage() {
 
         <Input label={t('anf.titleLabel')} required value={form.title} onChange={e => set('title', e.target.value)} />
         <Textarea label={t('anf.content')} rows={6} value={form.content} onChange={e => set('content', e.target.value)} />
+        <div className="space-y-1">
+          <Select label={t('anf.linkedClass')} value={form.linked_class_id} onChange={e => set('linked_class_id', e.target.value)}>
+            <option value="">{t('anf.noLinkedClass')}</option>
+            {classes.map(cls => <option key={cls.class_id} value={cls.class_id}>{cls.name}</option>)}
+          </Select>
+          <p className="text-xs text-gray-400">{t('anf.linkedClassHint')}</p>
+        </div>
         <Input label={t('anf.contactWa')} placeholder="08xxxxxxxxxx" value={form.contact_wa} onChange={e => set('contact_wa', e.target.value)} />
       </Card>
 
