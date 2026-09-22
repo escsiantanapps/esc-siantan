@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, MessageCircle, FileText, GraduationCap } from 'lucide-react'
+import { Bell, MessageCircle, FileText, GraduationCap, ExternalLink } from 'lucide-react'
 import { newsService } from '@/services/contentService'
 import { Card, Spinner, GradientHeader, Button, EmptyState } from '@/components/ui'
 import MediaGallery from '@/components/MediaGallery'
-import PdfViewerModal from '@/components/PdfViewerModal'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, waLink } from '@/lib/utils'
 
@@ -14,17 +13,10 @@ export default function InformationDetailPage() {
   const { t } = useLang()
   const [news, setNews] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [pdfViewer, setPdfViewer] = useState(null) // { url, name }
 
   useEffect(() => {
     newsService.getById(id).then(setNews).catch(() => {}).finally(() => setLoading(false))
   }, [id])
-
-  function openPdf(file) {
-    setPdfViewer({ url: file.url, name: file.name })
-  }
-
-  const closePdf = useCallback(() => setPdfViewer(null), [])
 
   return (
     <div className="pb-4">
@@ -57,20 +49,24 @@ export default function InformationDetailPage() {
               )}
               <MediaGallery photos={news.photo_urls} videos={news.video_urls} />
 
-              {/* Lampiran PDF dibuka melalui viewer PDF.js lokal di dalam aplikasi. */}
+              {/* PDF dibuka langsung oleh browser/aplikasi pembaca perangkat agar
+                  PWA tidak lagi memuat PDF.js dan worker berukuran besar. */}
               {Array.isArray(news.pdf_files) && news.pdf_files.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-gray-500">{t('infoDetail.attachments')}</p>
                   {news.pdf_files.map((f, i) => (
-                    <button
+                    <a
                       key={i}
-                      type="button"
-                      onClick={() => openPdf(f)}
-                      className="w-full flex items-center gap-2.5 rounded-xl border border-gray-100 bg-control px-3 py-2.5 hover:border-brand-300 transition-colors text-left"
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={t('infoDetail.openPdfExternal', { name: f.name })}
+                      className="w-full min-h-11 flex items-center gap-2.5 rounded-xl border border-gray-100 bg-control px-3 py-2.5 hover:border-brand-300 transition-colors text-left"
                     >
                       <FileText size={18} className="text-red-500 shrink-0" />
                       <span className="text-sm text-gray-700 truncate flex-1">{f.name}</span>
-                    </button>
+                      <ExternalLink size={16} className="text-gray-400 shrink-0" aria-hidden="true" />
+                    </a>
                   ))}
                 </div>
               )}
@@ -92,8 +88,6 @@ export default function InformationDetailPage() {
           </Card>
         )}
       </div>
-
-      {pdfViewer && <PdfViewerModal file={pdfViewer} onClose={closePdf} continuous />}
     </div>
   )
 }
