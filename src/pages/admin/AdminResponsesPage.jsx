@@ -83,6 +83,18 @@ export default function AdminResponsesPage() {
   const filterActive = !!(formId || startDate || endDate || userQuery)
 
   // Render satu nilai field sesuai tipenya (link utk file/gambar).
+  // Beberapa respon lama menyimpan key berdasarkan label (mis. `Halaman?`),
+  // sedangkan template sekarang menyimpan key slug (mis. `halaman`).
+  // Fallback ini menjaga jawaban lama tetap terbaca tanpa menulis ulang data.
+  function getResponseValue(data, field) {
+    const current = data?.[field.key]
+    if (current !== undefined && current !== null && current !== "") return current
+
+    const legacy = data?.[field.label]
+    if (legacy !== undefined && legacy !== null && legacy !== "") return legacy
+
+    return current
+  }
   function renderValue(field, val) {
     if ((field.type === 'file' || field.type === 'image') && val) {
       return <a href={val} target="_blank" rel="noreferrer" className="text-brand-500 underline">{t('aresp.viewFile')}</a>
@@ -206,7 +218,7 @@ export default function AdminResponsesPage() {
                 {(detail.form_templates?.fields_json || []).map(field => (
                   <div key={field.key} className="text-sm">
                     <p className="text-xs text-gray-400 mb-0.5">{field.label}</p>
-                    {renderValue(field, detail.data_json?.[field.key])}
+                    {renderValue(field, getResponseValue(detail.data_json, field))}
                   </div>
                 ))}
               </div>
