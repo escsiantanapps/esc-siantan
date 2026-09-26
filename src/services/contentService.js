@@ -445,9 +445,48 @@ export const prerequisiteService = {
 }
 
 // ─── Ministries (CRUD) ──────────────────────────────────────
+export const ministryDepartmentsService = {
+  async getAll() {
+    const { data, error } = await supabase.from('ministry_departments')
+      .select('*, head:users!ministry_departments_head_user_id_fkey(user_id, name, photo_url, role, status)')
+      .order('name')
+    if (error) throw error
+    return data || []
+  },
+
+  async getHeadCandidates() {
+    const { data, error } = await supabase.from('users')
+      .select('user_id, name, photo_url, role')
+      .eq('status', 'Aktif')
+      .order('name')
+    if (error) throw error
+    return data || []
+  },
+
+  async create(department) {
+    const { data, error } = await supabase.from('ministry_departments').insert(department).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async update(id, updates) {
+    const { data, error } = await supabase.from('ministry_departments')
+      .update(updates).eq('department_id', id).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async delete(id) {
+    const { error } = await supabase.from('ministry_departments').delete().eq('department_id', id)
+    if (error) throw error
+  },
+
+}
+
 export const ministriesService = {
   async getAll() {
-    const { data, error } = await supabase.from('ministries').select('*').order('name')
+    const { data, error } = await supabase.from('ministries').select('*')
+      .order('organization_order').order('name')
     if (error) throw error
     return data
   },
@@ -463,6 +502,15 @@ export const ministriesService = {
       .from('ministries').update(updates).eq('ministry_id', id).select().single()
     if (error) throw error
     return data
+  },
+
+  async saveOrganization(changes) {
+    const results = await Promise.all(changes.map(change => supabase
+      .from('ministries')
+      .update({ department_id: change.department_id, organization_order: change.organization_order })
+      .eq('ministry_id', change.ministry_id)))
+    const failed = results.find(result => result.error)
+    if (failed?.error) throw failed.error
   },
 
   async delete(id) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sparkles, Trophy, Gift, History, ScanLine, Medal } from 'lucide-react'
+import { Sparkles, Trophy, Gift, History, ScanLine, Medal, TrendingUp, TrendingDown } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { pointsService } from '@/services/pointsService'
@@ -44,6 +44,12 @@ export default function PointsPage() {
     () => rankingRows.find(u => u.user_id === profile?.user_id) || null,
     [rankingRows, profile?.user_id]
   )
+  const historySummary = useMemo(() => transactions.reduce((summary, transaction) => {
+    const amount = Number(transaction.amount) || 0
+    if (amount > 0) summary.earned += amount
+    if (amount < 0) summary.spent += Math.abs(amount)
+    return summary
+  }, { earned: 0, spent: 0 }), [transactions])
 
   return (
     <div className="pb-6">
@@ -184,7 +190,25 @@ export default function PointsPage() {
           transactions.length === 0 ? (
             <EmptyState icon={History} title="Belum ada transaksi" description="Poin dari kehadiran & penukaran akan tercatat di sini." />
           ) : (
-            <Card className="divide-y divide-gray-100">
+            <>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <Card className="p-3">
+                  <div className="flex items-center gap-2 text-green-600">
+                    <TrendingUp size={15} />
+                    <span className="text-xs font-medium">{t('points.historyEarned')}</span>
+                  </div>
+                  <p className="text-xl font-bold text-gray-900 mt-1">+{historySummary.earned}</p>
+                </Card>
+                <Card className="p-3">
+                  <div className="flex items-center gap-2 text-red-500">
+                    <TrendingDown size={15} />
+                    <span className="text-xs font-medium">{t('points.historySpent')}</span>
+                  </div>
+                  <p className="text-xl font-bold text-gray-900 mt-1">-{historySummary.spent}</p>
+                </Card>
+              </div>
+              <p className="text-xs text-gray-400 mb-2">{t('points.historyCount', { count: transactions.length })}</p>
+              <Card className="divide-y divide-gray-100">
               {transactions.map(tx => (
                 <div key={tx.transaction_id} className="flex items-center gap-3 p-3.5">
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${tx.amount >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
@@ -199,7 +223,8 @@ export default function PointsPage() {
                   </span>
                 </div>
               ))}
-            </Card>
+              </Card>
+            </>
           )
         )}
       </div>

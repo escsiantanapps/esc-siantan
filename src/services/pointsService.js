@@ -13,26 +13,45 @@ export const pointsService = {
     return data?.points || 0
   },
 
-  // Riwayat transaksi poin milik sendiri.
-  async getMyTransactions(userId, limit = 30) {
-    const { data, error } = await supabase
-      .from('point_transactions').select('*')
-      .eq('user_id', userId).order('created_at', { ascending: false }).limit(limit)
-    if (error) throw error
-    return data
+  // Riwayat transaksi poin milik sendiri. Pagination dipakai agar seluruh
+  // riwayat tetap terbaca meski PostgREST membatasi jumlah baris per request.
+  async getMyTransactions(userId, maxRows = null) {
+    const pageSize = 1000
+    const rows = []
+    for (let offset = 0; ; offset += pageSize) {
+      const pageLimit = maxRows == null ? pageSize : Math.min(pageSize, maxRows - rows.length)
+      if (pageLimit <= 0) break
+      const { data, error } = await supabase
+        .from('point_transactions').select('*')
+        .eq('user_id', userId).order('created_at', { ascending: false }).order('transaction_id', { ascending: false })
+        .range(offset, offset + pageLimit - 1)
+      if (error) throw error
+      rows.push(...(data || []))
+      if ((data || []).length < pageLimit) break
+    }
+    return rows
   },
 
   // Semua transaksi poin (audit distribusi) — untuk halaman Distribusi Poin.
   // RLS ptx_select mengizinkan Admin/Super Admin membaca semua. Nama jemaat
-  // di-join (inner: setiap transaksi pasti punya user_id). Limit tinggi karena
-  // dipakai agregasi "poin masuk ke mana saja". Filter nama di klien.
-  async getAllTransactions(limit = 3000) {
-    const { data, error } = await supabase
-      .from('point_transactions')
-      .select('transaction_id, user_id, amount, description, created_at, users!inner(name, photo_url)')
-      .order('created_at', { ascending: false }).limit(limit)
-    if (error) throw error
-    return data || []
+  // di-join (inner: setiap transaksi pasti punya user_id). Pagination dipakai
+  // agar tracking audit tidak berhenti di batas maksimum satu request.
+  async getAllTransactions(maxRows = null) {
+    const pageSize = 1000
+    const rows = []
+    for (let offset = 0; ; offset += pageSize) {
+      const pageLimit = maxRows == null ? pageSize : Math.min(pageSize, maxRows - rows.length)
+      if (pageLimit <= 0) break
+      const { data, error } = await supabase
+        .from('point_transactions')
+        .select('transaction_id, user_id, amount, description, created_at, users!inner(name, photo_url)')
+        .order('created_at', { ascending: false }).order('transaction_id', { ascending: false })
+        .range(offset, offset + pageLimit - 1)
+      if (error) throw error
+      rows.push(...(data || []))
+      if ((data || []).length < pageLimit) break
+    }
+    return rows
   },
 
   // Rincian poin kehadiran per KOMSEL (baris komsel_attendance yang benar-benar

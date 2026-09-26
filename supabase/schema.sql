@@ -5004,3 +5004,231 @@ ALTER TABLE news ADD COLUMN IF NOT EXISTS linked_class_id TEXT
 CREATE INDEX IF NOT EXISTS idx_news_linked_class_id
   ON news(linked_class_id)
   WHERE linked_class_id IS NOT NULL;
+
+-- ── Migrasi v87: Departemen dan struktur organisasi Ministry ─────────
+-- KEPUTUSAN OPERATOR: Ministry dikelompokkan dalam Departemen yang dapat
+-- dikelola Admin. Setiap Departemen wajib memiliki Kepala Departemen dari
+-- jemaat aktif; posisi puncak chart diambil otomatis dari role Gembala.
+
+CREATE TABLE IF NOT EXISTS ministry_departments (
+  department_id TEXT PRIMARY KEY DEFAULT 'MDEP-' || replace(gen_random_uuid()::text, '-', ''),
+  name          TEXT NOT NULL,
+  head_user_id  TEXT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ministry_departments_head_user_id
+  ON ministry_departments(head_user_id);
+
+ALTER TABLE ministries ADD COLUMN IF NOT EXISTS department_id TEXT
+  REFERENCES ministry_departments(department_id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ministries_department_id
+  ON ministries(department_id)
+  WHERE department_id IS NOT NULL;
+
+ALTER TABLE ministry_departments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "ministry_departments_select" ON ministry_departments;
+CREATE POLICY "ministry_departments_select" ON ministry_departments FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "ministry_departments_admin_write" ON ministry_departments;
+CREATE POLICY "ministry_departments_admin_write" ON ministry_departments FOR ALL
+  USING (auth_admin_can('/admin/ministry'))
+  WITH CHECK (auth_admin_can('/admin/ministry'));
+
+-- ── Migrasi v88: Urutan Ministry pada struktur organisasi ────────────
+-- Menyimpan posisi hasil drag-and-drop. Nilai 0 lama tetap aman dan
+-- ditampilkan menurut nama sampai Admin mulai mengatur urutan chart.
+
+ALTER TABLE ministries ADD COLUMN IF NOT EXISTS organization_order INTEGER
+  NOT NULL DEFAULT 0;
+
+-- ── Migrasi v89: Hapus permanen inventory beserta riwayat ───────────
+-- TEMUAN (2026-09-24): Migrasi v82 hanya mengizinkan penghapusan item
+-- dengan stok 0 tanpa riwayat. Foreign key transaksi dan peminjaman memakai
+-- ON DELETE RESTRICT, sehingga penghapusan langsung item berstok/berriwayat
+-- akan gagal atau meninggalkan keputusan destruktif di sisi klien.
+-- KEPUTUSAN OPERATOR (2026-09-24): Admin yang berhak mengelola inventory
+-- boleh menghapus item secara permanen tanpa menunggu stok 0. Seluruh stok,
+-- riwayat transaksi, dan riwayat peminjaman item terpilih ikut dihapus.
+CREATE OR REPLACE FUNCTION delete_inventory_item(p_item_id TEXT)
+  RETURNS jsonb
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path = public
+AS $$
+DECLARE
+  v_photo_url TEXT;
+BEGIN
+  IF NOT auth_admin_can('/admin/inventory') THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT photo_url
+  INTO v_photo_url
+  FROM inventory_items
+  WHERE item_id = p_item_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'item_not_found' USING ERRCODE = '22023';
+  END IF;
+
+  DELETE FROM inventory_loans WHERE item_id = p_item_id;
+  DELETE FROM inventory_transactions WHERE item_id = p_item_id;
+  DELETE FROM inventory_items WHERE item_id = p_item_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'item_id', p_item_id,
+    'photo_url', v_photo_url
+  );
+END $$;
+
+
+-- ── Migrasi v90: Detail sumber pada riwayat poin ────────────────────
+-- TEMUAN (2026-09-26): point_transactions hanya menyimpan deskripsi generik
+-- seperti "Kehadiran kelas", sehingga user/admin tidak dapat mengetahui kelas,
+-- event, ibadah, atau komsel mana yang menghasilkan poin.
+-- KEPUTUSAN OPERATOR: setiap poin kehadiran harus menyimpan nama sumbernya di
+-- riwayat. Riwayat lama yang dapat dicocokkan secara deterministik berdasarkan
+-- user + timestamp juga diperkaya; baris ambigu dibiarkan apa adanya.
+
+-- Backfill aman untuk transaksi lama: hanya satu baris absensi yang cocok
+-- persis pada user dan timestamp transaksi yang boleh diperkaya.
+UPDATE point_transactions p
+SET description = 'Kehadiran kelas: ' || COALESCE(c.name, 'Kelas')
+  || CASE WHEN a.session_no IS NULL THEN '' ELSE ' (Sesi ' || a.session_no::text || ')' END
+FROM class_attendance a
+LEFT JOIN classes c ON c.class_id = a.class_id
+WHERE p.user_id = a.user_id
+  AND p.description = 'Kehadiran kelas'
+  AND p.created_at = a.scanned_at
+  AND (SELECT count(*) FROM class_attendance a2
+       WHERE a2.user_id = a.user_id AND a2.scanned_at = a.scanned_at) = 1;
+
+UPDATE point_transactions p
+SET description = 'Kehadiran event: ' || COALESCE(e.name, 'Event')
+FROM event_attendance a
+LEFT JOIN events e ON e.event_id = a.event_id
+WHERE p.user_id = a.user_id
+  AND p.description = 'Kehadiran event'
+  AND p.created_at = a.recorded_at
+  AND (SELECT count(*) FROM event_attendance a2
+       WHERE a2.user_id = a.user_id AND a2.recorded_at = a.recorded_at) = 1;
+
+UPDATE point_transactions p
+SET description = 'Kehadiran ibadah minggu: ' || COALESCE(to_char(a.attendance_date, 'YYYY-MM-DD'), 'tanggal tidak tercatat')
+FROM sunday_attendance a
+WHERE p.user_id = a.user_id
+  AND p.description = 'Kehadiran ibadah minggu'
+  AND p.created_at = a.scanned_at
+  AND (SELECT count(*) FROM sunday_attendance a2
+       WHERE a2.user_id = a.user_id AND a2.scanned_at = a.scanned_at) = 1;
+
+UPDATE point_transactions p
+SET description = 'Kehadiran komsel: ' || COALESCE(k.name, 'Komsel')
+FROM komsel_attendance a
+LEFT JOIN komsel k ON k.komsel_id = a.komsel_id
+WHERE p.user_id = a.user_id
+  AND p.description = 'Kehadiran komsel'
+  AND p.created_at = a.created_at
+  AND (SELECT count(*) FROM komsel_attendance a2
+       WHERE a2.user_id = a.user_id AND a2.created_at = a.created_at) = 1;
+
+-- Poin kehadiran berikutnya langsung menyimpan nama sumber di description.
+-- Guard once-per-day komsel tetap mengenali baris lama dan baris berdetail.
+CREATE OR REPLACE FUNCTION award_attendance_point() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_desc TEXT;
+BEGIN
+  IF TG_TABLE_NAME = 'komsel_attendance' THEN
+    IF NEW.session_id IS NULL
+       OR NEW.status IS DISTINCT FROM 'Hadir'
+       OR NEW.attendance_source IS DISTINCT FROM 'self_scan'
+       OR NEW.user_id IS DISTINCT FROM auth_user_id()
+       OR auth_leads_komsel(NEW.komsel_id) THEN
+      RETURN NEW;
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM point_transactions
+      WHERE user_id = NEW.user_id
+        AND (description = 'Kehadiran komsel' OR description LIKE 'Kehadiran komsel:%')
+        AND (created_at AT TIME ZONE 'Asia/Jakarta')::date
+            = (now() AT TIME ZONE 'Asia/Jakarta')::date
+    ) THEN
+      RETURN NEW;
+    END IF;
+    SELECT 'Kehadiran komsel: ' || COALESCE(name, 'Komsel')
+    INTO v_desc FROM komsel WHERE komsel_id = NEW.komsel_id;
+    v_desc := COALESCE(v_desc, 'Kehadiran komsel');
+    PERFORM apply_points(NEW.user_id, 1, v_desc);
+    PERFORM set_config('app.allow_komsel_points_awarded', '1', true);
+    UPDATE komsel_attendance SET points_awarded = true WHERE attendance_id = NEW.attendance_id;
+    PERFORM set_config('app.allow_komsel_points_awarded', '', true);
+    RETURN NEW;
+  END IF;
+
+  IF TG_TABLE_NAME = 'class_attendance' THEN
+    v_desc := 'Kehadiran kelas: ' || COALESCE((SELECT name FROM classes WHERE class_id = NEW.class_id), 'Kelas')
+      || CASE WHEN NEW.session_no IS NULL THEN '' ELSE ' (Sesi ' || NEW.session_no::text || ')' END;
+  ELSIF TG_TABLE_NAME = 'event_attendance' THEN
+    v_desc := 'Kehadiran event: ' || COALESCE((SELECT name FROM events WHERE event_id = NEW.event_id), 'Event');
+  ELSIF TG_TABLE_NAME = 'sunday_attendance' THEN
+    v_desc := 'Kehadiran ibadah minggu: ' || COALESCE(to_char(NEW.attendance_date, 'YYYY-MM-DD'), 'tanggal tidak tercatat');
+  ELSE
+    v_desc := 'Kehadiran';
+  END IF;
+
+  PERFORM apply_points(NEW.user_id, 1, COALESCE(v_desc, 'Kehadiran'));
+  RETURN NEW;
+END $$;
+-- ── Migrasi v91: Ranking poin padat tanpa tie-breaker nama ──────────────
+-- TEMUAN (2026-09-26): leaderboard memakai ROW_NUMBER() dengan nama dan
+-- user_id sebagai tie-breaker. Akibatnya dua user dengan poin sama mendapat
+-- nomor juara berbeda hanya karena urutan nama.
+-- KEPUTUSAN OPERATOR: gunakan ranking padat. Poin sama = nomor juara sama;
+-- nomor berikutnya tidak melompat (contoh: 1, 2, 3, 3, 4). Nama hanya
+-- dipakai untuk urutan tampilan yang stabil, bukan untuk menentukan rank.
+CREATE OR REPLACE FUNCTION get_points_leaderboard_with_me(p_limit INT DEFAULT 10)
+  RETURNS TABLE (
+    user_id TEXT,
+    name TEXT,
+    photo_url TEXT,
+    points INT,
+    rank_number BIGINT
+  )
+  LANGUAGE sql
+  SECURITY DEFINER
+  STABLE
+  SET search_path = public
+AS $$
+  WITH ranked AS (
+    SELECT
+      u.user_id,
+      u.name,
+      u.photo_url,
+      COALESCE(u.points, 0) AS points,
+      DENSE_RANK() OVER (
+        ORDER BY COALESCE(u.points, 0) DESC
+      ) AS rank_number
+    FROM users u
+    WHERE u.status = 'Aktif'
+  )
+  SELECT
+    r.user_id,
+    r.name,
+    r.photo_url,
+    r.points,
+    r.rank_number
+  FROM ranked r
+  WHERE r.rank_number <= LEAST(GREATEST(COALESCE(p_limit, 10), 1), 100)
+     OR r.user_id = auth_user_id()
+  ORDER BY r.rank_number, r.name ASC, r.user_id ASC;
+$$;
+
+REVOKE EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) TO authenticated;

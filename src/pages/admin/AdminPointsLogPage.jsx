@@ -111,7 +111,7 @@ export default function AdminPointsLogPage() {
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
     if (!s) return tx
-    return tx.filter(t => (t.users?.name || '').toLowerCase().includes(s))
+    return tx.filter(t => [t.users?.name, t.description].some(value => (value || '').toLowerCase().includes(s)))
   }, [tx, q])
 
   function toggleGrantUser(userId) {

@@ -516,3 +516,277 @@ h1, h2, h3 {
 .pdf-viewer-stage-pinch {
   touch-action: pan-x pan-y;
 }
+
+.print-only {
+  display: none;
+}
+
+/* Cetak hanya menyertakan bagan agar navigasi dan kontrol Admin tidak ikut
+   tercetak. Browser tetap mengatur pemisahan halaman bila struktur sangat lebar. */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #organization-chart,
+  #organization-chart * {
+    visibility: visible !important;
+  }
+
+  #organization-chart {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    color: #111827 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #organization-chart .no-print {
+    display: none !important;
+  }
+
+  #organization-chart .print-only {
+    display: block !important;
+  }
+
+  #organization-chart .sm\:overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  #organization-chart .sm\:min-w-max {
+    min-width: 0 !important;
+  }
+
+  /* Semua Departemen tetap sejajar dalam satu baris cetak. Lebar kolom
+     dibagi rata supaya jumlah yang bertambah tidak keluar dari halaman A4. */
+  #organization-chart .sm\:flex-row {
+    flex-wrap: nowrap !important;
+  }
+
+  #organization-chart .sm\:w-72 {
+    width: auto !important;
+    min-width: 0 !important;
+    flex: 1 1 0 !important;
+  }
+
+  #organization-chart .sm\:shrink-0 {
+    flex-shrink: 1 !important;
+  }
+
+  #organization-chart .organization-department {
+    break-inside: avoid;
+  }
+}
+/* Poster cetak dibuat terpisah dari chart pengaturan. Ini menjaga tombol dan
+   select Admin tetap nyaman dipakai tanpa masuk ke hasil publikasi. */
+.organization-poster {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(255, 243, 168, 0.64), transparent 30%),
+    radial-gradient(circle at 92% 90%, rgba(190, 30, 65, 0.2), transparent 28%),
+    linear-gradient(145deg, #ffd54a 0%, #ff9f1a 42%, #f4511e 100%);
+}
+
+.organization-poster::before,
+.organization-poster::after {
+  position: absolute;
+  z-index: 0;
+  width: 10rem;
+  height: 10rem;
+  border: 2rem solid rgba(116, 37, 93, 0.18);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.organization-poster::before { top: -7rem; left: -7rem; }
+.organization-poster::after { right: -7rem; bottom: -7rem; }
+
+.organization-poster-title,
+.organization-poster-founder,
+.organization-poster-rail,
+.organization-poster-departments {
+  position: relative;
+  z-index: 1;
+}
+
+.organization-poster-title {
+  padding: 2rem 8rem 0;
+  color: #c83919;
+  font-size: 1.6rem;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.015em;
+  text-align: center;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+}
+
+.organization-poster-founder {
+  position: relative;
+  width: min(40%, 27rem);
+  margin: 1.15rem auto 2.7rem;
+  padding: 0.68rem 1rem;
+  border: 3px solid #f4511e;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 4px 0 rgba(116, 28, 12, 0.2);
+  color: #232323;
+  font-size: 0.95rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.organization-poster-founder::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 2px;
+  height: 2.75rem;
+  background: #63351f;
+  content: '';
+  transform: translateX(-50%);
+}
+
+.organization-poster-rail {
+  height: 3px;
+  margin: 0 5.8% 1.65rem;
+  border-radius: 999px;
+  background: #63351f;
+}
+
+.organization-poster-departments {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--poster-columns), minmax(0, 1fr));
+  align-items: start;
+  gap: 0.72rem;
+  padding: 0 4.5% 2.5rem;
+}
+
+.organization-poster-department {
+  position: relative;
+  min-width: 0;
+}
+
+.organization-poster-department::before {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  width: 2px;
+  height: 1.65rem;
+  background: #63351f;
+  content: '';
+  transform: translateX(-50%);
+}
+
+.organization-poster-leader {
+  overflow: hidden;
+  min-height: 3.9rem;
+  border: 2px solid #e9471f;
+  border-radius: 0.3rem;
+  background: #ffffff;
+  box-shadow: 0 3px 0 rgba(116, 28, 12, 0.2);
+  color: #202020;
+  text-align: center;
+}
+
+.organization-poster-leader strong,
+.organization-poster-leader span,
+.organization-poster-ministry,
+.organization-poster-empty {
+  display: block;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.organization-poster-leader strong {
+  min-height: 2.15rem;
+  padding: 0.42rem 0.22rem 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.organization-poster-leader span {
+  min-height: 1.55rem;
+  padding: 0.25rem 0.2rem;
+  background: #c83919;
+  color: #ffffff;
+  font-size: 0.52rem;
+  font-weight: 800;
+  line-height: 1.08;
+  text-transform: uppercase;
+}
+
+.organization-poster-ministries {
+  position: relative;
+  display: grid;
+  gap: 0.34rem;
+  margin-top: 0.85rem;
+  padding-left: 0.72rem;
+}
+
+.organization-poster-ministries::before {
+  position: absolute;
+  top: -0.85rem;
+  bottom: 0.9rem;
+  left: 0.12rem;
+  width: 2px;
+  background: rgba(99, 53, 31, 0.82);
+  content: '';
+}
+
+.organization-poster-ministry,
+.organization-poster-empty {
+  position: relative;
+  min-height: 1.85rem;
+  padding: 0.42rem 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 0.15rem;
+  background: #ffffff;
+  box-shadow: 0 2px 0 rgba(116, 28, 12, 0.18);
+  color: #252525;
+  font-size: 0.61rem;
+  font-weight: 800;
+  line-height: 1.12;
+  text-align: center;
+}
+
+.organization-poster-ministry::before,
+.organization-poster-empty::before {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 0.72rem;
+  height: 2px;
+  background: rgba(99, 53, 31, 0.82);
+  content: '';
+}
+
+.organization-poster-empty { color: #6b7280; font-weight: 600; }
+
+@media print {
+  #organization-chart {
+    height: calc(100vh - 24mm);
+  }
+
+  #organization-chart .organization-poster {
+    display: block !important;
+    min-height: 100%;
+  }
+}

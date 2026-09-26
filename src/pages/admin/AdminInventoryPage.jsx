@@ -316,6 +316,9 @@ export default function AdminInventoryPage() {
     if (!Number.isInteger(quantity) || quantity < 0 || (stockForm.transaction_type !== 'Penyesuaian' && quantity < 1)) {
       setFormError(t('inventory.errorQuantity')); return
     }
+    if (stockForm.transaction_type === 'Penyesuaian' && quantity === Number(stockItem.stock)) {
+      setFormError(t('inventory.errorStockUnchanged')); return
+    }
     if (stockForm.notes.trim().length < 3) {
       setFormError(t('inventory.errorNotesRequired')); return
     }
