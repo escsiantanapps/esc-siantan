@@ -1,23 +1,24 @@
 import { Link } from 'react-router-dom'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useId } from 'react'
 import { Sun, Moon, ArrowLeft, ChevronRight, MoreVertical } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import { useLang } from '@/hooks/useLang'
 import SheepLoader from '@/components/SheepLoader'
 
 // ─── Button ──────────────────────────────────────────────
-export function Button({ children, variant = 'primary', size = 'md', loading, className = '', ...props }) {
+export function Button({ children, variant = 'primary', size = 'md', loading, disabled, className = '', ...props }) {
   const base = 'inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed'
   const sizes = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2.5 text-sm', lg: 'px-6 py-3 text-base' }
+  // Latar brand yang tetap gelap menjaga kontras teks putih pada kedua tema.
   const variants = {
-    primary: 'gradient-main text-white shadow-[0_6px_18px_-8px_rgba(244,81,30,0.55)] hover:brightness-105 hover:shadow-[0_8px_22px_-8px_rgba(244,81,30,0.65)]',
+    primary: 'bg-[var(--color-primary-deeper)] text-white hover:brightness-105',
     secondary: 'bg-control text-gray-700 hover:bg-control-hover',
     outline: 'border border-gray-200 text-gray-700 hover:bg-control',
     danger: 'bg-red-500 text-white hover:bg-red-600',
     ghost: 'text-gray-600 hover:bg-control',
   }
   return (
-    <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} disabled={loading} {...props}>
+    <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} disabled={loading || disabled} aria-busy={loading || undefined} {...props}>
       {loading && <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />}
       {children}
     </button>
@@ -25,11 +26,15 @@ export function Button({ children, variant = 'primary', size = 'md', loading, cl
 }
 
 // ─── Input ───────────────────────────────────────────────
-export function Input({ label, error, required, icon: Icon, rightElement, className = '', ...props }) {
+export function Input({ label, error, required, icon: Icon, rightElement, className = '', id, 'aria-describedby': describedBy, ...props }) {
+  const generatedId = useId()
+  const fieldId = id || generatedId
+  const errorId = `${fieldId}-error`
+  const description = [describedBy, error && errorId].filter(Boolean).join(' ') || undefined
   return (
     <div className="space-y-1">
       {label && (
-        <label className="text-sm text-gray-600 font-medium">
+        <label htmlFor={fieldId} className="text-sm text-gray-600 font-medium">
           {label}{required && <span className="text-red-500 ml-0.5">*</span>}
         </label>
       )}
@@ -40,20 +45,28 @@ export function Input({ label, error, required, icon: Icon, rightElement, classN
             ${Icon ? 'pl-10' : 'pl-3'} ${rightElement ? 'pr-10' : 'pr-3'}
             ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
           {...props}
+          id={fieldId}
+          required={required}
+          aria-invalid={error ? true : props['aria-invalid']}
+          aria-describedby={description}
         />
         {rightElement}
       </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p id={errorId} role="alert" className="text-sm text-red-700">{error}</p>}
     </div>
   )
 }
 
 // ─── Textarea ────────────────────────────────────────────
-export function Textarea({ label, error, required, rows = 3, className = '', ...props }) {
+export function Textarea({ label, error, required, rows = 3, className = '', id, 'aria-describedby': describedBy, ...props }) {
+  const generatedId = useId()
+  const fieldId = id || generatedId
+  const errorId = `${fieldId}-error`
+  const description = [describedBy, error && errorId].filter(Boolean).join(' ') || undefined
   return (
     <div className="space-y-1">
       {label && (
-        <label className="text-sm text-gray-600 font-medium">
+        <label htmlFor={fieldId} className="text-sm text-gray-600 font-medium">
           {label}{required && <span className="text-red-500 ml-0.5">*</span>}
         </label>
       )}
@@ -62,8 +75,12 @@ export function Textarea({ label, error, required, rows = 3, className = '', ...
         className={`w-full px-3 py-2.5 text-base bg-gray-50 border rounded-xl resize-none transition
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
         {...props}
+        id={fieldId}
+        required={required}
+        aria-invalid={error ? true : props['aria-invalid']}
+        aria-describedby={description}
       />
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p id={errorId} role="alert" className="text-sm text-red-700">{error}</p>}
     </div>
   )
 }
@@ -73,11 +90,15 @@ export function Textarea({ label, error, required, rows = 3, className = '', ...
 const SELECT_CHEVRON =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")"
 
-export function Select({ label, error, required, children, className = '', style, ...props }) {
+export function Select({ label, error, required, children, className = '', id, 'aria-describedby': describedBy, style, ...props }) {
+  const generatedId = useId()
+  const fieldId = id || generatedId
+  const errorId = `${fieldId}-error`
+  const description = [describedBy, error && errorId].filter(Boolean).join(' ') || undefined
   return (
     <div className="space-y-1">
       {label && (
-        <label className="text-sm text-gray-600 font-medium">
+        <label htmlFor={fieldId} className="text-sm text-gray-600 font-medium">
           {label}{required && <span className="text-red-500 ml-0.5">*</span>}
         </label>
       )}
@@ -86,10 +107,14 @@ export function Select({ label, error, required, children, className = '', style
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
         style={{ backgroundImage: SELECT_CHEVRON, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.7rem center', backgroundSize: '1.1em', ...style }}
         {...props}
+        id={fieldId}
+        required={required}
+        aria-invalid={error ? true : props['aria-invalid']}
+        aria-describedby={description}
       >
         {children}
       </select>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p id={errorId} role="alert" className="text-sm text-red-700">{error}</p>}
     </div>
   )
 }
@@ -252,6 +277,7 @@ export function Spinner({ size = 'md' }) {
 
 // ─── GradientHeader ──────────────────────────────────────
 export function GradientHeader({ title, subtitle, back, children, wave = true }) {
+  const { t } = useLang()
   return (
     <div className={`gradient-main relative overflow-hidden px-4 ${wave ? 'pb-9' : 'pb-4'}`} style={{paddingTop: 'calc(var(--safe-top, 28px) + 1.5rem)'}}>
       {/* Glow dekoratif ala Stitch */}
@@ -262,8 +288,8 @@ export function GradientHeader({ title, subtitle, back, children, wave = true })
         {back && (
           <button
             onClick={back}
-            aria-label="Kembali"
-            className="w-9 h-9 -ml-1.5 mt-2 mb-3 rounded-full bg-white/15 text-white flex items-center justify-center transition-colors hover:bg-white/25 active:scale-90"
+            aria-label={t('quality.back')}
+            className="w-11 h-11 -ml-1.5 mt-2 mb-3 rounded-full bg-white/15 text-white flex items-center justify-center transition-colors hover:bg-white/25 active:scale-90"
           >
             <ArrowLeft size={18} />
           </button>

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useLang } from '@/hooks/useLang'
 import { fetchApi } from '@/lib/utils'
 import { Button, Input } from '@/components/ui'
+import { KeyRound, ShieldCheck } from 'lucide-react'
 
 async function postJson(url, payload) {
   const res = await fetchApi(url, {
@@ -37,7 +38,7 @@ export default function ForgotPasswordPage() {
 
   async function sendCode(e) {
     e?.preventDefault()
-    if (cooldown > 0) return
+    if (cooldown > 0 || loading) return
     setError(''); setInfo(''); setLoading(true)
     try {
       const r = await postJson('/api/wa-reset-request', { email: email.trim() })
@@ -80,8 +81,8 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-gray-50 flex justify-center sm:items-center sm:px-4 sm:py-10">
       <div className="w-full max-w-md min-h-screen sm:min-h-0 flex flex-col bg-surface sm:rounded-3xl sm:shadow-2xl sm:shadow-black/10 sm:overflow-hidden">
         <div className="gradient-main pt-16 pb-10 px-6 flex flex-col items-center text-center">
-          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
-            <span className="text-3xl">{step === 'email' ? '🔑' : '🔢'}</span>
+          <div className="w-16 h-16 text-white bg-white/20 rounded-2xl flex items-center justify-center mb-4">
+            {step === 'email' ? <KeyRound size={28} aria-hidden="true" /> : <ShieldCheck size={28} aria-hidden="true" />}
           </div>
           <h1 className="text-white text-2xl font-bold">{t('auth.forgotTitle')}</h1>
           <p className="text-white/70 text-sm mt-1">
@@ -91,17 +92,17 @@ export default function ForgotPasswordPage() {
 
         <div className="flex-1 bg-surface rounded-t-3xl -mt-4 px-6 pt-8 pb-6">
           {error && (
-            <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>
+            <div role="alert" className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>
           )}
           {info && (
-            <div className="bg-green-50 border border-green-100 text-green-700 text-sm rounded-xl px-4 py-3 mb-4">{info}</div>
+            <div role="status" className="bg-green-50 border border-green-100 text-green-700 text-sm rounded-xl px-4 py-3 mb-4">{info}</div>
           )}
 
           {step === 'email' ? (
             <>
               <h2 className="text-gray-900 text-lg font-semibold mb-6">{t('auth.enterEmail')}</h2>
               <form onSubmit={sendCode} className="space-y-4">
-                <Input label={t('auth.email')} type="email" placeholder="nama@email.com" required value={email} onChange={e => setEmail(e.target.value)} />
+                <Input label={t('auth.email')} type="email" autoComplete="email" inputMode="email" placeholder={t('auth.emailPlaceholder')} required value={email} onChange={e => setEmail(e.target.value)} />
                 <Button type="submit" loading={loading} className="w-full" size="lg">{t('auth.sendCode')}</Button>
               </form>
               <div className="mt-6 text-center">

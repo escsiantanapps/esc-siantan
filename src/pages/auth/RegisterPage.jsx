@@ -21,6 +21,7 @@ export default function RegisterPage() {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [photoFile, setPhotoFile] = useState(null)
   const [photoPreview, setPhotoPreview] = useState('')
   const [processingPhoto, setProcessingPhoto] = useState(false)
@@ -35,7 +36,39 @@ export default function RegisterPage() {
     if (photoPreview.startsWith('blob:')) URL.revokeObjectURL(photoPreview)
   }, [photoPreview])
 
-  function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
+  function set(key, val) {
+    setForm(p => ({ ...p, [key]: val }))
+    setFieldErrors(previous => ({ ...previous, [key]: undefined }))
+  }
+
+  // Periksa sebelum biodata/foto agar pengguna tidak mengulang langkah akhir.
+  // Validasi ini membantu UI; otoritas akun tetap berada di backend Auth.
+  function accountErrors() {
+    const errors = {}
+    if (!form.name.trim()) errors.name = 'auth.fieldRequired'
+    if (!form.email.trim()) errors.email = 'auth.fieldRequired'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = 'auth.emailInvalid'
+    if (!form.phone.trim()) errors.phone = 'auth.fieldRequired'
+    else if (form.phone.replace(/\D/g, '').length < 9) errors.phone = 'auth.phoneInvalid'
+    if (!form.password) errors.password = 'auth.fieldRequired'
+    else if (form.password.length < 8 || !/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password)) errors.password = 'auth.pwMin8'
+    if (!form.confirmPassword) errors.confirmPassword = 'auth.fieldRequired'
+    else if (form.password !== form.confirmPassword) errors.confirmPassword = 'auth.pwMismatch'
+    return errors
+  }
+
+  function nextAccount(e) {
+    e.preventDefault()
+    const errors = accountErrors()
+    setFieldErrors(errors)
+    setError('')
+    const firstInvalid = Object.keys(errors)[0]
+    if (firstInvalid) {
+      e.currentTarget.elements.namedItem(firstInvalid)?.focus()
+      return
+    }
+    setStep(2)
+  }
 
   function beforePhoto(file) {
     setError('')
@@ -71,6 +104,11 @@ export default function RegisterPage() {
   }
 
   async function handleSubmit() {
+    if (loading) return
+    if (!accountCreated) {
+      const errors = accountErrors()
+      if (Object.keys(errors).length) { setFieldErrors(errors); setStep(1); return }
+    }
     if (!photoFile) { setError(t('auth.photoRequired')); setStep(2); return }
     if (form.password !== form.confirmPassword) { setError(t('auth.pwMismatch')); setStep(1); return }
     if (form.password.length < 8 || !/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password)) {
@@ -162,24 +200,18 @@ export default function RegisterPage() {
 
         <div className="flex-1 bg-surface px-6 py-6">
           {error && (
-            <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>
+            <div role="alert" className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>
           )}
 
           {step === 1 && (
-            <div className="space-y-4">
-              <Input label={t('auth.fullName')} required placeholder={t('auth.fullNamePh')} value={form.name} onChange={e => set('name', e.target.value)} />
-              <Input label={t('auth.email')} type="email" required placeholder="nama@email.com" value={form.email} onChange={e => set('email', e.target.value)} />
-              <Input label={t('auth.phone')} type="tel" required placeholder="+62 8xx xxxx xxxx" value={form.phone} onChange={e => set('phone', e.target.value)} />
-              <Input label={t('auth.password')} type="password" required placeholder={t('auth.passwordMin8')} value={form.password} onChange={e => set('password', e.target.value)} />
-              <Input label={t('auth.repeatPassword')} type="password" required placeholder={t('auth.repeatPasswordPh')} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} />
-              <Button className="w-full mt-2" size="lg" onClick={() => {
-                if (!form.name || !form.email || !form.phone || !form.password) { setError(t('auth.completeAll')); return }
-                if (form.phone.replace(/\D/g, '').length < 9) { setError(t('auth.phoneInvalid')); return }
-                setError(''); setStep(2)
-              }}>
-                {t('auth.next')}
-              </Button>
-            </div>
+            <form noValidate onSubmit={nextAccount} className="space-y-4">
+              <Input name="name" label={t('auth.fullName')} required autoComplete="name" error={fieldErrors.name && t(fieldErrors.name)} placeholder={t('auth.fullNamePh')} value={form.name} onChange={e => set('name', e.target.value)} />
+              <Input name="email" label={t('auth.email')} type="email" required autoComplete="email" inputMode="email" error={fieldErrors.email && t(fieldErrors.email)} placeholder={t('auth.emailPlaceholder')} value={form.email} onChange={e => set('email', e.target.value)} />
+              <Input name="phone" label={t('auth.phone')} type="tel" required autoComplete="tel" error={fieldErrors.phone && t(fieldErrors.phone)} placeholder={t('auth.phonePlaceholder')} value={form.phone} onChange={e => set('phone', e.target.value)} />
+              <Input name="password" label={t('auth.password')} type="password" required autoComplete="new-password" error={fieldErrors.password && t(fieldErrors.password)} placeholder={t('auth.passwordMin8')} value={form.password} onChange={e => set('password', e.target.value)} />
+              <Input name="confirmPassword" label={t('auth.repeatPassword')} type="password" required autoComplete="new-password" error={fieldErrors.confirmPassword && t(fieldErrors.confirmPassword)} placeholder={t('auth.repeatPasswordPh')} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} />
+              <Button type="submit" className="w-full mt-2" size="lg">{t('auth.next')}</Button>
+            </form>
           )}
 
           {step === 2 && (

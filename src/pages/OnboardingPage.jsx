@@ -15,6 +15,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { appSettingsService } from '@/services/contentService'
 import SheepLoader from '@/components/SheepLoader'
+import { useLang } from '@/hooks/useLang'
+import { translations } from '@/lib/i18n'
 
 export const ONBOARDING_KEY = 'esc-onboarding-done'          // legacy (pra-v28)
 export const ROADMAP_SEEN_KEY = 'esc-roadmap-seen-count'
@@ -28,36 +30,13 @@ const STAGE_GRADIENTS = [
 ]
 
 // Konten bawaan — dipakai bila admin belum menyimpan template sendiri.
-export const DEFAULT_ROADMAP = [
-  {
-    title: 'Benih — Lahir Baru',
-    focus: 'Keselamatan & pertobatan',
-    characteristics: 'Percaya kepada Tuhan Yesus, dibaptis, dan mulai membangun kebiasaan rohani.',
-    attitude: 'Haus akan Firman, terbuka untuk dibimbing.',
-    image: '/images/roadmap/tahap1.svg',
-  },
-  {
-    title: 'Tunas — Bertumbuh',
-    focus: 'Pengenalan akan Firman',
-    characteristics: 'Rutin saat teduh, setia ibadah & komsel, mulai mengenal karunia.',
-    attitude: 'Setia dalam persekutuan dan disiplin rohani.',
-    image: '/images/roadmap/tahap2.svg',
-  },
-  {
-    title: 'Pohon — Berakar Kuat',
-    focus: 'Karakter Kristus & pelayanan',
-    characteristics: 'Terlibat pelayanan, hidup jadi teladan, kuat menghadapi tantangan.',
-    attitude: 'Rendah hati, setia, dapat dipercaya.',
-    image: '/images/roadmap/tahap3.svg',
-  },
-  {
-    title: 'Berbuah — Memuridkan',
-    focus: 'Multiplikasi & memimpin',
-    characteristics: 'Membimbing jiwa baru, memimpin kelompok, menjadi berkat bagi banyak orang.',
-    attitude: 'Hati bapa: memberi hidup bagi orang lain.',
-    image: '/images/roadmap/tahap4.svg',
-  },
-]
+export const DEFAULT_ROADMAP = [1, 2, 3, 4].map(stage => ({
+  title: translations.id[`roadmap.stage${stage}.title`],
+  focus: translations.id[`roadmap.stage${stage}.focus`],
+  characteristics: translations.id[`roadmap.stage${stage}.characteristics`],
+  attitude: translations.id[`roadmap.stage${stage}.attitude`],
+  image: `/images/roadmap/tahap${stage}.svg`,
+}))
 
 // Jumlah penayangan roadmap yang sudah terjadi di perangkat ini.
 export function getRoadmapSeenCount() {
@@ -83,7 +62,7 @@ export async function shouldShowOnboarding() {
 
 function Dots({ total, active }) {
   return (
-    <div className="flex items-center gap-2">
+    <div aria-hidden="true" className="flex items-center gap-2">
       {Array.from({ length: total }).map((_, i) => (
         <span
           key={i}
@@ -97,21 +76,30 @@ function Dots({ total, active }) {
 }
 
 export default function OnboardingPage() {
-  const navigate  = useNavigate()
+  const navigate = useNavigate()
+  const { t } = useLang()
   const [stages, setStages] = useState(null)
   const [index, setIndex] = useState(0)
   const [exiting, setExiting] = useState(false)
-  const touchStartX = useRef(null)
+  const touchStart = useRef(null)
+  const transitionTimer = useRef(null)
+  const transitionLocked = useRef(false)
+  const finished = useRef(false)
+
+  useEffect(() => () => clearTimeout(transitionTimer.current), [])
 
   // Muat template dari DB; fallback diam-diam ke DEFAULT_ROADMAP.
   // stages = null sampai fetch selesai → render spinner, bukan flash default.
   useEffect(() => {
+    let active = true
     appSettingsService.get('discipleship_roadmap')
       .then(v => {
+        if (!active) return
         if (Array.isArray(v) && v.length > 0 && v.every(s => s && s.title)) setStages(v)
         else setStages(DEFAULT_ROADMAP)
       })
-      .catch(() => setStages(DEFAULT_ROADMAP))
+      .catch(() => { if (active) setStages(DEFAULT_ROADMAP) })
+    return () => { active = false }
   }, [])
 
   // Tampilkan loading sampai data siap (mencegah flash konten default).
@@ -119,11 +107,19 @@ export default function OnboardingPage() {
     return <SheepLoader fullScreen size="xl" className="bg-gradient-to-br from-sky-600 to-blue-800" labelClassName="text-white/85" />
   }
 
-  const slide = stages[index]
+  const stage = stages[index]
+  // Hanya konten bawaan diterjemahkan; teks yang ditulis admin tetap dipertahankan.
+  const slide = stages === DEFAULT_ROADMAP ? {
+    ...stage,
+    ...Object.fromEntries(['title', 'focus', 'characteristics', 'attitude'].map(field => [field, t(`roadmap.stage${index + 1}.${field}`)])),
+  } : stage
   const isLast = index === stages.length - 1
 
   // Catat 1 penayangan & pergi ke beranda.
   function finish() {
+    if (finished.current) return
+    finished.current = true
+    clearTimeout(transitionTimer.current)
     try {
       localStorage.setItem(ROADMAP_SEEN_KEY, String(getRoadmapSeenCount() + 1))
       localStorage.setItem(ONBOARDING_KEY, '1')
@@ -131,58 +127,67 @@ export default function OnboardingPage() {
     navigate('/', { replace: true })
   }
 
-  function next() {
-    if (isLast) { finish(); return }
+  function move(direction) {
+    // Ref mengunci klik dan swipe di frame yang sama, sebelum React merender disabled.
+    if (transitionLocked.current || finished.current) return
+    if (direction > 0 && isLast) { finish(); return }
+    if (direction < 0 && index === 0) return
+    transitionLocked.current = true
     setExiting(true)
-    setTimeout(() => {
-      setIndex(i => i + 1)
+    transitionTimer.current = setTimeout(() => {
+      setIndex(i => Math.max(0, Math.min(stages.length - 1, i + direction)))
       setExiting(false)
+      transitionLocked.current = false
     }, 180)
   }
 
-  // Swipe support
-  function onTouchStart(e) { touchStartX.current = e.touches[0].clientX }
+  function onTouchStart(e) {
+    if (e.target.closest('button, a')) { touchStart.current = null; return }
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
   function onTouchEnd(e) {
-    if (touchStartX.current === null) return
-    const diff = touchStartX.current - e.changedTouches[0].clientX
-    if (diff > 50)  next()
-    if (diff < -50 && index > 0) setIndex(i => i - 1)
-    touchStartX.current = null
+    if (!touchStart.current) return
+    const dx = touchStart.current.x - e.changedTouches[0].clientX
+    const dy = touchStart.current.y - e.changedTouches[0].clientY
+    touchStart.current = null
+    // Scroll vertikal pada layar pendek tidak boleh dianggap pindah tahap.
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 1 : -1)
   }
 
   const gradient = STAGE_GRADIENTS[index % STAGE_GRADIENTS.length]
 
   return (
     <div
-      className={`h-svh overflow-hidden bg-gradient-to-br ${gradient} flex flex-col transition-all duration-500`}
+      className={`min-h-svh overflow-x-hidden bg-gradient-to-br ${gradient} flex flex-col transition-colors duration-300 motion-reduce:transition-none`}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
+      onTouchCancel={() => { touchStart.current = null }}
     >
       {/* Skip */}
       <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-[calc(var(--safe-top,env(safe-area-inset-top,0px))+0.75rem)] md:pt-4">
-        <span className="text-xs font-bold tracking-widest uppercase text-white/60">Roadmap Pemuridan</span>
+        <span className="text-xs font-bold tracking-widest uppercase text-white/90">{t('roadmap.title')}</span>
         <button
           onClick={finish}
-          className="flex min-h-11 items-center rounded-full px-3 text-sm text-white/70 transition hover:bg-white/10 hover:text-white"
+          className="flex min-h-11 items-center rounded-full px-3 text-sm text-white/90 transition hover:bg-white/10 hover:text-white"
         >
-          Lewati
+          {t('roadmap.skip')}
         </button>
       </div>
 
       {/* Konten utama */}
       <div
-        className={`flex-1 min-h-0 flex flex-col items-center justify-center px-8 text-center transition-all duration-180 ${
-          exiting ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'
+        className={`flex-1 flex flex-col items-center justify-center px-6 py-6 text-center transition-opacity duration-150 motion-reduce:transition-none ${
+          exiting ? 'opacity-0' : 'opacity-100'
         }`}
       >
         {/* Ilustrasi tahap */}
         {slide.image && (
-          <img src={slide.image} alt={slide.title} className="w-36 h-36 mb-2 drop-shadow-lg select-none" draggable="false" />
+          <img src={slide.image} alt={slide.title} width="144" height="144" className="w-28 h-28 shrink-0 mb-4 select-none" draggable="false" />
         )}
 
         {/* Tag tahap */}
-        <span className="text-xs font-bold tracking-widest uppercase text-white/70 mb-2">
-          Tahap {index + 1} dari {stages.length}
+        <span className="text-xs font-bold tracking-widest uppercase text-white/90 mb-2">
+          {t('roadmap.step', { n: index + 1, total: stages.length })}
         </span>
 
         {/* Judul */}
@@ -191,44 +196,45 @@ export default function OnboardingPage() {
         </h1>
 
         {/* Kartu isi tahap */}
-        <div className="w-full max-w-sm bg-white/15 border border-white/30 rounded-2xl px-6 py-4 backdrop-blur-sm text-left space-y-2.5">
+        <div className="w-full max-w-sm bg-black/15 border border-white/30 rounded-2xl px-5 py-4 text-left space-y-2.5">
           {slide.focus && (
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">Fokus</p>
-              <p className="text-white/95 text-sm leading-relaxed">{slide.focus}</p>
+              <p className="text-xs font-semibold text-white/90">{t('roadmap.focus')}</p>
+              <p className="text-white text-base leading-relaxed">{slide.focus}</p>
             </div>
           )}
           {slide.characteristics && (
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">Karakteristik</p>
-              <p className="text-white/95 text-sm leading-relaxed">{slide.characteristics}</p>
+              <p className="text-xs font-semibold text-white/90">{t('roadmap.characteristics')}</p>
+              <p className="text-white text-base leading-relaxed">{slide.characteristics}</p>
             </div>
           )}
           {slide.attitude && (
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">Sikap</p>
-              <p className="text-white/95 text-sm leading-relaxed">{slide.attitude}</p>
+              <p className="text-xs font-semibold text-white/90">{t('roadmap.attitude')}</p>
+              <p className="text-white text-base leading-relaxed">{slide.attitude}</p>
             </div>
           )}
         </div>
       </div>
 
       {/* Footer: dots + tombol */}
-      <div className="px-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-1 flex items-center justify-between shrink-0">
+      <div className="px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2 flex flex-wrap gap-4 items-center justify-between shrink-0">
         <Dots total={stages.length} active={index} />
 
         <button
-          onClick={next}
+          onClick={() => move(1)}
+          disabled={exiting}
+          aria-busy={exiting}
           className={`
-            px-7 py-3 rounded-2xl font-bold text-sm shadow-lg transition-all duration-200
-            active:scale-95 hover:scale-105
+            px-7 py-3 rounded-2xl font-semibold text-sm transition-colors duration-200 disabled:opacity-60
             ${isLast
               ? 'bg-white text-[#111827]'
               : 'bg-white/20 border border-white/40 text-white hover:bg-white/30'
             }
           `}
         >
-          {isLast ? 'Mulai 🚀' : 'Lanjut →'}
+          {t(isLast ? 'roadmap.start' : 'roadmap.next')}
         </button>
       </div>
     </div>

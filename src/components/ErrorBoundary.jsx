@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import { translations } from '@/lib/i18n'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 
 // Deteksi error gagal memuat chunk lazy (umum terjadi setelah deploy baru:
@@ -41,6 +42,8 @@ export default class ErrorBoundary extends Component {
     if (!this.state.hasError) return this.props.children
 
     const chunk = isChunkError(this.state.error)
+    // Boundary berada di luar provider; gunakan bahasa dokumen yang sudah disetel.
+    const copy = translations[document.documentElement.lang === 'en' ? 'en' : 'id']
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
         <div className="max-w-sm w-full text-center">
@@ -48,18 +51,16 @@ export default class ErrorBoundary extends Component {
             <AlertTriangle size={28} className="text-blue-500" />
           </div>
           <h1 className="text-lg font-semibold text-gray-900">
-            {chunk ? 'Versi baru tersedia' : 'Terjadi kesalahan'}
+            {copy[chunk ? 'error.newVersion' : 'error.title']}
           </h1>
           <p className="text-sm text-gray-500 mt-2">
-            {chunk
-              ? 'Aplikasi baru saja diperbarui. Muat ulang untuk melanjutkan.'
-              : 'Maaf, terjadi kendala saat menampilkan halaman. Coba muat ulang.'}
+            {copy[chunk ? 'error.updateMessage' : 'error.message']}
           </p>
           <button
             onClick={this.handleReload}
             className="mt-6 inline-flex items-center justify-center gap-2 w-full gradient-main text-white text-sm font-medium rounded-xl py-3 active:scale-[0.98] transition-transform"
           >
-            <RefreshCw size={16} /> Muat Ulang
+            <RefreshCw size={16} /> {copy['error.reload']}
           </button>
         </div>
       </div>

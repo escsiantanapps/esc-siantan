@@ -4,7 +4,7 @@ import { Bell, Calendar, BookOpen, Droplets, Heart, Baby, Church, HandCoins, Wif
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { newsService, appSettingsService } from '@/services/contentService'
-import { Skeleton, SkeletonCard, SectionHeader, EmptyState, Spinner } from '@/components/ui'
+import { Skeleton, SkeletonCard, SectionHeader, Spinner } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
 import SopNudgeCard from '@/components/SopNudgeCard'
@@ -153,7 +153,7 @@ export default function HomePage() {
               onClick={loadData}
               className="flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-800 transition-colors"
             >
-              <RefreshCw size={13} /> Coba lagi
+              <RefreshCw size={16} /> {t('quality.retry')}
             </button>
           </div>
         )}
@@ -192,14 +192,16 @@ export default function HomePage() {
           </section>
         )}
 
-        {!loading && news.length === 0 && (
+        {!loading && !fetchError && news.length === 0 && (
           <section>
             <SectionHeader title={t('info.announcements')} to="/informasi" />
-            <EmptyState
-              icon={Bell}
-              title={t('info.noAnnouncements')}
-              description={t('info.noAnnouncementsDesc')}
-            />
+            <div className="flex items-start gap-3 rounded-xl border border-gray-200 px-4 py-4 mb-5">
+              <Bell size={22} className="text-gray-500 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium text-gray-700">{t('info.noAnnouncements')}</p>
+                <p className="text-sm text-gray-500 mt-1">{t('info.noAnnouncementsDesc')}</p>
+              </div>
+            </div>
           </section>
         )}
 
@@ -212,7 +214,7 @@ export default function HomePage() {
               <Link
                 key={to}
                 to={to}
-                className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-surface border border-gray-100 ambient-shadow card-lift"
+                className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-surface border border-gray-200 hover:bg-control active:bg-control-hover transition-colors"
               >
                 <div className={`w-11 h-11 rounded-full ${color} flex items-center justify-center`}>
                   <Icon size={20} strokeWidth={1.5} />

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
-import { Mail, Lock, Eye, EyeOff, Check } from 'lucide-react'
+import { Mail, Eye, EyeOff } from 'lucide-react'
+import { Button, Input, Checkbox } from '@/components/ui'
 
 const REMEMBER_KEY = 'esc-remember-email'
 
@@ -18,6 +19,7 @@ export default function LoginPage() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (loading) return
     setError('')
     setLoading(true)
     try {
@@ -35,89 +37,53 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10 relative overflow-hidden gradient-main">
-      {/* Scrim lembut agar kartu kaca tetap terbaca di atas gambar apa pun */}
-      <div className="absolute inset-0 bg-black/10" />
-
-      {/* Blob cahaya melayang perlahan — hidup tapi tidak mengganggu */}
-      <div aria-hidden="true" className="pointer-events-none absolute -top-24 -left-16 w-72 h-72 rounded-full bg-white/15 blur-3xl" style={{ animation: 'floatY 9s ease-in-out infinite' }} />
-      <div aria-hidden="true" className="pointer-events-none absolute top-1/3 -right-20 w-80 h-80 rounded-full bg-amber-200/20 blur-3xl" style={{ animation: 'floatX 11s ease-in-out infinite' }} />
-      <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 left-1/4 w-72 h-72 rounded-full bg-red-900/25 blur-3xl" style={{ animation: 'floatY 13s ease-in-out infinite' }} />
-
-      {/* Kartu kaca */}
-      <div className="relative w-full max-w-sm rounded-[1.75rem] border border-white/40 bg-white/15 backdrop-blur-xl shadow-2xl shadow-black/20 px-7 py-8 text-white animate-scale-in">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/80">ESC Siantan</p>
-        <h1 className="font-display text-3xl font-bold tracking-tight mt-1">{t('auth.welcome')} 👋</h1>
-        <p className="text-sm text-white/85 mt-1.5 mb-7">{t('auth.loginSubtitle')}</p>
+    <div className="min-h-svh flex items-center justify-center px-4 py-8 gradient-main">
+      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-surface px-6 py-7">
+        <p className="text-sm font-semibold text-brand-700">ESC Siantan</p>
+        <h1 className="font-display text-2xl font-bold text-gray-900 mt-2">{t('auth.welcome')}</h1>
+        <p className="text-sm text-gray-600 mt-2 mb-6">{t('auth.loginSubtitle')}</p>
 
         {error && (
-          <div className="bg-red-500/20 border border-red-300/40 text-white text-sm rounded-xl px-4 py-3 mb-4 animate-fade-in">
+          <div id="login-error" role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Email */}
-          <div className="relative">
-            <input
-              type="text" required placeholder={t('auth.emailOrPhone')}
-              autoCapitalize="none" autoCorrect="off"
-              value={form.email}
-              onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-              className="w-full bg-white/10 border border-white/40 rounded-2xl pl-5 pr-12 py-3.5 text-white placeholder-white/70 outline-none focus:border-white/80 focus:bg-white/15 transition"
-            />
-            <Mail size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/80" />
-          </div>
-
-          {/* Password */}
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'} required placeholder={t('auth.password')}
-              value={form.password}
-              onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-              className="w-full bg-white/10 border border-white/40 rounded-2xl pl-5 pr-12 py-3.5 text-white placeholder-white/70 outline-none focus:border-white/80 focus:bg-white/15 transition"
-            />
-            <button
-              type="button" onClick={() => setShowPassword(s => !s)} tabIndex={-1}
-              aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white transition"
-            >
-              {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
-            </button>
-          </div>
-
-          {/* Remember me */}
-          <button
-            type="button" onClick={() => setRemember(r => !r)}
-            className="flex items-center gap-2.5 text-sm text-white/90"
-          >
-            <span className={`w-5 h-5 rounded-md flex items-center justify-center border transition
-              ${remember ? 'bg-white border-white' : 'bg-white/10 border-white/50'}`}>
-              {remember && <Check size={13} className="text-[#1f2937]" strokeWidth={3} />}
-            </span>
-            {t('auth.rememberMe')}
-          </button>
-
-          {/* Tombol Login — teks pakai warna gelap literal (bukan text-gray-900
-              yang di-remap jadi terang saat dark mode → tak terlihat di atas
-              tombol putih). */}
-          <button
-            type="submit" disabled={loading}
-            className="w-full mt-1 py-3.5 rounded-2xl font-display text-lg font-bold text-[#111827] bg-white shadow-lg shadow-black/20 transition active:scale-[0.99] hover:bg-white/90 disabled:opacity-70"
-          >
-            {loading ? '…' : t('auth.signIn')}
-          </button>
+        <form onSubmit={handleSubmit} className="space-y-4" aria-describedby={error ? 'login-error' : undefined}>
+          <Input
+            label={t('auth.emailOrPhone')} name="username" autoComplete="username"
+            type="text" required autoCapitalize="none" autoCorrect="off" icon={Mail}
+            value={form.email}
+            onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+          />
+          <Input
+            label={t('auth.password')} name="password" autoComplete="current-password"
+            type={showPassword ? 'text' : 'password'} required className="pr-14"
+            value={form.password}
+            onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+            rightElement={
+              <button
+                type="button" onClick={() => setShowPassword(s => !s)}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                aria-pressed={showPassword}
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 rounded-lg flex items-center justify-center text-gray-600 hover:bg-control transition-colors"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            }
+          />
+          <Checkbox label={t('auth.rememberMe')} checked={remember}
+            onChange={e => setRemember(e.target.checked)} className="min-h-11" />
+          <Button type="submit" loading={loading} className="w-full" size="lg">{t('auth.signIn')}</Button>
         </form>
 
-        <div className="mt-5 text-center text-sm text-white/90">
+        <p className="mt-5 text-center text-sm text-gray-600">
           {t('auth.noAccount')}{' '}
-          <Link to="/register" className="font-bold hover:underline">{t('auth.registerNow')}</Link>
-        </div>
-        <div className="mt-3 text-center">
-          <Link to="/lupa-password" className="text-xs text-white/75 hover:text-white transition">{t('auth.forgotPassword')}</Link>
-        </div>
-        <div className="mt-3 text-center">
-          <Link to="/kebijakan-privasi" className="text-xs text-white/60 hover:text-white transition">{t('auth.privacyPolicy')}</Link>
+          <Link to="/register" className="inline-flex min-h-11 items-center font-semibold text-brand-700 hover:underline">{t('auth.registerNow')}</Link>
+        </p>
+        <div className="flex flex-col items-center">
+          <Link to="/lupa-password" className="inline-flex min-h-11 items-center text-sm text-brand-700 hover:underline">{t('auth.forgotPassword')}</Link>
+          <Link to="/kebijakan-privasi" className="inline-flex min-h-11 items-center text-sm text-gray-600 hover:underline">{t('auth.privacyPolicy')}</Link>
         </div>
       </div>
     </div>

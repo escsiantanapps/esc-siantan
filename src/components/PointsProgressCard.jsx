@@ -12,23 +12,26 @@ import { Card } from '@/components/ui'
 export default function PointsProgressCard() {
   const { profile } = useAuth()
   const { t } = useLang()
-  const [target, setTarget] = useState(null) // hadiah termurah yg belum cukup poinnya
-  const [loaded, setLoaded] = useState(false)
+  const [products, setProducts] = useState(null)
+  const [failed, setFailed] = useState(false)
   const points = profile?.points ?? 0
 
   useEffect(() => {
+    let active = true
+    setProducts(null)
+    setFailed(false)
     pointsService.getProducts()
-      .then(list => {
-        const gap = (list || [])
-          .filter(p => p.points_cost > points)
-          .sort((a, b) => a.points_cost - b.points_cost)
-        setTarget(gap[0] || null)
-      })
-      .catch(() => setTarget(null))
-      .finally(() => setLoaded(true))
-  }, [points])
+      .then(list => { if (active) setProducts(list || []) })
+      .catch(() => { if (active) setFailed(true) })
+    return () => { active = false }
+  }, [profile?.user_id])
 
-  if (!loaded) return null
+  if (products === null && !failed) return null
+
+  // Katalog kosong/gagal bukan berarti saldo cukup untuk seluruh hadiah.
+  const available = (products || []).filter(product => product.stock !== 0)
+  const target = available.filter(product => product.points_cost > points)
+    .sort((a, b) => a.points_cost - b.points_cost)[0]
 
   const pct = target ? Math.min(100, Math.round((points / target.points_cost) * 100)) : 100
   const remaining = target ? target.points_cost - points : 0
@@ -36,7 +39,7 @@ export default function PointsProgressCard() {
   return (
     <section className="mb-5 animate-fade-in-up">
       <Link to="/poin" className="block">
-        <Card glass lift className="p-4">
+        <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
@@ -50,11 +53,11 @@ export default function PointsProgressCard() {
               </div>
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-500">
-              <Gift size={14} /> {t('home.points.redeem')} <ChevronRight size={14} />
+              <Gift size={14} /> {t(failed || !available.length ? 'home.points.view' : 'home.points.redeem')} <ChevronRight size={14} />
             </span>
           </div>
 
-          {target ? (
+          {!failed && target ? (
             <>
               <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                 <div className="h-full rounded-full gradient-main" style={{ width: `${pct}%` }} />
@@ -64,7 +67,9 @@ export default function PointsProgressCard() {
               </p>
             </>
           ) : (
-            <p className="text-xs text-emerald-600 font-medium">{t('home.points.allUnlocked')}</p>
+            <p className="text-sm text-gray-600">
+              {t(failed ? 'home.points.loadFailed' : !available.length ? 'home.points.empty' : 'home.points.allUnlocked')}
+            </p>
           )}
         </Card>
       </Link>
