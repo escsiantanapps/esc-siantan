@@ -4,6 +4,8 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { tasksService, taskCategoriesService } from '@/services/tasksService'
 import { usersService } from '@/services/usersService'
 import { useToast } from '@/hooks/useToast'
+import { useAuth } from '@/hooks/useAuth'
+import { useLang } from '@/hooks/useLang'
 import { Card, Input, Textarea, Select, Checkbox, Button, Spinner } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { validateUpload, compressImage } from '@/lib/utils'
@@ -62,6 +64,7 @@ export default function AdminTaskFormPage() {
   const navigate = useNavigate()
   const { toast, confirm } = useToast()
   const { profile } = useAuth()
+  const { t } = useLang()
   const isEdit = !!id
 
   // Gembala hanya read-only — redirect ke list tugas
@@ -263,7 +266,7 @@ export default function AdminTaskFormPage() {
           {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
         </Select>
         <p className="text-xs text-gray-400 -mt-2">
-          Kategori menentukan gerbang akses tambahan (lihat halaman Kategori Tugas di menu Sistem). Tidak ada kategori? Pilih "Umum".
+          {t('taskForm.categoryHelp')}
         </p>
       </Card>
 

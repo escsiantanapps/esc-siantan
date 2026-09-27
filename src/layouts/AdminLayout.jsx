@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { ThemeToggle, Spinner } from '@/components/ui'
+import { ThemeToggle, Spinner, Button } from '@/components/ui'
 import { permissionsService } from '@/services/permissionsService'
 import { useBackClose } from '@/hooks/useBackClose'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
@@ -78,6 +78,8 @@ export default function AdminLayout() {
   const isVolunteerSecondary = profile?.role_secondary === 'Volunteer'
   const hasSecondaryAccess = isPKS || isVolunteerSecondary
   const [allowedPages, setAllowedPages] = useState(null)
+  const [permError, setPermError] = useState(false)
+  const [permRetry, setPermRetry] = useState(0)
   const [permLoading, setPermLoading] = useState(!isSuperAdmin && !isGembala)
   const [pendingCounts, setPendingCounts] = useState({
     pendingUsers: 0, pendingClasses: 0, pendingEvents: 0
@@ -92,13 +94,17 @@ export default function AdminLayout() {
   }, [profile?.role])
 
   useEffect(() => {
+    let active = true
+    setPermError(false)
     if (isSuperAdmin || isGembala || !profile?.user_id) { setPermLoading(false); return }
     setPermLoading(true)
     permissionsService.getMyPermissions(profile.user_id)
-      .then(setAllowedPages)
-      .catch(() => setAllowedPages(null))
-      .finally(() => setPermLoading(false))
-  }, [isSuperAdmin, isGembala, profile?.user_id])
+      .then(pages => { if (active) setAllowedPages(pages) })
+      // Kegagalan jaringan bukan izin penuh; tunggu data sah sebelum membuka panel.
+      .catch(() => { if (active) { setAllowedPages([]); setPermError(true) } })
+      .finally(() => { if (active) setPermLoading(false) })
+    return () => { active = false }
+  }, [isSuperAdmin, isGembala, profile?.user_id, permRetry])
 
   async function handleLogout() {
     const ok = await confirm({
@@ -137,9 +143,25 @@ export default function AdminLayout() {
     </div>
   )
 
+  const noAllowedPages = !isSuperAdmin && !isGembala && Array.isArray(allowedPages) && allowedPages.length === 0
+  // Admin murni tanpa halaman tidak diarahkan ke '/' karena rute itu kembali ke '/admin'.
+  if (permError || noAllowedPages) return (
+    <main className="min-h-svh bg-gray-50 flex items-center justify-center p-6">
+      <div role="alert" className="max-w-md bg-surface border border-gray-200 rounded-2xl p-6 space-y-4">
+        <h1 className="text-xl font-bold text-gray-900">{t(permError ? 'aperm.loadFailedTitle' : 'aperm.noPagesTitle')}</h1>
+        <p className="text-gray-600">{t(permError ? 'aperm.loadFailedDesc' : 'aperm.noPagesDesc')}</p>
+        <div className="flex flex-wrap gap-3">
+          <Button className="min-h-11" onClick={() => setPermRetry(value => value + 1)}>{t('quality.retry')}</Button>
+          {hasSecondaryAccess && <Button className="min-h-11" variant="outline" onClick={() => navigate('/')}>{t('admin.switchApp')}</Button>}
+          <Button className="min-h-11" variant="outline" onClick={handleLogout}>{t('admin.logout')}</Button>
+        </div>
+      </div>
+    </main>
+  )
+
   // Tentukan tujuan fallback ketika Admin mencoba masuk halaman yang tidak
   // diizinkan. Prioritas: Dashboard jika masih diizinkan, kalau tidak ambil
-  // halaman pertama yang diizinkan. Bila SEMUA dicabut → kembalikan ke root.
+  // halaman pertama yang diizinkan. Izin kosong ditangani oleh pesan di atas.
   function fallbackPath() {
     if (isSuperAdmin) return '/admin'
     if (!allowedPages || allowedPages.includes('/admin')) return '/admin'

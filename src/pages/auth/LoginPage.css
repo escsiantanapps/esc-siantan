@@ -1,0 +1,53 @@
+/* Identitas brand memakai token tetap agar kontras teks putih tetap sama pada kedua tema. */
+.login-page {
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: max(1.25rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1.25rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  background: var(--color-gray-50);
+}
+.login-shell {
+  width: 100%;
+  min-width: 0;
+  max-width: 28rem;
+  border: 1px solid var(--color-gray-200);
+  border-radius: 1.75rem;
+  background: var(--color-surface);
+  box-shadow: 0 20px 60px -40px var(--color-brand-900);
+}
+.login-brand {
+  padding: 1.5rem;
+  border-radius: 1.7rem 1.7rem 0 0;
+  color: white;
+  background: var(--color-primary-deeper);
+  border-bottom: 4px solid var(--gradient-1);
+}
+.login-wordmark { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.login-logo { width: 3.5rem; height: 3.5rem; flex-shrink: 0; background: white; border-radius: 1rem; }
+.login-brand-name { overflow-wrap: anywhere; font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; }
+.login-brand-location { font-size: .875rem; margin-top: .25rem; }
+.login-introduction, .login-brand-caption { display: none; }
+.login-form-panel { overflow-wrap: anywhere; min-width: 0; padding: 1.75rem 1.5rem 1rem; }
+.login-form-heading { margin-bottom: 1.75rem; }
+.login-eyebrow { color: var(--color-brand-700); font-size: .875rem; font-weight: 600; margin-bottom: .5rem; }
+.login-form-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 1rem; }
+.login-link { display: inline-flex; align-items: center; gap: .5rem; min-height: 2.75rem; color: var(--color-brand-700); font-size: .875rem; }
+.login-link:hover { text-decoration: underline; }
+.login-registration { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; column-gap: .5rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--color-gray-200); }
+.login-footer { display: flex; justify-content: center; margin-top: .25rem; }
+/* Kontrol tetap di tempat saat ditekan; animasi tidak menggeser sasaran sentuh. */
+.login-submit:active { transform: none; filter: brightness(.92); }
+@media (min-width: 960px) {
+  .login-page { padding: 3rem; }
+  .login-shell { max-width: 64rem; display: grid; grid-template-columns: 1fr 1fr; }
+  .login-brand { display: flex; flex-direction: column; justify-content: space-between; padding: 3rem; border-radius: 1.7rem 0 0 1.7rem; border-bottom: 0; border-right: 4px solid var(--gradient-1); }
+  .login-introduction { display: block; margin: 4rem 0; }
+  .login-church-name { overflow-wrap: anywhere; font-family: var(--font-display); font-size: 3.25rem; font-weight: 700; line-height: 1.15; letter-spacing: -.04em; }
+  .login-brand-description { font-size: 1rem; line-height: 1.7; margin-top: 1.5rem; max-width: 20rem; }
+  .login-brand-caption { display: block; font-size: .875rem; font-weight: 500; }
+  .login-form-panel { padding: 3rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-page *, .login-page *::before, .login-page *::after { transition: none !important; }
+}

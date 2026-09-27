@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { startOfWeek, startOfMonth, isSameDay } from 'date-fns'
-import { ClipboardList, CheckCircle2, ArrowLeft, Clock } from 'lucide-react'
+import { ClipboardList, CheckCircle2, ArrowLeft, Clock, Lock } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { tasksService, canAccessTemplate, getTemplateSchedule } from '@/services/tasksService'
@@ -26,6 +26,7 @@ export default function TaskDetailPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [denied, setDenied] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   useEffect(() => {
     if (!profile) return
@@ -34,6 +35,9 @@ export default function TaskDetailPage() {
 
   async function load() {
     setLoading(true)
+    setLoadFailed(false)
+    setDenied(false)
+    setError('')
     try {
       const tmpl = await tasksService.getTemplateById(id)
       // Cegah akses ke tugas yang dibatasi untuk ministry tertentu
@@ -46,6 +50,7 @@ export default function TaskDetailPage() {
       setResponses(all.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at)))
       setForm(initialForm(tmpl))
     } catch (err) {
+      setLoadFailed(true)
       setError(err.message || t('taskDetail.loadFailed'))
     } finally {
       setLoading(false)
@@ -123,6 +128,16 @@ export default function TaskDetailPage() {
   }
 
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
+
+  if (loadFailed) return (
+    <div className="pb-4">
+      <GradientHeader title={t('taskDetail.fillTitle')} back={() => navigate('/tugas')} />
+      <div role="alert" className="m-4 p-5 bg-surface border border-gray-200 rounded-2xl space-y-4">
+        <p className="text-gray-700">{t('taskDetail.loadFailed')}</p>
+        <Button className="min-h-11" onClick={load}>{t('quality.retry')}</Button>
+      </div>
+    </div>
+  )
 
   if (denied) {
     return (

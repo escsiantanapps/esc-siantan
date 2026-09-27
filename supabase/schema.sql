@@ -5232,3 +5232,51 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) TO authenticated;
+
+-- ── Migrasi v92: Kembalikan peringkat poin unik seperti sistem lama ─────
+-- KEPUTUSAN OPERATOR (2026-09-27): batalkan peringkat padat v91. Setiap
+-- peserta mendapat nomor berbeda, termasuk ketika poinnya sama.
+-- Definisi fungsi production diverifikasi dari pg_get_functiondef yang
+-- diberikan operator; sesuai v91. Operator mengonfirmasi v91 sudah aktif.
+-- Pulihkan logika v81: poin menurun, lalu nama dan user_id menaik agar
+-- urutan stabil. Top-N dan posisi global pemanggil tetap dipertahankan.
+-- Hanya mengganti perhitungan peringkat, tanpa mengubah saldo poin.
+CREATE OR REPLACE FUNCTION get_points_leaderboard_with_me(p_limit INT DEFAULT 10)
+  RETURNS TABLE (
+    user_id TEXT,
+    name TEXT,
+    photo_url TEXT,
+    points INT,
+    rank_number BIGINT
+  )
+  LANGUAGE sql
+  SECURITY DEFINER
+  STABLE
+  SET search_path = public
+AS $$
+  WITH ranked AS (
+    SELECT
+      u.user_id,
+      u.name,
+      u.photo_url,
+      COALESCE(u.points, 0) AS points,
+      ROW_NUMBER() OVER (
+        ORDER BY COALESCE(u.points, 0) DESC, u.name ASC, u.user_id ASC
+      ) AS rank_number
+    FROM users u
+    WHERE u.status = 'Aktif'
+  )
+  SELECT
+    r.user_id,
+    r.name,
+    r.photo_url,
+    r.points,
+    r.rank_number
+  FROM ranked r
+  WHERE r.rank_number <= LEAST(GREATEST(COALESCE(p_limit, 10), 1), 100)
+     OR r.user_id = auth_user_id()
+  ORDER BY r.rank_number;
+$$;
+
+REVOKE EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) TO authenticated;

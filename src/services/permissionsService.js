@@ -14,8 +14,9 @@ export const permissionsService = {
     const { data: admins, error } = await supabase
       .from('users').select('user_id, name, photo_url, status').eq('role', 'Admin').order('name')
     if (error) throw error
-    const { data: perms } = await supabase
+    const { data: perms, error: permsError } = await supabase
       .from('admin_user_permissions').select('user_id, allowed_pages')
+    if (permsError) throw permsError
     const map = Object.fromEntries((perms || []).map(p => [p.user_id, p.allowed_pages]))
     return (admins || []).map(a => ({ ...a, allowed_pages: a.user_id in map ? map[a.user_id] : null }))
   },

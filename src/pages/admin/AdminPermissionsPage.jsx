@@ -14,6 +14,7 @@ export default function AdminPermissionsPage() {
   const { t } = useLang()
   const [admins, setAdmins] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
 
   const [query, setQuery] = useState('')
   const [candidates, setCandidates] = useState([])
@@ -28,7 +29,10 @@ export default function AdminPermissionsPage() {
 
   function load() {
     setLoading(true)
-    permissionsService.getAdmins().then(setAdmins).catch(() => {}).finally(() => setLoading(false))
+    setLoadError(false)
+    permissionsService.getAdmins().then(setAdmins)
+      .catch(() => { setAdmins([]); setLoadError(true) })
+      .finally(() => setLoading(false))
   }
 
   // Cari kandidat saat mengetik.
@@ -98,6 +102,17 @@ export default function AdminPermissionsPage() {
 
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner size="lg" /></div>
 
+  if (loadError) return (
+    <div className="max-w-2xl">
+      <PageHeader title={t('aperm.title')} subtitle={t('aperm.subtitle')} />
+      <Card className="p-6 space-y-4" role="alert">
+        <h2 className="text-lg font-semibold text-gray-900">{t('aperm.loadFailedTitle')}</h2>
+        <p className="text-gray-600">{t('aperm.loadFailedDesc')}</p>
+        <Button className="min-h-11" onClick={load}>{t('quality.retry')}</Button>
+      </Card>
+    </div>
+  )
+
   return (
     <div className="max-w-2xl">
       <PageHeader title={t('aperm.title')} subtitle={t('aperm.subtitle')} />
@@ -110,7 +125,7 @@ export default function AdminPermissionsPage() {
       {/* Tambah admin */}
       <Card className="p-4 mb-4 space-y-2">
         <h2 className="text-sm font-semibold text-gray-900">{t('aperm.grantTitle')}</h2>
-        <Input icon={Search} placeholder={t('akom.searchMember')} value={query} onChange={e => setQuery(e.target.value)} />
+        <Input label={t('aperm.searchLabel')} icon={Search} placeholder={t('akom.searchMember')} value={query} onChange={e => setQuery(e.target.value)} />
         {candidates.length > 0 && (
           <div className="space-y-1 max-h-56 overflow-y-auto">
             {candidates.map(u => (
@@ -166,7 +181,7 @@ export default function AdminPermissionsPage() {
                   <p className="text-xs text-gray-400">{t('aperm.configPages')}</p>
                 </div>
               </div>
-              <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600 shrink-0"><X size={18} /></button>
+              <button aria-label={t('common.close')} onClick={() => setEditing(null)} className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-600 hover:bg-control shrink-0"><X size={18} /></button>
             </div>
 
             <div className="flex items-center gap-2">

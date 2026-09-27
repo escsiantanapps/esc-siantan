@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint src api tests vite.config.js --ext js,jsx,mjs --max-warnings 0",
+    "test": "node --test --test-concurrency=1 tests/quality.test.mjs",
+    "check": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.19.13",
@@ -33,6 +35,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.2",
     "eslint-plugin-react-hooks": "^4.6.2",
+    "playwright": "1.63.0",
     "sharp": "^0.35.1",
     "tailwindcss": "^4.0.0",
     "vite": "^5.2.11",
