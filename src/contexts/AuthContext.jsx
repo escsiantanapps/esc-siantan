@@ -94,7 +94,12 @@ export function AuthProvider({ children }) {
     const id = String(identifier || '').trim()
     if (id.includes('@')) {
       const { data, error } = await supabase.auth.signInWithPassword({ email: id, password })
-      if (error) throw error
+      if (error) {
+        if (error.status === 402 || /restricted|egress_quota/i.test(error.message || '')) {
+          throw new Error('SERVICE_UNAVAILABLE')
+        }
+        throw error
+      }
       return data
     }
     const res = await fetchApi('/api/login-phone', {
@@ -103,7 +108,7 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ phone: id, password }),
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || 'Gagal masuk.')
+    if (!res.ok) throw new Error(data.code === 'SERVICE_UNAVAILABLE' ? data.code : (data.error || 'Gagal masuk.'))
     const { error } = await supabase.auth.setSession({
       access_token: data.access_token, refresh_token: data.refresh_token,
     })

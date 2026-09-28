@@ -34,14 +34,23 @@ export default async function handler(req, res) {
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
     // Ambil kandidat (skala kecil) lalu cocokkan inti nomornya — tahan beda format.
-    const { data: rows } = await admin
+    const { data: rows, error: rowsError, status: rowsStatus } = await admin
       .from('users').select('email, phone').not('phone', 'is', null).not('email', 'is', null)
+    if (rowsError) {
+      if (rowsStatus === 402 || /restricted|egress_quota/i.test(rowsError.message || '')) {
+        return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', error: 'Layanan sementara tidak tersedia.' })
+      }
+      throw rowsError
+    }
     const match = (rows || []).find(r => core(r.phone) === wanted)
     // Pesan generik agar tidak membocorkan apakah nomor terdaftar.
     if (!match) return res.status(401).json({ error: 'Nomor telepon atau kata sandi salah.' })
 
     const anon = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } })
     const { data, error } = await anon.auth.signInWithPassword({ email: match.email, password })
+    if (error?.status === 402 || /restricted|egress_quota/i.test(error?.message || '')) {
+      return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', error: 'Layanan sementara tidak tersedia.' })
+    }
     if (error || !data?.session) return res.status(401).json({ error: 'Nomor telepon atau kata sandi salah.' })
 
     res.setHeader('Cache-Control', 'no-store')

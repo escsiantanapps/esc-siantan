@@ -93,7 +93,7 @@ export default function ClassesPage() {
               <Card glass lift className="overflow-hidden">
                 <div className="relative h-28">
                   {cls.thumbnail_url
-                    ? <img src={cls.thumbnail_url} alt={cls.name} className="w-full h-full object-cover" />
+                    ? <img src={cls.thumbnail_url} alt={cls.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : (
                       <div className="w-full h-full gradient-main flex items-center justify-center">
                         <BookOpen size={34} className="text-white/85" strokeWidth={1.5} />

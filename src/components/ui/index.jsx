@@ -207,7 +207,7 @@ export function Badge({ children, color = 'gray', className = '' }) {
 export function Avatar({ name, src, size = 'md' }) {
   const sizes = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-14 h-14 text-base', xl: 'w-20 h-20 text-xl' }
   const initials = name ? name.trim().split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase() : '?'
-  if (src) return <img src={src} alt={name} className={`${sizes[size]} rounded-full object-cover flex-shrink-0`} />
+  if (src) return <img src={src} alt={name} loading="lazy" decoding="async" className={`${sizes[size]} rounded-full object-cover flex-shrink-0`} />
   return (
     <div className={`${sizes[size]} rounded-full gradient-main flex items-center justify-center text-white font-semibold flex-shrink-0`}>
       {initials}

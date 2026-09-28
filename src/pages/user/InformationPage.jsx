@@ -64,7 +64,7 @@ export default function InformationPage() {
                       <div className="rounded-3xl overflow-hidden ambient-shadow bg-surface active:scale-[0.99] transition-transform">
                         <div className="relative h-36">
                           {item.thumbnail_url
-                            ? <img src={item.thumbnail_url} alt={item.title} className="w-full h-full object-cover" />
+                            ? <img src={item.thumbnail_url} alt={item.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                             : (
                               <div className="w-full h-full gradient-main flex items-center justify-center">
                                 <Bell size={32} className="text-white/85" strokeWidth={1.5} />
@@ -111,7 +111,7 @@ export default function InformationPage() {
                       <div className="rounded-3xl overflow-hidden ambient-shadow bg-surface active:scale-[0.99] transition-transform">
                         <div className="relative h-36">
                           {cls.thumbnail_url
-                            ? <img src={cls.thumbnail_url} alt={cls.name} className="w-full h-full object-cover" />
+                            ? <img src={cls.thumbnail_url} alt={cls.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                             : (
                               <div className="w-full h-full gradient-main flex items-center justify-center">
                                 <BookOpen size={32} className="text-white/85" strokeWidth={1.5} />

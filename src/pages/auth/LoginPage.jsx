@@ -30,8 +30,8 @@ export default function LoginPage() {
       // UserLayout menjadi satu-satunya gerbang roadmap supaya perubahan state
       // auth dan request setting tidak memicu onboarding dua kali.
       navigate('/', { replace: true })
-    } catch {
-      setError(t('auth.loginError'))
+    } catch (err) {
+      setError(t(err?.message === 'SERVICE_UNAVAILABLE' ? 'auth.serviceUnavailable' : 'auth.loginError'))
     } finally {
       setLoading(false)
     }

@@ -30,7 +30,7 @@ export async function startHarness() {
 export async function fixture(harness, options = {}) {
   const state = {
     role: 'Super Admin', allowedPages: ['/admin/events'], permissionFailure: false,
-    templateFailure: false, authenticated: true, lang: 'id', theme: 'light',
+    templateFailure: false, authenticated: true, authRestricted: false, lang: 'id', theme: 'light', event: null,
     template: {
       form_id: 'QA-TASK', title: 'SOP simulasi', description: '', fields_json: [],
       allowed_roles: [], template_ministries: [], active_days: [], weekly_goal: 1,
@@ -57,7 +57,10 @@ export async function fixture(harness, options = {}) {
     // Semua request nonlokal diintersep, termasuk font. Kredensial asli tidak pernah diperlukan.
     if (url.hostname === 'qa-local.supabase.co') {
       requests.push({ path: url.pathname, method: request.method() })
-      if (url.pathname === '/auth/v1/token') return reply({ error: 'invalid_grant', error_description: 'Simulasi sandi salah' }, 400)
+      if (url.pathname === '/auth/v1/token') {
+        if (state.authRestricted) return reply({ message: 'Service restricted: exceed_cached_egress_quota' }, 402)
+        return reply({ error: 'invalid_grant', error_description: 'Simulasi sandi salah' }, 400)
+      }
       if (url.pathname === '/auth/v1/user') return reply(user)
       const table = url.pathname.split('/').at(-1)
       const singular = (request.headers().accept || '').includes('vnd.pgrst.object')
@@ -77,6 +80,7 @@ export async function fixture(harness, options = {}) {
         if (state.templateFailure) return reply({ message: 'Simulasi gangguan SOP' }, 503)
         return rows([state.template])
       }
+      if (table === 'events' && state.event) return rows([state.event])
       return rows([])
     }
     if (url.origin === harness.baseUrl && url.pathname.startsWith('/api/')) return reply({})

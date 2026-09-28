@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight, Image as ImageIcon, Video } from 'lucide-rea
 
 // Galeri media untuk halaman detail Kelas/Event/Informasi.
 // - Foto: carousel yang otomatis berpindah setiap 10 detik (auto-slide).
-// - Video: pemutar autoplay (muted) saat halaman dibuka, tanpa auto-slide.
+// - Video: baru mengambil data setelah pengguna menekan play. Autoplay pernah
+//   menghabiskan kuota Storage meski pengunjung tidak berniat menonton.
 export default function MediaGallery({ photos = [], videos = [] }) {
   const pics = (photos || []).filter(Boolean).slice(0, 5)
   const vids = (videos || []).filter(Boolean).slice(0, 2)
@@ -20,7 +21,7 @@ export default function MediaGallery({ photos = [], videos = [] }) {
           <div className="space-y-3">
             {vids.map((src, i) => (
               <video
-                key={i} src={src} controls autoPlay muted loop playsInline
+                key={i} src={src} controls preload="none" playsInline
                 className="w-full rounded-2xl bg-black"
               />
             ))}
@@ -54,13 +55,11 @@ function PhotoCarousel({ photos }) {
       {/* Tinggi container mengikuti foto aktif — tidak ada rasio paksa.
           object-contain agar foto tidak ter-crop; bg-gray-950 menutup area kosong. */}
       <div className="relative rounded-2xl overflow-hidden ambient-shadow bg-gray-950 min-h-32 max-h-[70vh]">
-        {photos.map((src, i) => (
-          <img
-            key={i} src={src} alt=""
-            className={`w-full max-h-[70vh] object-contain transition-opacity duration-700 ${i === idx ? 'opacity-100 relative' : 'opacity-0 absolute inset-0'}`}
-            draggable="false"
-          />
-        ))}
+        <img
+          key={photos[idx]} src={photos[idx]} alt="" loading="lazy" decoding="async"
+          className="relative w-full max-h-[70vh] object-contain"
+          draggable="false"
+        />
 
         {photos.length > 1 && (
           <>

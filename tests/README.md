@@ -37,9 +37,11 @@ Tes ini memeriksa UI, logika routing, dan penanganan respons service. Role disim
 - Admin hanya membuka halaman yang diizinkan; izin kosong tidak menyebabkan loop redirect; default izin NULL tetap berlaku sesuai perilaku proyek.
 - Admin dengan peran Volunteer masih dapat kembali ke aplikasi.
 - Login: field required, label, toggle sandi melalui keyboard, serta error login.
+- Login membedakan pembatasan layanan Supabase dari kredensial yang salah.
 - Onboarding: klik ganda dan penyelesaian satu kali.
 - Registrasi: validasi field dan fokus kesalahan.
 - Peringkat: poin seri memakai nomor unik dari server, 10 besar tidak bertambah, dan posisi pengguna di luar 10 besar tetap global. Fixture ini tidak mengeksekusi SQL; Migrasi v92 harus diverifikasi setelah dijalankan operator.
+- Galeri media tidak memutar video otomatis dan hanya merender foto yang sedang dilihat untuk menekan penggunaan Storage.
 - Tampilan login mobile/desktop, terang/gelap, id/en dan teks 200%.
 
 Jika tes gagal, baca assertion dan error browser. Sesuaikan locator hanya ketika label UI memang berubah; jangan melonggarkan assertion untuk menutupi bug.

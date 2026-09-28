@@ -118,6 +118,18 @@ test('Login: label, keyboard, validasi wajib, dan pesan gagal tetap berfungsi', 
   })
 })
 
+test('Login: pembatasan server tidak ditampilkan sebagai sandi salah', async () => {
+  await scenario({ authenticated: false, authRestricted: true }, async f => {
+    await f.goto('/login')
+    await f.page.getByLabel('Email atau No. HP').fill('qa@example.invalid')
+    await f.page.locator('input[name="password"]').fill('contoh-sandi')
+    await f.page.getByRole('button', { name: 'Masuk', exact: true }).click()
+    await f.page.getByRole('alert').waitFor()
+    assert.match(await f.page.getByRole('alert').innerText(), /Layanan sedang dibatasi/)
+    assert.equal(await f.page.getByText('Email atau kata sandi salah. Silakan coba lagi.', { exact: true }).count(), 0)
+  })
+})
+
 test('Onboarding: klik ganda tahap ketiga tidak melewati tahap terakhir', async () => {
   await scenario({ authenticated: false }, async f => {
     await f.goto('/onboarding')
@@ -204,5 +216,33 @@ test('Peringkat: poin seri memakai nomor berbeda dari server; posisi sendiri tet
     await ownRow.waitFor()
     assert.equal(await ownRow.getByText('#35', { exact: true }).count(), 1)
     assert.equal(await f.page.getByText(/^Peserta QA \d+$/, { exact: true }).count(), 10)
+  })
+})
+
+test('Galeri media: video tidak mengunduh otomatis dan hanya satu foto dirender', async () => {
+  const photoOne = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="2" height="2"%3E%3Crect width="2" height="2" fill="red"/%3E%3C/svg%3E'
+  const photoTwo = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="2" height="2"%3E%3Crect width="2" height="2" fill="blue"/%3E%3C/svg%3E'
+  await scenario({
+    role: 'Jemaat',
+    event: {
+      event_id: 'EVT-QA', name: 'Event hemat data', status: 'Selesai',
+      event_date: '2026-09-28', photo_urls: [photoOne, photoTwo],
+      video_urls: ['data:video/mp4;base64,', 'data:video/mp4;base64,'],
+      prerequisite_fields: [],
+    },
+  }, async f => {
+    await f.goto('/events/EVT-QA')
+    await f.page.getByRole('heading', { name: 'Event hemat data', exact: true }).waitFor()
+    assert.equal(await f.page.locator('video').count(), 2)
+    for (const video of await f.page.locator('video').all()) {
+      assert.deepEqual(await video.evaluate(el => ({ preload: el.preload, autoplay: el.autoplay, paused: el.paused })), {
+        preload: 'none', autoplay: false, paused: true,
+      })
+    }
+    assert.equal(await f.page.locator('img').count(), 1)
+    assert.equal(await f.page.locator('img').getAttribute('src'), photoOne)
+    await f.page.getByRole('button', { name: 'Berikutnya', exact: true }).click()
+    assert.equal(await f.page.locator('img').count(), 1)
+    assert.equal(await f.page.locator('img').getAttribute('src'), photoTwo)
   })
 })

@@ -17,7 +17,7 @@ export default function EventCarousel({ events = [], interval = 4500 }) {
           <Link to={`/events/${ev.event_id}`} className="block">
             <div className="relative rounded-3xl overflow-hidden ambient-shadow active:scale-[0.99] transition-transform">
               {ev.thumbnail_url
-                ? <img src={ev.thumbnail_url} alt={ev.name} className="w-full h-44 object-cover" />
+                ? <img src={ev.thumbnail_url} alt={ev.name} loading="lazy" decoding="async" className="w-full h-44 object-cover" />
                 : <div className="w-full h-44 gradient-main" />}
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
               <span className="absolute top-3 left-3 bg-surface/90 text-brand-600 text-[11px] font-semibold px-2.5 py-1 rounded-full">
