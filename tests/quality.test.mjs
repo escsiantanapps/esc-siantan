@@ -175,7 +175,7 @@ for (const [lang, theme, width] of [['id', 'light', 390], ['en', 'dark', 375], [
     await scenario({ authenticated: false, lang, theme, viewport: { width, height: width === 844 ? 390 : 900 } }, async f => {
       await f.goto('/login')
       await f.page.getByRole('heading', { name: lang === 'id' ? 'Selamat Datang' : 'Welcome', exact: true }).waitFor()
-      if (width === 1440) await f.page.getByText('Build A Strong Generations', { exact: true }).waitFor()
+      await f.page.getByText('Build A Strong Generations', { exact: true }).waitFor()
       assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
       await f.page.evaluate(() => { document.documentElement.style.fontSize = '32px' })
       assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)

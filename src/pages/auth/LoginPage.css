@@ -27,7 +27,9 @@
 .login-logo { width: 3.5rem; height: 3.5rem; flex-shrink: 0; background: white; border-radius: 1rem; }
 .login-brand-name { overflow-wrap: anywhere; font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; }
 .login-brand-location { font-size: .875rem; margin-top: .25rem; }
-.login-introduction, .login-brand-caption { display: none; }
+.login-introduction { margin-top: 1.25rem; }
+.login-church-name { overflow-wrap: anywhere; font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; line-height: 1.4; }
+.login-brand-description, .login-brand-caption { display: none; }
 .login-form-panel { overflow-wrap: anywhere; min-width: 0; padding: 1.75rem 1.5rem 1rem; }
 .login-form-heading { margin-bottom: 1.75rem; }
 .login-eyebrow { color: var(--color-brand-700); font-size: .875rem; font-weight: 600; margin-bottom: .5rem; }
@@ -44,7 +46,7 @@
   .login-brand { display: flex; flex-direction: column; justify-content: space-between; padding: 3rem; border-radius: 1.7rem 0 0 1.7rem; border-bottom: 0; border-right: 4px solid var(--gradient-1); }
   .login-introduction { display: block; margin: 4rem 0; }
   .login-church-name { overflow-wrap: anywhere; font-family: var(--font-display); font-size: 3.25rem; font-weight: 700; line-height: 1.15; letter-spacing: -.04em; }
-  .login-brand-description { font-size: 1rem; line-height: 1.7; margin-top: 1.5rem; max-width: 20rem; }
+  .login-brand-description { display: block; font-size: 1rem; line-height: 1.7; margin-top: 1.5rem; max-width: 20rem; }
   .login-brand-caption { display: block; font-size: .875rem; font-weight: 500; }
   .login-form-panel { padding: 3rem; }
 }

@@ -86,3 +86,12 @@ Setelah migrasi dan deploy:
 ## Status akhir
 
 `npm run check` selesai dengan exit 0 setelah koreksi ukuran tombol: lint lulus, **21/21 tes lulus**, dan build + generateSW PWA berhasil. `git diff --check` juga lulus. Peringatan bundle dan enam temuan audit dependensi tetap dicatat sebagai pekerjaan tersisa di atas. Hasil deploy dan CI GitHub dicatat terpisah dalam laporan rilis setelah push. SQL belum dieksekusi oleh pengujian lokal; operator menjalankan v92 secara manual.
+
+
+## Verifikasi rilis dan koreksi HP — 28 September 2026
+
+Commit `3533d3d` sudah di-push ke master; Vercel sukses dan workflow GitHub Actions `36328451094` lulus. Pemeriksaan login production pada lebar 390/1440 piksel menerima HTTP 200, tanpa error JavaScript atau overflow. Namun pemeriksaan slogan gagal pada 390 piksel: CSS menyembunyikan seluruh pengantar di HP.
+
+Koreksi lanjutan menampilkan slogan ringkas di HP; deskripsi panjang tetap khusus desktop. Tes layout sekarang mewajibkan slogan terlihat di keempat kombinasi ukuran/tema/bahasa. File koreksi: `src/pages/auth/LoginPage.css`, `tests/quality.test.mjs`, dan laporan ini. Migrasi v92 tetap perlu dijalankan operator; belum ada konfirmasi eksekusinya.
+
+Verifikasi koreksi HP: lint lulus, 21/21 tes lulus, build PWA exit 0. Screenshot lokal 390 piksel ditinjau: slogan terlihat, tidak ada overflow atau error JavaScript. Peringatan build lama tetap ada.
