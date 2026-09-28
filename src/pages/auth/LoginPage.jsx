@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { UserRound, LockKeyhole, Eye, EyeOff, ArrowRight } from 'lucide-react'
-import { Button, Input, Checkbox } from '@/components/ui'
+import { Button, Input, Checkbox, ThemeToggle } from '@/components/ui'
 import './LoginPage.css'
 
 const REMEMBER_KEY = 'esc-remember-email'
@@ -41,12 +41,15 @@ export default function LoginPage() {
     <main className="login-page">
       <div className="login-shell">
         <header className="login-brand">
-          <div className="login-wordmark">
-            <img src="/icons/icon-192.png" alt="" width="56" height="56" className="login-logo" />
-            <div>
-              <p className="login-brand-name">{t('auth.brandName')}</p>
-              <p className="login-brand-location">{t('auth.brandLocation')}</p>
+          <div className="login-brand-toolbar">
+            <div className="login-wordmark">
+              <img src="/icons/icon-192.png" alt="" width="56" height="56" className="login-logo" />
+              <div>
+                <p className="login-brand-name">{t('auth.brandName')}</p>
+                <p className="login-brand-location">{t('auth.brandLocation')}</p>
+              </div>
             </div>
+            <ThemeToggle className="login-theme-toggle" ariaLabel={t('settings.darkMode')} title={t('settings.darkMode')} />
           </div>
           <div className="login-introduction">
             <p className="login-church-name">{t('auth.churchName')}</p>
@@ -104,7 +107,6 @@ export default function LoginPage() {
           <div className="login-registration">
             <span className="text-sm text-gray-600">{t('auth.noAccount')}</span>
             <Link to="/register" className="login-link font-semibold">{t('auth.registerNow')} <ArrowRight size={16} aria-hidden="true" /></Link>
-            <Link to="/aktivasi" className="login-link font-semibold">{t('reg.activateSubmit')} <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
           <footer className="login-footer">
             <Link to="/kebijakan-privasi" className="inline-flex min-h-11 items-center text-sm text-gray-600 hover:underline">{t('auth.privacyPolicy')}</Link>

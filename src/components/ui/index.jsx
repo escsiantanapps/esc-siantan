@@ -312,13 +312,13 @@ export function GradientHeader({ title, subtitle, back, children, wave = true })
 }
 
 // ─── Theme Toggle ────────────────────────────────────────
-export function ThemeToggle({ className = '' }) {
+export function ThemeToggle({ className = '', ariaLabel = 'Ganti tema', title }) {
   const { theme, toggleTheme } = useTheme()
   return (
     <button
       onClick={toggleTheme}
-      aria-label="Ganti tema"
-      title={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}
+      aria-label={ariaLabel}
+      title={title || (theme === 'dark' ? 'Mode terang' : 'Mode gelap')}
       className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 ${className || 'bg-control text-gray-600 hover:bg-control-hover'}`}
     >
       {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}

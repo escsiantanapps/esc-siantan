@@ -10,7 +10,17 @@ function core(p) {
 
 export default async function handler(req, res) {
   try {
+    if (req.method === 'OPTIONS') return res.status(204).end()
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    // Sinkronisasi email berbagi entrypoint ini agar deployment tetap berada
+    // dalam batas 12 fungsi Vercel Hobby; handler tetap memverifikasi Super Admin.
+    if (body.action === 'update-email') {
+      const { default: updateEmail } = await import('./_lib/update-user-email.js')
+      return updateEmail(req, res)
+    }
+
     const { checkRateLimit } = await import('./_lib/rate-limit.js')
     // Rate limit ketat: 5/menit — mempersulit enumeration daftar jemaat.
     if (checkRateLimit(req, res, { endpoint: 'check-phone', max: 5 })) return
@@ -19,7 +29,6 @@ export default async function handler(req, res) {
     const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Konfigurasi server belum lengkap.' })
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const wanted = core(body.phone)
     const email = String(body.email || '').trim().toLowerCase()
     if (!wanted) return res.status(400).json({ error: 'Nomor telepon wajib diisi.' })
@@ -42,15 +51,12 @@ export default async function handler(req, res) {
       : null
     const phoneTaken = !!phoneRow
     const emailTaken = !!emailRow
-    // needsActivation: nomor cocok dgn baris jemaat lama yang BELUM punya login
-    // (auth_id NULL). Alur Daftar mengarahkan ke aktivasi yang meminta email
-    // asli + OTP WhatsApp; endpoint aktivasi tidak pernah membuat email sintetis.
-    const needsActivation = !!(phoneRow && !phoneRow.auth_id)
+
     // hasLogin: nomor ATAU email sudah tertaut akun login (auth_id) → arahkan ke Masuk.
     const hasLogin = !!((phoneRow && phoneRow.auth_id) || (emailRow && emailRow.auth_id))
     // `available` dipertahankan (= ketersediaan NOMOR) demi kompatibilitas
     // pemanggil lama (usersService "Tambah Jemaat"). Flag baru granular.
-    return res.status(200).json({ available: !phoneTaken, phoneTaken, emailTaken, needsActivation, hasLogin })
+    return res.status(200).json({ available: !phoneTaken, phoneTaken, emailTaken, hasLogin })
   } catch (e) {
     console.error('[check-phone]', e)
     return res.status(500).json({ error: 'Terjadi kesalahan internal.' })

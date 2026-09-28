@@ -181,6 +181,19 @@ test('Login: pembatasan server tidak ditampilkan sebagai sandi salah', async () 
   })
 })
 
+test('Login: tema dapat diubah dan pilihan tersimpan', async () => {
+  await scenario({ authenticated: false, theme: 'light' }, async f => {
+    await f.goto('/login')
+    const toggle = f.page.getByRole('button', { name: 'Mode Gelap', exact: true })
+    assert.equal(await toggle.evaluate(el => el.getBoundingClientRect().height >= 44), true)
+    assert.equal(await f.page.locator('html').evaluate(el => el.classList.contains('dark')), false)
+    await toggle.click()
+    assert.equal(await f.page.locator('html').evaluate(el => el.classList.contains('dark')), true)
+    assert.equal(await f.page.evaluate(() => localStorage.getItem('esc-theme')), 'dark')
+    assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+  })
+})
+
 test('Onboarding: klik ganda tahap ketiga tidak melewati tahap terakhir', async () => {
   await scenario({ authenticated: false }, async f => {
     await f.goto('/onboarding')
@@ -207,8 +220,8 @@ test('Registrasi: data invalid ditahan dengan fokus dan error dekat field', asyn
   })
 })
 
-test('Registrasi: profil lama tanpa login diarahkan ke aktivasi sebelum biodata lanjutan', async () => {
-  await scenario({ authenticated: false, checkPhone: { needsActivation: true, phoneTaken: true } }, async f => {
+test('Registrasi: profil lama tanpa login tetap ditolak sebagai nomor terdaftar', async () => {
+  await scenario({ authenticated: false, checkPhone: { phoneTaken: true } }, async f => {
     await f.goto('/register')
     await f.page.locator('input[name=name]').fill('Jemaat Lama')
     await f.page.locator('input[name=email]').fill('jemaat.lama@example.com')
@@ -216,23 +229,18 @@ test('Registrasi: profil lama tanpa login diarahkan ke aktivasi sebelum biodata 
     await f.page.locator('input[name=password]').fill('Generasi2026')
     await f.page.locator('input[name=confirmPassword]').fill('Generasi2026')
     await f.page.getByRole('button', { name: 'Lanjut →', exact: true }).click()
-    await f.page.waitForURL('**/aktivasi')
-    assert.equal(await f.page.locator('input[name=email]').inputValue(), 'jemaat.lama@example.com')
-    assert.equal(await f.page.locator('input[name=phone]').inputValue(), '081234567890')
+    await f.page.getByRole('alert').waitFor()
+    assert.equal(new URL(f.page.url()).pathname, '/register')
+    assert.match(await f.page.getByRole('alert').innerText(), /Nomor HP sudah terdaftar/)
+    assert.equal(await f.page.locator('select[name=gender]').count(), 0)
   })
 })
 
-test('Aktivasi: email asli dan nomor WhatsApp wajib sebelum meminta OTP', async () => {
-  await scenario({ authenticated: false, viewport: { width: 390, height: 844 } }, async f => {
+test('Aktivasi: rute dan tautan telah dihapus', async () => {
+  await scenario({ authenticated: false }, async f => {
     await f.goto('/aktivasi')
-    await f.page.getByRole('heading', { name: 'Verifikasi & Aktifkan', exact: true }).waitFor()
-    const phone = f.page.locator('input[name=phone]')
-    const email = f.page.locator('input[name=email]')
-    assert.equal(await phone.getAttribute('required'), '')
-    assert.equal(await email.getAttribute('required'), '')
-    assert.equal(await email.getAttribute('type'), 'email')
-    assert.equal((await f.page.locator('body').innerText()).includes('@wa.esc-siantan.app'), false)
-    assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+    await f.page.waitForURL('**/login')
+    assert.equal(await f.page.locator('a[href="/aktivasi"]').count(), 0)
   })
 })
 

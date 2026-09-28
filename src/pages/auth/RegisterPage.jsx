@@ -71,10 +71,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       const check = await postJson('/api/check-phone', { phone: form.phone, email: form.email }).catch(() => null)
-      if (check?.needsActivation) {
-        navigate('/aktivasi', { state: { phone: form.phone, email: form.email } })
-        return
-      }
+
       if (check?.hasLogin || check?.phoneTaken) {
         setError(t('auth.phoneTaken'))
         return
@@ -139,10 +136,7 @@ export default function RegisterPage() {
         // Cek nomor/email sebelum membuat akun agar foto tidak diproses untuk data duplikat.
         const chk = await postJson('/api/check-phone', { phone: form.phone, email: form.email }).catch(() => null)
 
-        if (chk?.needsActivation) {
-          navigate('/aktivasi', { state: { phone: form.phone, email: form.email } })
-          return
-        }
+
         if (chk?.hasLogin || chk?.phoneTaken) {
           setError(t('auth.phoneTaken'))
           setStep(1)

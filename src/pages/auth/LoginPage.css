@@ -23,7 +23,18 @@
   background: var(--color-primary-deeper);
   border-bottom: 4px solid var(--gradient-1);
 }
+.login-brand-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .login-wordmark { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.login-theme-toggle {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  color: white;
+  background: rgb(255 255 255 / .14);
+  border: 1px solid rgb(255 255 255 / .28);
+}
+.login-theme-toggle:hover { background: rgb(255 255 255 / .24); }
+.login-theme-toggle:focus-visible { outline: 2px solid white; outline-offset: 3px; }
 .login-logo { width: 3.5rem; height: 3.5rem; flex-shrink: 0; background: white; border-radius: 1rem; }
 .login-brand-name { overflow-wrap: anywhere; font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; }
 .login-brand-location { font-size: .875rem; margin-top: .25rem; }

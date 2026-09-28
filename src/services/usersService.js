@@ -160,13 +160,13 @@ export const usersService = {
     const { data: { session: freshSession } } = await supabase.auth.getSession()
     if (!freshSession) throw new Error('Sesi tidak ditemukan setelah refresh.')
 
-    const res = await fetchApi('/api/update-user-email', {
+    const res = await fetchApi('/api/check-phone', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${freshSession.access_token}`,
       },
-      body: JSON.stringify({ userId, email }),
+      body: JSON.stringify({ action: 'update-email', userId, email }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Gagal memperbarui email akun.')

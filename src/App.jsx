@@ -17,7 +17,6 @@ import PrivacyPolicyPage from '@/pages/PrivacyPolicyPage'
 // Auth
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
-import ActivatePage from '@/pages/auth/ActivatePage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import AccountStatusPage from '@/pages/auth/AccountStatusPage'
@@ -150,7 +149,6 @@ export default function App() {
           <Route path="/kebijakan-privasi" element={<PrivacyPolicyPage />} />
           <Route path="/login"          element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register"       element={<PublicRoute><RegisterPage /></PublicRoute>} />
-          <Route path="/aktivasi"       element={<PublicRoute><ActivatePage /></PublicRoute>} />
           <Route path="/lupa-password"  element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
