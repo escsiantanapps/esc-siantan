@@ -32,6 +32,16 @@ export async function fetchApi(path, options = {}) {
   return fetch(`${API_BASE}${path}`, options)
 }
 
+// Email ini hanya identitas internal akun lama yang diaktifkan lewat nomor HP.
+// Jangan tampilkan sebagai alamat kontak atau masukkan kembali ke form biodata.
+export function isSyntheticLoginEmail(email) {
+  return String(email || '').trim().toLowerCase().endsWith('@wa.esc-siantan.app')
+}
+
+export function displayEmail(email, fallback = '-') {
+  return email && !isSyntheticLoginEmail(email) ? email : fallback
+}
+
 // Konversi serial Excel ke tanggal (dari database lama)
 export function excelSerialToDate(serial) {
   if (!serial || isNaN(serial)) return null

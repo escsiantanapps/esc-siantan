@@ -57,7 +57,7 @@ export default function RegisterPage() {
     return errors
   }
 
-  function nextAccount(e) {
+  async function nextAccount(e) {
     e.preventDefault()
     const errors = accountErrors()
     setFieldErrors(errors)
@@ -67,7 +67,26 @@ export default function RegisterPage() {
       e.currentTarget.elements.namedItem(firstInvalid)?.focus()
       return
     }
-    setStep(2)
+
+    setLoading(true)
+    try {
+      const check = await postJson('/api/check-phone', { phone: form.phone, email: form.email }).catch(() => null)
+      if (check?.needsActivation) {
+        navigate('/aktivasi', { state: { phone: form.phone, email: form.email } })
+        return
+      }
+      if (check?.hasLogin || check?.phoneTaken) {
+        setError(t('auth.phoneTaken'))
+        return
+      }
+      if (check?.emailTaken) {
+        setError(t('auth.emailTaken'))
+        return
+      }
+      setStep(2)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function beforePhoto(file) {
@@ -120,7 +139,11 @@ export default function RegisterPage() {
         // Cek nomor/email sebelum membuat akun agar foto tidak diproses untuk data duplikat.
         const chk = await postJson('/api/check-phone', { phone: form.phone, email: form.email }).catch(() => null)
 
-        if (chk?.needsActivation || chk?.hasLogin || chk?.phoneTaken) {
+        if (chk?.needsActivation) {
+          navigate('/aktivasi', { state: { phone: form.phone, email: form.email } })
+          return
+        }
+        if (chk?.hasLogin || chk?.phoneTaken) {
           setError(t('auth.phoneTaken'))
           setStep(1)
           return
@@ -210,7 +233,7 @@ export default function RegisterPage() {
               <Input name="phone" label={t('auth.phone')} type="tel" required autoComplete="tel" error={fieldErrors.phone && t(fieldErrors.phone)} placeholder={t('auth.phonePlaceholder')} value={form.phone} onChange={e => set('phone', e.target.value)} />
               <Input name="password" label={t('auth.password')} type="password" required autoComplete="new-password" error={fieldErrors.password && t(fieldErrors.password)} placeholder={t('auth.passwordMin8')} value={form.password} onChange={e => set('password', e.target.value)} />
               <Input name="confirmPassword" label={t('auth.repeatPassword')} type="password" required autoComplete="new-password" error={fieldErrors.confirmPassword && t(fieldErrors.confirmPassword)} placeholder={t('auth.repeatPasswordPh')} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} />
-              <Button type="submit" className="w-full mt-2" size="lg">{t('auth.next')}</Button>
+              <Button type="submit" loading={loading} className="w-full mt-2" size="lg">{t('auth.next')}</Button>
             </form>
           )}
 

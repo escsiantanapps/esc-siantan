@@ -151,6 +151,28 @@ export const usersService = {
     }
   },
 
+  // Email akun login harus diubah melalui backend agar public.users dan
+  // Supabase Auth selalu sama. Endpoint hanya menerima Super Admin.
+  async updateLoginEmail(userId, email) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('Sesi tidak ditemukan.')
+    await supabase.auth.getUser()
+    const { data: { session: freshSession } } = await supabase.auth.getSession()
+    if (!freshSession) throw new Error('Sesi tidak ditemukan setelah refresh.')
+
+    const res = await fetchApi('/api/update-user-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${freshSession.access_token}`,
+      },
+      body: JSON.stringify({ userId, email }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Gagal memperbarui email akun.')
+    return data
+  },
+
   // Selaraskan ministry seorang user dengan daftar id yang diinginkan.
   async setUserMinistries(userId, ids = []) {
     const { data: existing } = await supabase

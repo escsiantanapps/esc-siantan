@@ -83,7 +83,10 @@ export async function fixture(harness, options = {}) {
       if (table === 'events' && state.event) return rows([state.event])
       return rows([])
     }
-    if (url.origin === harness.baseUrl && url.pathname.startsWith('/api/')) return reply({})
+    if (url.origin === harness.baseUrl && url.pathname.startsWith('/api/')) {
+      if (url.pathname === '/api/check-phone') return reply(state.checkPhone || {})
+      return reply({})
+    }
     if (!['fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname)) unexpected.push(url.hostname)
     return route.abort()
   })

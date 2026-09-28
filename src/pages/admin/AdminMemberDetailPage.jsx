@@ -11,7 +11,7 @@ import { mediaService } from '@/services/contentService'
 import { Card, Avatar, Select, Textarea, Input, Button, Spinner, Checkbox, EmptyState, StatusBadge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import MembershipCard from '@/components/MembershipCard'
-import { formatDate, formatPhone, hitungUmur, validateUpload } from '@/lib/utils'
+import { displayEmail, formatDate, formatPhone, hitungUmur, isSyntheticLoginEmail, validateUpload } from '@/lib/utils'
 
 export default function AdminMemberDetailPage() {
   const { id } = useParams()
@@ -22,6 +22,7 @@ export default function AdminMemberDetailPage() {
   const isGembala = profile?.role === 'Gembala'
   const isSuperAdmin = profile?.role === 'Super Admin'
   const canEditRole = ['Admin', 'Super Admin'].includes(profile?.role)
+  const canEditBiodata = isSuperAdmin
 
   const [member, setMember] = useState(null)
   const [ministries, setMinistries] = useState([])
@@ -67,7 +68,7 @@ export default function AdminMemberDetailPage() {
         ministry_ids: data.ministry_ids || [],
         name: data.name || '',
         phone: data.phone || '',
-        email: data.email || '',
+        email: isSyntheticLoginEmail(data.email) ? '' : (data.email || ''),
         gender: data.gender || '',
         birth_date: data.birth_date || '',
         birth_place: data.birth_place || '',
@@ -107,13 +108,20 @@ export default function AdminMemberDetailPage() {
       // diubah Super Admin — tidak dikirim sama sekali oleh Admin biasa agar
       // tidak menimpa data terbaru (race) dan ditegakkan ulang di server
       // (trigger guard_biodata_admin_edit).
-      const biodata = canEditRole ? {
-        name, phone, email: email || null,
+      const biodata = canEditBiodata ? {
+        name, phone,
         gender: gender || null, birth_date: birth_date || null, birth_place: birth_place || null,
         address: address || null, blood_type: blood_type || null,
         social_media: social_media || null,
       } : {}
-      const updated = await usersService.update(id, {
+      const currentEmail = isSyntheticLoginEmail(member.email) ? '' : String(member.email || '').trim().toLowerCase()
+      const nextEmail = String(email || '').trim().toLowerCase()
+      if (nextEmail !== currentEmail) {
+        if (!nextEmail) throw new Error(t('auth.emailInvalid'))
+        await usersService.updateLoginEmail(id, nextEmail)
+      }
+
+      await usersService.update(id, {
         ...rest,
         ...biodata,
         membership_card_url: membership_card_url || null,
@@ -123,7 +131,12 @@ export default function AdminMemberDetailPage() {
         komsel_id: rest.komsel_id || null,
       })
       if (isSuperAdmin) await sensitiveIdentityService.setNik('user', id, nik)
+      const updated = await usersService.getById(id)
       setMember(updated)
+      setForm(current => ({
+        ...current,
+        email: isSyntheticLoginEmail(updated.email) ? '' : (updated.email || ''),
+      }))
       setSuccess('Perubahan tersimpan.')
       toast.success('Perubahan tersimpan.')
     } catch (err) {
@@ -285,7 +298,7 @@ export default function AdminMemberDetailPage() {
           <Avatar name={member.name} src={member.photo_url} size="xl" />
           <div className="min-w-0">
             <p className="text-base font-semibold text-gray-900">{member.name}</p>
-            <p className="text-sm text-gray-400">{member.email || '-'}</p>
+            <p className="text-sm text-gray-400">{displayEmail(member.email)}</p>
             <p className="text-sm text-gray-400">{formatPhone(member.phone)}</p>
             {member.nij && (
               <p className="text-xs font-mono font-semibold text-brand-600 mt-0.5">NIJ: {member.nij}</p>
@@ -293,7 +306,7 @@ export default function AdminMemberDetailPage() {
           </div>
         </div>
 
-        {canEditRole ? (
+        {canEditBiodata ? (
           <div className="mt-4 space-y-3">
             <p className="text-xs text-gray-400">
               Biodata jemaat hanya dapat diubah oleh Super Admin.

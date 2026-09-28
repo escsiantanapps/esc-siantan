@@ -104,6 +104,7 @@ export default function LoginPage() {
           <div className="login-registration">
             <span className="text-sm text-gray-600">{t('auth.noAccount')}</span>
             <Link to="/register" className="login-link font-semibold">{t('auth.registerNow')} <ArrowRight size={16} aria-hidden="true" /></Link>
+            <Link to="/aktivasi" className="login-link font-semibold">{t('reg.activateSubmit')} <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
           <footer className="login-footer">
             <Link to="/kebijakan-privasi" className="inline-flex min-h-11 items-center text-sm text-gray-600 hover:underline">{t('auth.privacyPolicy')}</Link>

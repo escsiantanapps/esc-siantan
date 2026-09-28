@@ -5280,3 +5280,23 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION get_points_leaderboard_with_me(INT) TO authenticated;
+
+-- ── Migrasi v93: Pulihkan OTP aktivasi dengan email asli wajib ──────────
+-- TEMUAN (2026-09-28): activation_otp dihapus pada v67 bersama alur aktivasi,
+-- sehingga profil jemaat buatan Admin (auth_id NULL) tidak memiliki jalur aman
+-- untuk membuat akun login. Implementasi lama juga pernah membuat email internal
+-- nomor@wa.esc-siantan.app ketika profil belum memiliki email.
+-- KEPUTUSAN OPERATOR: pulihkan aktivasi melalui OTP WhatsApp, tetapi pengguna
+-- wajib mendaftarkan email asli. Tabel ini hanya boleh diakses endpoint serverless
+-- dengan service role; anon dan authenticated tidak mendapat akses langsung.
+CREATE TABLE IF NOT EXISTS activation_otp (
+  phone      TEXT PRIMARY KEY,
+  code_hash  TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts   INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE activation_otp ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE activation_otp FROM anon, authenticated;
+CREATE INDEX IF NOT EXISTS activation_otp_expires_idx ON activation_otp (expires_at);

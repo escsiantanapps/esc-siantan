@@ -8,7 +8,7 @@ import { usersService } from '@/services/usersService'
 import { Card, Badge, StatusBadge, Spinner } from '@/components/ui'
 import SkyTime from '@/components/SkyTime'
 import MembershipCard from '@/components/MembershipCard'
-import { formatDate, hitungUmur, formatPhone } from '@/lib/utils'
+import { displayEmail, formatDate, hitungUmur, formatPhone } from '@/lib/utils'
 
 export default function ProfilePage() {
   const { profile, logout, isAdmin, isPKS, isGembala } = useAuth()
@@ -48,7 +48,7 @@ export default function ProfilePage() {
     : profile.gender === 'Perempuan' ? t('gender.female') : profile.gender
 
   const info = [
-    { icon: Mail, label: t('profile.email'), value: profile.email },
+    { icon: Mail, label: t('profile.email'), value: displayEmail(profile.email) },
     { icon: Phone, label: t('profile.phone'), value: formatPhone(profile.phone) },
     { icon: Cake, label: t('profile.birthDate'), value: profile.birth_date ? `${formatDate(profile.birth_date)} (${hitungUmur(profile.birth_date)})` : '-' },
     { icon: MapPin, label: t('profile.birthPlace'), value: profile.birth_place || '-' },
@@ -74,7 +74,7 @@ export default function ProfilePage() {
 
         <div className="mt-3">
           <h1 className="text-xl font-bold text-gray-900">{profile.name}</h1>
-          <p className="text-sm text-gray-500">{profile.username ? `@${profile.username}` : profile.email}</p>
+          <p className="text-sm text-gray-500">{profile.username ? `@${profile.username}` : displayEmail(profile.email, formatPhone(profile.phone))}</p>
           <div className="flex items-center gap-2 mt-2 mb-3">
             <Badge color="gray">{profile.role}</Badge>
             <StatusBadge status={profile.status} />

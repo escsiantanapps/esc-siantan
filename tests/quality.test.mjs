@@ -2,6 +2,7 @@ import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { startHarness, fixture } from './harness.mjs'
 import { countLeaveCredits, getEvaluationResult } from '../src/lib/evaluationLeave.js'
+import { displayEmail, isSyntheticLoginEmail } from '../src/lib/utils.js'
 
 let harness
 before(async () => { harness = await startHarness() })
@@ -56,6 +57,13 @@ test('Evaluasi: setiap izin disetujui dihitung satu dan hanya untuk form terkait
   assert.deepEqual(getEvaluationResult({ filled: 0, leaveCount: 1, target: 1 }), {
     counted: 1, minLulus: 1, status: 'TERPENUHI',
   })
+})
+
+test('Email login internal tidak ditampilkan sebagai alamat kontak', () => {
+  assert.equal(isSyntheticLoginEmail('85123507610@wa.esc-siantan.app'), true)
+  assert.equal(isSyntheticLoginEmail('jemaat@example.com'), false)
+  assert.equal(displayEmail('85123507610@wa.esc-siantan.app'), '-')
+  assert.equal(displayEmail('jemaat@example.com'), 'jemaat@example.com')
 })
 
 test('Super Admin: formulir SOP baru dapat dibuka tanpa crash', { timeout: 30000 }, async () => {
@@ -196,6 +204,35 @@ test('Registrasi: data invalid ditahan dengan fokus dan error dekat field', asyn
     assert.equal(await f.page.locator('input[aria-invalid=true]').count(), 5)
     assert.equal(await f.page.locator('input[name=name]').evaluate(el => el === document.activeElement), true)
     assert.equal(f.requests.some(r => r.path.includes('/signup')), false)
+  })
+})
+
+test('Registrasi: profil lama tanpa login diarahkan ke aktivasi sebelum biodata lanjutan', async () => {
+  await scenario({ authenticated: false, checkPhone: { needsActivation: true, phoneTaken: true } }, async f => {
+    await f.goto('/register')
+    await f.page.locator('input[name=name]').fill('Jemaat Lama')
+    await f.page.locator('input[name=email]').fill('jemaat.lama@example.com')
+    await f.page.locator('input[name=phone]').fill('081234567890')
+    await f.page.locator('input[name=password]').fill('Generasi2026')
+    await f.page.locator('input[name=confirmPassword]').fill('Generasi2026')
+    await f.page.getByRole('button', { name: 'Lanjut →', exact: true }).click()
+    await f.page.waitForURL('**/aktivasi')
+    assert.equal(await f.page.locator('input[name=email]').inputValue(), 'jemaat.lama@example.com')
+    assert.equal(await f.page.locator('input[name=phone]').inputValue(), '081234567890')
+  })
+})
+
+test('Aktivasi: email asli dan nomor WhatsApp wajib sebelum meminta OTP', async () => {
+  await scenario({ authenticated: false, viewport: { width: 390, height: 844 } }, async f => {
+    await f.goto('/aktivasi')
+    await f.page.getByRole('heading', { name: 'Verifikasi & Aktifkan', exact: true }).waitFor()
+    const phone = f.page.locator('input[name=phone]')
+    const email = f.page.locator('input[name=email]')
+    assert.equal(await phone.getAttribute('required'), '')
+    assert.equal(await email.getAttribute('required'), '')
+    assert.equal(await email.getAttribute('type'), 'email')
+    assert.equal((await f.page.locator('body').innerText()).includes('@wa.esc-siantan.app'), false)
+    assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
   })
 })
 

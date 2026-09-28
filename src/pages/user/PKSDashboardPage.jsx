@@ -13,7 +13,7 @@ import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, 
 import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
-import { formatDate, formatRupiah, formatPhone, hitungUmur, validateUpload, compressImage } from '@/lib/utils'
+import { displayEmail, formatDate, formatRupiah, formatPhone, hitungUmur, validateUpload, compressImage } from '@/lib/utils'
 
 // Urutan tampil rincian SOP: yang terpenuhi dulu, lalu proses, lalu kosong.
 const STATUS_RANK = { TERPENUHI: 0, PROSES: 1, KOSONG: 2, IZIN: 3 }
@@ -931,7 +931,7 @@ export default function PKSDashboardPage() {
               </div>
               <div>
                 <p className="text-xs text-gray-400">{t('pks.detailEmail')}</p>
-                <p className="text-gray-700 truncate">{memberDetail.email || '-'}</p>
+                <p className="text-gray-700 truncate">{displayEmail(memberDetail.email)}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-400">{t('pks.detailGender')}</p>

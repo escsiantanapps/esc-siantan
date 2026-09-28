@@ -43,8 +43,8 @@ export default async function handler(req, res) {
     const phoneTaken = !!phoneRow
     const emailTaken = !!emailRow
     // needsActivation: nomor cocok dgn baris jemaat lama yang BELUM punya login
-    // (auth_id NULL) — jemaat impor/tambahan admin. Alur Daftar mengarahkan
-    // mereka ke verifikasi OTP WhatsApp (aktivasi), bukan membuat akun ganda.
+    // (auth_id NULL). Alur Daftar mengarahkan ke aktivasi yang meminta email
+    // asli + OTP WhatsApp; endpoint aktivasi tidak pernah membuat email sintetis.
     const needsActivation = !!(phoneRow && !phoneRow.auth_id)
     // hasLogin: nomor ATAU email sudah tertaut akun login (auth_id) → arahkan ke Masuk.
     const hasLogin = !!((phoneRow && phoneRow.auth_id) || (emailRow && emailRow.auth_id))
