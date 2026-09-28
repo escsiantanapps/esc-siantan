@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { countLeaveCredits, getEvaluationResult, toWibDateKey } from '@/lib/evaluationLeave'
 import { canAccessTemplate, tasksService } from '@/services/tasksService'
 
 export const evaluationService = {
@@ -6,12 +7,6 @@ export const evaluationService = {
   periodsInRange(startDate, endDate, period) {
     const diffDays = Math.max(1, Math.round((endDate - startDate) / 86400000) + 1)
     return period === 'bulan' ? Math.max(1, Math.ceil(diffDays / 30)) : Math.max(1, Math.ceil(diffDays / 7))
-  },
-
-  computeStatus(filled, target) {
-    if (filled <= 0) return 'KOSONG'
-    const minLulus = Math.max(1, Math.round(target * 0.8))
-    return filled >= minLulus ? 'TERPENUHI' : 'PROSES'
   },
 
   // baris evaluasi: user x form_template yang relevan untuknya
@@ -91,17 +86,22 @@ export const evaluationService = {
       }
     }
 
-    // Anggota dengan izin DISETUJUI yang beririsan dengan periode evaluasi →
-    // baris di bawah target ditandai "IZIN" (bukan "KOSONG"/"PROSES").
-    let leaveUserIds = new Set()
+    // Simpan tanggal dan form izin. Satu izin parsial tidak boleh mengubah semua
+    // form dan seluruh rentang evaluasi menjadi "IZIN".
+    let leavesByUser = new Map()
     if (userIds.length) {
       const { data: leaves } = await supabase.from('task_leaves')
-        .select('user_id')
+        .select('user_id, form_id, start_date, end_date')
         .eq('status', 'Disetujui')
         .in('user_id', userIds)
-        .lte('start_date', String(endDate).slice(0, 10))
-        .gte('end_date', String(startDate).slice(0, 10))
-      leaveUserIds = new Set((leaves || []).map(r => r.user_id))
+        .lte('start_date', toWibDateKey(endDate))
+        .gte('end_date', toWibDateKey(startDate))
+      leavesByUser = (leaves || []).reduce((map, leave) => {
+        const current = map.get(leave.user_id) || []
+        current.push(leave)
+        map.set(leave.user_id, current)
+        return map
+      }, new Map())
     }
 
     const start = new Date(startDate), end = new Date(endDate)
@@ -115,12 +115,18 @@ export const evaluationService = {
         // TIDAK di ministry yang dibatasi form → tidak muncul).
         if (!canAccessTemplate(t, u, { strict: true })) continue
         const filled = responses.filter(r => r.volunteer_id === u.user_id && r.form_id === t.form_id).length
+        const leaveCount = countLeaveCredits({
+          startDate: start,
+          endDate: end,
+          leaves: leavesByUser.get(u.user_id) || [],
+          formId: t.form_id,
+        })
         const periods = this.periodsInRange(start, end, t.period)
         const target = (t.weekly_goal || 1) * periods
-        const minLulus = Math.max(1, Math.round(target * 0.8))
-        let status = this.computeStatus(filled, target)
-        if (status !== 'TERPENUHI' && leaveUserIds.has(u.user_id)) status = 'IZIN'
-        rows.push({ user: u, form: t, filled, target, minLulus, status })
+        const { counted, minLulus, status } = getEvaluationResult({ filled, target, leaveCount })
+        rows.push({
+          user: u, form: t, filled, leaveCount, counted, target, minLulus, status,
+        })
       }
     }
     return rows

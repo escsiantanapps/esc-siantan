@@ -1,6 +1,7 @@
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { startHarness, fixture } from './harness.mjs'
+import { countLeaveCredits, getEvaluationResult } from '../src/lib/evaluationLeave.js'
 
 let harness
 before(async () => { harness = await startHarness() })
@@ -14,6 +15,48 @@ async function scenario(options, action) {
     assert.deepEqual(f.unexpected, [], 'Tidak boleh menghubungi backend selain fixture')
   } finally { await f.close() }
 }
+
+test('Evaluasi: setiap izin disetujui dihitung satu dan hanya untuk form terkait', () => {
+  const common = {
+    startDate: '2026-09-01', endDate: '2026-09-21',
+    formId: 'FORM-A',
+  }
+
+  assert.equal(countLeaveCredits({
+    ...common,
+    leaves: [{ form_id: 'FORM-A', start_date: '2026-09-05', end_date: '2026-09-07' }],
+  }), 1)
+
+  assert.equal(countLeaveCredits({
+    ...common,
+    leaves: [
+      { form_id: 'FORM-A', start_date: '2026-09-01', end_date: '2026-09-02' },
+      { form_id: 'FORM-A', start_date: '2026-09-10', end_date: '2026-09-12' },
+    ],
+  }), 2)
+
+  assert.equal(countLeaveCredits({
+    ...common,
+    leaves: [{ form_id: 'FORM-B', start_date: '2026-09-01', end_date: '2026-09-21' }],
+  }), 0)
+
+  assert.equal(countLeaveCredits({
+    ...common,
+    leaves: [{ form_id: null, start_date: '2026-09-01', end_date: '2026-09-21' }],
+  }), 1)
+
+  assert.equal(countLeaveCredits({
+    ...common,
+    leaves: [{ form_id: 'FORM-A', start_date: '2026-08-20', end_date: '2026-08-21' }],
+  }), 0)
+
+  assert.deepEqual(getEvaluationResult({ filled: 2, leaveCount: 1, target: 15 }), {
+    counted: 3, minLulus: 12, status: 'PROSES',
+  })
+  assert.deepEqual(getEvaluationResult({ filled: 0, leaveCount: 1, target: 1 }), {
+    counted: 1, minLulus: 1, status: 'TERPENUHI',
+  })
+})
 
 test('Super Admin: formulir SOP baru dapat dibuka tanpa crash', { timeout: 30000 }, async () => {
   await scenario({}, async f => {

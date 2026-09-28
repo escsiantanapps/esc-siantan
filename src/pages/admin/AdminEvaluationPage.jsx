@@ -100,7 +100,7 @@ export default function AdminEvaluationPage() {
         <td>${esc(r.user.name)}</td>
         ${showFormCol ? `<td>${esc(r.form?.title || '-')}</td>` : ''}
         <td>${esc(tags || '-')}</td>
-        <td class="c">${esc(r.filled)}/${esc(r.target)}</td>
+        <td class="c">${esc(r.counted ?? r.filled)}/${esc(r.target)}${r.leaveCount > 0 ? `<div class="leave-credit">+${esc(r.leaveCount)} ${esc(t('status.Izin'))}</div>` : ''}</td>
         <td class="c">${esc(r.minLulus)}</td>
         <td class="c status-${esc(r.status)}">${esc(statusLabel[r.status] || r.status)}</td>
       </tr>`
@@ -123,6 +123,7 @@ export default function AdminEvaluationPage() {
   table.data th, table.data td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
   table.data th { background: #f3f4f6; }
   td.c { text-align: center; }
+  .leave-credit { margin-top: 2px; color: #2563eb; font-size: 10px; }
   .status-TERPENUHI { color: #059669; font-weight: 600; }
   .status-PROSES { color: #d97706; font-weight: 600; }
   .status-KOSONG { color: #dc2626; font-weight: 600; }
@@ -252,8 +253,11 @@ export default function AdminEvaluationPage() {
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-semibold text-gray-900">{r.filled}/{r.target}</p>
-                    <p className="text-[10px] text-gray-400">{t('aev.min')} {r.minLulus}</p>
+                    <p className="text-sm font-semibold text-gray-900">{r.counted ?? r.filled}/{r.target}</p>
+                    <p className="text-[10px] text-gray-400">
+                      {t('aev.min')} {r.minLulus}
+                      {r.leaveCount > 0 && <span className="text-blue-500"> · +{r.leaveCount} {t('status.Izin')}</span>}
+                    </p>
                   </div>
                   <StatusBadge status={r.status} />
                 </div>

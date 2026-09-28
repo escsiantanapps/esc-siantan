@@ -793,7 +793,10 @@ export default function PKSDashboardPage() {
                                   <div key={r.form.form_id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs font-medium text-gray-700 truncate">{r.form.title}</p>
-                                      <p className="text-[10px] text-gray-400">{t('pks.formProgress', { filled: r.filled, target: r.target })}</p>
+                                      <p className="text-[10px] text-gray-400">
+                                        {t('pks.formProgress', { filled: r.counted ?? r.filled, target: r.target })}
+                                        {r.leaveCount > 0 && <span className="text-blue-500"> · +{r.leaveCount} {t('status.Izin')}</span>}
+                                      </p>
                                     </div>
                                     <StatusBadge status={r.status} />
                                   </div>
