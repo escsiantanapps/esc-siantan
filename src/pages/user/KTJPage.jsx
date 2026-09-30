@@ -4,6 +4,7 @@ import { CreditCard } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
+import { pushService } from '@/services/pushService'
 import { usersService } from '@/services/usersService'
 import { Card, Button, Input, Textarea, Select, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
 import Uploader from '@/components/Uploader'
@@ -91,6 +92,7 @@ export default function KTJPage() {
         user_id: profile.user_id,
       })
       setExisting(result)
+      pushService.notifyAdmin('new_ktj', result.ktj_id).catch(() => {})
       toast.success(t('ktj.submitted'))
     } catch (err) {
       setError(err.message || t('common.submitRegFailed'))

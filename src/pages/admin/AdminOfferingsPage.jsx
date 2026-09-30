@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { HandCoins, Plus, Pencil, Trash2, X, Printer, FileSpreadsheet, Check, Building2, QrCode } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { offeringsService, OFFERING_CATEGORIES, normalizeOfferingCategory } from '@/services/offeringsService'
 import { komselOfferingsService } from '@/services/contentService'
+import { notificationService } from '@/services/notificationService'
+import AdminPendingNotice from '@/components/AdminPendingNotice'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Select, Spinner, EmptyState, StatusBadge, Avatar, Badge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
@@ -16,17 +19,18 @@ const emptyAcc = { kind: 'bank', label: '', account_no: '', account_name: '', im
 
 export default function AdminOfferingsPage() {
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   const { toast, confirm } = useToast()
   const { t } = useLang()
   const isGembala = profile?.role === 'Gembala'
-  const [tab, setTab] = useState('rekap')
+  const [tab, setTab] = useState(() => ['rekap', 'komsel', 'rekening'].includes(searchParams.get('tab')) ? searchParams.get('tab') : 'rekap')
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [category, setCategory] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState(() => searchParams.get('status') || '')
 
   const [accounts, setAccounts] = useState([])
   const [accModal, setAccModal] = useState(null)
@@ -38,9 +42,16 @@ export default function AdminOfferingsPage() {
   const [komselItems, setKomselItems] = useState([])
   const [komselLoading, setKomselLoading] = useState(true)
 
+  useEffect(() => {
+    const requestedStatus = searchParams.get('status')
+    const requestedTab = searchParams.get('tab')
+    if (requestedStatus) setStatus(requestedStatus)
+    if (['rekap', 'komsel', 'rekening'].includes(requestedTab)) setTab(requestedTab)
+  }, [searchParams])
+
   useEffect(() => { loadRekap() }, [startDate, endDate, category, status])
   useEffect(() => { loadAccounts() }, [])
-  useEffect(() => { loadKomselOfferings() }, [])
+  useEffect(() => { loadKomselOfferings() }, [status])
 
   function loadRekap() {
     setLoading(true)
@@ -55,7 +66,7 @@ export default function AdminOfferingsPage() {
   }
   function loadKomselOfferings() {
     setKomselLoading(true)
-    komselOfferingsService.getAll().then(setKomselItems).catch(() => {}).finally(() => setKomselLoading(false))
+    komselOfferingsService.getAll({ status }).then(setKomselItems).catch(() => {}).finally(() => setKomselLoading(false))
   }
 
   const totals = useMemo(() => {
@@ -71,6 +82,7 @@ export default function AdminOfferingsPage() {
     try {
       await offeringsService.setStatus(o.offering_id, st, profile.user_id)
       toast.success(st === 'Terverifikasi' ? t('aoff.verifiedToast') : t('aoff.rejectedToast'))
+      notificationService.notifyPendingChanged()
       loadRekap()
     } catch (err) {
       toast.error(err.message || t('aoff.statusFailed'))
@@ -81,6 +93,7 @@ export default function AdminOfferingsPage() {
     try {
       await komselOfferingsService.setStatus(o.id, st, profile.user_id)
       toast.success(st === 'Terverifikasi' ? t('aoff.verifiedToast') : t('aoff.rejectedToast'))
+      notificationService.notifyPendingChanged()
       loadKomselOfferings()
     } catch (err) {
       toast.error(err.message || t('aoff.statusFailed'))
@@ -93,6 +106,7 @@ export default function AdminOfferingsPage() {
     try {
       await offeringsService.delete(o.offering_id)
       toast.success(t('aoff.recDeleted'))
+      notificationService.notifyPendingChanged()
       loadRekap()
     } catch (err) {
       toast.error(err.message || t('aoff.deleteFailed'))
@@ -217,11 +231,24 @@ export default function AdminOfferingsPage() {
             : null}
       />
 
+      {searchParams.get('pengingat') && status === 'Menunggu' && (
+        <AdminPendingNotice count={tab === 'komsel' ? komselItems.length : items.length} labelKey="admin.pending.offerings" />
+      )}
+
       <div className="flex gap-1 p-1 bg-control rounded-xl mb-4">
-        {[['rekap', t('aoff.tabRekap')], ['komsel', t('aoff.tabKomsel')], ['rekening', t('aoff.tabAccounts')]].map(([k, label]) => (
+        {[
+          ['rekap', t('aoff.tabRekap'), status === 'Menunggu' ? items.length : 0],
+          ['komsel', t('aoff.tabKomsel'), status === 'Menunggu' ? komselItems.length : 0],
+          ['rekening', t('aoff.tabAccounts'), 0],
+        ].map(([k, label, pending]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === k ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}>
-            {label}
+            className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 text-sm font-medium transition-colors ${tab === k ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}>
+            <span>{label}</span>
+            {pending > 0 && (
+              <span className="min-w-4 rounded-full bg-red-500 px-1 text-center text-[9px] font-bold leading-4 text-white">
+                {pending > 99 ? '99+' : pending}
+              </span>
+            )}
           </button>
         ))}
       </div>

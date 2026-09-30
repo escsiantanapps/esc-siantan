@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { CreditCard, ChevronRight } from 'lucide-react'
 import { registrationService } from '@/services/contentService'
 import { Card, Select, PageHeader, Spinner, EmptyState, StatusBadge } from '@/components/ui'
+import AdminPendingNotice from '@/components/AdminPendingNotice'
 import { useLang } from '@/hooks/useLang'
 import { formatDate, formatPhone } from '@/lib/utils'
 
@@ -10,9 +11,15 @@ const STATUSES = ['Menunggu', 'Sedang Ditinjau', 'Disetujui', 'Terjadwal', 'Sele
 
 export default function AdminKtjPage() {
   const { t } = useLang()
+  const [searchParams] = useSearchParams()
   const [registrations, setRegistrations] = useState([])
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState(() => searchParams.get('status') || '')
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const requestedStatus = searchParams.get('status')
+    if (requestedStatus && STATUSES.includes(requestedStatus)) setStatus(requestedStatus)
+  }, [searchParams])
 
   useEffect(() => {
     setLoading(true)
@@ -25,6 +32,10 @@ export default function AdminKtjPage() {
   return (
     <div>
       <PageHeader title={t('aktj.title')} subtitle={t('areg.count', { count: registrations.length })} />
+
+      {searchParams.get('pengingat') && status === 'Menunggu' && (
+        <AdminPendingNotice count={registrations.length} labelKey="admin.pending.ktj" />
+      )}
 
       <div className="mb-4 max-w-xs">
         <Select value={status} onChange={e => setStatus(e.target.value)}>

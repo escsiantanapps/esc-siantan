@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Users, Calendar, ClipboardList, AlertTriangle, Droplets, Heart, ChevronRight, CheckCircle2, Clock, XCircle, UserPlus, Cake, Database, BarChart3 } from 'lucide-react'
+import { Link, useOutletContext } from 'react-router-dom'
+import { Users, Calendar, ClipboardList, AlertTriangle, ChevronRight, CheckCircle2, Clock, XCircle, Cake, Database, BarChart3, Bell } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
@@ -9,13 +9,14 @@ import { storageService } from '@/services/storageService'
 import { Card, PageHeader, Spinner, Skeleton, StatusBadge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import MemberStats from '@/components/MemberStats'
+import AdminPendingList from '@/components/AdminPendingList'
 
 export default function AdminDashboardPage() {
   const { profile } = useAuth()
   const { t, lang } = useLang()
-  const [stats, setStats] = useState({ members: 0, events: 0, tasks: 0, sp: 0, baptism: 0, wedding: 0, pendingUsers: 0 })
+  const { pendingItems = [], pendingTotal = 0 } = useOutletContext() || {}
+  const [stats, setStats] = useState({ members: 0, events: 0, tasks: 0, sp: 0 })
   const [recentMembers, setRecentMembers] = useState([])
-  const [pendingRegs, setPendingRegs] = useState([])
   const [birthdays, setBirthdays] = useState([])
   const [bdayMonth, setBdayMonth] = useState(new Date().getMonth()) // 0-11, default bulan ini
   const [evalSummary, setEvalSummary] = useState({ TERPENUHI: 0, PROSES: 0, KOSONG: 0 })
@@ -36,16 +37,12 @@ export default function AdminDashboardPage() {
 
   async function loadDashboard() {
     try {
-      const [members, events, tasks, spUsers, baptism, wedding, pendingUsers, newMembers, pending, bdays] = await Promise.all([
+      const [members, events, tasks, spUsers, newMembers, bdays] = await Promise.all([
         supabase.from('users').select('*', { count: 'exact', head: true }),
         supabase.from('events').select('*', { count: 'exact', head: true }).in('status', ['Mulai', 'Sedang Berlangsung']),
         supabase.from('form_templates').select('*', { count: 'exact', head: true }),
         supabase.from('users').select('*', { count: 'exact', head: true }).neq('sp_level', 'Aman'),
-        supabase.from('baptism_registrations').select('*', { count: 'exact', head: true }).eq('status', 'Menunggu'),
-        supabase.from('wedding_registrations').select('*', { count: 'exact', head: true }).eq('status', 'Menunggu'),
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('status', 'Menunggu Persetujuan'),
         supabase.from('users').select('name, role, status, created_at').order('created_at', { ascending: false }).limit(5),
-        supabase.from('baptism_registrations').select('baptism_id, full_name, status, created_at').eq('status', 'Menunggu').limit(3),
         supabase.from('users').select('user_id, name, photo_url, birth_date').not('birth_date', 'is', null),
       ])
       setStats({
@@ -53,12 +50,8 @@ export default function AdminDashboardPage() {
         events: events.count || 0,
         tasks: tasks.count || 0,
         sp: spUsers.count || 0,
-        baptism: baptism.count || 0,
-        wedding: wedding.count || 0,
-        pendingUsers: pendingUsers.count || 0,
       })
       setRecentMembers(newMembers.data || [])
-      setPendingRegs(pending.data || [])
       setBirthdays(bdays.data || [])
     } finally {
       setLoading(false)
@@ -84,12 +77,9 @@ export default function AdminDashboardPage() {
 
   const statCards = [
     { label: t('adash.totalMembers'),  value: stats.members,     icon: Users,         color: 'text-brand-500', bg: 'bg-brand-50', to: '/admin/jemaat' },
-    { label: t('adash.newAccounts'),   value: stats.pendingUsers, icon: UserPlus,      color: 'text-amber-500',  bg: 'bg-amber-50',  to: '/admin/jemaat?status=Menunggu+Persetujuan' },
     { label: t('adash.activeEvents'),  value: stats.events,      icon: Calendar,      color: 'text-red-500',    bg: 'bg-red-50',    to: '/admin/events' },
     { label: t('adash.taskForms'),     value: stats.tasks,       icon: ClipboardList, color: 'text-blue-500',   bg: 'bg-blue-50',   to: '/admin/tugas' },
     { label: t('adash.hasSP'),         value: stats.sp,          icon: AlertTriangle, color: 'text-amber-500',  bg: 'bg-amber-50',  to: '/admin/sp' },
-    { label: t('adash.baptismQueue'),  value: stats.baptism,     icon: Droplets,      color: 'text-teal-500',   bg: 'bg-teal-50',   to: '/admin/baptisan' },
-    { label: t('adash.weddingQueue'),  value: stats.wedding,     icon: Heart,         color: 'text-pink-500',   bg: 'bg-pink-50',   to: '/admin/nikah' },
   ]
 
   // Ulang tahun pada bulan terpilih. Parse string 'YYYY-MM-DD' langsung agar
@@ -148,12 +138,31 @@ export default function AdminDashboardPage() {
         subtitle={t('adash.subtitle')}
       />
 
+      <Card className="mb-6 overflow-hidden">
+        <div className="flex items-start gap-3 border-b border-gray-100 px-4 py-3.5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+            <Bell size={19} strokeWidth={1.75} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold text-gray-900">{t('admin.pendingTitle')}</h2>
+            <p className="mt-0.5 text-xs text-gray-500">{t('admin.pendingSummary', { count: pendingTotal })}</p>
+          </div>
+          {pendingTotal > 0 && (
+            <span className="min-w-7 rounded-full bg-red-500 px-2 text-center text-xs font-bold leading-7 text-white">
+              {pendingTotal > 99 ? '99+' : pendingTotal}
+            </span>
+          )}
+        </div>
+        <AdminPendingList items={pendingItems} />
+      </Card>
+
       {/* Stats grid — kartu pertama tampil sebagai hero (gaya bento Stitch) */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6 stagger-children">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 stagger-children">
         {statCards.map(({ label, value, icon: Icon, color, bg, to }, idx) => {
           const hero = idx === 0
+          const wideMobile = hero || idx === statCards.length - 1
           return (
-            <Link key={label} to={to} className={hero ? 'col-span-2 lg:col-span-1' : ''}>
+            <Link key={label} to={to} className={wideMobile ? 'col-span-2 lg:col-span-1' : ''}>
               <Card lift className={`p-4 h-full relative overflow-hidden ${hero ? 'gradient-main border-transparent!' : 'hover:border-gray-200'}`}>
                 {/* Glow dekoratif kartu hero */}
                 {hero && <div aria-hidden="true" className="pointer-events-none absolute -top-10 -right-8 w-32 h-32 rounded-full bg-white/15 blur-2xl" />}
@@ -376,35 +385,6 @@ export default function AdminDashboardPage() {
               </div>
             ))}
           </div>
-        </Card>
-
-        {/* Pendaftaran masuk */}
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">{t('adash.regQueue')}</h3>
-            <Link to="/admin/baptisan" className="text-xs text-brand-500 flex items-center gap-0.5">
-              {t('adash.view')} <ChevronRight size={13} />
-            </Link>
-          </div>
-          {pendingRegs.length === 0
-            ? <p className="text-sm text-gray-400 text-center py-4">{t('adash.noQueue')}</p>
-            : (
-              <div className="space-y-3">
-                {pendingRegs.map((r, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
-                      <Droplets size={15} className="text-teal-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{r.full_name}</p>
-                      <p className="text-xs text-gray-400">{formatDate(r.created_at)}</p>
-                    </div>
-                    <StatusBadge status={r.status} />
-                  </div>
-                ))}
-              </div>
-            )
-          }
         </Card>
       </div>
     </div>

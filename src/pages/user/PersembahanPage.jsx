@@ -3,6 +3,7 @@ import { QrCode, Copy, Check, HandCoins, Building2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { offeringsService, OFFERING_CATEGORIES, normalizeOfferingCategory } from '@/services/offeringsService'
+import { pushService } from '@/services/pushService'
 import { Card, Spinner, GradientHeader, Button, Input, Select, Textarea, StatusBadge, EmptyState } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
@@ -75,13 +76,14 @@ export default function PersembahanPage() {
     if (!amount || amount <= 0) { setError(t('offering.amountRequired')); return }
     setSaving(true)
     try {
-      await offeringsService.create({
+      const result = await offeringsService.create({
         userId: profile.user_id,
         category: form.category,
         amount,
         note: form.note,
         proof_url: form.proof_url,
       })
+      pushService.notifyAdmin('new_offering', result.offering_id).catch(() => {})
       setForm({ category: 'Perpuluhan', amount: '', note: '', proof_url: '' })
       toast.success(t('offering.created'))
       load()

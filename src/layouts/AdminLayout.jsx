@@ -2,9 +2,9 @@ import { Outlet, NavLink, useNavigate, useLocation, Navigate } from 'react-route
 import {
   LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, HardDrive, ScrollText,
   MessageSquare, Users, BarChart3, LayoutDashboard, MessageSquareText, LayoutList, UsersRound, Droplet,
-  Gift, Coins
+  Gift, Coins, Bell
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
@@ -14,9 +14,31 @@ import { useBackClose } from '@/hooks/useBackClose'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 import { notificationService } from '@/services/notificationService'
+import AdminPendingList from '@/components/AdminPendingList'
 
 // Item menu Pesan Gembala — dipakai Gembala & Super Admin.
 const PESAN_ITEM = { to: '/admin/pesan', icon: MessageSquare, labelKey: 'admin.nav.pesan' }
+
+const PENDING_DESTINATIONS = {
+  '/admin/jemaat': { key: 'pendingUsers', labelKey: 'admin.pending.users', to: '/admin/jemaat?status=Menunggu+Persetujuan&pengingat=akun' },
+  '/admin/events': { key: 'pendingEvents', labelKey: 'admin.pending.events', to: '/admin/events?pengingat=event' },
+  '/admin/kelas': { key: 'pendingClasses', labelKey: 'admin.pending.classes', to: '/admin/kelas?pengingat=kelas' },
+  '/admin/baptisan': { key: 'pendingBaptism', labelKey: 'admin.pending.baptism', to: '/admin/baptisan?status=Menunggu&pengingat=baptisan' },
+  '/admin/nikah': { key: 'pendingWedding', labelKey: 'admin.pending.wedding', to: '/admin/nikah?status=Menunggu&pengingat=nikah' },
+  '/admin/penyerahan-anak': { key: 'pendingDedication', labelKey: 'admin.pending.dedication', to: '/admin/penyerahan-anak?status=Menunggu&pengingat=penyerahan' },
+  '/admin/ktj': { key: 'pendingKtj', labelKey: 'admin.pending.ktj', to: '/admin/ktj?status=Menunggu&pengingat=ktj' },
+  '/admin/izin': { key: 'pendingLeaves', labelKey: 'admin.pending.leaves', to: '/admin/izin?status=Menunggu&pengingat=izin' },
+  '/admin/persembahan': { key: 'pendingOfferings', labelKey: 'admin.pending.offerings', to: '/admin/persembahan?status=Menunggu&pengingat=persembahan' },
+}
+
+function getPendingDestination(baseTo, counts) {
+  const destination = PENDING_DESTINATIONS[baseTo]
+  if (!destination) return baseTo
+  if (baseTo === '/admin/persembahan' && counts.pendingPersonalOfferings === 0 && counts.pendingKomselOfferings > 0) {
+    return '/admin/persembahan?tab=komsel&status=Menunggu&pengingat=persembahan'
+  }
+  return destination.to
+}
 
 const GEMBALA_BLOCKED_ACTIONS = [
   'tambah', 'simpan', 'hapus', 'edit', 'setujui', 'tolak', 'kirim',
@@ -59,12 +81,25 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
 
 export default function AdminLayout() {
   const [open, setOpen] = useState(false)
+  const [pendingOpen, setPendingOpen] = useState(false)
+  const pendingRef = useRef(null)
   useBackClose(open, () => setOpen(false)) // back menutup sidebar mobile dulu
+  useBackClose(pendingOpen, () => setPendingOpen(false))
   const { profile, logout } = useAuth()
   const { toast, confirm } = useToast()
   const { t } = useLang()
   const navigate = useNavigate()
   const location = useLocation()
+
+  useEffect(() => {
+    function closePending(event) {
+      if (pendingRef.current && !pendingRef.current.contains(event.target)) setPendingOpen(false)
+    }
+    if (pendingOpen) document.addEventListener('mousedown', closePending)
+    return () => document.removeEventListener('mousedown', closePending)
+  }, [pendingOpen])
+
+  useEffect(() => { setPendingOpen(false) }, [location.pathname])
   // Konfirmasi keluar saat back di dashboard admin (root panel). Bila akses
   // Dashboard dicabut, halaman ini tidak akan pernah tampil untuk admin ybs
   // (guard di bawah), jadi hook ini tetap aman didaftarkan.
@@ -82,14 +117,34 @@ export default function AdminLayout() {
   const [permRetry, setPermRetry] = useState(0)
   const [permLoading, setPermLoading] = useState(!isSuperAdmin && !isGembala)
   const [pendingCounts, setPendingCounts] = useState({
-    pendingUsers: 0, pendingClasses: 0, pendingEvents: 0
+    pendingUsers: 0,
+    pendingClasses: 0,
+    pendingEvents: 0,
+    pendingBaptism: 0,
+    pendingWedding: 0,
+    pendingDedication: 0,
+    pendingKtj: 0,
+    pendingLeaves: 0,
+    pendingOfferings: 0,
+    pendingPersonalOfferings: 0,
+    pendingKomselOfferings: 0,
   })
 
   useEffect(() => {
-    if (profile?.role) {
+    if (!profile?.role) return undefined
+    let active = true
+    const load = () => {
       notificationService.getAdminPendingCounts(profile.role)
-        .then(setPendingCounts)
+        .then(counts => { if (active) setPendingCounts(counts) })
         .catch(console.error)
+    }
+    load()
+    window.addEventListener('focus', load)
+    window.addEventListener('admin-pending-changed', load)
+    return () => {
+      active = false
+      window.removeEventListener('focus', load)
+      window.removeEventListener('admin-pending-changed', load)
     }
   }, [profile?.role])
 
@@ -187,6 +242,17 @@ export default function AdminLayout() {
   }
 
   const MENU = buildMenu(isSuperAdmin, isGembala, allowedPages)
+  const visiblePendingItems = MENU
+    .filter(item => item.to && PENDING_DESTINATIONS[item.to])
+    .map(item => ({
+      ...PENDING_DESTINATIONS[item.to],
+      to: getPendingDestination(item.to, pendingCounts),
+      count: pendingCounts[PENDING_DESTINATIONS[item.to].key] || 0,
+      label: t(PENDING_DESTINATIONS[item.to].labelKey),
+      icon: item.icon,
+    }))
+    .filter(item => item.count > 0)
+  const pendingTotal = visiblePendingItems.reduce((total, item) => total + item.count, 0)
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -239,15 +305,9 @@ export default function AdminLayout() {
               </p>
             )
             const { to, icon: Icon, labelKey, label, exact } = item
-            let badge = 0
-            if (to === '/admin/jemaat') badge = pendingCounts.pendingUsers
-            else if (to === '/admin/kelas') badge = pendingCounts.pendingClasses
-            else if (to === '/admin/events') badge = pendingCounts.pendingEvents
-            const reminderTo = badge > 0
-              ? to === '/admin/jemaat' ? '/admin/jemaat?status=Menunggu+Persetujuan&pengingat=akun'
-                : to === '/admin/kelas' ? '/admin/kelas?pengingat=kelas'
-                  : to === '/admin/events' ? '/admin/events?pengingat=event' : to
-              : to
+            const pendingDestination = PENDING_DESTINATIONS[to]
+            const badge = pendingDestination ? (pendingCounts[pendingDestination.key] || 0) : 0
+            const reminderTo = badge > 0 ? getPendingDestination(to, pendingCounts) : to
 
             return (
               <NavLink key={to} to={reminderTo} end={exact}
@@ -312,15 +372,56 @@ export default function AdminLayout() {
       <div className="flex-1 flex flex-col min-w-0" onClickCapture={handleReadOnlyCapture} onSubmitCapture={handleReadOnlyCapture}>
         {/* Top bar mobile */}
         <header className="lg:hidden bg-surface/90 backdrop-blur-md border-b border-gray-100 px-4 pb-3 flex items-center gap-3 sticky top-0 z-20" style={{paddingTop: 'calc(var(--safe-top, 28px) + 0.75rem)'}}>
-          <button onClick={() => setOpen(true)} className="p-1 text-gray-500 active:scale-90 transition-transform">
+          <button onClick={() => setOpen(true)} aria-label={t('admin.openMenu')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-500 active:scale-90 transition-transform">
             <Menu size={22} />
           </button>
           <span className="font-semibold text-gray-900 text-sm flex-1">{t('admin.appShort')}</span>
+          <div className="contents" ref={pendingRef}>
+            <button
+              type="button"
+              onClick={() => setPendingOpen(value => !value)}
+              aria-label={pendingTotal > 0 ? t('admin.pendingWork', { count: pendingTotal }) : t('admin.noPendingWork')}
+              aria-expanded={pendingOpen}
+              aria-controls="admin-pending-menu"
+              className="relative flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-500 hover:bg-control"
+            >
+              <Bell size={20} />
+              {pendingTotal > 0 && (
+                <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-red-500 px-1 text-center text-[9px] font-bold leading-4 text-white">
+                  {pendingTotal > 99 ? '99+' : pendingTotal}
+                </span>
+              )}
+            </button>
+            {pendingOpen && (
+              <section
+                id="admin-pending-menu"
+                role="region"
+                aria-labelledby="admin-pending-menu-title"
+                className="absolute left-4 right-4 top-[calc(100%+0.5rem)] max-h-[min(28rem,calc(100vh-7rem))] overflow-y-auto rounded-2xl border border-gray-200 bg-surface ambient-shadow"
+              >
+                <div className="sticky top-0 flex items-start gap-3 border-b border-gray-100 bg-surface px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <h2 id="admin-pending-menu-title" className="text-sm font-semibold text-gray-900">{t('admin.pendingTitle')}</h2>
+                    <p className="mt-0.5 text-xs text-gray-500">{t('admin.pendingSummary', { count: pendingTotal })}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPendingOpen(false)}
+                    aria-label={t('admin.closePending')}
+                    className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-500 hover:bg-control"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <AdminPendingList items={visiblePendingItems} onSelect={() => setPendingOpen(false)} />
+              </section>
+            )}
+          </div>
           <ThemeToggle />
         </header>
 
         <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
-          <Outlet />
+          <Outlet context={{ pendingItems: visiblePendingItems, pendingTotal }} />
         </main>
       </div>
     </div>

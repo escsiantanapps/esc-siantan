@@ -78,6 +78,7 @@ export default async function handler(req, res) {
     let title = 'Pemberitahuan Admin'
     let message = ''
     let url = '/admin'
+    let requiredPage = '/admin'
 
     if (type === 'new_user') {
       if (caller.status !== 'Menunggu Persetujuan' || !recent(caller.created_at)) {
@@ -85,7 +86,8 @@ export default async function handler(req, res) {
       }
       title = 'Pendaftaran Jemaat Baru'
       message = `${caller.name || 'Seseorang'} baru saja mendaftar dan menunggu persetujuan.`
-      url = '/admin/jemaat'
+      url = '/admin/jemaat?status=Menunggu+Persetujuan&pengingat=akun'
+      requiredPage = '/admin/jemaat'
     } else if (type === 'new_class') {
       if (typeof referenceId !== 'string' || !referenceId) {
         return res.status(400).json({ error: 'Referensi pendaftaran kelas wajib diisi.' })
@@ -100,7 +102,8 @@ export default async function handler(req, res) {
       }
       title = 'Pendaftaran Kelas Baru'
       message = `${caller.name || 'Seseorang'} mendaftar ke kelas.`
-      url = '/admin/kelas'
+      url = '/admin/kelas?pengingat=kelas'
+      requiredPage = '/admin/kelas'
     } else if (type === 'new_event') {
       if (typeof referenceId !== 'string' || !referenceId) {
         return res.status(400).json({ error: 'Referensi pendaftaran event wajib diisi.' })
@@ -115,16 +118,100 @@ export default async function handler(req, res) {
       }
       title = 'Pendaftaran Event Baru'
       message = `${caller.name || 'Seseorang'} mendaftar ke event.`
-      url = '/admin/events'
+      url = '/admin/events?pengingat=event'
+      requiredPage = '/admin/events'
+    } else if (['new_baptism', 'new_wedding', 'new_dedication', 'new_ktj', 'new_leave', 'new_offering', 'new_komsel_offering'].includes(type)) {
+      const taskTypes = {
+        new_baptism: {
+          table: 'baptism_registrations', idColumn: 'baptism_id', ownerColumn: 'user_id',
+          title: 'Pendaftaran Baptisan Baru', label: 'mengajukan baptisan',
+          url: '/admin/baptisan?status=Menunggu&pengingat=baptisan', page: '/admin/baptisan',
+        },
+        new_wedding: {
+          table: 'wedding_registrations', idColumn: 'wedding_id', ownerColumn: 'user_id',
+          title: 'Pendaftaran Pemberkatan Baru', label: 'mengajukan pemberkatan nikah',
+          url: '/admin/nikah?status=Menunggu&pengingat=nikah', page: '/admin/nikah',
+        },
+        new_dedication: {
+          table: 'child_dedication_registrations', idColumn: 'dedication_id', ownerColumn: 'user_id',
+          title: 'Pendaftaran Penyerahan Anak', label: 'mengajukan penyerahan anak',
+          url: '/admin/penyerahan-anak?status=Menunggu&pengingat=penyerahan', page: '/admin/penyerahan-anak',
+        },
+        new_ktj: {
+          table: 'ktj_registrations', idColumn: 'ktj_id', ownerColumn: 'user_id',
+          title: 'Pengajuan KTJ Baru', label: 'mengajukan Kartu Tanda Jemaat',
+          url: '/admin/ktj?status=Menunggu&pengingat=ktj', page: '/admin/ktj',
+        },
+        new_leave: {
+          table: 'task_leaves', idColumn: 'leave_id', ownerColumn: 'user_id',
+          title: 'Pengajuan Izin Baru', label: 'mengajukan izin atau sakit',
+          url: '/admin/izin?status=Menunggu&pengingat=izin', page: '/admin/izin',
+        },
+        new_offering: {
+          table: 'offerings', idColumn: 'offering_id', ownerColumn: 'user_id',
+          title: 'Catatan Persembahan Baru', label: 'mencatat persembahan yang perlu diverifikasi',
+          url: '/admin/persembahan?status=Menunggu&pengingat=persembahan', page: '/admin/persembahan',
+        },
+        new_komsel_offering: {
+          table: 'komsel_offerings', idColumn: 'id', ownerColumn: 'recorded_by',
+          title: 'Persembahan Komsel Baru', label: 'mencatat persembahan komsel yang perlu diverifikasi',
+          url: '/admin/persembahan?tab=komsel&status=Menunggu&pengingat=persembahan', page: '/admin/persembahan',
+        },
+      }
+      const task = taskTypes[type]
+      if (typeof referenceId !== 'string' || !referenceId) {
+        return res.status(400).json({ error: 'Referensi pekerjaan admin wajib diisi.' })
+      }
+      const { data: record, error: recordError } = await admin
+        .from(task.table)
+        .select(task.idColumn + ', ' + task.ownerColumn + ', status, created_at')
+        .eq(task.idColumn, referenceId)
+        .maybeSingle()
+      if (recordError) {
+        console.error('[notify-admin] gagal memverifikasi referensi:', recordError.message)
+        return res.status(500).json({ error: 'Referensi belum dapat diverifikasi.' })
+      }
+      if (!record || record[task.ownerColumn] !== caller.user_id || record.status !== 'Menunggu' || !recent(record.created_at)) {
+        return res.status(403).json({ error: 'Pekerjaan admin baru tidak ditemukan.' })
+      }
+      title = task.title
+      message = (caller.name || 'Seseorang') + ' baru saja ' + task.label + '.'
+      url = task.url
+      requiredPage = task.page
     } else {
       return res.status(400).json({ error: 'Tipe tidak valid.' })
     }
 
-    // Cari admin aktif; tipe peran sintetis seperti "Admin Kelas" bukan
-    // bagian dari model role aplikasi dan tidak boleh dipakai sebagai target.
-    const { data: admins } = await admin
-      .from('users').select('user_id').in('role', ['Super Admin', 'Admin']).eq('status', 'Aktif')
-    const adminIds = (admins || []).map(a => a.user_id)
+    // Kirim hanya kepada Admin aktif yang menuju halaman yang memang dapat
+    // mereka tindak lanjuti. Super Admin selalu lolos; Admin tanpa baris
+    // pengaturan mempertahankan akses penuh sesuai auth_admin_can().
+    const { data: admins, error: adminsError } = await admin
+      .from('users').select('user_id, role').in('role', ['Super Admin', 'Admin']).eq('status', 'Aktif')
+    if (adminsError) {
+      console.error('[notify-admin] gagal membaca admin:', adminsError.message)
+      return res.status(500).json({ error: 'Penerima notifikasi belum dapat ditentukan.' })
+    }
+
+    const regularAdminIds = (admins || []).filter(item => item.role === 'Admin').map(item => item.user_id)
+    let permissionRows = []
+    if (regularAdminIds.length > 0) {
+      const { data, error: permissionsError } = await admin
+        .from('admin_user_permissions')
+        .select('user_id, allowed_pages')
+        .in('user_id', regularAdminIds)
+      if (permissionsError) {
+        console.error('[notify-admin] gagal membaca hak akses:', permissionsError.message)
+        return res.status(500).json({ error: 'Hak akses penerima belum dapat diverifikasi.' })
+      }
+      permissionRows = data || []
+    }
+    const permissionByUser = new Map(permissionRows.map(row => [row.user_id, row.allowed_pages]))
+    const adminIds = (admins || [])
+      .filter(item => item.role === 'Super Admin'
+        || !permissionByUser.has(item.user_id)
+        || permissionByUser.get(item.user_id) === null
+        || (Array.isArray(permissionByUser.get(item.user_id)) && permissionByUser.get(item.user_id).includes(requiredPage)))
+      .map(item => item.user_id)
     if (adminIds.length === 0) return res.status(200).json({ ok: true, reason: 'no-admins' })
 
     const { data: subs } = await admin

@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { komselService, komselOfferingsService } from '@/services/contentService'
 import { offeringsService, OFFERING_CATEGORIES, normalizeOfferingCategory } from '@/services/offeringsService'
+import { pushService } from '@/services/pushService'
 import { birthdayService } from '@/services/birthdayService'
 import { evaluationService } from '@/services/evaluationService'
 import { Card, Spinner, EmptyState, GradientHeader, Avatar, StatusBadge, Badge, Select, Input, Textarea, Button } from '@/components/ui'
@@ -172,7 +173,7 @@ export default function PKSDashboardPage() {
 
     setOfferingSaving(true)
     try {
-      await komselOfferingsService.create({
+      const result = await komselOfferingsService.create({
         komsel_id: selectedId,
         category: offeringForm.category,
         amount,
@@ -180,6 +181,7 @@ export default function PKSDashboardPage() {
         proof_url: offeringForm.proof_url,
         recorded_by: userId,
       })
+      pushService.notifyAdmin('new_komsel_offering', result.id).catch(() => {})
       toast.success(t('pks.offeringSaved'))
       setOfferingForm({ category: OFFERING_CATEGORIES[0], amount: '', note: '', proof_url: '' })
       loadOfferingHistory(selectedId)

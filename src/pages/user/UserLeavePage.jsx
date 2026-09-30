@@ -4,6 +4,7 @@ import { HeartPulse, CalendarOff, Trash2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { leavesService, LEAVE_TYPES } from '@/services/leavesService'
+import { pushService } from '@/services/pushService'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { Card, Spinner, GradientHeader, Button, Input, Select, Textarea, StatusBadge, EmptyState } from '@/components/ui'
 import Uploader from '@/components/Uploader'
@@ -73,7 +74,7 @@ export default function UserLeavePage() {
     setSaving(true)
     try {
       const selectedTpl = form.form_id ? templates.find(t => t.form_id === form.form_id) : null
-      await leavesService.create({
+      const result = await leavesService.create({
         userId: profile.user_id,
         type: form.type,
         startDate: form.start_date,
@@ -83,6 +84,7 @@ export default function UserLeavePage() {
         formId: form.form_id || null,
         formTitle: selectedTpl?.title || null,
       })
+      pushService.notifyAdmin('new_leave', result.leave_id).catch(() => {})
       setForm({ type: 'Sakit', start_date: today, end_date: today, reason: '', proof_url: '', form_id: '' })
       toast.success('Pengajuan terkirim. Menunggu persetujuan admin.')
       load()

@@ -4,6 +4,7 @@ import { Info } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { registrationService } from '@/services/contentService'
+import { pushService } from '@/services/pushService'
 import { Card, Button, Input, Textarea, Spinner, StatusBadge, GradientHeader } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
@@ -98,6 +99,7 @@ export default function PenyerahanAnakPage() {
     try {
       const result = await registrationService.submitDedication({ ...form, user_id: profile.user_id })
       setExisting(result)
+      pushService.notifyAdmin('new_dedication', result.dedication_id).catch(() => {})
       toast.success(t('dedication.submitted'))
     } catch (err) {
       setError(err.message || t('common.submitRegFailed'))

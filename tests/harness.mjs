@@ -31,6 +31,7 @@ export async function fixture(harness, options = {}) {
   const state = {
     role: 'Super Admin', allowedPages: ['/admin/events'], permissionFailure: false,
     templateFailure: false, authenticated: true, authRestricted: false, lang: 'id', theme: 'light', event: null,
+    pendingCounts: {}, ktjRegistrations: [],
     template: {
       form_id: 'QA-TASK', title: 'SOP simulasi', description: '', fields_json: [],
       allowed_roles: [], template_ministries: [], active_days: [], weekly_goal: 1,
@@ -65,7 +66,22 @@ export async function fixture(harness, options = {}) {
       const table = url.pathname.split('/').at(-1)
       const singular = (request.headers().accept || '').includes('vnd.pgrst.object')
       const rows = data => reply(singular ? data[0] ?? null : data)
-      if (request.method() === 'HEAD') return reply(null)
+      if (request.method() === 'HEAD') {
+        let count = Number(state.pendingCounts?.[table]) || 0
+        if (table === 'registration_prerequisites') {
+          if (url.searchParams.get('class_id') === 'not.is.null') count = Number(state.pendingCounts?.pendingClasses) || 0
+          if (url.searchParams.get('event_id') === 'not.is.null') count = Number(state.pendingCounts?.pendingEvents) || 0
+        }
+        return route.fulfill({
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+            'access-control-expose-headers': 'Content-Range',
+            'content-range': count > 0 ? '0-' + String(count - 1) + '/' + String(count) : '*/0',
+          },
+          body: '',
+        })
+      }
       if (table === 'get_points_leaderboard_with_me') return reply(state.leaderboard || [])
       if (table === 'admin_user_permissions') {
         if (state.permissionFailure) return reply({ message: 'Simulasi gangguan izin' }, 503)
@@ -76,6 +92,7 @@ export async function fixture(harness, options = {}) {
         if (url.searchParams.get('role') === 'eq.Admin') return rows([{ user_id: 'QA-ADMIN', name: 'Admin Uji', role: 'Admin', status: 'Aktif', photo_url: null }])
         return rows([])
       }
+      if (table === 'ktj_registrations') return rows(state.ktjRegistrations || [])
       if (table === 'form_templates') {
         if (state.templateFailure) return reply({ message: 'Simulasi gangguan SOP' }, 503)
         return rows([state.template])

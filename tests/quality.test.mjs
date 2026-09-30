@@ -144,6 +144,47 @@ test('Admin: izin belum diatur mempertahankan akses default yang sah', async () 
   })
 })
 
+test('Admin: KTJ menunggu tampil sebagai notifikasi dan membuka antrean terfilter', async () => {
+  await scenario({
+    pendingCounts: { ktj_registrations: 1 },
+    ktjRegistrations: [{
+      ktj_id: 'KTJ-QA-1',
+      user_id: 'QA-USER',
+      full_name: 'Pengajuan KTJ Uji',
+      status: 'Menunggu',
+      created_at: '2026-09-30T08:00:00Z',
+      users: { name: 'Pengguna QA', phone: '081234567890' },
+    }],
+  }, async f => {
+    await f.goto('/admin')
+    await f.page.getByRole('heading', { name: 'Perlu Ditangani', exact: true }).waitFor()
+    const notification = f.page.getByRole('button', { name: '1 pekerjaan admin menunggu', exact: true })
+    await notification.click()
+    const pendingMenu = f.page.getByRole('region', { name: 'Perlu Ditangani', exact: true })
+    await pendingMenu.getByRole('link', { name: 'Buka Pengajuan KTJ, 1 menunggu', exact: true }).click()
+    await f.page.waitForURL(url => url.pathname === '/admin/ktj' && url.searchParams.get('status') === 'Menunggu')
+    await f.page.getByRole('heading', { name: 'Pengajuan KTJ', exact: true }).waitFor()
+    assert.match(await f.page.getByRole('status').innerText(), /Pengajuan KTJ: 1 menunggu/)
+    assert.equal(await f.page.getByText('Pengajuan KTJ Uji', { exact: true }).count(), 1)
+    assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+  })
+})
+
+test('Admin terbatas hanya melihat antrean dari halaman yang diizinkan', async () => {
+  await scenario({
+    role: 'Admin',
+    allowedPages: ['/admin', '/admin/events'],
+    pendingCounts: { ktj_registrations: 3, pendingEvents: 2 },
+  }, async f => {
+    await f.goto('/admin')
+    const notification = f.page.getByRole('button', { name: '2 pekerjaan admin menunggu', exact: true })
+    await notification.waitFor()
+    await notification.click()
+    const pendingMenu = f.page.getByRole('region', { name: 'Perlu Ditangani', exact: true })
+    assert.equal(await pendingMenu.getByRole('link', { name: 'Buka Pendaftaran event, 2 menunggu', exact: true }).count(), 1)
+    assert.equal(await pendingMenu.getByText('Pengajuan KTJ', { exact: true }).count(), 0)
+  })
+})
 test('Admin terbatas tidak membuka halaman sistem Super Admin', async () => {
   await scenario({ role: 'Admin' }, async f => {
     await f.goto('/admin/hak-akses')

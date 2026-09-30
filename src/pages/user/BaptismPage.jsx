@@ -4,6 +4,7 @@ import { Droplets, Info } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { registrationService, classesService, appSettingsService } from '@/services/contentService'
+import { pushService } from '@/services/pushService'
 import { Card, Button, Input, Textarea, Select, Spinner, StatusBadge, GradientHeader, EmptyState } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { useLang } from '@/hooks/useLang'
@@ -113,6 +114,7 @@ export default function BaptismPage() {
     try {
       const result = await registrationService.submitBaptism({ ...form, class_id: form.class_id || null, user_id: profile.user_id })
       setExisting(result)
+      pushService.notifyAdmin('new_baptism', result.baptism_id).catch(() => {})
       toast.success(t('baptism.submitted'))
     } catch (err) {
       setError(err.message || t('common.submitRegFailed'))

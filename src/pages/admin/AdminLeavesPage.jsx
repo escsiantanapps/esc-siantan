@@ -1,18 +1,29 @@
 import { useEffect, useState } from 'react'
 import { CalendarOff, Check, X, Trash2 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { leavesService } from '@/services/leavesService'
+import { notificationService } from '@/services/notificationService'
+import AdminPendingNotice from '@/components/AdminPendingNotice'
 import { Card, PageHeader, Select, Spinner, EmptyState, StatusBadge, Avatar } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
+const LEAVE_STATUSES = ['Menunggu', 'Disetujui', 'Ditolak']
+
 export default function AdminLeavesPage() {
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   const { toast, confirm } = useToast()
   const isGembala = profile?.role === 'Gembala'
   const [items, setItems] = useState([])
-  const [status, setStatus] = useState('Menunggu')
+  const [status, setStatus] = useState(() => searchParams.get('status') || 'Menunggu')
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const requestedStatus = searchParams.get('status')
+    if (requestedStatus && LEAVE_STATUSES.includes(requestedStatus)) setStatus(requestedStatus)
+  }, [searchParams])
 
   useEffect(() => { load() }, [status])
 
@@ -25,6 +36,7 @@ export default function AdminLeavesPage() {
     try {
       await leavesService.setStatus(it.leave_id, st, profile.user_id)
       toast.success(st === 'Disetujui' ? 'Izin disetujui.' : 'Izin ditolak.')
+      notificationService.notifyPendingChanged()
       load()
     } catch (err) {
       toast.error(err.message || 'Gagal memperbarui status.')
@@ -34,13 +46,17 @@ export default function AdminLeavesPage() {
   async function remove(it) {
     const ok = await confirm({ title: 'Hapus pengajuan?', message: 'Data pengajuan izin ini akan dihapus permanen.', confirmText: 'Hapus', danger: true })
     if (!ok) return
-    try { await leavesService.delete(it.leave_id); toast.success('Pengajuan dihapus.'); load() }
+    try { await leavesService.delete(it.leave_id); toast.success('Pengajuan dihapus.'); notificationService.notifyPendingChanged(); load() }
     catch (err) { toast.error(err.message || 'Gagal menghapus.') }
   }
 
   return (
     <div>
       <PageHeader title="Izin / Sakit" subtitle="Tinjau & setujui pengajuan izin anggota" />
+
+      {searchParams.get('pengingat') && status === 'Menunggu' && (
+        <AdminPendingNotice count={items.length} labelKey="admin.pending.leaves" />
+      )}
 
       <Card className="p-4 mb-4">
         <Select label="Status" value={status} onChange={e => setStatus(e.target.value)}>

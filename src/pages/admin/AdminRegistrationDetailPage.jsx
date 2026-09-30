@@ -5,6 +5,7 @@ import { registrationService } from '@/services/contentService'
 import { usersService } from '@/services/usersService'
 import { sensitiveIdentityService } from '@/services/sensitiveIdentityService'
 import { pushService } from '@/services/pushService'
+import { notificationService } from '@/services/notificationService'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { Card, Select, Textarea, Input, Button, Spinner, StatusBadge, EmptyState } from '@/components/ui'
@@ -137,6 +138,7 @@ export default function AdminRegistrationDetailPage() {
           }).catch(() => {})
         }
         await load()
+        notificationService.notifyPendingChanged()
         setSuccess('Pengajuan KTJ ditolak. Jemaat dapat melihat alasan dan mengajukan ulang.')
         toast.success('Pengajuan KTJ ditolak. Jemaat dapat melihat alasan dan mengajukan ulang.')
       } catch (err) {
@@ -155,6 +157,7 @@ export default function AdminRegistrationDetailPage() {
         scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
       })
       await load() // reload lewat getById supaya photo_url/documents ter-resolve ulang (bukan path mentah)
+      notificationService.notifyPendingChanged()
       setSuccess('Status pendaftaran berhasil diperbarui.')
       toast.success('Status pendaftaran berhasil diperbarui.')
       // Beri tahu jemaat lewat push bila statusnya berubah
