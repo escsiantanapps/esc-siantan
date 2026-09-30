@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { startHarness, fixture } from './harness.mjs'
 import { countLeaveCredits, getEvaluationResult } from '../src/lib/evaluationLeave.js'
 import { displayEmail, isSyntheticLoginEmail } from '../src/lib/utils.js'
+import { isAutoDeactivated, isReactivationPending } from '../src/lib/accountActivity.js'
 
 let harness
 before(async () => { harness = await startHarness() })
@@ -57,6 +58,25 @@ test('Evaluasi: setiap izin disetujui dihitung satu dan hanya untuk form terkait
   assert.deepEqual(getEvaluationResult({ filled: 0, leaveCount: 1, target: 1 }), {
     counted: 1, minLulus: 1, status: 'TERPENUHI',
   })
+})
+
+test('Aktivasi ulang hanya berlaku untuk Nonaktif otomatis dan tetap menunggu Admin', () => {
+  assert.equal(isAutoDeactivated({
+    status: 'Nonaktif',
+    inactivity_deactivated_at: '2026-09-30T01:00:00Z',
+  }), true)
+  assert.equal(isAutoDeactivated({
+    status: 'Nonaktif',
+    inactivity_deactivated_at: null,
+  }), false)
+  assert.equal(isReactivationPending({
+    status: 'Menunggu Persetujuan',
+    reactivation_requested_at: '2026-09-30T02:00:00Z',
+  }), true)
+  assert.equal(isReactivationPending({
+    status: 'Aktif',
+    reactivation_requested_at: '2026-09-30T02:00:00Z',
+  }), false)
 })
 
 test('Email login internal tidak ditampilkan sebagai alamat kontak', () => {
@@ -167,6 +187,28 @@ test('Admin: KTJ menunggu tampil sebagai notifikasi dan membuka antrean terfilte
     assert.match(await f.page.getByRole('status').innerText(), /Pengajuan KTJ: 1 menunggu/)
     assert.equal(await f.page.getByText('Pengajuan KTJ Uji', { exact: true }).count(), 1)
     assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+  })
+})
+
+test('Admin dapat membedakan Nonaktif otomatis dan permintaan aktivasi ulang', async () => {
+  await scenario({
+    members: [
+      {
+        user_id: 'QA-INACTIVE', name: 'Akun Tidak Aktif', role: 'Jemaat',
+        status: 'Nonaktif', inactivity_deactivated_at: '2026-09-30T01:00:00Z',
+        last_seen_at: '2026-09-15T01:00:00Z', user_ministries: [],
+      },
+      {
+        user_id: 'QA-REACTIVATE', name: 'Akun Minta Aktif', role: 'Volunteer',
+        status: 'Menunggu Persetujuan', reactivation_requested_at: '2026-09-30T02:00:00Z',
+        inactivity_deactivated_at: '2026-09-29T01:00:00Z', user_ministries: [],
+      },
+    ],
+  }, async f => {
+    await f.goto('/admin/jemaat')
+    await f.page.getByText('Akun Tidak Aktif', { exact: true }).waitFor()
+    assert.equal(await f.page.getByText('Nonaktif otomatis', { exact: true }).count(), 1)
+    assert.equal(await f.page.getByText('Menunggu aktivasi ulang', { exact: true }).count(), 1)
   })
 })
 

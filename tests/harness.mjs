@@ -90,6 +90,7 @@ export async function fixture(harness, options = {}) {
       if (table === 'users') {
         if (url.searchParams.has('auth_id')) return rows([profile])
         if (url.searchParams.get('role') === 'eq.Admin') return rows([{ user_id: 'QA-ADMIN', name: 'Admin Uji', role: 'Admin', status: 'Aktif', photo_url: null }])
+        if (request.method() === 'GET' && state.members) return rows(state.members)
         return rows([])
       }
       if (table === 'ktj_registrations') return rows(state.ktjRegistrations || [])

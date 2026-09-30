@@ -10,6 +10,7 @@ import { Sparkles } from 'lucide-react'
 import { Card, Input, Select, Textarea, Button, PageHeader, Spinner, EmptyState, Badge, StatusBadge, Avatar } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 import { spColor } from '@/lib/utils'
+import { isAutoDeactivated, isReactivationPending } from '@/lib/accountActivity'
 
 const LIMIT = 20
 
@@ -269,6 +270,12 @@ export default function AdminMembersPage() {
               </div>
               <div className="flex flex-col items-end gap-1">
                 <StatusBadge status={m.status} />
+                {isAutoDeactivated(m) && (
+                  <span className="text-[10px] font-medium text-amber-700">{t('amem.autoInactive')}</span>
+                )}
+                {isReactivationPending(m) && (
+                  <span className="text-[10px] font-medium text-brand-600">{t('amem.reactivationPending')}</span>
+                )}
                 {m.sp_level && m.sp_level !== 'Aman' && (
                   <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${spColor(m.sp_level)}`}>{m.sp_level}</span>
                 )}

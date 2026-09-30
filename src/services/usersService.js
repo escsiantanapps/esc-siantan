@@ -256,11 +256,12 @@ export const usersService = {
     return data
   },
 
-  // Heartbeat kehadiran online: perbarui last_seen_at milik sendiri.
-  // Dipanggil berkala dari UserLayout — gagal diam-diam (bukan fitur kritis).
+  // Heartbeat aktivitas: perbarui last_seen_at milik sendiri untuk semua peran.
+  // Status selain Aktif tidak disentuh agar masa tunggu persetujuan tetap utuh.
   async heartbeat(userId) {
     await supabase.from('users')
       .update({ last_seen_at: new Date().toISOString() })
       .eq('user_id', userId)
+      .eq('status', 'Aktif')
   },
 }

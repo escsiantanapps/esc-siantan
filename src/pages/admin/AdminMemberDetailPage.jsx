@@ -12,6 +12,7 @@ import { Card, Avatar, Select, Textarea, Input, Button, Spinner, Checkbox, Empty
 import Uploader from '@/components/Uploader'
 import MembershipCard from '@/components/MembershipCard'
 import { displayEmail, formatDate, formatPhone, hitungUmur, isSyntheticLoginEmail, validateUpload } from '@/lib/utils'
+import { isAutoDeactivated, isReactivationPending } from '@/lib/accountActivity'
 
 export default function AdminMemberDetailPage() {
   const { id } = useParams()
@@ -148,6 +149,7 @@ export default function AdminMemberDetailPage() {
   }
 
   async function handleApproval(status) {
+    const reactivationRequest = isReactivationPending(member)
     if (status === 'Ditolak') {
       const ok = await confirm({
         title: 'Tolak Pendaftaran?',
@@ -174,7 +176,9 @@ export default function AdminMemberDetailPage() {
       const updated = await usersService.update(id, { status })
       setMember(updated)
       set('status', status)
-      const msg = 'Pendaftaran disetujui.'
+      const msg = reactivationRequest
+        ? (status === 'Aktif' ? t('amem.reactivationApproved') : t('amem.reactivationRejected'))
+        : 'Pendaftaran disetujui.'
       setSuccess(msg)
       toast.success(msg)
     } catch (err) {
@@ -249,7 +253,8 @@ export default function AdminMemberDetailPage() {
 
   if (loading) return <div className="flex justify-center items-center h-60"><Spinner /></div>
 
-  const approvalBlocked = member?.registration_photo_required === true && !member?.photo_url
+  const reactivationPending = isReactivationPending(member)
+  const approvalBlocked = !reactivationPending && member?.registration_photo_required === true && !member?.photo_url
 
   if (!member) {
     return (
@@ -275,17 +280,24 @@ export default function AdminMemberDetailPage() {
         <div className="bg-green-50 border border-green-100 text-green-600 text-sm rounded-xl px-4 py-3 mb-4">{success}</div>
       )}
 
-      {/* Persetujuan pendaftaran */}
+      {/* Persetujuan pendaftaran atau aktivasi ulang akun lama */}
       {member.status === 'Menunggu Persetujuan' && (
         <Card className="p-4 mb-4 border-brand-200 bg-brand-50 flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <p className="text-sm font-semibold text-brand-700">Menunggu persetujuan pendaftaran</p>
+            <p className="text-sm font-semibold text-brand-700">
+              {reactivationPending ? t('amem.reactivationPending') : 'Menunggu persetujuan pendaftaran'}
+            </p>
             <p className="text-xs text-brand-600">
-              {approvalBlocked ? t('amem.photoRequiredApproval') : 'Setujui agar jemaat ini bisa mengakses akunnya.'}
+              {reactivationPending
+                ? t('amem.reactivationPendingDesc')
+                : approvalBlocked ? t('amem.photoRequiredApproval') : 'Setujui agar jemaat ini bisa mengakses akunnya.'}
             </p>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="danger" loading={saving} onClick={() => handleApproval('Ditolak')}>Tolak</Button>
+            <Button size="sm" variant="danger" loading={saving}
+              onClick={() => handleApproval(reactivationPending ? 'Nonaktif' : 'Ditolak')}>
+              {reactivationPending ? t('amem.keepInactive') : 'Tolak'}
+            </Button>
             <Button size="sm" loading={saving} disabled={approvalBlocked}
               onClick={() => handleApproval('Aktif')}>Setujui</Button>
           </div>
@@ -503,6 +515,18 @@ export default function AdminMemberDetailPage() {
           <option value="Aktif">Aktif</option>
           <option value="Nonaktif">Nonaktif</option>
         </Select>
+        {(isAutoDeactivated(member) || reactivationPending) && (
+          <div className="rounded-xl border border-amber-200 bg-control px-3 py-2.5">
+            <p className="text-xs font-semibold text-amber-700">
+              {reactivationPending ? t('amem.reactivationPending') : t('amem.autoInactive')}
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {reactivationPending
+                ? t('amem.reactivationPendingDesc')
+                : t('amem.inactivityLastSeen', { date: member.last_seen_at ? formatDate(member.last_seen_at) : t('amem.neverActive') })}
+            </p>
+          </div>
+        )}
 
         {/* Peran tambahan: PKS */}
         {canEditRole && (

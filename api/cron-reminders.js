@@ -12,6 +12,10 @@ const norm = s => String(s || '').trim().toLowerCase()
 
 export default async function handler(req, res) {
   try {
+    if (req.method !== 'GET' && req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' })
+    }
+
     // Fail-closed: CRON_SECRET wajib. Bila belum diset, endpoint DIBLOKIR
     // (bukan dibuka) supaya lupa konfigurasi tidak berujung terbukanya
     // pengiriman push massal ke publik.
@@ -24,10 +28,6 @@ export default async function handler(req, res) {
     const authBuf = Buffer.from(authVal)
     if (secretBuf.length !== authBuf.length || !timingSafeEqual(secretBuf, authBuf)) {
       return res.status(401).json({ error: 'Unauthorized' })
-    }
-
-    if (req.method !== 'GET' && req.method !== 'POST') {
-      return res.status(405).json({ error: 'Method not allowed' })
     }
 
     const webpush = (await import('web-push')).default
@@ -52,6 +52,20 @@ export default async function handler(req, res) {
     const slot = norm(req.query?.slot || '')
     const VALID_SLOTS = ['pagi', 'siang', 'sore']
 
+    // Sweep cukup sekali sehari di slot pagi. Bila migrasi belum dijalankan,
+    // pengingat SOP tetap berjalan dan respons menandai kegagalan sweep.
+    let autoDeactivated = 0
+    let inactivitySweepFailed = false
+    if (slot === 'pagi') {
+      const { data, error } = await admin.rpc('deactivate_stale_users')
+      if (error) {
+        inactivitySweepFailed = true
+        console.error('[cron-reminders:inactivity-sweep]', error)
+      } else {
+        autoDeactivated = Number(data) || 0
+      }
+    }
+
     const { data: templates } = await admin
       .from('form_templates').select('form_id, title, weekly_goal, period, reminder_enabled, reminder_days, reminder_slots, allowed_roles')
       .eq('reminder_enabled', true)
@@ -66,7 +80,12 @@ export default async function handler(req, res) {
       if (rs.length === 0) return true
       return rs.includes(slot)
     })
-    if (due.length === 0) return res.status(200).json({ ok: true, today: todayId, slot: slot || null, due: 0 })
+    if (due.length === 0) {
+      return res.status(200).json({
+        ok: true, today: todayId, slot: slot || null, due: 0,
+        autoDeactivated, inactivitySweepFailed,
+      })
+    }
 
     // Pra-ambil langganan push & subset user yang berlangganan.
     const { data: subs } = await admin.from('push_subscriptions').select('*')
@@ -138,7 +157,10 @@ export default async function handler(req, res) {
       report.push({ form: tpl.title, targets: targets.length, sent, errors })
     }
 
-    return res.status(200).json({ ok: true, today: todayId, slot: slot || null, due: due.length, totalSent, removed, report })
+    return res.status(200).json({
+      ok: true, today: todayId, slot: slot || null, due: due.length,
+      totalSent, removed, autoDeactivated, inactivitySweepFailed, report,
+    })
   } catch (e) {
     console.error('[cron-reminders]', e)
     return res.status(500).json({ error: 'Terjadi kesalahan internal.' })

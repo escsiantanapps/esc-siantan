@@ -2,6 +2,7 @@ import { createContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchApi } from '@/lib/utils'
 import { usersService } from '@/services/usersService'
+import { isAutoDeactivated } from '@/lib/accountActivity'
 
 export const AuthContext = createContext(null)
 
@@ -49,6 +50,26 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Catat aktivitas semua peran dari penyedia auth, termasuk Admin yang tidak
+  // pernah membuka UserLayout. Tab tersembunyi tidak dianggap aktivitas.
+  useEffect(() => {
+    const userId = profile?.user_id
+    if (!userId || profile?.status !== 'Aktif') return undefined
+
+    const heartbeat = () => {
+      if (document.visibilityState === 'visible') {
+        usersService.heartbeat(userId).catch(() => {})
+      }
+    }
+    heartbeat()
+    const timer = setInterval(heartbeat, 120000)
+    document.addEventListener('visibilitychange', heartbeat)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', heartbeat)
+    }
+  }, [profile?.user_id, profile?.status])
+
   async function fetchProfile(authUser) {
     try {
       let { data, error } = await supabase
@@ -79,13 +100,31 @@ export function AuthProvider({ children }) {
       }
 
       setProfile(data)
+      return data
     } catch {
       // Gagal memuat profil (mis. jaringan putus). Jangan biarkan user terjebak
       // di layar spinner — biarkan profile null agar UI bisa menampilkan login.
       setProfile(null)
+      return null
     } finally {
       setLoading(false)
     }
+  }
+
+  async function requestReactivationAfterLogin(authUser, accessToken) {
+    const currentProfile = await fetchProfile(authUser)
+    if (!isAutoDeactivated(currentProfile) || !accessToken) return currentProfile
+
+    // Kata sandi sudah diverifikasi oleh Supabase Auth. Endpoint hanya mengubah
+    // Nonaktif otomatis menjadi Menunggu Persetujuan; blokir manual tetap utuh.
+    const response = await fetchApi('/api/request-reactivation', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken },
+    })
+    if (!response.ok) return currentProfile
+
+    const result = await response.json().catch(() => ({}))
+    return result.requested ? fetchProfile(authUser) : currentProfile
   }
 
   // Login dengan email ATAU nomor telepon. Bila bukan email, nomor diresolusi
@@ -100,6 +139,7 @@ export function AuthProvider({ children }) {
         }
         throw error
       }
+      await requestReactivationAfterLogin(data.user, data.session?.access_token)
       return data
     }
     const res = await fetchApi('/api/login-phone', {
@@ -109,10 +149,11 @@ export function AuthProvider({ children }) {
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.code === 'SERVICE_UNAVAILABLE' ? data.code : (data.error || 'Gagal masuk.'))
-    const { error } = await supabase.auth.setSession({
+    const { data: sessionData, error } = await supabase.auth.setSession({
       access_token: data.access_token, refresh_token: data.refresh_token,
     })
     if (error) throw error
+    await requestReactivationAfterLogin(sessionData.user, sessionData.session?.access_token)
     return data
   }
 

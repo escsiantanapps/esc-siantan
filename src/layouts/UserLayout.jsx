@@ -5,7 +5,6 @@ import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAuth'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
-import { usersService } from '@/services/usersService'
 import { shouldShowOnboarding } from '@/pages/OnboardingPage'
 import SheepLoader from '@/components/SheepLoader'
 
@@ -50,15 +49,6 @@ export default function UserLayout() {
   const roadmapCheckStarted = useRef(false)
   const roadmapCheckMounted = useRef(false)
 
-  // Heartbeat kehadiran online: perbarui last_seen_at saat app dibuka lalu
-  // tiap 2 menit selama app aktif. Dipakai indikator online/offline di admin.
-  useEffect(() => {
-    const uid = profile?.user_id
-    if (!uid) return
-    usersService.heartbeat(uid).catch(() => {})
-    const timer = setInterval(() => usersService.heartbeat(uid).catch(() => {}), 120000)
-    return () => clearInterval(timer)
-  }, [profile?.user_id])
   // Konfirmasi keluar hanya di Beranda (root). Tab lain pakai replace, jadi
   // back dari tab kembali ke Beranda dulu, baru dari Beranda minta konfirmasi.
   useExitConfirm(location.pathname === '/', () => toast.info(t('app.exitConfirm')))

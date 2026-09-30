@@ -5300,3 +5300,113 @@ CREATE TABLE IF NOT EXISTS activation_otp (
 ALTER TABLE activation_otp ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE activation_otp FROM anon, authenticated;
 CREATE INDEX IF NOT EXISTS activation_otp_expires_idx ON activation_otp (expires_at);
+
+
+-- ── Migrasi v94: Nonaktif otomatis setelah 14 hari tanpa aktivitas ───
+-- TEMUAN (2026-09-30): last_seen_at sebelumnya hanya diperbarui dari
+-- UserLayout. Admin/Super Admin dan akun yang tidak membuka layout jemaat
+-- tidak tercatat konsisten, sehingga kolom ini belum aman dipakai langsung
+-- untuk menonaktifkan akun lama.
+-- KEPUTUSAN OPERATOR: Jemaat, Volunteer, dan PKS yang tidak aktif selama
+-- 14 hari dibuat Nonaktif. Admin, Super Admin, dan Gembala dikecualikan.
+-- Akun lama mendapat tenggang 14 hari sejak migrasi ini dijalankan. Hanya
+-- status Nonaktif yang dibuat sistem ini yang boleh meminta persetujuan ulang
+-- sesudah kata sandi diverifikasi; blokir manual Admin tetap berlaku.
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS inactivity_tracking_started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS inactivity_deactivated_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS reactivation_requested_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS users_inactivity_sweep_idx
+  ON users (status, role, last_seen_at)
+  WHERE auth_id IS NOT NULL AND status = 'Aktif';
+
+-- Marker inactivity_deactivated_at adalah kolom sistem. Perubahan status
+-- manual selalu menghapus marker agar akun yang diblokir Admin tidak dapat
+-- mengaktifkan dirinya sendiri pada login berikutnya.
+CREATE OR REPLACE FUNCTION guard_user_inactivity_marker() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  trusted_change boolean :=
+    COALESCE(current_setting('app.allow_inactivity_status_update', true), '') = '1';
+BEGIN
+  IF trusted_change THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    NEW.inactivity_deactivated_at := NULL;
+    NEW.reactivation_requested_at := NULL;
+  ELSIF NEW.inactivity_deactivated_at IS DISTINCT FROM OLD.inactivity_deactivated_at
+     OR NEW.reactivation_requested_at IS DISTINCT FROM OLD.reactivation_requested_at
+     OR NEW.inactivity_tracking_started_at IS DISTINCT FROM OLD.inactivity_tracking_started_at THEN
+    RAISE EXCEPTION 'Kolom status aktivitas hanya dapat diubah oleh sistem.';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_user_inactivity_marker ON users;
+CREATE TRIGGER trg_guard_user_inactivity_marker
+  BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION guard_user_inactivity_marker();
+
+-- Dipanggil sekali sehari dari cron pagi. Fungsi hanya tersedia bagi
+-- service_role agar pengguna tidak dapat menonaktifkan akun lain lewat RPC.
+CREATE OR REPLACE FUNCTION deactivate_stale_users()
+  RETURNS integer
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  affected integer := 0;
+BEGIN
+  PERFORM set_config('app.allow_inactivity_status_update', '1', true);
+
+  UPDATE users
+  SET status = 'Nonaktif',
+      inactivity_deactivated_at = now()
+  WHERE status = 'Aktif'
+    AND auth_id IS NOT NULL
+    AND role IN ('Jemaat', 'Volunteer', 'PKS')
+    AND COALESCE(last_seen_at, inactivity_tracking_started_at)
+        < now() - interval '14 days';
+
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  PERFORM set_config('app.allow_inactivity_status_update', '', true);
+  RETURN affected;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION deactivate_stale_users() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION deactivate_stale_users() TO service_role;
+
+-- Endpoint login memanggil fungsi ini setelah Supabase Auth memverifikasi
+-- kata sandi. Login hanya membuat permintaan; akses tetap tertutup sampai
+-- Admin menyetujui. Marker wajib ada agar Nonaktif manual tidak ikut masuk
+-- antrean aktivasi ulang.
+CREATE OR REPLACE FUNCTION request_inactive_user_reactivation(p_auth_id UUID)
+  RETURNS boolean
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  affected integer := 0;
+BEGIN
+  IF p_auth_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  PERFORM set_config('app.allow_inactivity_status_update', '1', true);
+
+  UPDATE users
+  SET status = 'Menunggu Persetujuan',
+      reactivation_requested_at = now(),
+      last_seen_at = now()
+  WHERE auth_id = p_auth_id
+    AND status = 'Nonaktif'
+    AND inactivity_deactivated_at IS NOT NULL
+    AND role IN ('Jemaat', 'Volunteer', 'PKS');
+
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  PERFORM set_config('app.allow_inactivity_status_update', '', true);
+  RETURN affected = 1;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION request_inactive_user_reactivation(UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION request_inactive_user_reactivation(UUID) TO service_role;
