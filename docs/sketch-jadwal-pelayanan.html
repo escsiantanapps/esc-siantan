@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sketch Jadwal Pelayanan - ESC Siantan</title>
+  <style>
+    :root {
+      --brand: #f4511e;
+      --brand-soft: #fff1eb;
+      --ink: #18212f;
+      --muted: #64748b;
+      --line: #dfe5ec;
+      --surface: #ffffff;
+      --canvas: #eef2f6;
+      --control: #f2f5f7;
+      --green: #16794a;
+      --green-soft: #e9f7ef;
+      --amber: #98620c;
+      --amber-soft: #fff6dc;
+      --red: #bd302b;
+      --red-soft: #fff0ee;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    .canvas { max-width: 1500px; margin: 0 auto; padding: 32px; }
+    .intro { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+    .eyebrow { color: var(--brand); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    h1 { margin: 5px 0 0; font-size: 28px; line-height: 1.2; }
+    .intro p { margin: 0; color: var(--muted); font-size: 14px; max-width: 620px; line-height: 1.55; }
+    .screens { display: grid; grid-template-columns: repeat(2, minmax(320px, 420px)); gap: 24px; justify-content: center; align-items: start; }
+    .screen-label { margin: 0 0 8px; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .phone {
+      min-height: 640px;
+      background: var(--surface);
+      border: 1px solid #cbd5df;
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar { padding: 20px 18px 14px; border-bottom: 1px solid var(--line); }
+    .back { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+    .topline { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    h2 { margin: 0; font-size: 20px; }
+    .content { padding: 16px; flex: 1; }
+    .home-entry { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 9px 12px; margin: 0 0 8px; font-size: 12px; }
+    .home-entry strong { color: var(--brand); font-size: 13px; }
+    .empty-view { min-height: 300px; display: grid; align-content: center; justify-items: center; text-align: center; gap: 10px; }
+    .empty-view strong { font-size: 17px; }
+    .empty-view p { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 8px; max-width: 260px; }
+    .segments { display: grid; grid-template-columns: 1fr 1fr; background: var(--control); padding: 4px; border-radius: 8px; }
+    .segment { min-height: 40px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); font-size: 13px; font-weight: 700; }
+    .segment.active { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 16px 0; }
+    .select, .search, .field {
+      min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+      padding: 11px 12px; font-size: 14px; color: var(--ink);
+    }
+    .select { flex: 1; }
+    .btn { min-height: 44px; border: 0; border-radius: 8px; padding: 0 14px; font-weight: 750; font-size: 13px; background: var(--brand); color: white; }
+    .btn.secondary { color: var(--ink); background: var(--control); border: 1px solid var(--line); }
+    .date-title { margin: 20px 0 8px; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    .card { border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 10px; background: var(--surface); }
+    .card-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+    .card h3 { font-size: 15px; margin: 0 0 4px; }
+    .meta { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .role { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .role strong { display: block; font-size: 13px; margin-bottom: 2px; }
+    .badge { display: inline-flex; align-items: center; min-height: 24px; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+    .published { background: var(--green-soft); color: var(--green); }
+    .draft { background: var(--control); color: #4b5868; }
+    .warning { background: var(--amber-soft); color: var(--amber); }
+    .danger { background: var(--red-soft); color: var(--red); }
+    .note { margin-top: 10px; background: var(--brand-soft); border-left: 3px solid var(--brand); padding: 9px 10px; font-size: 12px; line-height: 1.45; }
+    .filters { display: flex; gap: 7px; overflow: hidden; margin-bottom: 12px; }
+    .chip { min-height: 36px; display: inline-flex; align-items: center; padding: 0 11px; border-radius: 999px; background: var(--control); color: var(--muted); font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .chip.active { background: var(--brand-soft); color: var(--brand); }
+    .progress { height: 6px; background: var(--control); border-radius: 999px; overflow: hidden; margin: 12px 0 8px; }
+    .progress span { display: block; height: 100%; background: var(--brand); }
+    .row-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .link { color: var(--brand); font-size: 12px; font-weight: 750; }
+    .autosave { color: var(--green); font-size: 12px; font-weight: 700; }
+    .section-title { display: flex; justify-content: space-between; margin: 18px 0 10px; font-size: 13px; font-weight: 800; text-transform: uppercase; }
+    .slot-label { font-size: 12px; font-weight: 750; margin: 12px 0 6px; }
+    .person, .empty-slot {
+      min-height: 44px; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 7px; font-size: 13px;
+    }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+    .person-name { flex: 1; font-weight: 700; }
+    .empty-slot { border-style: dashed; color: var(--brand); justify-content: center; font-weight: 750; }
+    .alert { margin-top: 10px; border: 1px solid #f1d29c; background: var(--amber-soft); color: #744c0a; border-radius: 8px; padding: 10px; font-size: 12px; line-height: 1.45; }
+    .fields { display: grid; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+    .field-label { font-size: 12px; font-weight: 750; margin-bottom: 5px; }
+    .sticky-actions { display: grid; grid-template-columns: 1fr 1.25fr; gap: 8px; margin-top: 18px; }
+    .desktop-block { margin-top: 30px; }
+    .admin-shell { display: grid; grid-template-columns: 200px minmax(0, 1fr); background: var(--surface); border: 1px solid #cbd5df; border-radius: 8px; overflow: hidden; }
+    .admin-nav { background: #f8fafb; border-right: 1px solid var(--line); padding: 18px 12px; }
+    .admin-nav strong { display: block; font-size: 15px; margin: 0 8px 20px; }
+    .admin-nav span { display: block; border-radius: 6px; padding: 11px 9px; font-size: 13px; color: var(--muted); }
+    .admin-nav .active { color: var(--brand); background: var(--brand-soft); font-weight: 800; }
+    .admin-main { min-width: 0; padding: 20px; }
+    .admin-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+    .admin-heading .meta { margin-top: 5px; }
+    .admin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .admin-panel { border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+    .admin-panel h3 { font-size: 16px; margin: 0 0 12px; }
+    .conflict-row { padding: 11px 0; border-top: 1px solid var(--line); font-size: 13px; }
+    .conflict-row strong { display: block; margin-bottom: 3px; }
+    .panel-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .desktop {
+      background: var(--surface); border: 1px solid #cbd5df; border-radius: 8px; overflow: hidden;
+    }
+    .desktop-head { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 18px; }
+    .month-grid { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); }
+    .week { border-right: 1px solid var(--line); min-width: 0; }
+    .week:last-child { border-right: 0; }
+    .week-head { padding: 14px; background: #fff8f4; border-bottom: 1px solid var(--line); }
+    .week-head strong { display: block; font-size: 14px; }
+    .week-body { padding: 8px 14px 16px; }
+    .duty { display: grid; grid-template-columns: 80px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid #edf0f3; font-size: 12px; }
+    .duty span:first-child { color: var(--muted); font-weight: 700; }
+    .footer-note { color: var(--muted); font-size: 12px; padding: 14px 20px; border-top: 1px solid var(--line); }
+    @media (max-width: 1080px) {
+      .screens { grid-template-columns: 1fr; }
+      .phone { min-height: auto; max-width: 420px; width: 100%; margin: 0 auto; }
+      .admin-grid { grid-template-columns: 1fr; }
+      .month-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 600px) {
+      .canvas { padding: 18px 12px 28px; }
+      .intro { display: block; }
+      .intro p { margin-top: 10px; }
+      h1 { font-size: 23px; }
+      .month-grid { grid-template-columns: 1fr; }
+      .week { border-right: 0; border-bottom: 1px solid var(--line); }
+      .desktop-head { align-items: start; flex-direction: column; }
+      .admin-shell { grid-template-columns: 1fr; }
+      .admin-nav { border-right: 0; border-bottom: 1px solid var(--line); }
+      .admin-nav strong { margin-bottom: 8px; }
+      .admin-nav span { display: inline-block; }
+      .admin-main { padding: 14px; }
+      .admin-heading { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="canvas">
+    <header class="intro">
+      <div>
+        <div class="eyebrow">Design review · Draft</div>
+        <h1>Sistem Jadwal Pelayanan</h1>
+      </div>
+      <p>Menu jadwal pribadi tersedia bagi Volunteer bahkan saat belum mendapat tugas. Admin/Super Admin dan Head/Wakil yang diberi grant mengelola roster dan PDF dari panel pengelola.</p>
+    </header>
+
+    <section class="screens">
+      <div>
+        <p class="screen-label">VOLUNTEER · ADA TUGAS</p>
+        <div class="home-entry"><span>Menu Beranda</span><strong>Jadwal Pelayanan &gt;</strong></div>
+        <article class="phone">
+          <header class="topbar">
+            <div class="back">Kembali</div>
+            <h2>Jadwal Pelayanan</h2>
+          </header>
+          <div class="content">
+            <div class="toolbar"><div class="select">Oktober 2026</div></div>
+            <div class="date-title">Minggu, 4 Oktober</div>
+            <div class="card">
+              <div class="card-head">
+                <div><h3>Ibadah Kids · Elbert</h3><div class="meta">07.00-09.00 · Ruang Kids</div></div>
+                <span class="badge published">Terbit</span>
+              </div>
+              <div class="role"><strong>Worship · Singer</strong><div class="meta">Bersama Mei Mei</div></div>
+              <div class="note"><strong>Dresscode: Blazer</strong><br>Hadir 30 menit lebih awal untuk briefing.</div>
+            </div>
+            <div class="date-title">Minggu, 11 Oktober</div>
+            <div class="card">
+              <div class="card-head">
+                <div><h3>Ibadah Pagi</h3><div class="meta">08.00-10.00 · Ruang Utama</div></div>
+                <span class="badge published">Terbit</span>
+              </div>
+              <div class="role"><strong>Multimedia · Operator Media</strong><div class="meta">Briefing pukul 07.30</div></div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div>
+        <p class="screen-label">VOLUNTEER · BELUM ADA TUGAS</p>
+        <div class="home-entry"><span>Menu Beranda</span><strong>Jadwal Pelayanan &gt;</strong></div>
+        <article class="phone">
+          <header class="topbar">
+            <div class="back">Kembali</div>
+            <h2>Jadwal Pelayanan</h2>
+          </header>
+          <div class="content">
+            <div class="toolbar"><div class="select">Oktober 2026</div></div>
+            <div class="empty-view">
+              <strong>Belum ada tugas pelayanan</strong>
+              <p>Belum ada penugasan untuk periode ini. Jadwal Minggu yang baru akan muncul di sini setelah diterbitkan.</p>
+              <button class="btn secondary">Lihat bulan berikutnya</button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="desktop-block">
+      <p class="screen-label">PANEL PENGELOLA · /admin/jadwal-pelayanan</p>
+      <article class="admin-shell">
+        <aside class="admin-nav">
+          <strong>Panel Pengelola</strong>
+          <span class="active">Jadwal Pelayanan</span>
+          <span class="meta">Head/Wakil: hanya ministry yang diberikan. Admin: mengikuti Hak Akses.</span>
+        </aside>
+        <div class="admin-main">
+          <header class="admin-heading">
+            <div><h2>Jadwal Pelayanan</h2><div class="meta">Ministry Worship · Oktober 2026</div></div>
+            <div class="panel-actions" style="margin:0"><button class="btn secondary">Ekspor PDF</button><button class="btn">Buat Jadwal</button></div>
+          </header>
+          <div class="admin-grid">
+            <section class="admin-panel">
+              <h3>Roster kegiatan</h3>
+              <div class="toolbar"><div class="select">Oktober 2026</div></div>
+              <div class="card">
+                <div class="card-head"><div><h3>Ibadah Kids · Elbert</h3><div class="meta">4 Okt · 07.00-09.00 · Ruang Kids</div></div><span class="badge warning">Draft</span></div>
+                <div class="progress"><span style="width:83%"></span></div>
+                <div class="row-between"><span class="meta">5 dari 6 slot terisi</span><span class="link">Buka</span></div>
+              </div>
+              <div class="card">
+                <div class="card-head"><div><h3>Ibadah Pagi</h3><div class="meta">4 Okt · 08.30-10.00 · Ruang Utama</div></div><span class="badge warning">Draft</span></div>
+                <div class="progress"><span style="width:83%"></span></div>
+                <div class="row-between"><span class="meta">5 dari 6 slot terisi</span><span class="link">Buka</span></div>
+              </div>
+            </section>
+            <section class="admin-panel">
+              <div class="row-between"><h3>Editor · Ibadah Pagi</h3><span class="badge draft">Draft</span></div>
+              <div class="meta">Minggu, 4 Oktober · Ruang Utama</div>
+              <div class="fields">
+                <div><div class="field-label">Jam mulai</div><div class="field">08.30</div></div>
+                <div><div class="field-label">Jam selesai</div><div class="field">10.00</div></div>
+              </div>
+              <div class="section-title"><span>Worship</span><span>5/6 terisi</span></div>
+              <div class="slot-label">Singer</div>
+              <div class="person"><span class="avatar">MM</span><span class="person-name">Mei Mei</span><span class="meta">Hapus</span></div>
+              <div class="empty-slot">Pilih pelayan</div>
+              <div class="alert"><strong>1 slot belum terisi.</strong> Draft dapat disimpan dan ditinjau sebelum terbit.</div>
+              <div class="panel-actions"><button class="btn secondary">Simpan Draft</button><button class="btn">Tinjau & Terbitkan</button></div>
+            </section>
+          </div>
+          <section class="admin-panel" style="margin-top:18px">
+            <h3>Pemeriksaan bentrok · Belva</h3>
+            <div class="meta">Calon tugas: Ibadah Pagi · Worship · Singer · 4 Okt, 08.30-10.00 · Ruang Utama</div>
+            <div class="conflict-row"><strong>1. Ibadah Kids · Elbert</strong>Worship · WL · 4 Okt, 07.00-09.00 · Ruang Kids</div>
+            <div class="conflict-row"><strong>2. Kelas Creative · Sesi 3</strong>Musik · Bass · 4 Okt, 09.00-11.00 · Ruang Musik</div>
+            <div class="panel-actions"><button class="btn secondary">Batal</button><button class="btn">Tetap tugaskan</button></div>
+          </section>
+        </div>
+      </article>
+    </section>
+
+    <section class="desktop-block">
+      <p class="screen-label">PANEL PENGELOLA · REKAP BULANAN</p>
+      <article class="desktop">
+        <header class="desktop-head">
+          <div><h2>Roster Oktober 2026</h2><div class="meta">Ministry Worship · Ibadah Kids</div></div>
+          <div class="toolbar" style="margin:0"><button class="btn secondary">Ekspor PDF</button><button class="btn">Buat Jadwal</button></div>
+        </header>
+        <div class="month-grid">
+          <div class="week">
+            <div class="week-head"><strong>4 Oktober</strong><span class="meta">Ibadah Kids · Elbert<br>07.00-09.00 · 6/6 slot · Terbit</span></div>
+            <div class="week-body"><div class="duty"><span>WL</span><strong>Elyon</strong></div><div class="duty"><span>Singer</span><strong>Mei Mei, Delvin</strong></div><div class="duty"><span>Peraga</span><strong>Keysha, Elin</strong></div><div class="duty"><span>Pengajar</span><strong>Review Games</strong></div></div>
+          </div>
+          <div class="week">
+            <div class="week-head"><strong>11 Oktober</strong><span class="meta">Ibadah Kids · Merin<br>07.00-09.00 · 5/6 slot · Draft</span></div>
+            <div class="week-body"><div class="duty"><span>WL</span><strong>Belva</strong></div><div class="duty"><span>Singer</span><strong>Nico, Yola</strong></div><div class="duty"><span>Peraga</span><strong>Vania, Sully</strong></div><div class="duty"><span>Pengajar</span><strong class="badge warning">Belum diisi</strong></div></div>
+          </div>
+          <div class="week">
+            <div class="week-head"><strong>18 Oktober</strong><span class="meta">Ibadah Kids · Elbert<br>07.00-09.00 · 6/6 slot · Terbit</span></div>
+            <div class="week-body"><div class="duty"><span>WL</span><strong>Belva</strong></div><div class="duty"><span>Singer</span><strong>Keysha, Delvin</strong></div><div class="duty"><span>Peraga</span><strong>Elin, Vania</strong></div><div class="duty"><span>Pengajar</span><strong>Nonton Games</strong></div></div>
+          </div>
+          <div class="week">
+            <div class="week-head"><strong>25 Oktober</strong><span class="meta">Ibadah Kids · Juliana<br>07.00-09.00 · 4/6 slot · Draft</span></div>
+            <div class="week-body"><div class="duty"><span>WL</span><strong>Kevin</strong></div><div class="duty"><span>Singer</span><strong>Mei Mei, Nico</strong></div><div class="duty"><span>Peraga</span><strong>Sully</strong></div><div class="duty"><span>Pengajar</span><strong class="badge warning">Belum diisi</strong></div></div>
+          </div>
+        </div>
+        <footer class="footer-note">Ekspor PDF tersedia pada panel pengelola sesuai lingkup akses. Nama orang dan isi roster adalah contoh rancangan.</footer>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

@@ -57,7 +57,7 @@ export async function fixture(harness, options = {}) {
     if (url.origin === harness.baseUrl && !url.pathname.startsWith('/api/')) return route.continue()
     // Semua request nonlokal diintersep, termasuk font. Kredensial asli tidak pernah diperlukan.
     if (url.hostname === 'qa-local.supabase.co') {
-      requests.push({ path: url.pathname, method: request.method() })
+      requests.push({ path: url.pathname, method: request.method(), search: url.search })
       if (url.pathname === '/auth/v1/token') {
         if (state.authRestricted) return reply({ message: 'Service restricted: exceed_cached_egress_quota' }, 402)
         return reply({ error: 'invalid_grant', error_description: 'Simulasi sandi salah' }, 400)
@@ -83,6 +83,7 @@ export async function fixture(harness, options = {}) {
         })
       }
       if (table === 'get_points_leaderboard_with_me') return reply(state.leaderboard || [])
+      if (table === 'auth_admin_can') return reply(state.role === 'Super Admin' || state.allowedPages?.includes('/admin/jadwal-pelayanan') || false)
       if (table === 'admin_user_permissions') {
         if (state.permissionFailure) return reply({ message: 'Simulasi gangguan izin' }, 503)
         return rows(state.allowedPages === null ? [] : [{ user_id: 'QA-ADMIN', allowed_pages: state.allowedPages }])
@@ -93,7 +94,49 @@ export async function fixture(harness, options = {}) {
         if (request.method() === 'GET' && state.members) return rows(state.members)
         return rows([])
       }
+      if (table === 'user_ministries') {
+        let data = state.ministryMembers || []
+        const ministryId = url.searchParams.get('ministry_id')
+        if (ministryId?.startsWith('eq.')) data = data.filter(row => row.ministry_id === ministryId.slice(3))
+        const status = url.searchParams.get('users.status')
+        const name = url.searchParams.get('users.name')
+        const needle = name?.startsWith('ilike.%') ? name.slice(7, -1).toLocaleLowerCase('id') : null
+        data = data.map(row => ({
+          ...row,
+          users: row.users && (!status?.startsWith('eq.') || row.users.status === status.slice(3))
+            && (needle === null || row.users.name.toLocaleLowerCase('id').includes(needle)) ? row.users : null,
+        }))
+        if (url.searchParams.get('select')?.includes('!inner(')) data = data.filter(row => row.users)
+        const limit = Number(url.searchParams.get('limit'))
+        if (limit > 0) data = data.slice(0, limit)
+        return rows(data)
+      }
+      if (table === 'service_roster_slots') {
+        if (state.rosterFailure) return reply({ message: 'Simulasi gagal memuat roster' }, 503)
+        return rows(state.rosterSlots || [])
+      }
+      if (table === 'service_rosters') {
+        if (state.rosterFailure) return reply({ message: 'Simulasi gagal memuat roster' }, 503)
+        let data = state.rosters || []
+        const rosterId = url.searchParams.get('roster_id')
+        if (rosterId?.startsWith('eq.')) data = data.filter(row => row.roster_id === rosterId.slice(3))
+        const ministryId = url.searchParams.get('ministry_id')
+        if (ministryId?.startsWith('eq.')) data = data.filter(row => row.ministry_id === ministryId.slice(3))
+        const status = url.searchParams.get('status')
+        if (status?.startsWith('in.')) data = data.filter(row => status.slice(3).includes(row.status))
+        for (const condition of url.searchParams.getAll('service_date')) {
+          if (condition.startsWith('gte.')) data = data.filter(row => row.service_date >= condition.slice(4))
+          if (condition.startsWith('lt.')) data = data.filter(row => row.service_date < condition.slice(3))
+        }
+        return rows(data)
+      }
+      if (table === 'ministry_schedule_assignments') {
+        if (state.legacyScheduleFailure) return reply({ message: 'Simulasi gagal memuat jadwal lama' }, 503)
+        return rows(state.legacyScheduleAssignments || [])
+      }
       if (table === 'ktj_registrations') return rows(state.ktjRegistrations || [])
+      if (table === 'ministries') return rows(state.ministries || [])
+      if (table === 'ministry_schedule_managers') return rows(state.managerGrants || [])
       if (table === 'form_templates') {
         if (state.templateFailure) return reply({ message: 'Simulasi gangguan SOP' }, 503)
         return rows([state.template])

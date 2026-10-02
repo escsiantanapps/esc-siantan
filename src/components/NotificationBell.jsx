@@ -1,15 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, Megaphone, ClipboardList, FileCheck, X } from 'lucide-react'
+import { Bell, Megaphone, ClipboardList, FileCheck, CalendarClock, X } from 'lucide-react'
 import { startOfWeek } from 'date-fns'
 import { useAuth } from '@/hooks/useAuth'
+import { useLang } from '@/hooks/useLang'
 import { newsService, registrationService } from '@/services/contentService'
 import { tasksService, canAccessTemplate } from '@/services/tasksService'
 import { useBackClose } from '@/hooks/useBackClose'
 import { formatDate } from '@/lib/utils'
+import { serviceRosterService } from '@/services/serviceRosterService'
+
+function localDateKey(date = new Date()) {
+  const pad = value => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function nearestUpcomingRosters(rosters, today = localDateKey()) {
+  return [...(rosters || [])]
+    .filter(roster => String(roster.service_date || '') >= today)
+    .sort((a, b) =>
+      String(a.service_date || '').localeCompare(String(b.service_date || ''))
+      || String(a.start_time || '').localeCompare(String(b.start_time || ''))
+    )
+    .slice(0, 5)
+}
 
 export default function NotificationBell() {
   const { profile } = useAuth()
+  const { t } = useLang()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState([])
   const [seen, setSeen] = useState(0)
@@ -74,7 +92,25 @@ export default function NotificationBell() {
       })
     } catch { /* abaikan */ }
 
-    // 3. Pengumuman terbaru
+    // 3. Jadwal pelayanan terbit milik pengguna.
+    try {
+      const rosters = await serviceRosterService.listMine(profile.user_id)
+      nearestUpcomingRosters(rosters).forEach(roster => list.push({
+        id: `roster-${roster.roster_id}-${roster.version}`,
+        icon: CalendarClock,
+        title: roster.status === 'Dibatalkan'
+          ? t('sched.notificationCancelled', { title: roster.title })
+          : t('sched.notificationTitle', { title: roster.title }),
+        subtitle: t('sched.notificationSubtitle', {
+          date: formatDate(roster.service_date),
+          time: String(roster.start_time || '').slice(0, 5),
+        }),
+        time: roster.updated_at || roster.published_at || roster.created_at,
+        to: `/jadwal-pelayanan?rosterId=${encodeURIComponent(roster.roster_id)}`,
+      }))
+    } catch { /* abaikan */ }
+
+    // 4. Pengumuman terbaru
     try {
       const news = await newsService.getAll()
       news.slice(0, 5).forEach(n => list.push({

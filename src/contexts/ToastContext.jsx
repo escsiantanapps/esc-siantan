@@ -95,13 +95,13 @@ export function ToastProvider({ children }) {
             className="absolute inset-0 bg-black/40 animate-fade-in"
             onClick={() => closeConfirm(false)}
           />
-          <div className="relative w-full max-w-sm bg-surface rounded-2xl shadow-2xl shadow-black/20 p-6 animate-toast-in">
+          <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto bg-surface rounded-2xl shadow-2xl shadow-black/20 p-6 animate-toast-in">
             <div className="flex flex-col items-center text-center">
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${confirmState.danger ? 'bg-red-50' : 'bg-brand-50'}`}>
                 <AlertTriangle size={22} className={confirmState.danger ? 'text-red-500' : 'text-brand-500'} />
               </div>
               <h2 className="text-base font-semibold text-gray-900">{confirmState.title}</h2>
-              <p className="text-sm text-gray-500 mt-1.5">{confirmState.message}</p>
+              <p className="mt-1.5 max-h-[45dvh] overflow-y-auto whitespace-pre-line text-sm text-gray-500">{confirmState.message}</p>
             </div>
             <div className="flex gap-2 mt-6">
               <button

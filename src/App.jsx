@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { LanguageProvider } from '@/contexts/LanguageContext'
@@ -84,20 +84,25 @@ const AdminSundayPage = lazy(() => import('@/pages/admin/AdminSundayPage'))
 const AdminMessagesPage = lazy(() => import('@/pages/admin/AdminMessagesPage'))
 const AdminMinistrySchedulePage = lazy(() => import('@/pages/admin/AdminMinistrySchedulePage'))
 const AdminInventoryPage = lazy(() => import('@/pages/admin/AdminInventoryPage'))
+const ServiceSchedulesPage = lazy(() => import('@/pages/user/ServiceSchedulesPage'))
 
 // Layouts
 import UserLayout from '@/layouts/UserLayout'
 import AdminLayout from '@/layouts/AdminLayout'
+import MinistryScheduleLayout from '@/layouts/MinistryScheduleLayout'
+import { serviceRosterService } from '@/services/serviceRosterService'
 
 function PrivateRoute({ children }) {
   const { user, profile, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <SheepLoader fullScreen size="xl" />
   if (!user) return <Navigate to="/login" replace />
   // Admin murni (tanpa peran kedua) tidak punya keperluan di app mobile.
   // Admin yang juga PKS atau Volunteer (role_secondary) tetap boleh masuk.
   const isPKS = profile?.is_pks === true || profile?.role === 'PKS'
   const hasSecondaryAccess = isPKS || !!profile?.role_secondary
-  if (profile?.role === 'Admin' && !hasSecondaryAccess) {
+  // Tautan notifikasi penugasan tetap dapat dibaca Admin tanpa membuka panel kelola.
+  if (profile?.role === 'Admin' && !hasSecondaryAccess && location.pathname !== '/jadwal-pelayanan') {
     return <Navigate to="/admin" replace />
   }
   // Fail-closed: sesi login yang profilnya BELUM terkonfirmasi Aktif tidak boleh
@@ -117,6 +122,34 @@ function AdminRoute({ children }) {
   if (!['Admin', 'Super Admin', 'Gembala'].includes(profile?.role)) return <Navigate to="/" replace />
   if (profile && profile.status !== 'Aktif') return <AccountStatusPage />
   return children
+}
+
+function ScheduleViewerRoute() {
+  return <ServiceSchedulesPage />
+}
+
+function ScheduleManagementRoute() {
+  const { user, profile, loading } = useAuth()
+  const [managerAccess, setManagerAccess] = useState(null)
+  const isAdmin = ['Admin', 'Super Admin'].includes(profile?.role)
+
+  useEffect(() => {
+    if (loading || !user || !profile?.user_id || isAdmin || profile.role === 'Gembala') return undefined
+    let active = true
+    serviceRosterService.listManagedMinistries(profile)
+      .then(rows => { if (active) setManagerAccess({ userId: profile.user_id, allowed: rows.length > 0 }) })
+      .catch(() => { if (active) setManagerAccess({ userId: profile.user_id, allowed: false }) })
+    return () => { active = false }
+  }, [isAdmin, loading, profile?.role, profile?.user_id, user])
+
+  if (loading) return <SheepLoader fullScreen size="xl" />
+  if (!user) return <Navigate to="/login" replace />
+  if (!profile || profile.status !== 'Aktif') return <AccountStatusPage />
+  if (isAdmin) return <AdminLayout><ServiceSchedulesPage adminMode /></AdminLayout>
+  if (profile.role === 'Gembala') return <Navigate to="/admin" replace />
+  if (managerAccess?.userId !== profile.user_id) return <SheepLoader fullScreen size="xl" />
+  if (!managerAccess.allowed) return <Navigate to="/" replace />
+  return <MinistryScheduleLayout><ServiceSchedulesPage adminMode /></MinistryScheduleLayout>
 }
 
 function PKSRoute({ children }) {
@@ -175,6 +208,7 @@ export default function App() {
             <Route path="status-pendaftaran"   element={<RegistrationStatusPage />} />
             <Route path="persembahan"          element={<PersembahanPage />} />
             <Route path="poin"                 element={<PointsPage />} />
+            <Route path="jadwal-pelayanan"     element={<ScheduleViewerRoute />} />
             <Route path="baca"                 element={<Navigate to="/" replace />} />
             <Route path="pesan"                element={<PesanPage />} />
             <Route path="panduan"              element={<HelpPage />} />
@@ -225,6 +259,8 @@ export default function App() {
             <Route path="backup"               element={<AdminBackupPage />} />
             <Route path="audit"                element={<AdminAuditPage />} />
           </Route>
+
+          <Route path="/admin/jadwal-pelayanan" element={<ScheduleManagementRoute />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

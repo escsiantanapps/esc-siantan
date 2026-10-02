@@ -52,6 +52,7 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
   // Admin). Filter yang sama berlaku untuknya.
   let lastSection = null
   for (const page of ADMIN_PAGES) {
+    if (isGembala && page.to === '/admin/jadwal-pelayanan') continue
     if (!isSuperAdmin && !isGembala && allowedPages && !allowedPages.includes(page.to)) continue
     if (page.section !== lastSection) {
       items.push({ section: page.section, sectionKey: page.sectionKey })
@@ -79,7 +80,7 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
   return items
 }
 
-export default function AdminLayout() {
+export default function AdminLayout({ children }) {
   const [open, setOpen] = useState(false)
   const [pendingOpen, setPendingOpen] = useState(false)
   const pendingRef = useRef(null)
@@ -421,7 +422,7 @@ export default function AdminLayout() {
         </header>
 
         <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
-          <Outlet context={{ pendingItems: visiblePendingItems, pendingTotal }} />
+          {children || <Outlet context={{ pendingItems: visiblePendingItems, pendingTotal }} />}
         </main>
       </div>
     </div>

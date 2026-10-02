@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src api tests vite.config.js --ext js,jsx,mjs --max-warnings 0",
-    "test": "node --test --test-concurrency=1 tests/quality.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/quality.test.mjs tests/roster-notifications.test.mjs tests/roster-api.test.mjs tests/roster-db.test.mjs",
     "check": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
@@ -28,6 +28,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

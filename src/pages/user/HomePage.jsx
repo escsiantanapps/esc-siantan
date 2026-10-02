@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, Calendar, BookOpen, Droplets, Heart, Baby, Church, HandCoins, WifiOff, RefreshCw, Star, CreditCard } from 'lucide-react'
+import { Bell, Calendar, CalendarClock, BookOpen, Droplets, Heart, Baby, Church, HandCoins, WifiOff, RefreshCw, Star, CreditCard } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { newsService, appSettingsService } from '@/services/contentService'
@@ -27,7 +27,7 @@ function greeting(t) {
 }
 
 export default function HomePage() {
-  const { profile } = useAuth()
+  const { profile, isVolunteer, isAdmin } = useAuth()
   const { t } = useLang()
   const [news, setNews] = useState([])
   const [loading, setLoading] = useState(true)
@@ -53,6 +53,7 @@ export default function HomePage() {
     { to: '/persembahan',        icon: HandCoins,     label: t('home.q.offering'), color: 'bg-emerald-600/15 text-emerald-600' },
     { to: '/events',             icon: Calendar,      label: t('home.q.events'),   color: 'bg-red-600/15 text-red-600' },
     { to: '/kelas',              icon: BookOpen,      label: t('home.q.classes'),  color: 'bg-blue-600/15 text-blue-600' },
+    ...(isVolunteer && !isAdmin ? [{ to: '/jadwal-pelayanan', icon: CalendarClock, label: t('sched.mySchedule'), color: 'bg-brand-100 text-brand-700' }] : []),
     ...(baptismOpen ? [{ to: '/baptisan', icon: Droplets, label: t('home.q.baptism'), color: 'bg-teal-600/15 text-teal-600' }] : []),
     { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-600/15 text-pink-600' },
     { to: '/penyerahan-anak',    icon: Baby,          label: t('home.q.dedication'), color: 'bg-amber-600/15 text-amber-600' },
@@ -226,8 +227,8 @@ export default function HomePage() {
         </section>
         )}
 
-        {/* Jadwal pelayanan Volunteer (self-gating; pindah ke bawah Menu Cepat) */}
-        <MyMinistryScheduleCard />
+        {/* Ringkasan jadwal selalu terlihat bagi Volunteer, termasuk saat belum ditugaskan. */}
+        {isVolunteer && !isAdmin && <MyMinistryScheduleCard />}
 
 
         {/* Ringkasan kehadiran bulan ini */}

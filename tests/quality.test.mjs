@@ -86,6 +86,244 @@ test('Email login internal tidak ditampilkan sebagai alamat kontak', () => {
   assert.equal(displayEmail('jemaat@example.com'), 'jemaat@example.com')
 })
 
+test('MH: pencarian anggota ministry memfilter status dan nama di server sebelum batas 50 hasil', async () => {
+  const membership = (id, name, status = 'Aktif', ministryId = 'QA-MIN') => ({
+    ministry_id: ministryId, user_id: id,
+    users: { user_id: id, name, status, photo_url: null },
+  })
+  await scenario({
+    role: 'Volunteer',
+    ministryMembers: [
+      ...Array.from({ length: 50 }, (_, index) => membership(`QA-MEMBER-${index + 1}`, `Anggota ${index + 1}`)),
+      membership('QA-MEMBER-51', 'Anggota Kelimapuluhsatu'),
+      membership('QA-INACTIVE', 'Anggota Kelimapuluhsatu Nonaktif', 'Nonaktif'),
+      membership('QA-OTHER', 'Anggota Kelimapuluhsatu Ministry Lain', 'Aktif', 'QA-OTHER-MIN'),
+    ],
+  }, async f => {
+    await f.goto('/jadwal-pelayanan')
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan' }).waitFor()
+    const found = await f.page.evaluate(async () => {
+      const { serviceRosterService } = await import('/src/services/serviceRosterService.js')
+      return serviceRosterService.listMinistryMembers('QA-MIN', '  kelimapuluhsatu  ')
+    })
+    assert.deepEqual(found.map(user => user.user_id), ['QA-MEMBER-51'])
+    const request = f.requests.find(row => row.path.endsWith('/user_ministries'))
+    assert.ok(request, 'Pencarian harus memanggil query keanggotaan di server')
+    const params = new URLSearchParams(request.search)
+    assert.equal(params.get('select'), 'user_id,users!user_id!inner(user_id,name,photo_url,status)')
+    assert.equal(params.get('ministry_id'), 'eq.QA-MIN')
+    assert.equal(params.get('users.status'), 'eq.Aktif')
+    assert.equal(params.get('users.name'), 'ilike.%kelimapuluhsatu%')
+    assert.equal(params.get('limit'), '50')
+  })
+})
+
+test('Volunteer: menu jadwal tetap terlihat saat belum ada tugas dan halaman hanya-baca', async () => {
+  await scenario({ role: 'Volunteer' }, async f => {
+    await f.goto('/')
+    await f.page.getByRole('link', { name: 'Jadwal Saya', exact: true }).waitFor()
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan Saya' }).waitFor()
+    await f.page.getByText('Tidak ada jadwal pelayanan mendatang.').waitFor()
+    await f.goto('/jadwal-pelayanan')
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan' }).waitFor()
+    await f.page.getByText('Belum ada tugas pelayanan untuk Anda pada bulan ini.').waitFor()
+    const previousMonth = await f.page.getByLabel('Bulan').inputValue()
+    await f.page.getByRole('button', { name: 'Lihat bulan berikutnya' }).click()
+    const [year, month] = previousMonth.split('-').map(Number)
+    const followingMonth = String(year + (month === 12 ? 1 : 0)) + '-' + String(month === 12 ? 1 : month + 1).padStart(2, '0')
+    assert.equal(await f.page.getByLabel('Bulan').inputValue(), followingMonth)
+    assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'Akses & Posisi', exact: true }).count(), 0)
+  })
+})
+
+test('Volunteer: gagal memuat jadwal tidak ditampilkan sebagai keadaan kosong', async () => {
+  await scenario({ role: 'Volunteer', rosterFailure: true, legacyScheduleFailure: true }, async f => {
+    await f.goto('/')
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan Saya' }).waitFor()
+    await f.page.getByRole('alert').filter({ hasText: 'Jadwal pelayanan gagal dimuat.' }).waitFor()
+    assert.equal(await f.page.getByText('Tidak ada jadwal pelayanan mendatang.').count(), 0)
+  })
+})
+
+test('Bell jadwal memilih pelayanan mendatang terdekat, bukan riwayat tertua', async () => {
+  const day = offset => {
+    const date = new Date()
+    date.setDate(date.getDate() + offset)
+    const pad = value => String(value).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  }
+  const rosterSlot = (id, title, offset, start = '08:00:00') => ({
+    roster_id: id,
+    service_rosters: {
+      roster_id: id,
+      title,
+      service_date: day(offset),
+      start_time: start,
+      end_time: '10:00:00',
+      status: 'Terbit',
+      version: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: new Date(Date.now() + offset * 1000).toISOString(),
+      ministries: { name: 'Worship' },
+      service_roster_slots: [],
+    },
+  })
+
+  await scenario({
+    role: 'Volunteer',
+    rosterSlots: [
+      rosterSlot('OLD-1', 'Riwayat Lama 1', -20),
+      rosterSlot('OLD-2', 'Riwayat Lama 2', -19),
+      rosterSlot('OLD-3', 'Riwayat Lama 3', -18),
+      rosterSlot('OLD-4', 'Riwayat Lama 4', -17),
+      rosterSlot('OLD-5', 'Riwayat Lama 5', -16),
+      rosterSlot('NEXT-2', 'Pelayanan Lusa', 2),
+      rosterSlot('NEXT-1', 'Pelayanan Besok', 1),
+    ],
+  }, async f => {
+    await f.goto('/')
+    await f.page.getByRole('button', { name: 'Notifikasi' }).click()
+    await f.page.getByText('Jadwal: Pelayanan Besok').waitFor()
+    await f.page.getByText('Jadwal: Pelayanan Lusa').waitFor()
+    assert.equal(await f.page.getByText('Jadwal: Riwayat Lama 1').count(), 0)
+  })
+})
+
+function nextMonthRoster(status = 'Terbit') {
+  const today = new Date()
+  const serviceDate = new Date(Date.UTC(today.getFullYear(), today.getMonth() + 1, 7)).toISOString().slice(0, 10)
+  return {
+    roster_id: 'QA-ROSTER/TAUTAN?1', ministry_id: 'QA-MIN',
+    title: 'Ibadah Bulan Berikutnya', service_date: serviceDate,
+    source_type: 'Ibadah', start_time: '08:00:00', end_time: '10:00:00',
+    location: 'Aula QA', status, version: 1,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    ministries: { name: 'Worship' },
+    service_roster_slots: [{
+      slot_id: 'QA-SLOT', user_id: 'QA-USER', position_id: 'QA-POS', slot_no: 1,
+      ministry_service_positions: { name: 'Worship Leader', sort_order: 0 },
+      users: { name: 'Pengguna QA', photo_url: null },
+    }],
+  }
+}
+
+test('Tautan bell membuka detail jadwal Terbit lintas bulan dan kembali mempertahankan bulan', async () => {
+  const roster = nextMonthRoster()
+  await scenario({ role: 'Volunteer', rosters: [roster], rosterSlots: [{ roster_id: roster.roster_id, service_rosters: roster }] }, async f => {
+    await f.goto('/')
+    await f.page.getByRole('button', { name: 'Notifikasi' }).click()
+    const notification = f.page.getByRole('link').filter({ hasText: 'Jadwal: Ibadah Bulan Berikutnya' })
+    await notification.waitFor()
+    assert.equal(await notification.getAttribute('href'), '/jadwal-pelayanan?rosterId=' + encodeURIComponent(roster.roster_id))
+    await notification.click()
+    await f.page.getByRole('heading', { name: roster.title, exact: true }).waitFor()
+    assert.equal(await f.page.getByText('Worship Leader', { exact: true }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'PDF', exact: true }).count(), 0)
+    await f.page.getByRole('button', { name: 'Kembali', exact: true }).click()
+    await f.page.waitForURL(url => !url.searchParams.has('rosterId'))
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan', exact: true }).waitFor()
+    assert.equal(await f.page.getByLabel('Bulan').inputValue(), roster.service_date.slice(0, 7))
+    await f.page.getByText(roster.title, { exact: true }).waitFor()
+  })
+})
+
+test('Tautan jadwal Dibatalkan terbuka lintas bulan dan kembali hanya menghapus rosterId', async () => {
+  const roster = nextMonthRoster('Dibatalkan')
+  await scenario({ role: 'Volunteer', rosters: [roster], rosterSlots: [{ roster_id: roster.roster_id, service_rosters: roster }] }, async f => {
+    await f.goto('/jadwal-pelayanan?keep=1&rosterId=' + encodeURIComponent(roster.roster_id))
+    await f.page.getByRole('heading', { name: roster.title, exact: true }).waitFor()
+    assert.equal(await f.page.getByText('Dibatalkan', { exact: true }).count(), 1)
+    await f.page.getByRole('button', { name: 'Kembali', exact: true }).click()
+    await f.page.waitForURL(url => !url.searchParams.has('rosterId') && url.searchParams.get('keep') === '1')
+    assert.equal(await f.page.getByLabel('Bulan').inputValue(), roster.service_date.slice(0, 7))
+    await f.page.getByText(roster.title, { exact: true }).waitFor()
+    assert.equal(await f.page.getByText('Dibatalkan', { exact: true }).count(), 1)
+  })
+})
+
+test('Tautan Draft ditolak pada tampilan anggota walaupun backend mengembalikan datanya', async () => {
+  const roster = nextMonthRoster('Draft')
+  await scenario({ role: 'Volunteer', rosters: [roster], rosterSlots: [{ roster_id: roster.roster_id, service_rosters: roster }] }, async f => {
+    await f.goto('/jadwal-pelayanan?rosterId=' + encodeURIComponent(roster.roster_id))
+    await f.page.waitForURL(url => !url.searchParams.has('rosterId'))
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan', exact: true }).waitFor()
+    await f.page.getByText('Jadwal pelayanan gagal dimuat.', { exact: true }).waitFor()
+    assert.equal(await f.page.getByText(roster.title, { exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'Terbitkan', exact: true }).count(), 0)
+  })
+})
+
+test('Super Admin: menu jadwal mobile tidak tampil, rute lihat terpisah dari panel admin', async () => {
+  await scenario({ secondary: 'Volunteer', ministries: [{ ministry_id: 'QA-MIN', name: 'Worship' }] }, async f => {
+    await f.goto('/')
+    await f.page.getByRole('heading', { name: /Shalom/ }).waitFor()
+    assert.equal(await f.page.locator('a[href="/jadwal-pelayanan"]').count(), 0)
+    await f.goto('/jadwal-pelayanan')
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan' }).waitFor()
+    assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 0)
+    await f.goto('/admin/jadwal-pelayanan')
+    await f.page.getByRole('button', { name: 'Kelola', exact: true }).waitFor()
+  })
+})
+
+test('Admin dengan peran kedua Volunteer tetap tidak mendapat menu jadwal mobile', async () => {
+  await scenario({ role: 'Admin', secondary: 'Volunteer' }, async f => {
+    await f.goto('/')
+    await f.page.getByRole('heading', { name: /Shalom/ }).waitFor()
+    assert.equal(await f.page.locator('a[href="/jadwal-pelayanan"]').count(), 0)
+  })
+})
+
+test('Admin tanpa izin kelola tetap bisa melihat tautan jadwal penugasannya', async () => {
+  await scenario({ role: 'Admin', allowedPages: [] }, async f => {
+    await f.goto('/jadwal-pelayanan')
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan' }).waitFor()
+    assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 0)
+    await f.goto('/admin/jadwal-pelayanan')
+    await f.page.getByRole('alert').waitFor()
+    assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 0)
+  })
+})
+
+test('Wakil ber-grant hanya membuka panel pengelola jadwal, bukan halaman Admin lain', async () => {
+  await scenario({
+    role: 'Volunteer',
+    managerGrants: [{ manager_role: 'Wakil', ministries: { ministry_id: 'QA-MIN', name: 'Worship' } }],
+  }, async f => {
+    await f.goto('/profil')
+    await f.page.getByRole('link', { name: /Kelola Jadwal Pelayanan/ }).waitFor()
+    await f.goto('/admin/jadwal-pelayanan')
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan' }).waitFor()
+    await f.page.getByRole('button', { name: 'Kelola', exact: true }).waitFor()
+    assert.equal(await f.page.locator('aside').count(), 0)
+    await f.goto('/admin/jemaat')
+    await f.page.waitForURL(url => url.pathname === '/')
+  })
+})
+
+test('Admin terbatas: panel jadwal terbuka hanya bila halaman itu diizinkan', async () => {
+  await scenario({
+    role: 'Admin',
+    allowedPages: ['/admin/jadwal-pelayanan'],
+    ministries: [{ ministry_id: 'QA-MIN', name: 'Worship' }],
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await f.page.getByRole('button', { name: 'Kelola', exact: true }).waitFor()
+    assert.equal(await f.page.getByRole('link', { name: 'Jadwal Pelayanan', exact: true }).count(), 1)
+    await f.goto('/admin/jemaat')
+    await f.page.waitForURL(url => url.pathname === '/admin/jadwal-pelayanan')
+  })
+})
+
+test('Volunteer tanpa grant ditolak dari panel pengelola jadwal', async () => {
+  await scenario({ role: 'Volunteer' }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await f.page.waitForURL(url => url.pathname === '/')
+  })
+})
+
 test('Super Admin: formulir SOP baru dapat dibuka tanpa crash', { timeout: 30000 }, async () => {
   await scenario({}, async f => {
     await f.goto('/admin/tugas/baru')

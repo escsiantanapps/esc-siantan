@@ -5410,3 +5410,1197 @@ END $$;
 
 REVOKE EXECUTE ON FUNCTION request_inactive_user_reactivation(UUID) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION request_inactive_user_reactivation(UUID) TO service_role;
+
+-- ── Migrasi v95: Jadwal pelayanan per-Ministry Head ─────────────────
+-- TEMUAN (2026-09-30): modul Absen Pelayanan lama hanya menyimpan sesi dan
+-- daftar nama tanpa posisi, sumber ibadah/kelas, status terbit, atau pengingat.
+-- Memberi role Admin kepada Ministry Head untuk mengatasi ini akan membuka
+-- seluruh kemampuan Admin lain dan menjadi eskalasi hak yang tidak perlu.
+-- KEPUTUSAN OPERATOR: Admin memberi izin kelola secara eksplisit per ministry.
+-- Izin ini TIDAK mengubah users.role/role_secondary dan tidak memberikan akses
+-- Admin lain. Roster terbit dapat dibaca user login; Draft hanya pengelola.
+
+CREATE TABLE IF NOT EXISTS ministry_schedule_managers (
+  ministry_id  TEXT NOT NULL REFERENCES ministries(ministry_id) ON DELETE CASCADE,
+  user_id      TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  manager_role TEXT NOT NULL CHECK (manager_role IN ('Ministry Head', 'Wakil')),
+  is_active    BOOLEAN NOT NULL DEFAULT true,
+  approved_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  approved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (ministry_id, user_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ministry_schedule_one_head_idx
+  ON ministry_schedule_managers(ministry_id)
+  WHERE manager_role = 'Ministry Head' AND is_active = true;
+
+ALTER TABLE ministry_schedule_managers ENABLE ROW LEVEL SECURITY;
+
+CREATE OR REPLACE FUNCTION auth_manages_ministry(p_ministry_id TEXT)
+  RETURNS BOOLEAN
+  LANGUAGE sql
+  SECURITY DEFINER
+  STABLE
+  SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM ministry_schedule_managers msm
+    JOIN users u ON u.user_id = msm.user_id
+    WHERE msm.ministry_id = p_ministry_id
+      AND msm.user_id = auth_user_id()
+      AND msm.is_active = true
+      AND u.status = 'Aktif'
+  )
+$$;
+
+REVOKE EXECUTE ON FUNCTION auth_manages_ministry(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_manages_ministry(TEXT) TO authenticated;
+
+DROP POLICY IF EXISTS "msm_select" ON ministry_schedule_managers;
+CREATE POLICY "msm_select" ON ministry_schedule_managers FOR SELECT
+  USING (
+    user_id = auth_user_id()
+    OR auth_admin_can('/admin/jadwal-pelayanan')
+  );
+
+DROP POLICY IF EXISTS "msm_admin_write" ON ministry_schedule_managers;
+CREATE POLICY "msm_admin_write" ON ministry_schedule_managers FOR ALL
+  USING (auth_admin_can('/admin/jadwal-pelayanan'))
+  WITH CHECK (auth_admin_can('/admin/jadwal-pelayanan'));
+
+CREATE OR REPLACE FUNCTION prepare_ministry_schedule_manager() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth_user_role() IS NOT NULL THEN
+    NEW.approved_by := auth_user_id();
+    NEW.approved_at := now();
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_prepare_ministry_schedule_manager ON ministry_schedule_managers;
+CREATE TRIGGER trg_prepare_ministry_schedule_manager
+  BEFORE INSERT OR UPDATE ON ministry_schedule_managers
+  FOR EACH ROW EXECUTE FUNCTION prepare_ministry_schedule_manager();
+
+CREATE TABLE IF NOT EXISTS ministry_service_positions (
+  position_id  TEXT PRIMARY KEY DEFAULT 'MSPOS-' || replace(gen_random_uuid()::text, '-', ''),
+  ministry_id  TEXT NOT NULL REFERENCES ministries(ministry_id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  default_slots INTEGER NOT NULL DEFAULT 1 CHECK (default_slots BETWEEN 1 AND 20),
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  is_active    BOOLEAN NOT NULL DEFAULT true,
+  created_by   TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (ministry_id, name)
+);
+
+ALTER TABLE ministry_service_positions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "msp_select" ON ministry_service_positions;
+CREATE POLICY "msp_select" ON ministry_service_positions FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "msp_write" ON ministry_service_positions;
+CREATE POLICY "msp_write" ON ministry_service_positions FOR ALL
+  USING (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(ministry_id)
+  )
+  WITH CHECK (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(ministry_id)
+  );
+
+CREATE TABLE IF NOT EXISTS service_rosters (
+  roster_id       TEXT PRIMARY KEY DEFAULT 'ROSTER-' || replace(gen_random_uuid()::text, '-', ''),
+  ministry_id     TEXT NOT NULL REFERENCES ministries(ministry_id) ON DELETE CASCADE,
+  source_type     TEXT NOT NULL CHECK (source_type IN ('Ibadah', 'Event', 'Kelas')),
+  event_id        TEXT REFERENCES events(event_id) ON DELETE SET NULL,
+  class_id        TEXT REFERENCES classes(class_id) ON DELETE SET NULL,
+  class_session_no INTEGER,
+  title           TEXT NOT NULL,
+  service_date    DATE NOT NULL,
+  start_time      TIME NOT NULL,
+  end_time        TIME,
+  location        TEXT,
+  dress_code      TEXT,
+  notes           TEXT,
+  status          TEXT NOT NULL DEFAULT 'Draft'
+                  CHECK (status IN ('Draft', 'Terbit', 'Dibatalkan')),
+  version         INTEGER NOT NULL DEFAULT 0,
+  published_at    TIMESTAMPTZ,
+  published_by    TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_by      TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (end_time IS NULL OR end_time > start_time),
+  CHECK (
+    (source_type = 'Event' AND event_id IS NOT NULL AND class_id IS NULL)
+    OR (source_type = 'Kelas' AND class_id IS NOT NULL AND event_id IS NULL)
+    OR (source_type = 'Ibadah' AND event_id IS NULL AND class_id IS NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS service_rosters_date_idx
+  ON service_rosters(service_date, start_time);
+CREATE INDEX IF NOT EXISTS service_rosters_ministry_idx
+  ON service_rosters(ministry_id, service_date);
+
+ALTER TABLE service_rosters ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "service_rosters_select" ON service_rosters;
+CREATE POLICY "service_rosters_select" ON service_rosters FOR SELECT
+  USING (
+    status IN ('Terbit', 'Dibatalkan')
+    OR auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(ministry_id)
+  );
+
+DROP POLICY IF EXISTS "service_rosters_write" ON service_rosters;
+CREATE POLICY "service_rosters_write" ON service_rosters FOR ALL
+  USING (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(ministry_id)
+  )
+  WITH CHECK (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(ministry_id)
+  );
+
+CREATE TABLE IF NOT EXISTS service_roster_slots (
+  slot_id      TEXT PRIMARY KEY DEFAULT 'RSLOT-' || replace(gen_random_uuid()::text, '-', ''),
+  roster_id    TEXT NOT NULL REFERENCES service_rosters(roster_id) ON DELETE CASCADE,
+  ministry_id  TEXT NOT NULL REFERENCES ministries(ministry_id) ON DELETE CASCADE,
+  position_id  TEXT NOT NULL REFERENCES ministry_service_positions(position_id) ON DELETE RESTRICT,
+  slot_no      INTEGER NOT NULL CHECK (slot_no BETWEEN 1 AND 20),
+  user_id      TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (roster_id, position_id, slot_no)
+);
+
+CREATE INDEX IF NOT EXISTS service_roster_slots_user_idx
+  ON service_roster_slots(user_id)
+  WHERE user_id IS NOT NULL;
+
+ALTER TABLE service_roster_slots ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "service_roster_slots_select" ON service_roster_slots;
+CREATE POLICY "service_roster_slots_select" ON service_roster_slots FOR SELECT
+  USING (
+    user_id = auth_user_id()
+    OR auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(ministry_id)
+    OR EXISTS (
+      SELECT 1 FROM service_rosters sr
+      WHERE sr.roster_id = service_roster_slots.roster_id
+        AND sr.status IN ('Terbit', 'Dibatalkan')
+    )
+  );
+
+DROP POLICY IF EXISTS "service_roster_slots_write" ON service_roster_slots;
+CREATE POLICY "service_roster_slots_write" ON service_roster_slots FOR ALL
+  USING (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(ministry_id)
+  )
+  WITH CHECK (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(ministry_id)
+  );
+
+CREATE TABLE IF NOT EXISTS service_roster_notification_logs (
+  notification_id TEXT PRIMARY KEY DEFAULT 'RNOTIF-' || replace(gen_random_uuid()::text, '-', ''),
+  roster_id       TEXT NOT NULL REFERENCES service_rosters(roster_id) ON DELETE CASCADE,
+  user_id         TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  kind            TEXT NOT NULL CHECK (kind IN ('Terbit', 'Perubahan', 'Dibatalkan', 'Pengingat H-1', 'Manual')),
+  roster_version  INTEGER NOT NULL DEFAULT 0,
+  sent_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (roster_id, user_id, kind, roster_version)
+);
+
+ALTER TABLE service_roster_notification_logs ENABLE ROW LEVEL SECURITY;
+REVOKE INSERT, UPDATE, DELETE ON service_roster_notification_logs FROM anon, authenticated;
+
+DROP POLICY IF EXISTS "service_roster_notifications_select" ON service_roster_notification_logs;
+CREATE POLICY "service_roster_notifications_select" ON service_roster_notification_logs FOR SELECT
+  USING (
+    user_id = auth_user_id()
+    OR EXISTS (
+      SELECT 1 FROM service_rosters sr
+      WHERE sr.roster_id = service_roster_notification_logs.roster_id
+        AND (
+          auth_admin_can('/admin/jadwal-pelayanan')
+          OR auth_manages_ministry(sr.ministry_id)
+        )
+    )
+  );
+
+CREATE OR REPLACE FUNCTION guard_service_roster() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  trusted_transition BOOLEAN :=
+    COALESCE(current_setting('app.allow_roster_transition', true), '') = '1';
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.status <> 'Draft' THEN
+      RAISE EXCEPTION 'Roster yang sudah diterbitkan tidak dapat dihapus.';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    NEW.created_by := COALESCE(auth_user_id(), NEW.created_by);
+    NEW.status := 'Draft';
+    NEW.version := 0;
+  ELSE
+    IF NEW.ministry_id IS DISTINCT FROM OLD.ministry_id THEN
+      RAISE EXCEPTION 'Ministry roster tidak dapat diubah.';
+    END IF;
+    IF OLD.status <> 'Draft' AND NOT trusted_transition THEN
+      RAISE EXCEPTION 'Roster yang sudah diterbitkan tidak dapat diedit langsung.';
+    END IF;
+    IF NEW.status IS DISTINCT FROM OLD.status AND NOT trusted_transition THEN
+      RAISE EXCEPTION 'Perubahan status roster wajib melalui aksi Terbit/Batalkan.';
+    END IF;
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_service_roster ON service_rosters;
+CREATE TRIGGER trg_guard_service_roster
+  BEFORE INSERT OR UPDATE OR DELETE ON service_rosters
+  FOR EACH ROW EXECUTE FUNCTION guard_service_roster();
+
+CREATE OR REPLACE FUNCTION guard_service_roster_slot() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  roster_ministry TEXT;
+  roster_status TEXT;
+  position_ministry TEXT;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    SELECT ministry_id, status INTO roster_ministry, roster_status
+    FROM service_rosters WHERE roster_id = OLD.roster_id;
+    IF roster_status <> 'Draft' THEN
+      RAISE EXCEPTION 'Slot roster yang sudah diterbitkan tidak dapat dihapus.';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  SELECT ministry_id, status INTO roster_ministry, roster_status
+  FROM service_rosters WHERE roster_id = NEW.roster_id;
+  SELECT ministry_id INTO position_ministry
+  FROM ministry_service_positions WHERE position_id = NEW.position_id;
+
+  IF roster_ministry IS NULL OR roster_ministry <> NEW.ministry_id
+     OR position_ministry IS NULL OR position_ministry <> NEW.ministry_id THEN
+    RAISE EXCEPTION 'Slot, posisi, dan roster harus berasal dari ministry yang sama.';
+  END IF;
+  IF roster_status <> 'Draft' THEN
+    RAISE EXCEPTION 'Slot roster yang sudah diterbitkan tidak dapat diubah.';
+  END IF;
+
+  IF NEW.user_id IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM users u
+       WHERE u.user_id = NEW.user_id AND u.status = 'Aktif'
+     ) THEN
+    RAISE EXCEPTION 'Pelayan yang dipilih harus berstatus Aktif.';
+  END IF;
+
+  IF NEW.user_id IS NOT NULL
+     AND auth_user_role() IS NOT NULL
+     AND NOT auth_admin_can('/admin/jadwal-pelayanan')
+     AND NOT EXISTS (
+       SELECT 1
+       FROM user_ministries um
+       JOIN users u ON u.user_id = um.user_id
+       WHERE um.ministry_id = NEW.ministry_id
+         AND um.user_id = NEW.user_id
+         AND u.status = 'Aktif'
+     ) THEN
+    RAISE EXCEPTION 'Ministry Head hanya dapat memilih anggota aktif ministry ini.';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_service_roster_slot ON service_roster_slots;
+CREATE TRIGGER trg_guard_service_roster_slot
+  BEFORE INSERT OR UPDATE OR DELETE ON service_roster_slots
+  FOR EACH ROW EXECUTE FUNCTION guard_service_roster_slot();
+
+CREATE OR REPLACE FUNCTION guard_ministry_service_position() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  used_in_final BOOLEAN;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM service_roster_slots slot
+      JOIN service_rosters roster ON roster.roster_id = slot.roster_id
+      WHERE slot.position_id = OLD.position_id
+        AND roster.status <> 'Draft'
+    ) INTO used_in_final;
+    IF used_in_final THEN
+      RAISE EXCEPTION 'Posisi yang sudah dipakai roster Terbit tidak dapat dihapus.';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  NEW.name := btrim(NEW.name);
+  IF NEW.name = '' THEN
+    RAISE EXCEPTION 'Nama posisi wajib diisi.' USING ERRCODE = '22023';
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.ministry_id IS DISTINCT FROM OLD.ministry_id THEN
+    RAISE EXCEPTION 'Ministry posisi pelayanan tidak dapat dipindahkan.';
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.name IS DISTINCT FROM OLD.name THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM service_roster_slots slot
+      JOIN service_rosters roster ON roster.roster_id = slot.roster_id
+      WHERE slot.position_id = OLD.position_id
+        AND roster.status <> 'Draft'
+    ) INTO used_in_final;
+    IF used_in_final THEN
+      RAISE EXCEPTION 'Nama posisi yang sudah dipakai roster Terbit tidak dapat diubah.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_ministry_service_position ON ministry_service_positions;
+CREATE TRIGGER trg_guard_ministry_service_position
+  BEFORE INSERT OR UPDATE OR DELETE ON ministry_service_positions
+  FOR EACH ROW EXECUTE FUNCTION guard_ministry_service_position();
+
+CREATE OR REPLACE FUNCTION create_service_roster(
+  p_ministry_id TEXT,
+  p_source_type TEXT,
+  p_event_id TEXT,
+  p_class_id TEXT,
+  p_class_session_no INTEGER,
+  p_title TEXT,
+  p_service_date DATE,
+  p_start_time TIME,
+  p_end_time TIME,
+  p_location TEXT,
+  p_dress_code TEXT,
+  p_notes TEXT
+) RETURNS TEXT
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  new_roster_id TEXT;
+BEGIN
+  IF NOT (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(p_ministry_id)
+  ) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF COALESCE(btrim(p_title), '') = '' OR p_service_date IS NULL OR p_start_time IS NULL THEN
+    RAISE EXCEPTION 'Data kegiatan belum lengkap.' USING ERRCODE = '22023';
+  END IF;
+  IF p_end_time IS NOT NULL AND p_end_time <= p_start_time THEN
+    RAISE EXCEPTION 'Jam selesai harus setelah jam mulai.' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO service_rosters (
+    ministry_id, source_type, event_id, class_id, class_session_no,
+    title, service_date, start_time, end_time, location, dress_code,
+    notes, created_by
+  ) VALUES (
+    p_ministry_id, p_source_type, p_event_id, p_class_id, p_class_session_no,
+    btrim(p_title), p_service_date, p_start_time, p_end_time,
+    nullif(btrim(p_location), ''), nullif(btrim(p_dress_code), ''),
+    nullif(btrim(p_notes), ''), auth_user_id()
+  )
+  RETURNING roster_id INTO new_roster_id;
+
+  INSERT INTO service_roster_slots(roster_id, ministry_id, position_id, slot_no)
+  SELECT new_roster_id, p_ministry_id, p.position_id, series.slot_no
+  FROM ministry_service_positions p
+  CROSS JOIN LATERAL generate_series(1, p.default_slots) AS series(slot_no)
+  WHERE p.ministry_id = p_ministry_id AND p.is_active = true;
+
+  RETURN new_roster_id;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION create_service_roster(TEXT,TEXT,TEXT,TEXT,INTEGER,TEXT,DATE,TIME,TIME,TEXT,TEXT,TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION create_service_roster(TEXT,TEXT,TEXT,TEXT,INTEGER,TEXT,DATE,TIME,TIME,TEXT,TEXT,TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION publish_service_roster(
+  p_roster_id TEXT,
+  p_allow_incomplete BOOLEAN DEFAULT false
+) RETURNS service_rosters
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  roster service_rosters%ROWTYPE;
+  empty_slots INTEGER;
+BEGIN
+  SELECT * INTO roster FROM service_rosters WHERE roster_id = p_roster_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Roster tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+  IF NOT (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(roster.ministry_id)
+  ) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF roster.status <> 'Draft' THEN
+    RAISE EXCEPTION 'Hanya roster Draft yang dapat diterbitkan.' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT count(*) INTO empty_slots
+  FROM service_roster_slots
+  WHERE roster_id = p_roster_id AND user_id IS NULL;
+  IF empty_slots > 0 AND NOT COALESCE(p_allow_incomplete, false) THEN
+    RAISE EXCEPTION 'Masih ada % slot kosong.', empty_slots USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM service_roster_slots
+    WHERE roster_id = p_roster_id AND user_id IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'Isi minimal satu pelayan sebelum menerbitkan.' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM set_config('app.allow_roster_transition', '1', true);
+  UPDATE service_rosters
+  SET status = 'Terbit',
+      version = version + 1,
+      published_at = now(),
+      published_by = auth_user_id()
+  WHERE roster_id = p_roster_id
+  RETURNING * INTO roster;
+  PERFORM set_config('app.allow_roster_transition', '', true);
+  RETURN roster;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION publish_service_roster(TEXT,BOOLEAN) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION publish_service_roster(TEXT,BOOLEAN) TO authenticated;
+
+CREATE OR REPLACE FUNCTION cancel_service_roster(p_roster_id TEXT)
+  RETURNS service_rosters
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  roster service_rosters%ROWTYPE;
+BEGIN
+  SELECT * INTO roster FROM service_rosters WHERE roster_id = p_roster_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Roster tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+  IF NOT (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(roster.ministry_id)
+  ) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF roster.status <> 'Terbit' THEN
+    RAISE EXCEPTION 'Hanya roster Terbit yang dapat dibatalkan.' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM set_config('app.allow_roster_transition', '1', true);
+  UPDATE service_rosters
+  SET status = 'Dibatalkan', version = version + 1
+  WHERE roster_id = p_roster_id
+  RETURNING * INTO roster;
+  PERFORM set_config('app.allow_roster_transition', '', true);
+  RETURN roster;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION cancel_service_roster(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION cancel_service_roster(TEXT) TO authenticated;
+
+DROP TRIGGER IF EXISTS audit_ministry_schedule_managers ON ministry_schedule_managers;
+CREATE TRIGGER audit_ministry_schedule_managers
+  AFTER INSERT OR UPDATE OR DELETE ON ministry_schedule_managers
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+
+DROP TRIGGER IF EXISTS audit_ministry_service_positions ON ministry_service_positions;
+CREATE TRIGGER audit_ministry_service_positions
+  AFTER INSERT OR UPDATE OR DELETE ON ministry_service_positions
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+
+DROP TRIGGER IF EXISTS audit_service_rosters ON service_rosters;
+CREATE TRIGGER audit_service_rosters
+  AFTER INSERT OR UPDATE OR DELETE ON service_rosters
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+
+DROP TRIGGER IF EXISTS audit_service_roster_slots ON service_roster_slots;
+CREATE TRIGGER audit_service_roster_slots
+  AFTER INSERT OR UPDATE OR DELETE ON service_roster_slots
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+
+-- ── Migrasi v96: Bentrok waktu, akses pengelola, dan pengiriman roster ───
+-- TEMUAN (2026-10-01): pemeriksaan bentrok di klien tidak dapat melihat Draft
+-- ministry lain karena RLS, mengabaikan penugasan ganda dalam roster yang sama,
+-- dan jadwal tanpa jam selesai tidak punya rentang waktu yang dapat dibandingkan.
+-- KEPUTUSAN OPERATOR: bentrok ditentukan oleh tanggal + rentang jam yang
+-- bertumpuk, dengan konteks ibadah/kelas, ministry, posisi, dan lokasi. Jadwal
+-- pada tanggal sama tetapi jam tidak bertumpuk BUKAN bentrok. Jam selesai wajib
+-- untuk jadwal baru; data lama tanpa jam selesai dianggap potensi bentrok.
+
+-- TEMUAN: akun Admin/Super Admin/Gembala yang menerima grant MH/Wakil dapat
+-- memakai auth_manages_ministry() sebagai jalur alternatif saat Hak Akses Admin
+-- menolak /admin/jadwal-pelayanan.
+-- KEPUTUSAN OPERATOR: grant aktif hanya boleh diberikan kepada jemaat
+-- operasional; role utama maupun role_secondary yang bersifat pengawas atau
+-- administratif harus tetap mengikuti gerbang haknya sendiri.
+CREATE OR REPLACE FUNCTION guard_schedule_manager_recipient_role()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path = public
+AS $$
+DECLARE
+  recipient_role TEXT;
+  recipient_role_secondary TEXT;
+  recipient_status TEXT;
+BEGIN
+  SELECT role, role_secondary, status
+    INTO recipient_role, recipient_role_secondary, recipient_status
+  FROM users
+  WHERE user_id = NEW.user_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Penerima akses pengelola tidak ditemukan.'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF NEW.is_active AND recipient_status IS DISTINCT FROM 'Aktif' THEN
+    RAISE EXCEPTION 'Akses pengelola hanya dapat diberikan kepada pengguna Aktif.'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF NEW.is_active AND (
+    recipient_role IN ('Admin', 'Super Admin', 'Gembala')
+    OR recipient_role_secondary IN ('Admin', 'Super Admin', 'Gembala')
+  ) THEN
+    RAISE EXCEPTION 'Admin, Super Admin, dan Gembala tidak dapat menerima akses Ministry Head/Wakil.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_schedule_manager_recipient_role
+  ON ministry_schedule_managers;
+CREATE TRIGGER trg_guard_schedule_manager_recipient_role
+  BEFORE INSERT OR UPDATE ON ministry_schedule_managers
+  FOR EACH ROW EXECUTE FUNCTION guard_schedule_manager_recipient_role();
+
+CREATE OR REPLACE FUNCTION guard_service_roster() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  trusted_transition BOOLEAN :=
+    COALESCE(current_setting('app.allow_roster_transition', true), '') = '1';
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.status <> 'Draft' THEN
+      RAISE EXCEPTION 'Roster yang sudah diterbitkan tidak dapat dihapus.';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.end_time IS NULL THEN
+      RAISE EXCEPTION 'Jam selesai wajib diisi agar bentrok jadwal dapat diperiksa.'
+        USING ERRCODE = '22023';
+    END IF;
+    NEW.created_by := COALESCE(auth_user_id(), NEW.created_by);
+    NEW.status := 'Draft';
+    NEW.version := 0;
+  ELSE
+    IF NEW.ministry_id IS DISTINCT FROM OLD.ministry_id THEN
+      RAISE EXCEPTION 'Ministry roster tidak dapat diubah.';
+    END IF;
+    IF (
+      NEW.service_date IS DISTINCT FROM OLD.service_date
+      OR NEW.start_time IS DISTINCT FROM OLD.start_time
+      OR NEW.end_time IS DISTINCT FROM OLD.end_time
+    ) AND EXISTS (
+      SELECT 1
+      FROM service_roster_slots slot
+      WHERE slot.roster_id = OLD.roster_id
+        AND slot.user_id IS NOT NULL
+    ) THEN
+      RAISE EXCEPTION 'Kosongkan seluruh pelayan sebelum mengubah tanggal atau jam roster.'
+        USING ERRCODE = '22023';
+    END IF;
+    IF OLD.status <> 'Draft' AND NOT trusted_transition THEN
+      RAISE EXCEPTION 'Roster yang sudah diterbitkan tidak dapat diedit langsung.';
+    END IF;
+    IF NEW.status IS DISTINCT FROM OLD.status AND NOT trusted_transition THEN
+      RAISE EXCEPTION 'Perubahan status roster wajib melalui aksi Terbit/Batalkan.';
+    END IF;
+    IF NEW.status = 'Terbit' AND NEW.end_time IS NULL THEN
+      RAISE EXCEPTION 'Jam selesai wajib diisi sebelum roster diterbitkan.'
+        USING ERRCODE = '22023';
+    END IF;
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION get_service_roster_conflicts(
+  p_user_id TEXT,
+  p_roster_id TEXT,
+  p_slot_id TEXT DEFAULT NULL
+) RETURNS TABLE (
+  roster_id TEXT,
+  title TEXT,
+  service_date DATE,
+  start_time TIME,
+  end_time TIME,
+  location TEXT,
+  source_type TEXT,
+  ministry_name TEXT,
+  status TEXT,
+  position_names TEXT
+)
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  VOLATILE
+  SET search_path = public
+AS $$
+DECLARE
+  target_roster service_rosters%ROWTYPE;
+  caller_is_admin BOOLEAN;
+BEGIN
+  SELECT * INTO target_roster
+  FROM service_rosters
+  WHERE service_rosters.roster_id = p_roster_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Roster tidak ditemukan.' USING ERRCODE = '22023';
+  END IF;
+
+  caller_is_admin := auth_admin_can('/admin/jadwal-pelayanan');
+  IF NOT (
+    caller_is_admin
+    OR auth_manages_ministry(target_roster.ministry_id)
+  ) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM users u
+    WHERE u.user_id = p_user_id AND u.status = 'Aktif'
+  ) THEN
+    RAISE EXCEPTION 'Pelayan yang diperiksa harus berstatus Aktif.'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF NOT caller_is_admin AND NOT EXISTS (
+    SELECT 1 FROM user_ministries um
+    WHERE um.ministry_id = target_roster.ministry_id
+      AND um.user_id = p_user_id
+  ) THEN
+    RAISE EXCEPTION 'Ministry Head hanya dapat memeriksa anggota ministry ini.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    roster.roster_id,
+    CASE
+      WHEN roster.source_type = 'Kelas' AND roster.class_session_no IS NOT NULL
+        THEN roster.title || ' #' || roster.class_session_no::text
+      ELSE roster.title
+    END,
+    roster.service_date,
+    roster.start_time,
+    roster.end_time,
+    roster.location,
+    roster.source_type,
+    ministry.name,
+    roster.status,
+    string_agg(DISTINCT pos.name, ', ' ORDER BY pos.name)
+  FROM service_roster_slots slot
+  JOIN service_rosters roster ON roster.roster_id = slot.roster_id
+  JOIN ministries ministry ON ministry.ministry_id = roster.ministry_id
+  JOIN ministry_service_positions pos ON pos.position_id = slot.position_id
+  WHERE slot.user_id = p_user_id
+    AND (p_slot_id IS NULL OR slot.slot_id <> p_slot_id)
+    AND roster.status <> 'Dibatalkan'
+    AND roster.service_date = target_roster.service_date
+    AND (
+      roster.roster_id = target_roster.roster_id
+      OR roster.end_time IS NULL
+      OR target_roster.end_time IS NULL
+      OR (
+        roster.start_time < target_roster.end_time
+        AND target_roster.start_time < roster.end_time
+      )
+    )
+  GROUP BY
+    roster.roster_id,
+    roster.title,
+    roster.class_session_no,
+    roster.service_date,
+    roster.start_time,
+    roster.end_time,
+    roster.location,
+    roster.source_type,
+    ministry.name,
+    roster.status
+  ORDER BY roster.start_time, roster.title;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION get_service_roster_conflicts(TEXT,TEXT,TEXT)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_service_roster_conflicts(TEXT,TEXT,TEXT)
+  TO authenticated;
+
+CREATE OR REPLACE FUNCTION guard_service_roster_slot() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  roster_ministry TEXT;
+  roster_status TEXT;
+  position_ministry TEXT;
+  trusted_assignment BOOLEAN :=
+    COALESCE(current_setting('app.allow_roster_slot_assignment', true), '') = '1';
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    SELECT ministry_id, status INTO roster_ministry, roster_status
+    FROM service_rosters WHERE roster_id = OLD.roster_id FOR UPDATE;
+    IF roster_status <> 'Draft' THEN
+      RAISE EXCEPTION 'Slot roster yang sudah diterbitkan tidak dapat dihapus.';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF TG_OP = 'UPDATE' AND (
+    NEW.roster_id IS DISTINCT FROM OLD.roster_id
+    OR NEW.ministry_id IS DISTINCT FROM OLD.ministry_id
+    OR NEW.position_id IS DISTINCT FROM OLD.position_id
+    OR NEW.slot_no IS DISTINCT FROM OLD.slot_no
+  ) THEN
+    RAISE EXCEPTION 'Identitas slot roster tidak dapat diubah.';
+  END IF;
+
+  SELECT ministry_id, status INTO roster_ministry, roster_status
+  FROM service_rosters WHERE roster_id = NEW.roster_id FOR UPDATE;
+  SELECT ministry_id INTO position_ministry
+  FROM ministry_service_positions WHERE position_id = NEW.position_id;
+
+  IF roster_ministry IS NULL OR roster_ministry <> NEW.ministry_id
+     OR position_ministry IS NULL OR position_ministry <> NEW.ministry_id THEN
+    RAISE EXCEPTION 'Slot, posisi, dan roster harus berasal dari ministry yang sama.';
+  END IF;
+  IF roster_status <> 'Draft' THEN
+    RAISE EXCEPTION 'Slot roster yang sudah diterbitkan tidak dapat diubah.';
+  END IF;
+  IF TG_OP = 'UPDATE'
+     AND NEW.user_id IS DISTINCT FROM OLD.user_id
+     AND auth_user_role() IS NOT NULL
+     AND NOT trusted_assignment THEN
+    RAISE EXCEPTION 'Penugasan pelayan wajib melalui aksi penjadwalan.'
+      USING ERRCODE = '42501';
+  END IF;
+  IF TG_OP = 'INSERT'
+     AND NEW.user_id IS NOT NULL
+     AND auth_user_role() IS NOT NULL
+     AND NOT trusted_assignment THEN
+    RAISE EXCEPTION 'Penugasan pelayan wajib melalui aksi penjadwalan.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.user_id IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM users u
+       WHERE u.user_id = NEW.user_id AND u.status = 'Aktif'
+     ) THEN
+    RAISE EXCEPTION 'Pelayan yang dipilih harus berstatus Aktif.';
+  END IF;
+
+  IF NEW.user_id IS NOT NULL
+     AND auth_user_role() IS NOT NULL
+     AND NOT auth_admin_can('/admin/jadwal-pelayanan')
+     AND NOT EXISTS (
+       SELECT 1
+       FROM user_ministries um
+       JOIN users u ON u.user_id = um.user_id
+       WHERE um.ministry_id = NEW.ministry_id
+         AND um.user_id = NEW.user_id
+         AND u.status = 'Aktif'
+     ) THEN
+    RAISE EXCEPTION 'Ministry Head hanya dapat memilih anggota aktif ministry ini.';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION assign_service_roster_slot(
+  p_slot_id TEXT,
+  p_user_id TEXT,
+  p_allow_conflict BOOLEAN DEFAULT false
+) RETURNS service_roster_slots
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  target_slot service_roster_slots%ROWTYPE;
+  target_roster service_rosters%ROWTYPE;
+  saved_slot service_roster_slots%ROWTYPE;
+BEGIN
+  SELECT * INTO target_slot
+  FROM service_roster_slots
+  WHERE slot_id = p_slot_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Slot pelayanan tidak ditemukan.' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO target_roster
+  FROM service_rosters
+  WHERE roster_id = target_slot.roster_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Roster tidak ditemukan.' USING ERRCODE = '22023';
+  END IF;
+  IF NOT (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    OR auth_manages_ministry(target_roster.ministry_id)
+  ) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF target_roster.status <> 'Draft' THEN
+    RAISE EXCEPTION 'Hanya roster Draft yang dapat diubah.' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_user_id IS NOT NULL THEN
+    -- Mengunci per-pelayan menutup race dua pengelola yang menugaskan orang
+    -- yang sama pada dua roster berbeda di saat hampir bersamaan.
+    PERFORM pg_advisory_xact_lock(hashtextextended(p_user_id, 0));
+  END IF;
+
+  IF p_user_id IS NOT NULL
+     AND NOT COALESCE(p_allow_conflict, false)
+     AND EXISTS (
+       SELECT 1
+       FROM get_service_roster_conflicts(
+         p_user_id,
+         target_roster.roster_id,
+         target_slot.slot_id
+       )
+     ) THEN
+    RAISE EXCEPTION 'schedule_conflict' USING ERRCODE = 'P0001';
+  END IF;
+
+  PERFORM set_config('app.allow_roster_slot_assignment', '1', true);
+  UPDATE service_roster_slots
+  SET user_id = p_user_id
+  WHERE slot_id = p_slot_id
+  RETURNING * INTO saved_slot;
+  PERFORM set_config('app.allow_roster_slot_assignment', '', true);
+  RETURN saved_slot;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION assign_service_roster_slot(TEXT,TEXT,BOOLEAN)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION assign_service_roster_slot(TEXT,TEXT,BOOLEAN)
+  TO authenticated;
+
+-- TEMUAN: policy baca roster Terbit dan slotnya di v95 tidak membatasi anon.
+-- Policy RESTRICTIVE ini melengkapi policy yang ada tanpa menggantinya.
+DO $v96$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'service_rosters'
+      AND policyname = 'service_rosters_logged_in_read'
+  ) THEN
+    CREATE POLICY "service_rosters_logged_in_read"
+      ON service_rosters AS RESTRICTIVE FOR SELECT
+      USING (auth.uid() IS NOT NULL);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'service_roster_slots'
+      AND policyname = 'service_roster_slots_logged_in_read'
+  ) THEN
+    CREATE POLICY "service_roster_slots_logged_in_read"
+      ON service_roster_slots AS RESTRICTIVE FOR SELECT
+      USING (auth.uid() IS NOT NULL);
+  END IF;
+END $v96$;
+
+-- TEMUAN: grant lama dapat bertahan setelah perubahan role penerimanya.
+-- Helper harus memeriksa role saat dipakai; Admin tetap melalui auth_admin_can().
+CREATE OR REPLACE FUNCTION auth_manages_ministry(p_ministry_id TEXT)
+  RETURNS BOOLEAN
+  LANGUAGE sql
+  SECURITY DEFINER
+  STABLE
+  SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM ministry_schedule_managers msm
+    JOIN users u ON u.user_id = msm.user_id
+    WHERE msm.ministry_id = p_ministry_id
+      AND msm.user_id = auth_user_id()
+      AND msm.is_active = true
+      AND u.status = 'Aktif'
+      AND u.role IN ('Jemaat', 'Volunteer', 'PKS')
+      AND COALESCE(u.role_secondary, '') NOT IN ('Admin', 'Super Admin', 'Gembala')
+  )
+$$;
+
+REVOKE EXECUTE ON FUNCTION auth_manages_ministry(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_manages_ministry(TEXT) TO authenticated;
+
+-- TEMUAN: SELECT lalu kirim lalu UPSERT log dapat menggandakan push dan
+-- mencatat percobaan gagal sebagai terkirim. Klaim berjangka dibuat atomik
+-- melalui kunci unik; percobaan gagal boleh diulang, klaim macet kedaluwarsa.
+ALTER TABLE service_roster_notification_logs
+  ADD COLUMN IF NOT EXISTS delivery_status TEXT NOT NULL DEFAULT 'sent'
+    CHECK (delivery_status IN ('pending', 'sent', 'failed')),
+  ADD COLUMN IF NOT EXISTS claim_token TEXT,
+  ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+
+CREATE OR REPLACE FUNCTION claim_service_roster_notification(
+  p_roster_id TEXT,
+  p_user_id TEXT,
+  p_kind TEXT,
+  p_roster_version INTEGER
+) RETURNS TEXT
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  new_token TEXT := gen_random_uuid()::TEXT;
+  claimed_token TEXT;
+BEGIN
+  IF p_kind NOT IN ('Terbit', 'Dibatalkan', 'Pengingat H-1', 'Manual') THEN
+    RAISE EXCEPTION 'Jenis notifikasi tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM service_rosters sr
+    JOIN service_roster_slots slot ON slot.roster_id = sr.roster_id
+    JOIN users u ON u.user_id = slot.user_id
+    WHERE sr.roster_id = p_roster_id
+      AND sr.version = p_roster_version
+      AND slot.user_id = p_user_id
+      AND u.status = 'Aktif'
+      AND (
+        (p_kind = 'Dibatalkan' AND sr.status = 'Dibatalkan')
+        OR (p_kind <> 'Dibatalkan' AND sr.status = 'Terbit')
+      )
+  ) THEN
+    RETURN NULL;
+  END IF;
+
+  INSERT INTO service_roster_notification_logs (
+    roster_id, user_id, kind, roster_version,
+    delivery_status, claim_token, claimed_at
+  ) VALUES (
+    p_roster_id, p_user_id, p_kind, p_roster_version,
+    'pending', new_token, now()
+  )
+  ON CONFLICT (roster_id, user_id, kind, roster_version)
+  DO UPDATE SET
+    delivery_status = 'pending',
+    claim_token = EXCLUDED.claim_token,
+    claimed_at = EXCLUDED.claimed_at
+  WHERE service_roster_notification_logs.delivery_status = 'failed'
+     OR (
+       service_roster_notification_logs.delivery_status = 'pending'
+       AND service_roster_notification_logs.claimed_at < now() - INTERVAL '10 minutes'
+     )
+  RETURNING claim_token INTO claimed_token;
+
+  RETURN claimed_token;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION claim_service_roster_notification(TEXT,TEXT,TEXT,INTEGER)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION claim_service_roster_notification(TEXT,TEXT,TEXT,INTEGER)
+  TO service_role;
+
+-- ── Migrasi v97: Pembersihan referensi akun pada roster final ───────────
+-- TEMUAN (2026-10-02): guard v96 menolak UPDATE akibat ON DELETE SET NULL
+-- pada pelayan, pembuat, atau penerbit roster Terbit/Dibatalkan. Penghapusan
+-- akun melalui backend menjadi gagal, termasuk cascade auth.users -> users.
+-- Definisi kedua guard, trigger, dan FK production telah dicocokkan dengan
+-- hasil query baca-saja operator pada 2026-10-02; tidak ada policy diubah.
+-- KEPUTUSAN OPERATOR: rilis tetap ditahan. Perbaikan memulihkan pembersihan
+-- referensi yang sah tanpa membuka edit roster final kepada pengguna.
+-- Pengecualian hanya untuk backend, pengguna referensi sudah hilang, dan
+-- seluruh kolom input selain FK yang dibersihkan tetap sama; updated_at
+-- roster diperbarui otomatis seperti update lain. Blok aman diulang.
+
+CREATE OR REPLACE FUNCTION guard_service_roster() RETURNS trigger
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  trusted_transition BOOLEAN :=
+    COALESCE(current_setting('app.allow_roster_transition', true), '') = '1';
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.status <> 'Draft' THEN
+      RAISE EXCEPTION 'Roster yang sudah diterbitkan tidak dapat dihapus.';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.end_time IS NULL THEN
+      RAISE EXCEPTION 'Jam selesai wajib diisi agar bentrok jadwal dapat diperiksa.'
+        USING ERRCODE = '22023';
+    END IF;
+    NEW.created_by := COALESCE(auth_user_id(), NEW.created_by);
+    NEW.status := 'Draft';
+    NEW.version := 0;
+  ELSE
+    -- FK diproses setelah pengguna dihapus; VOLATILE melihat penghapusan
+    -- transaksi ini. Setiap referensi yang berubah harus valid sendiri.
+    IF auth_user_role() IS NULL
+       AND (
+         NEW.created_by IS DISTINCT FROM OLD.created_by
+         OR NEW.published_by IS DISTINCT FROM OLD.published_by
+       )
+       AND (to_jsonb(NEW) - 'created_by' - 'published_by')
+         = (to_jsonb(OLD) - 'created_by' - 'published_by')
+       AND (
+         NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+         OR (
+           OLD.created_by IS NOT NULL AND NEW.created_by IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM users WHERE user_id = OLD.created_by
+           )
+         )
+       )
+       AND (
+         NEW.published_by IS NOT DISTINCT FROM OLD.published_by
+         OR (
+           OLD.published_by IS NOT NULL AND NEW.published_by IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM users WHERE user_id = OLD.published_by
+           )
+         )
+       ) THEN
+      NEW.updated_at := now();
+      RETURN NEW;
+    END IF;
+
+    IF NEW.ministry_id IS DISTINCT FROM OLD.ministry_id THEN
+      RAISE EXCEPTION 'Ministry roster tidak dapat diubah.';
+    END IF;
+    IF (
+      NEW.service_date IS DISTINCT FROM OLD.service_date
+      OR NEW.start_time IS DISTINCT FROM OLD.start_time
+      OR NEW.end_time IS DISTINCT FROM OLD.end_time
+    ) AND EXISTS (
+      SELECT 1
+      FROM service_roster_slots slot
+      WHERE slot.roster_id = OLD.roster_id
+        AND slot.user_id IS NOT NULL
+    ) THEN
+      RAISE EXCEPTION 'Kosongkan seluruh pelayan sebelum mengubah tanggal atau jam roster.'
+        USING ERRCODE = '22023';
+    END IF;
+    IF OLD.status <> 'Draft' AND NOT trusted_transition THEN
+      RAISE EXCEPTION 'Roster yang sudah diterbitkan tidak dapat diedit langsung.';
+    END IF;
+    IF NEW.status IS DISTINCT FROM OLD.status AND NOT trusted_transition THEN
+      RAISE EXCEPTION 'Perubahan status roster wajib melalui aksi Terbit/Batalkan.';
+    END IF;
+    IF NEW.status = 'Terbit' AND NEW.end_time IS NULL THEN
+      RAISE EXCEPTION 'Jam selesai wajib diisi sebelum roster diterbitkan.'
+        USING ERRCODE = '22023';
+    END IF;
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION guard_service_roster_slot() RETURNS trigger
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  roster_ministry TEXT;
+  roster_status TEXT;
+  position_ministry TEXT;
+  trusted_assignment BOOLEAN :=
+    COALESCE(current_setting('app.allow_roster_slot_assignment', true), '') = '1';
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    SELECT ministry_id, status INTO roster_ministry, roster_status
+    FROM service_rosters WHERE roster_id = OLD.roster_id FOR UPDATE;
+    IF roster_status <> 'Draft' THEN
+      RAISE EXCEPTION 'Slot roster yang sudah diterbitkan tidak dapat dihapus.';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  -- Tidak cukup memeriksa caller NULL: pelayan lama wajib benar-benar
+  -- telah dihapus, dan tidak boleh ada perubahan lain dalam UPDATE ini.
+  IF TG_OP = 'UPDATE'
+     AND auth_user_role() IS NULL
+     AND OLD.user_id IS NOT NULL AND NEW.user_id IS NULL
+     AND (to_jsonb(NEW) - 'user_id') = (to_jsonb(OLD) - 'user_id')
+     AND NOT EXISTS (SELECT 1 FROM users WHERE user_id = OLD.user_id) THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE' AND (
+    NEW.roster_id IS DISTINCT FROM OLD.roster_id
+    OR NEW.ministry_id IS DISTINCT FROM OLD.ministry_id
+    OR NEW.position_id IS DISTINCT FROM OLD.position_id
+    OR NEW.slot_no IS DISTINCT FROM OLD.slot_no
+  ) THEN
+    RAISE EXCEPTION 'Identitas slot roster tidak dapat diubah.';
+  END IF;
+
+  SELECT ministry_id, status INTO roster_ministry, roster_status
+  FROM service_rosters WHERE roster_id = NEW.roster_id FOR UPDATE;
+  SELECT ministry_id INTO position_ministry
+  FROM ministry_service_positions WHERE position_id = NEW.position_id;
+
+  IF roster_ministry IS NULL OR roster_ministry <> NEW.ministry_id
+     OR position_ministry IS NULL OR position_ministry <> NEW.ministry_id THEN
+    RAISE EXCEPTION 'Slot, posisi, dan roster harus berasal dari ministry yang sama.';
+  END IF;
+  IF roster_status <> 'Draft' THEN
+    RAISE EXCEPTION 'Slot roster yang sudah diterbitkan tidak dapat diubah.';
+  END IF;
+  IF TG_OP = 'UPDATE'
+     AND NEW.user_id IS DISTINCT FROM OLD.user_id
+     AND auth_user_role() IS NOT NULL
+     AND NOT trusted_assignment THEN
+    RAISE EXCEPTION 'Penugasan pelayan wajib melalui aksi penjadwalan.'
+      USING ERRCODE = '42501';
+  END IF;
+  IF TG_OP = 'INSERT'
+     AND NEW.user_id IS NOT NULL
+     AND auth_user_role() IS NOT NULL
+     AND NOT trusted_assignment THEN
+    RAISE EXCEPTION 'Penugasan pelayan wajib melalui aksi penjadwalan.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.user_id IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM users u
+       WHERE u.user_id = NEW.user_id AND u.status = 'Aktif'
+     ) THEN
+    RAISE EXCEPTION 'Pelayan yang dipilih harus berstatus Aktif.';
+  END IF;
+
+  IF NEW.user_id IS NOT NULL
+     AND auth_user_role() IS NOT NULL
+     AND NOT auth_admin_can('/admin/jadwal-pelayanan')
+     AND NOT EXISTS (
+       SELECT 1
+       FROM user_ministries um
+       JOIN users u ON u.user_id = um.user_id
+       WHERE um.ministry_id = NEW.ministry_id
+         AND um.user_id = NEW.user_id
+         AND u.status = 'Aktif'
+     ) THEN
+    RAISE EXCEPTION 'Ministry Head hanya dapat memilih anggota aktif ministry ini.';
+  END IF;
+
+  RETURN NEW;
+END $$;

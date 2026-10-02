@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, ChevronRight, Star, HelpCircle } from 'lucide-react'
+import { LogOut, Phone, Mail, MapPin, Cake, Droplet, Instagram, Users, Heart, ShieldAlert, Settings, ShieldCheck, ClipboardCheck, CalendarRange, ChevronRight, Star, HelpCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { usersService } from '@/services/usersService'
+import { serviceRosterService } from '@/services/serviceRosterService'
 import { Card, Badge, StatusBadge, Spinner } from '@/components/ui'
 import SkyTime from '@/components/SkyTime'
 import MembershipCard from '@/components/MembershipCard'
@@ -18,6 +19,7 @@ export default function ProfilePage() {
   const [ministries, setMinistries] = useState([])
   const [komsel, setKomsel] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [hasScheduleManagerAccess, setHasScheduleManagerAccess] = useState(false)
 
   useEffect(() => {
     if (!profile) return
@@ -27,6 +29,15 @@ export default function ProfilePage() {
     ]).then(([m, k]) => { setMinistries(m); setKomsel(k) })
       .finally(() => setLoading(false))
   }, [profile])
+
+  useEffect(() => {
+    if (!profile?.user_id || isAdmin || isGembala) return undefined
+    let active = true
+    serviceRosterService.listManagedMinistries(profile)
+      .then(rows => { if (active) setHasScheduleManagerAccess(rows.length > 0) })
+      .catch(() => { if (active) setHasScheduleManagerAccess(false) })
+    return () => { active = false }
+  }, [isAdmin, isGembala, profile])
 
   async function handleLogout() {
     const ok = await confirm({
@@ -103,7 +114,7 @@ export default function ProfilePage() {
 
       <div className="px-4 mt-5 space-y-4">
         {/* Ganti panel — bergaya seperti mengganti akun */}
-        {(isAdmin || isGembala || isPKS) && (
+        {(isAdmin || isGembala || isPKS || hasScheduleManagerAccess) && (
           <Card className="p-2">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2.5 pt-2 pb-1">{t('profile.switchPanel')}</p>
             {(isAdmin || isGembala) && (
@@ -114,6 +125,18 @@ export default function ProfilePage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900">{isGembala ? t('profile.gembalaPanel') : t('profile.adminPanel')}</p>
                   <p className="text-xs text-gray-400">{isGembala ? t('profile.gembalaPanelDesc') : t('profile.adminPanelDesc')}</p>
+                </div>
+                <ChevronRight size={18} className="text-gray-300 shrink-0" />
+              </Link>
+            )}
+            {hasScheduleManagerAccess && (
+              <Link to="/admin/jadwal-pelayanan" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-control active:scale-[0.99] transition-all">
+                <div className="w-10 h-10 rounded-full bg-brand-50 flex items-center justify-center text-brand-600 shrink-0">
+                  <CalendarRange size={18} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{t('profile.schedulePanel')}</p>
+                  <p className="text-xs text-gray-400">{t('profile.schedulePanelDesc')}</p>
                 </div>
                 <ChevronRight size={18} className="text-gray-300 shrink-0" />
               </Link>
