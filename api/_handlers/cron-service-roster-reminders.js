@@ -1,6 +1,6 @@
 export const config = { runtime: 'nodejs' }
 
-import { sendRosterNotifications } from './_lib/service-roster-notifications.js'
+import { sendRosterNotifications } from '../_lib/service-roster-notifications.js'
 
 export default async function handler(req, res) {
   try {

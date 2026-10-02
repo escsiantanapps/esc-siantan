@@ -7,7 +7,7 @@ npm ci
 npm run check
 ```
 
-`check` menjalankan lint → tes browser → build. Tahap berikutnya tidak dijalankan jika tahap sebelumnya gagal.
+`check` menjalankan lint → tes browser/API/database lokal → build. Tahap berikutnya tidak dijalankan jika tahap sebelumnya gagal.
 
 Pada Windows, tes memakai Microsoft Edge yang sudah terpasang. Pada Linux/macOS, instal browser pengujian satu kali:
 
@@ -20,7 +20,7 @@ Untuk executable browser khusus, isi environment variable `QA_BROWSER_PATH` deng
 Perintah terpisah:
 
 - `npm run lint`: kesalahan seperti variabel tidak terdefinisi, assignment tidak sah, dan aturan pemanggilan hooks. Impor tidak terpakai serta exhaustive-deps belum menjadi gerbang pada adopsi awal ini. Beberapa aturan gaya yang tidak menunjukkan kesalahan runtime sengaja tidak diaktifkan.
-- `npm test`: tes browser dengan data fiktif, tanpa kredensial.
+- `npm test`: tes browser, API, dan PostgreSQL lokal dengan data fiktif, tanpa kredensial.
 - `npm run build`: build production sesuai konfigurasi proyek.
 
 ## Isolasi
@@ -31,6 +31,8 @@ Tes ini memeriksa UI, logika routing, dan penanganan respons service. Role disim
 
 ## Cakupan
 
+- API: jumlah entrypoint Vercel tetap maksimal 12 untuk paket Hobby. Handler dalam folder berawalan `_` tidak menjadi fungsi tersendiri. Router `api/[endpoint].js` mempertahankan URL notifikasi/cron lama dan memilih handler hanya dari pathname, bukan query/body.
+- Konsolidasi API: pengaman metode, token/secret, pembatasan pengiriman, query slot SOP, dan cabang arsip respons tetap diperiksa melalui router.
 - Form SOP admin dapat dibuka; halaman penolakan SOP untuk Jemaat, Volunteer, dan PKS tidak crash.
 - Gagal mengambil SOP menampilkan error dan retry, lalu dapat pulih.
 - Gagal mengambil izin tidak berubah menjadi akses penuh atau daftar admin kosong.

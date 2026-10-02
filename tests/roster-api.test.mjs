@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import notifyRoster from '../api/notify-service-roster.js'
+import notifyRoster from '../api/[endpoint].js'
 
 const envKeys = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT']
 let requestNumber = 0
@@ -57,6 +57,7 @@ async function endpointFixture(options, action) {
     throw new Error('Pengiriman push tidak boleh dimulai dalam tes guard')
   }
   const request = {
+    url: '/api/notify-service-roster',
     method: options.method || 'POST',
     headers: {
       authorization: 'Bearer qa-access-token',

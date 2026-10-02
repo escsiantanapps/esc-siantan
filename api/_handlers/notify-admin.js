@@ -61,7 +61,7 @@ export default async function handler(req, res) {
       .maybeSingle()
     if (!caller) return res.status(403).json({ error: 'Forbidden' })
 
-    const { checkRateLimit } = await import('./_lib/rate-limit.js')
+    const { checkRateLimit } = await import('../_lib/rate-limit.js')
     if (checkRateLimit(req, res, { endpoint: 'notify-admin', max: 10 })) return
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})

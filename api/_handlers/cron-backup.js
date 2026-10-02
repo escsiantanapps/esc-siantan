@@ -14,7 +14,7 @@
 export const config = { runtime: 'nodejs' }
 
 // Sumber tunggal daftar tabel (dipakai bareng halaman in-app & skrip lokal).
-import { BACKUP_TABLES } from '../src/lib/backupTables.js'
+import { BACKUP_TABLES } from '../../src/lib/backupTables.js'
 
 const KEEP = 30 // simpan 30 arsip harian terakhir (rotasi otomatis)
 const PAGE = 1000 // batas baris per request PostgREST; tabel besar dipaginasi

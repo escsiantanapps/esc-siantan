@@ -1,7 +1,7 @@
 export const config = { runtime: 'nodejs' }
 
-import { checkRateLimit } from './_lib/rate-limit.js'
-import { sendRosterNotifications } from './_lib/service-roster-notifications.js'
+import { checkRateLimit } from '../_lib/rate-limit.js'
+import { sendRosterNotifications } from '../_lib/service-roster-notifications.js'
 
 const ALLOWED_KINDS = ['Terbit', 'Dibatalkan', 'Manual']
 const ADMIN_ROLES = new Set(['Admin', 'Super Admin', 'Gembala'])

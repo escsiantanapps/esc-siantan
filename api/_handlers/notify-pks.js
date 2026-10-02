@@ -61,7 +61,7 @@ export default async function handler(req, res) {
     const { data: userData, error: uErr } = await admin.auth.getUser(token)
     if (uErr || !userData?.user) return res.status(401).json({ error: 'Unauthorized' })
 
-    const { checkRateLimit } = await import('./_lib/rate-limit.js')
+    const { checkRateLimit } = await import('../_lib/rate-limit.js')
     if (checkRateLimit(req, res, { endpoint: 'notify-pks', max: 10 })) return
 
     const { data: member } = await admin

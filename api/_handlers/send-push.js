@@ -148,7 +148,7 @@ export default async function handler(req, res) {
     // tidak menggagalkan web-push yang sudah terkirim.
     let fcm = { sent: 0, removed: 0, errors: [] }
     try {
-      const { fcmAvailable, sendFcm } = await import('./_lib/fcm.js')
+      const { fcmAvailable, sendFcm } = await import('../_lib/fcm.js')
       if (fcmAvailable()) {
         let tq = admin.from('device_tokens').select('token, user_id')
         if (Array.isArray(userIds) && userIds.length) tq = tq.in('user_id', userIds)
