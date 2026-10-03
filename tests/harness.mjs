@@ -57,7 +57,8 @@ export async function fixture(harness, options = {}) {
     if (url.origin === harness.baseUrl && !url.pathname.startsWith('/api/')) return route.continue()
     // Semua request nonlokal diintersep, termasuk font. Kredensial asli tidak pernah diperlukan.
     if (url.hostname === 'qa-local.supabase.co') {
-      requests.push({ path: url.pathname, method: request.method(), search: url.search })
+      requests.push({ path: url.pathname, method: request.method(), search: url.search,
+        body: ['POST', 'PATCH', 'PUT'].includes(request.method()) ? request.postDataJSON() : undefined })
       if (url.pathname === '/auth/v1/token') {
         if (state.authRestricted) return reply({ message: 'Service restricted: exceed_cached_egress_quota' }, 402)
         return reply({ error: 'invalid_grant', error_description: 'Simulasi sandi salah' }, 400)
@@ -83,6 +84,29 @@ export async function fixture(harness, options = {}) {
         })
       }
       if (table === 'get_points_leaderboard_with_me') return reply(state.leaderboard || [])
+      if (table === 'get_service_schedule_month') {
+        const monthId = request.postDataJSON()?.p_month_id
+        const schedule = state.monthlySchedules?.find(item => item.month.month_id === monthId)
+        if (!schedule) return reply({ message: 'Simulasi bulan tidak ditemukan', code: '22023' }, 400)
+        return reply(schedule)
+      }
+      if (table === 'service_schedule_templates') return rows(state.monthlyTemplates || [])
+      if (table === 'service_schedule_months') {
+        const monthDate = url.searchParams.get('month_date')
+        let data = (state.monthlySchedules || []).map(item => item.month)
+        if (monthDate?.startsWith('eq.')) data = data.filter(row => row.month_date === monthDate.slice(3))
+        return rows(data)
+      }
+      if (table === 'service_schedule_parts') {
+        if (state.rosterMonthLinkDelayMs) await new Promise(resolve => setTimeout(resolve, state.rosterMonthLinkDelayMs))
+        const rosterId = url.searchParams.get('roster_id')?.slice(3)
+        const schedule = state.monthlySchedules?.find(item => item.parts.some(part => part.roster_id === rosterId))
+        return rows(schedule ? [{ service_schedule_occurrences: {
+          month_id: schedule.month.month_id,
+          service_schedule_months: { month_date: schedule.month.month_date },
+        } }] : [])
+      }
+      if (table === 'ministry_service_positions') return rows(state.servicePositions || [])
       if (table === 'auth_admin_can') return reply(state.role === 'Super Admin' || state.allowedPages?.includes('/admin/jadwal-pelayanan') || false)
       if (table === 'admin_user_permissions') {
         if (state.permissionFailure) return reply({ message: 'Simulasi gangguan izin' }, 503)
@@ -91,10 +115,27 @@ export async function fixture(harness, options = {}) {
       if (table === 'users') {
         if (url.searchParams.has('auth_id')) return rows([profile])
         if (url.searchParams.get('role') === 'eq.Admin') return rows([{ user_id: 'QA-ADMIN', name: 'Admin Uji', role: 'Admin', status: 'Aktif', photo_url: null }])
-        if (request.method() === 'GET' && state.members) return rows(state.members)
+        if (request.method() === 'GET' && state.members) {
+          let data = state.members
+          const ids = url.searchParams.get('user_id')
+          if (ids?.startsWith('in.(') && ids.endsWith(')')) {
+            const allowed = new Set(ids.slice(4, -1).split(','))
+            data = data.filter(member => allowed.has(member.user_id))
+          }
+          const status = url.searchParams.get('status')
+          if (status?.startsWith('eq.')) data = data.filter(member => member.status === status.slice(3))
+          const role = url.searchParams.get('role')
+          if (role?.startsWith('eq.')) data = data.filter(member => member.role === role.slice(3))
+          return rows(data)
+        }
         return rows([])
       }
       if (table === 'user_ministries') {
+        if (request.method() === 'POST') {
+          const created = request.postDataJSON()
+          state.ministryMembers = [...(state.ministryMembers || []), created]
+          return rows([created])
+        }
         let data = state.ministryMembers || []
         const ministryId = url.searchParams.get('ministry_id')
         if (ministryId?.startsWith('eq.')) data = data.filter(row => row.ministry_id === ministryId.slice(3))
@@ -135,7 +176,13 @@ export async function fixture(harness, options = {}) {
         return rows(state.legacyScheduleAssignments || [])
       }
       if (table === 'ktj_registrations') return rows(state.ktjRegistrations || [])
-      if (table === 'ministries') return rows(state.ministries || [])
+      if (table === 'ministries') {
+        if (state.ministryHeadSourceMissing && request.method() === 'GET'
+          && url.searchParams.get('select')?.includes('head:users!head_user_id')) {
+          return reply({ code: 'PGRST200', message: 'Relasi kepala Ministry belum tersedia' }, 400)
+        }
+        return rows(state.ministries || [])
+      }
       if (table === 'ministry_schedule_managers') return rows(state.managerGrants || [])
       if (table === 'form_templates') {
         if (state.templateFailure) return reply({ message: 'Simulasi gangguan SOP' }, 503)

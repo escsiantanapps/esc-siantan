@@ -1,0 +1,60 @@
+.sched-month-matrix { min-width: 0; width: 100%; color: var(--color-gray-900); }
+.sched-month-matrix *, .sched-month-matrix h1, .sched-month-matrix h2 { letter-spacing: 0; }
+.sched-matrix-scroll { width: 100%; max-width: 100%; overflow-x: auto; border: 1px solid var(--color-gray-200); border-radius: 8px; }
+.sched-matrix-scroll:focus-visible, .sched-month-matrix button:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: 2px; }
+.sched-matrix-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 13px; }
+.sched-matrix-label-column { width: 180px; }
+.sched-matrix-date-column { min-width: 155px; }
+.sched-matrix-table th, .sched-matrix-table td { padding: 0; text-align: left; vertical-align: top; border-right: 1px solid var(--color-gray-200); border-bottom: 1px solid var(--color-gray-200); overflow-wrap: anywhere; }
+.sched-matrix-table tr:last-child > * { border-bottom: 0; }
+.sched-matrix-table tr > *:last-child { border-right: 0; }
+.sched-matrix-table .sched-matrix-label { position: sticky; left: 0; z-index: 1; padding: 11px 12px; background: var(--color-surface); font-weight: 600; }
+.sched-matrix-table thead th { padding: 12px; background: var(--color-control); font-weight: 650; }
+.sched-matrix-table thead .sched-matrix-label { background: var(--color-control); }
+.sched-matrix-table th small { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; color: var(--color-gray-500); }
+.sched-matrix-column-date { display: flex; align-items: center; gap: 6px; }
+.sched-month-matrix .sched-matrix-cell { position: relative; width: 100%; min-height: 49px; display: flex; align-items: flex-start; flex-direction: column; justify-content: center; gap: 5px; padding: 10px 20px 10px 12px; border-radius: 0; text-align: left; white-space: normal; font-weight: 400; color: var(--color-gray-800); font-size: 13px; overflow-wrap: anywhere; line-height: 1.45; }
+.sched-month-matrix button.sched-matrix-cell:hover { background: var(--color-control-hover); }
+.sched-month-matrix button.sched-matrix-cell:active { transform: none; }
+.sched-matrix-edit-mark { position: absolute; right: 6px; top: 9px; opacity: 0.55; }
+.sched-matrix-assigned { display: flex; flex-direction: column; gap: 3px; width: 100%; }
+.sched-matrix-vacancy { display: inline-block; border-left: 2px solid var(--color-brand-400); padding-left: 5px; font-size: 11px; color: var(--color-gray-600); }
+.sched-matrix-locked { min-height: 48px; display: flex; align-items: center; padding: 12px; gap: 5px; font-size: 11px; color: var(--color-gray-500); }
+.sched-matrix-not-scheduled { display: block; min-height: 49px; padding: 12px; color: var(--color-gray-400); }
+.sched-matrix-time { display: flex; gap: 5px; align-items: center; font-weight: 650; color: var(--color-gray-900); }
+.sched-matrix-meta { display: flex; align-items: flex-start; gap: 5px; font-size: 11px; color: var(--color-gray-600); }
+.sched-matrix-meta svg { flex-shrink: 0; margin-top: 2px; }
+.sched-matrix-table .sched-matrix-activity > * { background: color-mix(in srgb, var(--color-surface), #14b8a6 10%); }
+.sched-matrix-table .sched-matrix-activity .sched-matrix-label { background: color-mix(in srgb, var(--color-surface), #14b8a6 14%); padding-top: 14px; padding-bottom: 14px; }
+.sched-matrix-table .sched-matrix-activity .sched-matrix-label > span { display: block; font-size: 14px; }
+.sched-matrix-table .sched-matrix-ministry > * { background: var(--color-control); }
+.sched-matrix-table .sched-matrix-ministry .sched-matrix-label { background: var(--color-control); color: var(--color-gray-700); }
+.sched-matrix-ministry th > svg { display: block; margin-top: 5px; color: var(--color-gray-500); }
+.sched-matrix-part-line { display: block; width: 100%; color: var(--color-gray-700); font-size: 12px; }
+.sched-matrix-part-line > span { display: block; color: var(--color-gray-500); font-size: 10px; }
+.sched-matrix-notes .sched-matrix-label, .sched-matrix-notes .sched-matrix-cell { color: var(--color-gray-600); font-size: 12px; }
+.sched-matrix-date-picker { display: none; }
+.sched-matrix-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.sched-matrix-empty { padding: 28px 16px; text-align: center; font-size: 14px; color: var(--color-gray-500); border-top: 1px solid var(--color-gray-200); }
+@media (min-width: 768px) {
+  .sched-matrix-table { min-width: var(--sched-matrix-width, 820px); }
+}
+@media (max-width: 767px) {
+  .sched-matrix-table { font-size: 13px; }
+  .sched-matrix-label-column { width: 37%; }
+  .sched-matrix-date-column { display: none; }
+  .sched-matrix-date-column.is-current-date { display: table-column; }
+  .sched-matrix-table .sched-matrix-date { display: none; }
+  .sched-matrix-table .sched-matrix-date.is-current-date { display: table-cell; border-right: 0; }
+  .sched-matrix-table .sched-matrix-label { padding: 11px 9px; }
+  .sched-matrix-table thead th { padding: 11px 9px; }
+  .sched-matrix-label small { font-size: 10px; }
+  .sched-month-matrix .sched-matrix-cell { min-height: 49px; padding: 11px 20px 11px 9px; font-size: 13px; }
+  .sched-matrix-date-picker { display: flex; align-items: center; gap: 3px; width: 100%; margin: 0 0 10px; }
+  .sched-matrix-date-options { display: flex; flex: 1; min-width: 0; overflow-x: auto; gap: 3px; }
+  .sched-month-matrix .sched-matrix-date-option { border-radius: 6px; flex: 1 0 44px; height: 47px; min-width: 44px; display: flex; flex-direction: column; gap: 1px; padding: 4px; background: var(--color-control); color: var(--color-gray-700); }
+  .sched-month-matrix .sched-matrix-date-option.is-selected { background: var(--color-primary-deeper); color: #fff; }
+  .sched-matrix-date-option small { font-size: 10px; }
+  .sched-month-matrix .sched-matrix-date-arrow { width: 44px; min-width: 44px; height: 45px; padding: 0; border-radius: 6px; }
+  .sched-matrix-locked { padding: 12px 9px; }
+}

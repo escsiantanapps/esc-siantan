@@ -85,6 +85,7 @@ const AdminMessagesPage = lazy(() => import('@/pages/admin/AdminMessagesPage'))
 const AdminMinistrySchedulePage = lazy(() => import('@/pages/admin/AdminMinistrySchedulePage'))
 const AdminInventoryPage = lazy(() => import('@/pages/admin/AdminInventoryPage'))
 const ServiceSchedulesPage = lazy(() => import('@/pages/user/ServiceSchedulesPage'))
+const AdminMonthlySchedulePage = lazy(() => import('@/pages/admin/AdminMonthlySchedulePage'))
 
 // Layouts
 import UserLayout from '@/layouts/UserLayout'
@@ -145,11 +146,11 @@ function ScheduleManagementRoute() {
   if (loading) return <SheepLoader fullScreen size="xl" />
   if (!user) return <Navigate to="/login" replace />
   if (!profile || profile.status !== 'Aktif') return <AccountStatusPage />
-  if (isAdmin) return <AdminLayout><ServiceSchedulesPage adminMode /></AdminLayout>
+  if (isAdmin) return <AdminLayout><AdminMonthlySchedulePage /></AdminLayout>
   if (profile.role === 'Gembala') return <Navigate to="/admin" replace />
   if (managerAccess?.userId !== profile.user_id) return <SheepLoader fullScreen size="xl" />
   if (!managerAccess.allowed) return <Navigate to="/" replace />
-  return <MinistryScheduleLayout><ServiceSchedulesPage adminMode /></MinistryScheduleLayout>
+  return <MinistryScheduleLayout><AdminMonthlySchedulePage /></MinistryScheduleLayout>
 }
 
 function PKSRoute({ children }) {

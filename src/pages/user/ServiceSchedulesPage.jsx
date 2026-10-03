@@ -142,13 +142,13 @@ function Picker({ roster, slot, canPickAnyMember, onClose, onPick, t }) {
   )
 }
 
-export default function ServiceSchedulesPage({ adminMode = false }) {
+export default function ServiceSchedulesPage({ adminMode = false, initialTab = 'manage', legacyOnly = false }) {
   const { profile } = useAuth()
   const { t } = useLang()
   const { toast, confirm } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedRosterId = searchParams.get('rosterId')
-  const [tab, setTab] = useState(adminMode ? 'manage' : 'mine')
+  const [tab, setTab] = useState(adminMode ? initialTab : 'mine')
   const [month, setMonth] = useState(nowMonth())
   const [managed, setManaged] = useState([])
   const [ministryId, setMinistryId] = useState('')
@@ -246,13 +246,13 @@ export default function ServiceSchedulesPage({ adminMode = false }) {
       let rows = []
       if (tab === 'mine') rows = await serviceRosterService.listMine(profile.user_id, month)
       if (tab === 'all') rows = await serviceRosterService.listPublished(month)
-      if (tab === 'manage' && ministryId) rows = await serviceRosterService.listManaged(month, ministryId)
+      if (tab === 'manage' && ministryId) rows = await serviceRosterService.listManaged(month, ministryId, { legacyOnly })
       setRosters(rows)
     } catch {
       setRosters([])
       toast.error(t('sched.loadFailed'))
     } finally { setLoading(false) }
-  }, [ministryId, month, profile?.user_id, t, tab, toast])
+  }, [legacyOnly, ministryId, month, profile?.user_id, t, tab, toast])
 
   useEffect(() => { load() }, [load])
 
@@ -483,7 +483,7 @@ export default function ServiceSchedulesPage({ adminMode = false }) {
   }
 
   const tabs = adminMode
-    ? [{ id: 'manage', label: t('sched.manage') }, { id: 'settings', label: t('sched.accessPositions') }]
+    ? [{ id: 'manage', label: t('sched.manage') }, ...(!legacyOnly ? [{ id: 'settings', label: t('sched.accessPositions') }] : [])]
     : [{ id: 'mine', label: t('sched.mySchedule') }, { id: 'all', label: t('sched.allSchedules') }]
 
   return (

@@ -6604,3 +6604,914 @@ BEGIN
 
   RETURN NEW;
 END $$;
+
+-- ── Migrasi v98: Template pelayanan bulanan bersama ───────────────────
+-- KEPUTUSAN OPERATOR (2026-10-02): Admin mengatur struktur/jam dan
+-- menerbitkan seluruh bulan. MH/Wakil berizin hanya mengisi bagiannya.
+-- Bentrok jam dan rangkap posisi ditolak tanpa override; tanpa self-signup.
+-- TEMUAN: RPC lama mengizinkan override dan publikasi per-ministry.
+-- Guard TAMBAHAN tidak mengganti objek lama. Roster/slot tetap digunakan
+-- agar Volunteer dan notifikasi tidak memiliki sumber penugasan kedua.
+
+CREATE TABLE IF NOT EXISTS service_schedule_templates (
+  template_id TEXT PRIMARY KEY DEFAULT 'SSTPL-' || replace(gen_random_uuid()::text, '-', ''),
+  name TEXT NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 120),
+  definition JSONB NOT NULL, is_active BOOLEAN NOT NULL DEFAULT true,
+  created_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS service_schedule_months (
+  month_id TEXT PRIMARY KEY DEFAULT 'SSMONTH-' || replace(gen_random_uuid()::text, '-', ''),
+  template_id TEXT NOT NULL REFERENCES service_schedule_templates(template_id) ON DELETE RESTRICT,
+  month_date DATE NOT NULL CHECK (extract(day FROM month_date) = 1),
+  name TEXT NOT NULL, definition JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft', 'Terbit', 'Dibatalkan')),
+  version INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  published_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  published_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS service_schedule_one_active_month_idx
+  ON service_schedule_months(month_date) WHERE status <> 'Dibatalkan';
+CREATE TABLE IF NOT EXISTS service_schedule_occurrences (
+  occurrence_id TEXT PRIMARY KEY DEFAULT 'SSOCC-' || replace(gen_random_uuid()::text, '-', ''),
+  month_id TEXT NOT NULL REFERENCES service_schedule_months(month_id) ON DELETE CASCADE,
+  section_id TEXT NOT NULL, title TEXT NOT NULL,
+  source_type TEXT NOT NULL CHECK (source_type IN ('Ibadah', 'Event', 'Kelas')),
+  event_id TEXT REFERENCES events(event_id) ON DELETE SET NULL,
+  class_id TEXT REFERENCES classes(class_id) ON DELETE SET NULL, class_session_no INTEGER,
+  service_date DATE NOT NULL, start_time TIME NOT NULL,
+  end_time TIME NOT NULL CHECK (end_time > start_time),
+  location TEXT, dress_code TEXT, pic TEXT, notes TEXT,
+  UNIQUE (month_id, section_id, service_date)
+);
+CREATE TABLE IF NOT EXISTS service_schedule_parts (
+  part_id TEXT PRIMARY KEY DEFAULT 'SSPART-' || replace(gen_random_uuid()::text, '-', ''),
+  occurrence_id TEXT NOT NULL REFERENCES service_schedule_occurrences(occurrence_id) ON DELETE CASCADE,
+  ministry_id TEXT NOT NULL REFERENCES ministries(ministry_id) ON DELETE CASCADE,
+  roster_id TEXT NOT NULL UNIQUE REFERENCES service_rosters(roster_id) ON DELETE CASCADE,
+  team_name TEXT, material TEXT, notes TEXT, UNIQUE (occurrence_id, ministry_id)
+);
+CREATE INDEX IF NOT EXISTS service_schedule_occurrences_month_idx ON service_schedule_occurrences(month_id, service_date);
+CREATE INDEX IF NOT EXISTS service_schedule_parts_ministry_idx ON service_schedule_parts(ministry_id, occurrence_id);
+ALTER TABLE service_schedule_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_schedule_months ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_schedule_occurrences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_schedule_parts ENABLE ROW LEVEL SECURITY;
+-- Semua penulisan melalui RPC, termasuk bagi Admin.
+REVOKE INSERT, UPDATE, DELETE ON service_schedule_templates, service_schedule_months,
+  service_schedule_occurrences, service_schedule_parts FROM anon, authenticated;
+GRANT SELECT ON service_schedule_templates, service_schedule_months,
+  service_schedule_occurrences, service_schedule_parts TO authenticated;
+
+CREATE OR REPLACE FUNCTION auth_service_schedule_admin() RETURNS BOOLEAN
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT auth_admin_can('/admin/jadwal-pelayanan') AND EXISTS (
+    SELECT 1 FROM users WHERE user_id = auth_user_id() AND status = 'Aktif'
+  )
+$$;
+REVOKE EXECUTE ON FUNCTION auth_service_schedule_admin() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_service_schedule_admin() TO authenticated;
+
+CREATE OR REPLACE FUNCTION auth_service_schedule_manager() RETURNS BOOLEAN
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT auth_service_schedule_admin() OR EXISTS (
+    SELECT 1 FROM ministry_schedule_managers manager
+    WHERE manager.user_id = auth_user_id() AND auth_manages_ministry(manager.ministry_id)
+  )
+$$;
+CREATE OR REPLACE FUNCTION auth_reads_service_schedule_month(p_month_id TEXT) RETURNS BOOLEAN
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT auth.uid() IS NOT NULL AND EXISTS (
+    SELECT 1 FROM service_schedule_months month WHERE month.month_id = p_month_id
+      AND (month.status <> 'Draft' OR auth_service_schedule_admin() OR EXISTS (
+        SELECT 1 FROM service_schedule_occurrences occurrence
+        JOIN service_schedule_parts part ON part.occurrence_id = occurrence.occurrence_id
+        WHERE occurrence.month_id = month.month_id AND auth_manages_ministry(part.ministry_id)
+      ))
+  )
+$$;
+REVOKE EXECUTE ON FUNCTION auth_service_schedule_manager(), auth_reads_service_schedule_month(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_service_schedule_manager(), auth_reads_service_schedule_month(TEXT) TO authenticated;
+-- Policy objek baru dibuat bila belum ada; policy production lama tidak disentuh.
+DO $v98$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'service_schedule_templates' AND policyname = 'sst_select') THEN
+    CREATE POLICY sst_select ON service_schedule_templates FOR SELECT TO authenticated USING (auth_service_schedule_manager());
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'service_schedule_months' AND policyname = 'ssm_select') THEN
+    CREATE POLICY ssm_select ON service_schedule_months FOR SELECT TO authenticated USING (auth_reads_service_schedule_month(month_id));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'service_schedule_occurrences' AND policyname = 'sso_select') THEN
+    CREATE POLICY sso_select ON service_schedule_occurrences FOR SELECT TO authenticated USING (auth_reads_service_schedule_month(month_id));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'service_schedule_parts' AND policyname = 'ssp_select') THEN
+    CREATE POLICY ssp_select ON service_schedule_parts FOR SELECT TO authenticated USING (
+      auth_service_schedule_admin() OR auth_manages_ministry(ministry_id)
+      OR EXISTS (SELECT 1 FROM service_schedule_occurrences occurrence
+        JOIN service_schedule_months month ON month.month_id = occurrence.month_id
+        WHERE occurrence.occurrence_id = service_schedule_parts.occurrence_id AND month.status <> 'Draft')
+    );
+  END IF;
+END $v98$;
+
+-- Policy slot lama memperbolehkan anggota membaca slot Draft miliknya.
+-- Khusus jadwal bulanan, publikasi Admin menjadi batas baca anggota.
+CREATE OR REPLACE FUNCTION auth_reads_service_schedule_roster(p_roster_id TEXT) RETURNS BOOLEAN
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT NOT EXISTS (SELECT 1 FROM service_schedule_parts WHERE roster_id = p_roster_id)
+    OR EXISTS (SELECT 1 FROM service_schedule_parts part
+      JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id
+      JOIN service_schedule_months month ON month.month_id = occurrence.month_id
+      WHERE part.roster_id = p_roster_id AND (month.status <> 'Draft'
+        OR auth_service_schedule_admin() OR auth_manages_ministry(part.ministry_id)))
+$$;
+REVOKE EXECUTE ON FUNCTION auth_reads_service_schedule_roster(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_reads_service_schedule_roster(TEXT) TO authenticated;
+DO $v98$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'service_roster_slots' AND policyname = 'service_roster_slots_monthly_published_read') THEN
+    CREATE POLICY service_roster_slots_monthly_published_read ON service_roster_slots AS RESTRICTIVE FOR SELECT TO authenticated
+      USING (auth_reads_service_schedule_roster(roster_id));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'service_rosters' AND policyname = 'service_rosters_monthly_published_read') THEN
+    CREATE POLICY service_rosters_monthly_published_read ON service_rosters AS RESTRICTIVE FOR SELECT TO authenticated
+      USING (auth_reads_service_schedule_roster(roster_id));
+  END IF;
+END $v98$;
+
+CREATE OR REPLACE FUNCTION validate_service_schedule_definition(p_definition JSONB) RETURNS VOID
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE section JSONB; part JSONB; position JSONB; owner TEXT; position_owner TEXT;
+BEGIN
+  IF jsonb_typeof(p_definition) IS DISTINCT FROM 'object' OR jsonb_typeof(p_definition->'sections') IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Struktur template tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_array_length(p_definition->'sections') NOT BETWEEN 1 AND 12 THEN
+    RAISE EXCEPTION 'Template harus memiliki 1 sampai 12 kegiatan.' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_definition->'sections') s GROUP BY s->>'section_id' HAVING count(*) > 1) THEN
+    RAISE EXCEPTION 'Identitas kegiatan template tidak boleh berulang.' USING ERRCODE = '22023';
+  END IF;
+  FOR section IN SELECT value FROM jsonb_array_elements(p_definition->'sections') LOOP
+    IF COALESCE(section->>'section_id', '') !~ '^[A-Za-z0-9_-]{1,64}$'
+      OR length(btrim(COALESCE(section->>'title', ''))) NOT BETWEEN 1 AND 160
+      OR COALESCE(section->>'source_type', '') NOT IN ('Ibadah', 'Event', 'Kelas')
+      OR COALESCE(section->>'start_time', '') !~ '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$'
+      OR COALESCE(section->>'end_time', '') !~ '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN
+      RAISE EXCEPTION 'Nama, sumber, atau jam kegiatan template tidak valid.' USING ERRCODE = '22023';
+    END IF;
+    IF (section->>'end_time')::TIME <= (section->>'start_time')::TIME THEN
+      RAISE EXCEPTION 'Jam selesai harus setelah jam mulai.' USING ERRCODE = '22023';
+    END IF;
+    IF (section->>'source_type' = 'Event' AND (NULLIF(section->>'event_id', '') IS NULL OR NULLIF(section->>'class_id', '') IS NOT NULL))
+      OR (section->>'source_type' = 'Kelas' AND (NULLIF(section->>'class_id', '') IS NULL OR NULLIF(section->>'event_id', '') IS NOT NULL))
+      OR (section->>'source_type' = 'Ibadah' AND (NULLIF(section->>'class_id', '') IS NOT NULL OR NULLIF(section->>'event_id', '') IS NOT NULL)) THEN
+      RAISE EXCEPTION 'Sumber kegiatan template belum sesuai.' USING ERRCODE = '22023';
+    END IF;
+    IF section->>'source_type' = 'Event' AND NOT EXISTS (SELECT 1 FROM events WHERE event_id = section->>'event_id') THEN RAISE EXCEPTION 'Event tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+    IF section->>'source_type' = 'Kelas' AND NOT EXISTS (SELECT 1 FROM classes WHERE class_id = section->>'class_id') THEN RAISE EXCEPTION 'Kelas tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+    IF section->>'class_session_no' IS NOT NULL AND ((section->>'class_session_no')::INTEGER < 1 OR section->>'source_type' <> 'Kelas') THEN RAISE EXCEPTION 'Nomor sesi kelas tidak valid.' USING ERRCODE = '22023'; END IF;
+    IF jsonb_typeof(section->'parts') IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'Bagian ministry wajib diisi.' USING ERRCODE = '22023'; END IF;
+    IF jsonb_array_length(section->'parts') NOT BETWEEN 1 AND 20
+      OR EXISTS (SELECT 1 FROM jsonb_array_elements(section->'parts') p GROUP BY p->>'ministry_id' HAVING count(*) > 1) THEN RAISE EXCEPTION 'Bagian ministry kosong atau berulang.' USING ERRCODE = '22023'; END IF;
+    FOR part IN SELECT value FROM jsonb_array_elements(section->'parts') LOOP
+      owner := part->>'ministry_id';
+      IF NOT EXISTS (SELECT 1 FROM ministries WHERE ministry_id = owner) OR jsonb_typeof(part->'positions') IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'Ministry atau daftar posisi tidak valid.' USING ERRCODE = '22023'; END IF;
+      IF jsonb_array_length(part->'positions') NOT BETWEEN 1 AND 30
+        OR EXISTS (SELECT 1 FROM jsonb_array_elements(part->'positions') p GROUP BY p->>'position_id' HAVING count(*) > 1) THEN RAISE EXCEPTION 'Posisi kosong atau berulang.' USING ERRCODE = '22023'; END IF;
+      FOR position IN SELECT value FROM jsonb_array_elements(part->'positions') LOOP
+        SELECT ministry_id INTO position_owner FROM ministry_service_positions WHERE position_id = position->>'position_id' AND is_active;
+        IF position_owner IS DISTINCT FROM owner OR COALESCE(position->>'capacity', '') !~ '^[0-9]+$' OR (position->>'capacity')::INTEGER NOT BETWEEN 1 AND 20 THEN
+          RAISE EXCEPTION 'Posisi harus aktif, dimiliki ministry yang sesuai, dan berkapasitas 1 sampai 20.' USING ERRCODE = '22023';
+        END IF;
+      END LOOP;
+    END LOOP;
+  END LOOP;
+END $$;
+REVOKE EXECUTE ON FUNCTION validate_service_schedule_definition(JSONB) FROM PUBLIC, anon, authenticated;
+
+-- Catatan diwariskan ke roster existing agar Volunteer menerima PIC, tim,
+-- materi, dan catatan bagiannya tanpa sumber data penugasan lain.
+CREATE OR REPLACE FUNCTION service_schedule_roster_notes(p_occurrence_id TEXT, p_team_name TEXT, p_material TEXT, p_part_notes TEXT)
+  RETURNS TEXT LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT NULLIF(concat_ws(E'\n', NULLIF(btrim(occurrence.notes), ''),
+    CASE WHEN NULLIF(btrim(occurrence.pic), '') IS NOT NULL THEN 'PIC: ' || btrim(occurrence.pic) END,
+    CASE WHEN NULLIF(btrim(p_team_name), '') IS NOT NULL THEN 'Tim: ' || btrim(p_team_name) END,
+    CASE WHEN NULLIF(btrim(p_material), '') IS NOT NULL THEN 'Materi: ' || btrim(p_material) END,
+    NULLIF(btrim(p_part_notes), '')), '')
+  FROM service_schedule_occurrences occurrence WHERE occurrence.occurrence_id = p_occurrence_id
+$$;
+REVOKE EXECUTE ON FUNCTION service_schedule_roster_notes(TEXT,TEXT,TEXT,TEXT) FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION guard_service_schedule_linked_roster() RETURNS trigger
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE linked_month TEXT;
+BEGIN
+  SELECT occurrence.month_id INTO linked_month FROM service_schedule_parts part
+  JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id WHERE part.roster_id = OLD.roster_id;
+  IF linked_month IS NULL THEN IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
+  -- Pembersihan FK backend masih diperiksa secara ketat oleh guard v97.
+  IF TG_OP = 'UPDATE' AND auth_user_role() IS NULL
+    AND (to_jsonb(NEW) - 'created_by' - 'published_by' - 'updated_at') = (to_jsonb(OLD) - 'created_by' - 'published_by' - 'updated_at') THEN RETURN NEW; END IF;
+  IF TG_OP = 'DELETE' THEN
+    IF auth_user_role() IS NOT NULL THEN RAISE EXCEPTION 'Bagian jadwal bulanan tidak dapat dihapus terpisah.' USING ERRCODE = '42501'; END IF;
+    RETURN OLD;
+  END IF;
+  IF auth_manages_ministry(OLD.ministry_id)
+    AND COALESCE(current_setting('app.service_schedule_metadata', true), '') = linked_month
+    AND (to_jsonb(NEW) - 'notes' - 'updated_at') = (to_jsonb(OLD) - 'notes' - 'updated_at') THEN RETURN NEW; END IF;
+  IF NOT auth_service_schedule_admin() OR (
+    COALESCE(current_setting('app.service_schedule_metadata', true), '') <> linked_month
+    AND COALESCE(current_setting('app.service_schedule_transition', true), '') <> linked_month
+  ) THEN RAISE EXCEPTION 'Struktur dan publikasi harus melalui jadwal bulanan Admin.' USING ERRCODE = '42501'; END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION guard_service_schedule_linked_slot() RETURNS trigger
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE linked_month TEXT; target_id TEXT; target_roster service_rosters%ROWTYPE; conflict RECORD;
+BEGIN
+  target_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.roster_id ELSE NEW.roster_id END;
+  SELECT occurrence.month_id INTO linked_month FROM service_schedule_parts part
+  JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id WHERE part.roster_id = target_id;
+  IF TG_OP = 'UPDATE' AND auth_user_role() IS NULL AND OLD.user_id IS NOT NULL AND NEW.user_id IS NULL
+    AND (to_jsonb(NEW) - 'user_id') = (to_jsonb(OLD) - 'user_id')
+    AND NOT EXISTS (SELECT 1 FROM users WHERE user_id = OLD.user_id) THEN RETURN NEW; END IF;
+  IF linked_month IS NOT NULL THEN
+    IF TG_OP IN ('INSERT', 'DELETE') THEN
+      IF COALESCE(current_setting('app.service_schedule_structure', true), '') <> linked_month AND auth_user_role() IS NOT NULL THEN
+        RAISE EXCEPTION 'Kapasitas posisi harus melalui struktur template Admin.' USING ERRCODE = '42501';
+      END IF;
+    ELSIF NEW.user_id IS DISTINCT FROM OLD.user_id AND COALESCE(current_setting('app.service_schedule_assignment', true), '') <> target_id THEN
+      RAISE EXCEPTION 'Penugasan jadwal bulanan wajib melalui pengisian posisi.' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  IF NEW.user_id IS NULL OR (TG_OP = 'UPDATE' AND NEW.user_id IS NOT DISTINCT FROM OLD.user_id) THEN RETURN NEW; END IF;
+  SELECT * INTO target_roster FROM service_rosters WHERE roster_id = target_id;
+  -- Kunci sama dengan RPC lama. Pemeriksaan dua arah menutup override RPC
+  -- lama ketika target lama berbenturan dengan penugasan jadwal bulanan.
+  PERFORM pg_advisory_xact_lock(hashtextextended(NEW.user_id, 0));
+  SELECT roster.roster_id, roster.title, roster.start_time, roster.end_time INTO conflict
+  FROM service_roster_slots slot JOIN service_rosters roster ON roster.roster_id = slot.roster_id
+  WHERE slot.user_id = NEW.user_id AND slot.slot_id <> NEW.slot_id AND roster.status <> 'Dibatalkan'
+    AND roster.service_date = target_roster.service_date
+    AND (linked_month IS NOT NULL OR EXISTS (SELECT 1 FROM service_schedule_parts p WHERE p.roster_id = roster.roster_id))
+    AND (roster.end_time IS NULL OR target_roster.end_time IS NULL OR (roster.start_time < target_roster.end_time AND target_roster.start_time < roster.end_time))
+  ORDER BY roster.start_time, roster.roster_id LIMIT 1;
+  IF FOUND THEN RAISE EXCEPTION 'schedule_conflict' USING ERRCODE = 'P0001',
+    DETAIL = jsonb_build_object('title', conflict.title, 'start_time', conflict.start_time, 'end_time', conflict.end_time)::TEXT; END IF;
+  RETURN NEW;
+END $$;
+REVOKE EXECUTE ON FUNCTION guard_service_schedule_linked_roster(), guard_service_schedule_linked_slot() FROM PUBLIC, anon, authenticated;
+DO $v98$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_service_schedule_linked_roster' AND tgrelid = 'public.service_rosters'::regclass) THEN
+    CREATE TRIGGER trg_guard_service_schedule_linked_roster BEFORE UPDATE OR DELETE ON service_rosters
+      FOR EACH ROW EXECUTE FUNCTION guard_service_schedule_linked_roster();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_service_schedule_linked_slot' AND tgrelid = 'public.service_roster_slots'::regclass) THEN
+    CREATE TRIGGER trg_guard_service_schedule_linked_slot BEFORE INSERT OR UPDATE OR DELETE ON service_roster_slots
+      FOR EACH ROW EXECUTE FUNCTION guard_service_schedule_linked_slot();
+  END IF;
+END $v98$;
+
+-- Katalog posisi lama masih mempunyai jalur tulis MH. Posisi yang sudah
+-- menjadi struktur template bulanan hanya boleh diubah oleh Admin.
+CREATE OR REPLACE FUNCTION guard_service_schedule_template_position() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth_user_role() IS NULL OR auth_service_schedule_admin() THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+  IF (TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND (
+    NEW.position_id IS DISTINCT FROM OLD.position_id OR NEW.name IS DISTINCT FROM OLD.name OR NEW.default_slots IS DISTINCT FROM OLD.default_slots
+    OR NEW.sort_order IS DISTINCT FROM OLD.sort_order OR NEW.is_active IS DISTINCT FROM OLD.is_active
+  ))) AND EXISTS (
+    SELECT 1 FROM (
+      SELECT definition FROM service_schedule_templates
+      UNION ALL SELECT definition FROM service_schedule_months
+    ) snapshot
+    CROSS JOIN LATERAL jsonb_array_elements(snapshot.definition->'sections') section
+    CROSS JOIN LATERAL jsonb_array_elements(section->'parts') part
+    CROSS JOIN LATERAL jsonb_array_elements(part->'positions') position
+    WHERE position->>'position_id' = OLD.position_id
+  ) THEN RAISE EXCEPTION 'Posisi template bulanan hanya dapat diubah oleh Admin.' USING ERRCODE = '42501'; END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END $$;
+REVOKE EXECUTE ON FUNCTION guard_service_schedule_template_position() FROM PUBLIC, anon, authenticated;
+DO $v98$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_service_schedule_template_position' AND tgrelid = 'public.ministry_service_positions'::regclass) THEN
+    CREATE TRIGGER trg_guard_service_schedule_template_position BEFORE UPDATE OR DELETE ON ministry_service_positions
+      FOR EACH ROW EXECUTE FUNCTION guard_service_schedule_template_position();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'audit_service_schedule_templates' AND tgrelid = 'public.service_schedule_templates'::regclass) THEN
+    CREATE TRIGGER audit_service_schedule_templates AFTER INSERT OR UPDATE OR DELETE ON service_schedule_templates
+      FOR EACH ROW EXECUTE FUNCTION record_audit();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'audit_service_schedule_months' AND tgrelid = 'public.service_schedule_months'::regclass) THEN
+    CREATE TRIGGER audit_service_schedule_months AFTER INSERT OR UPDATE OR DELETE ON service_schedule_months
+      FOR EACH ROW EXECUTE FUNCTION record_audit();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'audit_service_schedule_occurrences' AND tgrelid = 'public.service_schedule_occurrences'::regclass) THEN
+    CREATE TRIGGER audit_service_schedule_occurrences AFTER INSERT OR UPDATE OR DELETE ON service_schedule_occurrences
+      FOR EACH ROW EXECUTE FUNCTION record_audit();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'audit_service_schedule_parts' AND tgrelid = 'public.service_schedule_parts'::regclass) THEN
+    CREATE TRIGGER audit_service_schedule_parts AFTER INSERT OR UPDATE OR DELETE ON service_schedule_parts
+      FOR EACH ROW EXECUTE FUNCTION record_audit();
+  END IF;
+END $v98$;
+
+CREATE OR REPLACE FUNCTION save_service_schedule_template(p_template_id TEXT, p_name TEXT, p_definition JSONB)
+  RETURNS service_schedule_templates LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE saved service_schedule_templates%ROWTYPE;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  PERFORM validate_service_schedule_definition(p_definition);
+  IF length(btrim(COALESCE(p_name, ''))) NOT BETWEEN 1 AND 120 THEN RAISE EXCEPTION 'Nama template wajib diisi, maksimal 120 karakter.' USING ERRCODE = '22023'; END IF;
+  IF p_template_id IS NULL THEN
+    INSERT INTO service_schedule_templates(name, definition, created_by) VALUES (btrim(p_name), p_definition, auth_user_id()) RETURNING * INTO saved;
+  ELSE
+    UPDATE service_schedule_templates SET name = btrim(p_name), definition = p_definition, updated_at = now() WHERE template_id = p_template_id RETURNING * INTO saved;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Template tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+  END IF;
+  RETURN saved;
+END $$;
+
+CREATE OR REPLACE FUNCTION create_service_schedule_month(p_template_id TEXT, p_month DATE, p_dates DATE[])
+  RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE template service_schedule_templates%ROWTYPE; snapshot JSONB; new_month TEXT; new_occurrence TEXT; new_roster TEXT;
+  service_day DATE; section JSONB; part JSONB; position JSONB;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  SELECT * INTO template FROM service_schedule_templates WHERE template_id = p_template_id AND is_active FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Template aktif tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+  PERFORM validate_service_schedule_definition(template.definition);
+  IF p_month IS NULL OR extract(day FROM p_month) <> 1 OR p_dates IS NULL OR cardinality(p_dates) NOT BETWEEN 1 AND 31
+    OR EXISTS (SELECT 1 FROM unnest(p_dates) d WHERE d IS NULL OR date_trunc('month', d)::DATE <> p_month)
+    OR cardinality(p_dates) <> (SELECT count(DISTINCT d) FROM unnest(p_dates) d) THEN
+    RAISE EXCEPTION 'Tanggal harus unik dan berada dalam bulan yang dipilih.' USING ERRCODE = '22023';
+  END IF;
+  -- Nama/urutan posisi dan ministry dibekukan saat bulan dibuat. Perubahan
+  -- katalog untuk template bulan berikutnya tidak melabel ulang riwayat.
+  SELECT jsonb_build_object('sections', jsonb_agg(template_section || jsonb_build_object('parts', (
+    SELECT jsonb_agg(template_part || jsonb_build_object('ministry_name', ministry.name, 'positions', (
+      SELECT jsonb_agg(template_position || jsonb_build_object('name', catalog.name, 'sort_order', catalog.sort_order) ORDER BY position_order)
+      FROM jsonb_array_elements(template_part->'positions') WITH ORDINALITY p(template_position, position_order)
+      JOIN ministry_service_positions catalog ON catalog.position_id = template_position->>'position_id'
+    )) ORDER BY part_order)
+    FROM jsonb_array_elements(template_section->'parts') WITH ORDINALITY p(template_part, part_order)
+    JOIN ministries ministry ON ministry.ministry_id = template_part->>'ministry_id'
+  )) ORDER BY section_order)) INTO snapshot
+  FROM jsonb_array_elements(template.definition->'sections') WITH ORDINALITY s(template_section, section_order);
+  INSERT INTO service_schedule_months(template_id, month_date, name, definition, created_by)
+    VALUES (p_template_id, p_month, template.name, snapshot, auth_user_id()) RETURNING month_id INTO new_month;
+  PERFORM set_config('app.service_schedule_structure', new_month, true);
+  FOREACH service_day IN ARRAY p_dates LOOP
+    FOR section IN SELECT value FROM jsonb_array_elements(template.definition->'sections') LOOP
+      INSERT INTO service_schedule_occurrences(month_id, section_id, title, source_type, event_id, class_id, class_session_no,
+        service_date, start_time, end_time, location, dress_code, pic, notes)
+      VALUES (new_month, section->>'section_id', btrim(section->>'title'), section->>'source_type', NULLIF(section->>'event_id', ''),
+        NULLIF(section->>'class_id', ''), (section->>'class_session_no')::INTEGER, service_day, (section->>'start_time')::TIME,
+        (section->>'end_time')::TIME, NULLIF(btrim(section->>'location'), ''), NULLIF(btrim(section->>'dress_code'), ''),
+        NULLIF(btrim(section->>'pic'), ''), NULLIF(btrim(section->>'notes'), '')) RETURNING occurrence_id INTO new_occurrence;
+      FOR part IN SELECT value FROM jsonb_array_elements(section->'parts') LOOP
+        INSERT INTO service_rosters(ministry_id, source_type, event_id, class_id, class_session_no, title,
+          service_date, start_time, end_time, location, dress_code, notes, created_by)
+        VALUES (part->>'ministry_id', section->>'source_type', NULLIF(section->>'event_id', ''), NULLIF(section->>'class_id', ''),
+          (section->>'class_session_no')::INTEGER, btrim(section->>'title'), service_day, (section->>'start_time')::TIME,
+          (section->>'end_time')::TIME, NULLIF(btrim(section->>'location'), ''), NULLIF(btrim(section->>'dress_code'), ''),
+          service_schedule_roster_notes(new_occurrence, NULL, NULL, NULL), auth_user_id()) RETURNING roster_id INTO new_roster;
+        INSERT INTO service_schedule_parts(occurrence_id, ministry_id, roster_id) VALUES (new_occurrence, part->>'ministry_id', new_roster);
+        FOR position IN SELECT value FROM jsonb_array_elements(part->'positions') LOOP
+          INSERT INTO service_roster_slots(roster_id, ministry_id, position_id, slot_no)
+          SELECT new_roster, part->>'ministry_id', position->>'position_id', number FROM generate_series(1, (position->>'capacity')::INTEGER) number;
+        END LOOP;
+      END LOOP;
+    END LOOP;
+  END LOOP;
+  PERFORM set_config('app.service_schedule_structure', '', true);
+  RETURN new_month;
+END $$;
+
+CREATE OR REPLACE FUNCTION get_service_schedule_month(p_month_id TEXT)
+  RETURNS JSONB LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE month service_schedule_months%ROWTYPE; result JSONB; sections JSONB;
+BEGIN
+  IF NOT auth_reads_service_schedule_month(p_month_id) THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  SELECT * INTO month FROM service_schedule_months WHERE month_id = p_month_id;
+  SELECT COALESCE(jsonb_agg(section || jsonb_build_object('key', section->>'section_id', 'positions', (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('position_id', position->>'position_id', 'ministry_id', part->>'ministry_id',
+      'name', COALESCE(position->>'name', catalog.name), 'ministry_name', COALESCE(part->>'ministry_name', ministry.name),
+      'slots', (position->>'capacity')::INTEGER, 'sort_order', COALESCE((position->>'sort_order')::INTEGER, catalog.sort_order))), '[]'::JSONB)
+    FROM jsonb_array_elements(section->'parts') part CROSS JOIN LATERAL jsonb_array_elements(part->'positions') position
+    JOIN ministry_service_positions catalog ON catalog.position_id = position->>'position_id' JOIN ministries ministry ON ministry.ministry_id = part->>'ministry_id'
+  ))), '[]'::JSONB) INTO sections FROM jsonb_array_elements(month.definition->'sections') section;
+  SELECT jsonb_build_object('month', to_jsonb(month), 'sections', sections,
+    'occurrences', (SELECT COALESCE(jsonb_agg(to_jsonb(o) ORDER BY o.service_date, o.start_time, o.section_id), '[]'::JSONB)
+      FROM service_schedule_occurrences o WHERE o.month_id = p_month_id),
+    'parts', (SELECT COALESCE(jsonb_agg(to_jsonb(p) || jsonb_build_object('ministry_name', m.name) ORDER BY p.part_id), '[]'::JSONB)
+      FROM service_schedule_parts p JOIN service_schedule_occurrences o ON o.occurrence_id = p.occurrence_id JOIN ministries m ON m.ministry_id = p.ministry_id
+      WHERE o.month_id = p_month_id AND (month.status <> 'Draft' OR auth_service_schedule_admin() OR auth_manages_ministry(p.ministry_id))),
+    'rosters', (SELECT COALESCE(jsonb_agg(to_jsonb(r) || jsonb_build_object('service_roster_slots', (
+        SELECT COALESCE(jsonb_agg(to_jsonb(s) || jsonb_build_object('users', CASE WHEN u.user_id IS NULL THEN NULL
+          ELSE jsonb_build_object('user_id', u.user_id, 'name', u.name, 'photo_url', u.photo_url) END,
+          'ministry_service_positions', jsonb_build_object('name', position.name, 'sort_order', position.sort_order))
+          ORDER BY position.sort_order, position.name, s.slot_no), '[]'::JSONB)
+        FROM service_roster_slots s JOIN ministry_service_positions position ON position.position_id = s.position_id
+        LEFT JOIN users u ON u.user_id = s.user_id WHERE s.roster_id = r.roster_id
+      )) ORDER BY r.service_date, r.start_time, r.ministry_id), '[]'::JSONB)
+      FROM service_rosters r JOIN service_schedule_parts p ON p.roster_id = r.roster_id JOIN service_schedule_occurrences o ON o.occurrence_id = p.occurrence_id
+      WHERE o.month_id = p_month_id AND (month.status <> 'Draft' OR auth_service_schedule_admin() OR auth_manages_ministry(p.ministry_id)))
+  ) INTO result;
+  RETURN result;
+END $$;
+
+CREATE OR REPLACE FUNCTION set_service_schedule_position(p_roster_id TEXT, p_position_id TEXT, p_user_ids TEXT[], p_expected_user_ids TEXT[])
+  RETURNS JSONB LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE linked_month TEXT; month_status TEXT; roster service_rosters%ROWTYPE; actual_ids TEXT[]; desired_ids TEXT[];
+  capacity INTEGER; member TEXT; slot RECORD; ordinal INTEGER := 0; result JSONB;
+BEGIN
+  SELECT occurrence.month_id INTO linked_month FROM service_schedule_parts part
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id WHERE part.roster_id = p_roster_id;
+  IF linked_month IS NULL THEN RAISE EXCEPTION 'Bagian jadwal bulanan tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+  SELECT status INTO month_status FROM service_schedule_months WHERE month_id = linked_month FOR UPDATE;
+  SELECT * INTO roster FROM service_rosters WHERE roster_id = p_roster_id FOR UPDATE;
+  IF NOT (auth_service_schedule_admin() OR auth_manages_ministry(roster.ministry_id)) THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  IF month_status <> 'Draft' OR roster.status <> 'Draft' THEN RAISE EXCEPTION 'Hanya jadwal Draft yang dapat diisi.' USING ERRCODE = '22023'; END IF;
+  IF p_user_ids IS NULL OR p_expected_user_ids IS NULL OR EXISTS (SELECT 1 FROM unnest(p_user_ids) id WHERE id IS NULL OR btrim(id) = '')
+    OR cardinality(p_user_ids) <> (SELECT count(DISTINCT id) FROM unnest(p_user_ids) id) THEN RAISE EXCEPTION 'Daftar pelayan tidak valid atau berulang.' USING ERRCODE = '22023'; END IF;
+  PERFORM 1 FROM service_roster_slots WHERE roster_id = p_roster_id AND position_id = p_position_id ORDER BY slot_no FOR UPDATE;
+  SELECT count(*), COALESCE(array_agg(user_id ORDER BY user_id) FILTER (WHERE user_id IS NOT NULL), ARRAY[]::TEXT[])
+    INTO capacity, actual_ids FROM service_roster_slots WHERE roster_id = p_roster_id AND position_id = p_position_id;
+  IF capacity = 0 OR cardinality(p_user_ids) > capacity THEN RAISE EXCEPTION 'Kapasitas posisi tidak mencukupi.' USING ERRCODE = '22023'; END IF;
+  IF actual_ids IS DISTINCT FROM (SELECT COALESCE(array_agg(id ORDER BY id), ARRAY[]::TEXT[]) FROM unnest(p_expected_user_ids) id) THEN RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001'; END IF;
+  SELECT COALESCE(array_agg(id ORDER BY id), ARRAY[]::TEXT[]) INTO desired_ids FROM unnest(p_user_ids) id;
+  FOR member IN SELECT DISTINCT id FROM unnest(actual_ids || desired_ids) id ORDER BY id LOOP PERFORM pg_advisory_xact_lock(hashtextextended(member, 0)); END LOOP;
+  PERFORM set_config('app.allow_roster_slot_assignment', '1', true);
+  PERFORM set_config('app.service_schedule_assignment', p_roster_id, true);
+  UPDATE service_roster_slots SET user_id = NULL WHERE roster_id = p_roster_id AND position_id = p_position_id;
+  FOR slot IN SELECT slot_id FROM service_roster_slots WHERE roster_id = p_roster_id AND position_id = p_position_id ORDER BY slot_no LOOP
+    ordinal := ordinal + 1;
+    IF ordinal <= cardinality(desired_ids) THEN UPDATE service_roster_slots SET user_id = desired_ids[ordinal] WHERE slot_id = slot.slot_id; END IF;
+  END LOOP;
+  PERFORM set_config('app.allow_roster_slot_assignment', '', true);
+  PERFORM set_config('app.service_schedule_assignment', '', true);
+  SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY slot_no), '[]'::JSONB) INTO result FROM service_roster_slots s WHERE roster_id = p_roster_id AND position_id = p_position_id;
+  RETURN result;
+END $$;
+
+CREATE OR REPLACE FUNCTION update_service_schedule_occurrence(p_occurrence_id TEXT, p_data JSONB)
+  RETURNS service_schedule_occurrences LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE occurrence service_schedule_occurrences%ROWTYPE; month_status TEXT; month_date DATE; saved service_schedule_occurrences%ROWTYPE;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  SELECT * INTO occurrence FROM service_schedule_occurrences WHERE occurrence_id = p_occurrence_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Kegiatan tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+  SELECT status, service_schedule_months.month_date INTO month_status, month_date FROM service_schedule_months WHERE month_id = occurrence.month_id FOR UPDATE;
+  IF month_status <> 'Draft' THEN RAISE EXCEPTION 'Hanya jadwal Draft yang dapat diubah.' USING ERRCODE = '22023'; END IF;
+  -- Baca ulang setelah kunci bulan didapat agar perubahan field lain dari
+  -- pengelola yang baru selesai tidak tertimpa snapshot sebelum menunggu.
+  SELECT * INTO occurrence FROM service_schedule_occurrences WHERE occurrence_id = p_occurrence_id FOR UPDATE;
+  IF jsonb_typeof(p_data) IS DISTINCT FROM 'object' OR EXISTS (SELECT 1 FROM jsonb_object_keys(p_data) key
+    WHERE key NOT IN ('title', 'service_date', 'start_time', 'end_time', 'location', 'dress_code', 'pic', 'notes')) THEN RAISE EXCEPTION 'Isian kegiatan tidak valid.' USING ERRCODE = '22023'; END IF;
+  saved := occurrence;
+  IF p_data ? 'title' THEN saved.title := btrim(p_data->>'title'); END IF;
+  IF p_data ? 'service_date' THEN saved.service_date := (p_data->>'service_date')::DATE; END IF;
+  IF p_data ? 'start_time' THEN saved.start_time := (p_data->>'start_time')::TIME; END IF;
+  IF p_data ? 'end_time' THEN saved.end_time := (p_data->>'end_time')::TIME; END IF;
+  IF p_data ? 'location' THEN saved.location := NULLIF(btrim(p_data->>'location'), ''); END IF;
+  IF p_data ? 'dress_code' THEN saved.dress_code := NULLIF(btrim(p_data->>'dress_code'), ''); END IF;
+  IF p_data ? 'pic' THEN saved.pic := NULLIF(btrim(p_data->>'pic'), ''); END IF;
+  IF p_data ? 'notes' THEN saved.notes := NULLIF(btrim(p_data->>'notes'), ''); END IF;
+  IF saved.title IS NULL OR length(saved.title) NOT BETWEEN 1 AND 160 OR saved.start_time IS NULL OR saved.end_time IS NULL OR saved.end_time <= saved.start_time THEN
+    RAISE EXCEPTION 'Nama atau jam kegiatan tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  IF saved.service_date IS NULL OR date_trunc('month', saved.service_date)::DATE <> month_date THEN
+    RAISE EXCEPTION 'Tanggal kegiatan harus berada dalam bulan jadwal.' USING ERRCODE = '22023';
+  END IF;
+  PERFORM 1 FROM service_rosters r JOIN service_schedule_parts p ON p.roster_id = r.roster_id WHERE p.occurrence_id = p_occurrence_id ORDER BY r.roster_id FOR UPDATE OF r;
+  IF (saved.service_date IS DISTINCT FROM occurrence.service_date OR saved.start_time IS DISTINCT FROM occurrence.start_time OR saved.end_time IS DISTINCT FROM occurrence.end_time)
+    AND EXISTS (SELECT 1 FROM service_schedule_parts part JOIN service_roster_slots slot ON slot.roster_id = part.roster_id WHERE part.occurrence_id = p_occurrence_id AND slot.user_id IS NOT NULL) THEN
+    RAISE EXCEPTION 'Kosongkan seluruh pelayan kegiatan sebelum mengubah tanggal atau jam.' USING ERRCODE = '22023';
+  END IF;
+  UPDATE service_schedule_occurrences SET title = saved.title, service_date = saved.service_date, start_time = saved.start_time, end_time = saved.end_time,
+    location = saved.location, dress_code = saved.dress_code, pic = saved.pic, notes = saved.notes WHERE occurrence_id = p_occurrence_id RETURNING * INTO saved;
+  PERFORM set_config('app.service_schedule_metadata', occurrence.month_id, true);
+  UPDATE service_rosters roster SET title = saved.title, service_date = saved.service_date, start_time = saved.start_time, end_time = saved.end_time,
+    location = saved.location, dress_code = saved.dress_code,
+    notes = service_schedule_roster_notes(p_occurrence_id, part.team_name, part.material, part.notes)
+    FROM service_schedule_parts part WHERE part.occurrence_id = p_occurrence_id AND part.roster_id = roster.roster_id;
+  PERFORM set_config('app.service_schedule_metadata', '', true);
+  RETURN saved;
+END $$;
+
+CREATE OR REPLACE FUNCTION update_service_schedule_part(p_roster_id TEXT, p_team_name TEXT, p_material TEXT, p_notes TEXT)
+  RETURNS service_schedule_parts LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE part service_schedule_parts%ROWTYPE; linked_month TEXT; month_status TEXT;
+BEGIN
+  SELECT * INTO part FROM service_schedule_parts WHERE roster_id = p_roster_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Bagian tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+  IF NOT (auth_service_schedule_admin() OR auth_manages_ministry(part.ministry_id)) THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  SELECT month_id INTO linked_month FROM service_schedule_occurrences WHERE occurrence_id = part.occurrence_id;
+  SELECT status INTO month_status FROM service_schedule_months WHERE month_id = linked_month FOR UPDATE;
+  IF month_status <> 'Draft' THEN RAISE EXCEPTION 'Hanya jadwal Draft yang dapat diisi.' USING ERRCODE = '22023'; END IF;
+  IF length(COALESCE(p_team_name, '')) > 120 OR length(COALESCE(p_material, '')) > 2000 OR length(COALESCE(p_notes, '')) > 2000 THEN RAISE EXCEPTION 'Isian bagian terlalu panjang.' USING ERRCODE = '22023'; END IF;
+  UPDATE service_schedule_parts SET team_name = NULLIF(btrim(p_team_name), ''), material = NULLIF(btrim(p_material), ''), notes = NULLIF(btrim(p_notes), '')
+    WHERE roster_id = p_roster_id RETURNING * INTO part;
+  PERFORM set_config('app.service_schedule_metadata', linked_month, true);
+  UPDATE service_rosters SET notes = service_schedule_roster_notes(part.occurrence_id, part.team_name, part.material, part.notes) WHERE roster_id = p_roster_id;
+  PERFORM set_config('app.service_schedule_metadata', '', true);
+  RETURN part;
+END $$;
+
+CREATE OR REPLACE FUNCTION publish_service_schedule_month(p_month_id TEXT, p_allow_incomplete BOOLEAN DEFAULT false)
+  RETURNS TEXT[] LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE month_status TEXT; roster_ids TEXT[]; member TEXT;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  SELECT status INTO month_status FROM service_schedule_months WHERE month_id = p_month_id FOR UPDATE;
+  IF NOT FOUND OR month_status <> 'Draft' THEN RAISE EXCEPTION 'Hanya jadwal bulanan Draft yang dapat diterbitkan.' USING ERRCODE = '22023'; END IF;
+  SELECT array_agg(part.roster_id ORDER BY part.roster_id) INTO roster_ids FROM service_schedule_parts part
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id WHERE occurrence.month_id = p_month_id;
+  PERFORM 1 FROM service_rosters WHERE roster_id = ANY(roster_ids) ORDER BY roster_id FOR UPDATE;
+  IF cardinality(roster_ids) IS NULL OR EXISTS (SELECT 1 FROM service_rosters WHERE roster_id = ANY(roster_ids) AND (status <> 'Draft' OR end_time IS NULL)) THEN
+    RAISE EXCEPTION 'Bagian jadwal tidak sesuai atau jam selesai belum diisi.' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (SELECT 1 FROM unnest(roster_ids) id WHERE NOT EXISTS (
+    SELECT 1 FROM service_roster_slots WHERE roster_id = id AND user_id IS NOT NULL
+  )) THEN RAISE EXCEPTION 'Isi minimal satu pelayan pada setiap bagian ministry.' USING ERRCODE = '22023'; END IF;
+  IF NOT COALESCE(p_allow_incomplete, false) AND EXISTS (SELECT 1 FROM service_roster_slots WHERE roster_id = ANY(roster_ids) AND user_id IS NULL) THEN RAISE EXCEPTION 'Masih ada slot kosong.' USING ERRCODE = '22023'; END IF;
+  FOR member IN SELECT DISTINCT user_id FROM service_roster_slots WHERE roster_id = ANY(roster_ids) AND user_id IS NOT NULL ORDER BY user_id LOOP PERFORM pg_advisory_xact_lock(hashtextextended(member, 0)); END LOOP;
+  IF EXISTS (SELECT 1 FROM service_roster_slots a JOIN service_rosters ra ON ra.roster_id = a.roster_id
+    JOIN service_roster_slots b ON b.user_id = a.user_id AND b.slot_id <> a.slot_id JOIN service_rosters rb ON rb.roster_id = b.roster_id
+    WHERE a.roster_id = ANY(roster_ids) AND a.user_id IS NOT NULL AND rb.status <> 'Dibatalkan' AND ra.service_date = rb.service_date
+      AND (rb.end_time IS NULL OR (ra.start_time < rb.end_time AND rb.start_time < ra.end_time))) THEN RAISE EXCEPTION 'schedule_conflict' USING ERRCODE = 'P0001'; END IF;
+  IF EXISTS (SELECT 1 FROM service_roster_slots slot JOIN users u ON u.user_id = slot.user_id WHERE slot.roster_id = ANY(roster_ids) AND u.status <> 'Aktif') THEN RAISE EXCEPTION 'Pelayan nonaktif tidak dapat diterbitkan.' USING ERRCODE = '22023'; END IF;
+  PERFORM set_config('app.allow_roster_transition', '1', true);
+  PERFORM set_config('app.service_schedule_transition', p_month_id, true);
+  UPDATE service_rosters SET status = 'Terbit', version = version + 1, published_at = now(), published_by = auth_user_id() WHERE roster_id = ANY(roster_ids);
+  UPDATE service_schedule_months SET status = 'Terbit', version = version + 1, published_at = now(), published_by = auth_user_id(), updated_at = now() WHERE month_id = p_month_id;
+  PERFORM set_config('app.allow_roster_transition', '', true);
+  PERFORM set_config('app.service_schedule_transition', '', true);
+  RETURN roster_ids;
+END $$;
+
+CREATE OR REPLACE FUNCTION cancel_service_schedule_month(p_month_id TEXT)
+  RETURNS TEXT[] LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE month_status TEXT; roster_ids TEXT[];
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501'; END IF;
+  SELECT status INTO month_status FROM service_schedule_months WHERE month_id = p_month_id FOR UPDATE;
+  IF NOT FOUND OR month_status <> 'Terbit' THEN RAISE EXCEPTION 'Hanya jadwal bulanan Terbit yang dapat dibatalkan.' USING ERRCODE = '22023'; END IF;
+  SELECT array_agg(part.roster_id ORDER BY part.roster_id) INTO roster_ids FROM service_schedule_parts part JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id WHERE occurrence.month_id = p_month_id;
+  PERFORM 1 FROM service_rosters WHERE roster_id = ANY(roster_ids) ORDER BY roster_id FOR UPDATE;
+  PERFORM set_config('app.allow_roster_transition', '1', true);
+  PERFORM set_config('app.service_schedule_transition', p_month_id, true);
+  UPDATE service_rosters SET status = 'Dibatalkan', version = version + 1 WHERE roster_id = ANY(roster_ids);
+  UPDATE service_schedule_months SET status = 'Dibatalkan', version = version + 1, updated_at = now() WHERE month_id = p_month_id;
+  PERFORM set_config('app.allow_roster_transition', '', true);
+  PERFORM set_config('app.service_schedule_transition', '', true);
+  RETURN roster_ids;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION save_service_schedule_template(TEXT,TEXT,JSONB), create_service_schedule_month(TEXT,DATE,DATE[]),
+  get_service_schedule_month(TEXT), set_service_schedule_position(TEXT,TEXT,TEXT[],TEXT[]), update_service_schedule_occurrence(TEXT,JSONB),
+  update_service_schedule_part(TEXT,TEXT,TEXT,TEXT), publish_service_schedule_month(TEXT,BOOLEAN), cancel_service_schedule_month(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION save_service_schedule_template(TEXT,TEXT,JSONB), create_service_schedule_month(TEXT,DATE,DATE[]),
+  get_service_schedule_month(TEXT), set_service_schedule_position(TEXT,TEXT,TEXT[],TEXT[]), update_service_schedule_occurrence(TEXT,JSONB),
+  update_service_schedule_part(TEXT,TEXT,TEXT,TEXT), publish_service_schedule_month(TEXT,BOOLEAN), cancel_service_schedule_month(TEXT) TO authenticated;
+
+-- ── Migrasi v99: Sumber Ministry Head dari struktur Ministry ──────────
+-- KEPUTUSAN OPERATOR (2026-10-03): setiap Ministry memiliki MH tersendiri,
+-- dikelola di menu Ministry; Kepala Departemen bukan sumber MH pelayanan.
+-- Identitas organisasi dan persetujuan mengelola jadwal tetap terpisah:
+-- menentukan MH tidak memberi role Admin atau otomatis menyetujui akses.
+-- Tidak ada backfill dari grant lama: Admin harus menentukan MH di Ministry.
+-- Grant MH lama yang tidak sesuai sumber menjadi tidak efektif; Wakil tetap
+-- mengikuti persetujuan Admin jadwal yang sudah ada.
+-- KEPUTUSAN OPERATOR: MH merupakan jabatan Ministry dari pengguna terdaftar
+-- ber-role utama Volunteer, bukan role akun tambahan. Wakil tidak berubah.
+-- GROUND TRUTH: operator telah mengirim definisi auth_manages_ministry()
+-- production v96. Seluruh syarat role/status/grant sebelumnya dipertahankan.
+-- Policy tulis/trigger lama tidak diganti; penjaga tambahan memakai nama baru.
+-- Policy baca publik yang terverifikasi dibatasi login sesuai keputusan baru.
+
+ALTER TABLE ministries ADD COLUMN IF NOT EXISTS head_user_id TEXT
+  REFERENCES users(user_id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_ministries_head_user_id
+  ON ministries(head_user_id) WHERE head_user_id IS NOT NULL;
+
+-- TEMUAN (audit production 2026-10-03): ministries_read_all memakai USING
+-- true walaupun policy ministries_select sudah membatasi ke pengguna login.
+-- KEPUTUSAN OPERATOR: struktur Ministry/MH hanya dibaca pengguna login.
+-- Hanya policy baca publik yang definisinya terverifikasi ini diubah; policy
+-- admin_write dan msm tidak disentuh. Jika policy drift ini tidak ada, no-op.
+DO $v99_read$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policy WHERE polname = 'ministries_read_all'
+    AND polrelid = 'public.ministries'::regclass) THEN
+    ALTER POLICY ministries_read_all ON ministries USING (auth.uid() IS NOT NULL);
+  END IF;
+END $v99_read$;
+
+CREATE OR REPLACE FUNCTION auth_manages_ministry(p_ministry_id TEXT)
+  RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM ministry_schedule_managers msm
+    JOIN users u ON u.user_id = msm.user_id
+    JOIN ministries ministry ON ministry.ministry_id = msm.ministry_id
+    WHERE msm.ministry_id = p_ministry_id
+      AND msm.user_id = auth_user_id()
+      AND msm.is_active = true
+      AND u.status = 'Aktif'
+      AND u.role IN ('Jemaat', 'Volunteer', 'PKS')
+      AND COALESCE(u.role_secondary, '') NOT IN ('Admin', 'Super Admin', 'Gembala')
+      AND (msm.manager_role = 'Wakil'
+        OR (msm.manager_role = 'Ministry Head' AND u.role = 'Volunteer'
+          AND ministry.head_user_id = msm.user_id))
+  )
+$$;
+REVOKE EXECUTE ON FUNCTION auth_manages_ministry(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_manages_ministry(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION guard_ministry_head_source()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE caller_role TEXT := auth_user_role();
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.head_user_id IS NOT DISTINCT FROM OLD.head_user_id THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' AND NEW.head_user_id IS NULL THEN RETURN NEW; END IF;
+
+  -- ON DELETE SET NULL pada kepala yang benar-benar sudah dihapus bukan
+  -- penggantian organisasi. Izinkan hanya perubahan referensi tersebut.
+  IF TG_OP = 'UPDATE' AND OLD.head_user_id IS NOT NULL AND NEW.head_user_id IS NULL
+     AND (to_jsonb(NEW) - 'head_user_id') = (to_jsonb(OLD) - 'head_user_id')
+     AND NOT EXISTS (SELECT 1 FROM users WHERE user_id = OLD.head_user_id) THEN
+    RETURN NEW;
+  END IF;
+  IF caller_role IS NOT NULL AND NOT (
+    auth_admin_can('/admin/ministry')
+    AND EXISTS (SELECT 1 FROM users WHERE user_id = auth_user_id() AND status = 'Aktif')
+  ) THEN
+    RAISE EXCEPTION 'Penetapan Ministry Head hanya melalui Admin berakses Ministry.' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.head_user_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM users WHERE user_id = NEW.head_user_id AND status = 'Aktif'
+      AND role = 'Volunteer' AND COALESCE(role_secondary, '') NOT IN ('Admin', 'Super Admin', 'Gembala')
+  ) THEN
+    RAISE EXCEPTION 'Ministry Head harus pengguna Aktif ber-role Volunteer tanpa peran kedua Admin/Gembala.' USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION guard_schedule_manager_head_source()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE source_head TEXT; caller_role TEXT := auth_user_role();
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    -- CASCADE akibat penghapusan Ministry/akun mengikuti hak operasi asal.
+    IF NOT EXISTS (SELECT 1 FROM ministries WHERE ministry_id = OLD.ministry_id)
+       OR NOT EXISTS (SELECT 1 FROM users WHERE user_id = OLD.user_id) THEN RETURN OLD; END IF;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF OLD.approved_by IS NOT NULL AND NEW.approved_by IS NULL
+       AND (to_jsonb(NEW) - 'approved_by') = (to_jsonb(OLD) - 'approved_by')
+       AND NOT EXISTS (SELECT 1 FROM users WHERE user_id = OLD.approved_by) THEN RETURN NEW; END IF;
+    -- Hanya trigger penggantian kepala boleh mencabut grant lama meskipun
+    -- Admin Ministry tidak berakses menu Jadwal. Tidak boleh mengaktifkan grant.
+    IF pg_trigger_depth() > 1
+       AND OLD.is_active AND NOT NEW.is_active AND OLD.manager_role = 'Ministry Head'
+       AND (to_jsonb(NEW) - 'is_active') = (to_jsonb(OLD) - 'is_active')
+       AND NOT EXISTS (SELECT 1 FROM ministries
+         WHERE ministry_id = OLD.ministry_id AND head_user_id = OLD.user_id) THEN RETURN NEW; END IF;
+  END IF;
+  IF caller_role IS NOT NULL AND NOT (
+    auth_admin_can('/admin/jadwal-pelayanan')
+    AND EXISTS (SELECT 1 FROM users WHERE user_id = auth_user_id() AND status = 'Aktif')
+  ) THEN
+    RAISE EXCEPTION 'Persetujuan akses jadwal hanya melalui Admin berakses Jadwal Pelayanan.' USING ERRCODE = '42501';
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  IF TG_OP = 'UPDATE' AND (
+    NEW.ministry_id IS DISTINCT FROM OLD.ministry_id OR NEW.user_id IS DISTINCT FROM OLD.user_id
+  ) THEN
+    RAISE EXCEPTION 'Identitas penerima akses tidak dapat diubah; cabut dan berikan akses baru.' USING ERRCODE = '22023';
+  END IF;
+  SELECT head_user_id INTO source_head FROM ministries WHERE ministry_id = NEW.ministry_id FOR UPDATE;
+  IF NEW.is_active AND NEW.manager_role = 'Ministry Head'
+     AND source_head IS DISTINCT FROM NEW.user_id THEN
+    RAISE EXCEPTION 'Penerima akses MH harus Ministry Head yang ditetapkan di menu Ministry.' USING ERRCODE = '22023';
+  END IF;
+  IF NEW.is_active AND NEW.manager_role = 'Ministry Head' AND NOT EXISTS (
+    SELECT 1 FROM users WHERE user_id = NEW.user_id AND status = 'Aktif'
+      AND role = 'Volunteer' AND COALESCE(role_secondary, '') NOT IN ('Admin', 'Super Admin', 'Gembala')
+  ) THEN
+    RAISE EXCEPTION 'Penerima akses MH harus pengguna Aktif ber-role Volunteer tanpa peran kedua Admin/Gembala.' USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION revoke_previous_ministry_head_schedule_access()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.head_user_id IS DISTINCT FROM OLD.head_user_id THEN
+    UPDATE ministry_schedule_managers SET is_active = false
+    WHERE ministry_id = NEW.ministry_id AND manager_role = 'Ministry Head'
+      AND is_active AND user_id IS DISTINCT FROM NEW.head_user_id;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DO $v99$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_ministry_head_source' AND tgrelid = 'public.ministries'::regclass) THEN
+    CREATE TRIGGER trg_guard_ministry_head_source BEFORE INSERT OR UPDATE ON ministries
+      FOR EACH ROW EXECUTE FUNCTION guard_ministry_head_source();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_aa_guard_schedule_manager_head_source' AND tgrelid = 'public.ministry_schedule_managers'::regclass) THEN
+    CREATE TRIGGER trg_aa_guard_schedule_manager_head_source BEFORE INSERT OR UPDATE OR DELETE ON ministry_schedule_managers
+      FOR EACH ROW EXECUTE FUNCTION guard_schedule_manager_head_source();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_revoke_previous_ministry_head_schedule_access' AND tgrelid = 'public.ministries'::regclass) THEN
+    CREATE TRIGGER trg_revoke_previous_ministry_head_schedule_access AFTER UPDATE ON ministries
+      FOR EACH ROW EXECUTE FUNCTION revoke_previous_ministry_head_schedule_access();
+  END IF;
+END $v99$;
+
+REVOKE EXECUTE ON FUNCTION guard_ministry_head_source(), guard_schedule_manager_head_source(),
+  revoke_previous_ministry_head_schedule_access() FROM PUBLIC, anon, authenticated;
+
+-- ── Migrasi v100: MH harus terdaftar melayani di Ministry ──────────────
+-- TEMUAN (2026-10-03): v99 hanya memeriksa role Volunteer dan status Aktif.
+-- Keanggotaan Ministry belum diwajibkan untuk sumber maupun akses MH.
+-- KEPUTUSAN OPERATOR: Admin memilih MH dari Volunteer aktif yang terdaftar
+-- melayani di Ministry itu. Keluar dari Ministry mengosongkan sumber MH
+-- dan mencabut persetujuan jadwal lama melalui trigger v99.
+-- Keanggotaan dapat dikelola sendiri sesuai policy user_ministries lama;
+-- policy tersebut tidak diubah oleh migrasi ini.
+
+-- Kolom tertentu saja dibuat NULL agar ministry_id (PK) tetap utuh.
+-- NOT VALID menjaga migrasi aman jika v99 sempat diisi sebelum v100;
+-- seluruh penulisan baru dan penghapusan relasi tetap dijaga.
+DO $v100_fk$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+    WHERE conname = 'ministries_head_membership_fkey'
+      AND conrelid = 'public.ministries'::regclass) THEN
+    ALTER TABLE ministries ADD CONSTRAINT ministries_head_membership_fkey
+      FOREIGN KEY (head_user_id, ministry_id)
+      REFERENCES user_ministries(user_id, ministry_id)
+      ON DELETE SET NULL (head_user_id) NOT VALID;
+  END IF;
+END $v100_fk$;
+
+-- SET NULL oleh FK keanggotaan harus lewat penjaga v99; hanya referensi
+-- yang benar-benar telah hilang boleh dibersihkan oleh trigger berantai.
+-- Admin tanpa akses Ministry tidak boleh mengirim UPDATE langsung ke NULL.
+CREATE OR REPLACE FUNCTION guard_ministry_head_source()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE caller_role TEXT := auth_user_role();
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.head_user_id IS NOT DISTINCT FROM OLD.head_user_id THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' AND NEW.head_user_id IS NULL THEN RETURN NEW; END IF;
+
+  IF TG_OP = 'UPDATE' AND OLD.head_user_id IS NOT NULL AND NEW.head_user_id IS NULL
+     AND pg_trigger_depth() > 1
+     AND (to_jsonb(NEW) - 'head_user_id') = (to_jsonb(OLD) - 'head_user_id')
+     AND (
+       NOT EXISTS (SELECT 1 FROM users WHERE user_id = OLD.head_user_id)
+       OR NOT EXISTS (SELECT 1 FROM user_ministries
+         WHERE user_id = OLD.head_user_id AND ministry_id = OLD.ministry_id)
+     ) THEN
+    RETURN NEW;
+  END IF;
+  IF caller_role IS NOT NULL AND NOT (
+    auth_admin_can('/admin/ministry')
+    AND EXISTS (SELECT 1 FROM users WHERE user_id = auth_user_id() AND status = 'Aktif')
+  ) THEN
+    RAISE EXCEPTION 'Penetapan Ministry Head hanya melalui Admin berakses Ministry.' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.head_user_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM users WHERE user_id = NEW.head_user_id AND status = 'Aktif'
+      AND role = 'Volunteer' AND COALESCE(role_secondary, '') NOT IN ('Admin', 'Super Admin', 'Gembala')
+  ) THEN
+    RAISE EXCEPTION 'Ministry Head harus pengguna Aktif ber-role Volunteer tanpa peran kedua Admin/Gembala.' USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION auth_manages_ministry(p_ministry_id TEXT)
+  RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM ministry_schedule_managers msm
+    JOIN users u ON u.user_id = msm.user_id
+    JOIN ministries ministry ON ministry.ministry_id = msm.ministry_id
+    WHERE msm.ministry_id = p_ministry_id
+      AND msm.user_id = auth_user_id()
+      AND msm.is_active = true
+      AND u.status = 'Aktif'
+      AND u.role IN ('Jemaat', 'Volunteer', 'PKS')
+      AND COALESCE(u.role_secondary, '') NOT IN ('Admin', 'Super Admin', 'Gembala')
+      AND (msm.manager_role = 'Wakil'
+        OR (msm.manager_role = 'Ministry Head' AND u.role = 'Volunteer'
+          AND ministry.head_user_id = msm.user_id
+          AND EXISTS (SELECT 1 FROM user_ministries member
+            WHERE member.user_id = msm.user_id
+              AND member.ministry_id = msm.ministry_id)))
+  )
+$$;
+REVOKE EXECUTE ON FUNCTION auth_manages_ministry(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_manages_ministry(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION guard_ministry_head_membership()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE target_ministry TEXT; target_user TEXT; needs_check BOOLEAN := false;
+BEGIN
+  IF TG_TABLE_NAME = 'ministries' THEN
+    target_ministry := NEW.ministry_id;
+    target_user := NEW.head_user_id;
+    needs_check := NEW.head_user_id IS NOT NULL
+      AND (TG_OP = 'INSERT' OR NEW.head_user_id IS DISTINCT FROM OLD.head_user_id);
+  ELSE
+    target_ministry := NEW.ministry_id;
+    target_user := NEW.user_id;
+    needs_check := NEW.is_active AND NEW.manager_role = 'Ministry Head'
+      AND (TG_OP = 'INSERT' OR NOT OLD.is_active
+        OR OLD.manager_role IS DISTINCT FROM NEW.manager_role
+        OR OLD.ministry_id IS DISTINCT FROM NEW.ministry_id
+        OR OLD.user_id IS DISTINCT FROM NEW.user_id);
+  END IF;
+  IF needs_check AND NOT EXISTS (
+    SELECT 1 FROM user_ministries member
+    WHERE member.user_id = target_user AND member.ministry_id = target_ministry
+  ) THEN
+    RAISE EXCEPTION 'Ministry Head harus terdaftar melayani di Ministry ini.'
+      USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DO $v100_triggers$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trg_validate_ministry_head_membership'
+      AND tgrelid = 'public.ministries'::regclass) THEN
+    CREATE TRIGGER trg_validate_ministry_head_membership
+      BEFORE INSERT OR UPDATE ON ministries FOR EACH ROW
+      EXECUTE FUNCTION guard_ministry_head_membership();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trg_validate_schedule_manager_head_membership'
+      AND tgrelid = 'public.ministry_schedule_managers'::regclass) THEN
+    CREATE TRIGGER trg_validate_schedule_manager_head_membership
+      BEFORE INSERT OR UPDATE ON ministry_schedule_managers FOR EACH ROW
+      EXECUTE FUNCTION guard_ministry_head_membership();
+  END IF;
+END $v100_triggers$;
+
+-- Policy um_admin_write lama mengizinkan semua Admin menghapus anggota.
+-- Lindungi hanya tautan anggota yang sedang menjabat MH; penghapusan
+-- anggota biasa tetap mengikuti policy lama.
+CREATE OR REPLACE FUNCTION guard_ministry_head_member_removal()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE caller_role TEXT := auth_user_role();
+BEGIN
+  IF EXISTS (SELECT 1 FROM ministries
+    WHERE ministry_id = OLD.ministry_id AND head_user_id = OLD.user_id)
+    AND caller_role IS NOT NULL
+    AND auth_user_id() IS DISTINCT FROM OLD.user_id
+    AND NOT (
+      auth_admin_can('/admin/ministry')
+      AND EXISTS (SELECT 1 FROM users
+        WHERE user_id = auth_user_id() AND status = 'Aktif')
+    ) THEN
+    RAISE EXCEPTION 'Pencabutan anggota Ministry Head memerlukan akses Admin Ministry.'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN OLD;
+END $$;
+
+DO $v100_member_guard$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trg_guard_ministry_head_member_removal'
+      AND tgrelid = 'public.user_ministries'::regclass) THEN
+    CREATE TRIGGER trg_guard_ministry_head_member_removal
+      BEFORE DELETE ON user_ministries FOR EACH ROW
+      EXECUTE FUNCTION guard_ministry_head_member_removal();
+  END IF;
+END $v100_member_guard$;
+
+REVOKE EXECUTE ON FUNCTION guard_ministry_head_source(),
+  guard_ministry_head_membership(), guard_ministry_head_member_removal()
+  FROM PUBLIC, anon, authenticated;

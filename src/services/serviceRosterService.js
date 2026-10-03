@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { notifyScheduleMonth } from '@/lib/serviceScheduleNotifications'
 
 const FORBIDDEN_SCHEDULE_MANAGER_ROLES = new Set(['Admin', 'Super Admin', 'Gembala'])
 
@@ -40,6 +41,7 @@ export const serviceRosterService = {
   },
 
   async listManagedMinistries(profile) {
+    if (profile?.status !== 'Aktif') return []
     if (['Admin', 'Super Admin'].includes(profile?.role)) {
       const { data: allowed, error: permissionError } = await supabase.rpc('auth_admin_can', {
         p_page: '/admin/jadwal-pelayanan',
@@ -53,15 +55,34 @@ export const serviceRosterService = {
       if (error) throw error
       return (data || []).map(item => ({ ...item, manager_role: 'Admin' }))
     }
-    if (FORBIDDEN_SCHEDULE_MANAGER_ROLES.has(profile?.role)
+    if (profile?.status !== 'Aktif' || !['Jemaat', 'Volunteer', 'PKS'].includes(profile?.role)
+      || FORBIDDEN_SCHEDULE_MANAGER_ROLES.has(profile?.role)
       || FORBIDDEN_SCHEDULE_MANAGER_ROLES.has(profile?.role_secondary)) return []
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('ministry_schedule_managers')
-      .select('manager_role, ministries(ministry_id, name)')
+      .select('manager_role, ministries(ministry_id, name, head_user_id)')
       .eq('user_id', profile?.user_id)
       .eq('is_active', true)
+    if (error && ['42703', 'PGRST200', 'PGRST204'].includes(error.code)) {
+      // Wakil tetap dapat memakai jadwal ketika kolom sumber MH belum dimigrasikan.
+      const fallback = await supabase.from('ministry_schedule_managers')
+        .select('manager_role, ministries(ministry_id, name)')
+        .eq('user_id', profile.user_id).eq('is_active', true)
+      data = fallback.data
+      error = fallback.error
+    }
     if (error) throw error
-    return (data || []).map(row => ({ ...row.ministries, manager_role: row.manager_role })).filter(Boolean)
+    const mhRows = (data || []).filter(row => row.manager_role === 'Ministry Head'
+      && row.ministries?.head_user_id === profile.user_id && profile.role === 'Volunteer')
+    let membershipIds = new Set()
+    if (mhRows.length) {
+      const memberships = await supabase.from('user_ministries').select('ministry_id').eq('user_id', profile.user_id)
+      if (memberships.error) throw memberships.error
+      membershipIds = new Set((memberships.data || []).map(row => row.ministry_id))
+    }
+    return (data || []).filter(row => row.ministries && (row.manager_role === 'Wakil'
+      || (row.manager_role === 'Ministry Head' && mhRows.includes(row) && membershipIds.has(row.ministries.ministry_id))))
+      .map(row => ({ ...row.ministries, manager_role: row.manager_role }))
   },
 
   async listPublished(month) {
@@ -108,18 +129,23 @@ export const serviceRosterService = {
     )
   },
 
-  async listManaged(month, ministryId) {
+  async listManaged(month, ministryId, { legacyOnly = false } = {}) {
     const [start, end] = monthRange(month)
     const { data, error } = await supabase
       .from('service_rosters')
-      .select(rosterSelect)
+      .select(legacyOnly ? `${rosterSelect}, service_schedule_parts(part_id)` : rosterSelect)
       .eq('ministry_id', ministryId)
       .gte('service_date', start)
       .lt('service_date', end)
       .order('service_date')
       .order('start_time')
-    if (error) throw error
-    return (data || []).map(sortRoster)
+    if (error) {
+      if (legacyOnly && ['PGRST200', 'PGRST205', '42P01'].includes(error.code)) return this.listManaged(month, ministryId)
+      throw error
+    }
+    // Roster bulanan hanya dikelola lewat lembar bulan, bukan aksi roster satuan.
+    return (data || []).filter(row => !legacyOnly || !row.service_schedule_parts
+      || (Array.isArray(row.service_schedule_parts) && row.service_schedule_parts.length === 0)).map(sortRoster)
   },
 
   async create(payload) {
@@ -203,6 +229,14 @@ export const serviceRosterService = {
     const result = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(result.error || 'Notifikasi gagal dikirim.')
     return result
+  },
+
+  notifyMonth(monthId, kind) {
+    return notifyScheduleMonth({ monthId, kind, getAccessToken: async () => {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) throw error
+      return session?.access_token
+    } })
   },
 
   async listPositions(ministryId, { includeInactive = false } = {}) {

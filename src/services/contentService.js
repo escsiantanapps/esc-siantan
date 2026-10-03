@@ -484,22 +484,54 @@ export const ministryDepartmentsService = {
 }
 
 export const ministriesService = {
-  async getAll() {
-    const { data, error } = await supabase.from('ministries').select('*')
+  async getAllWithHeadSupport() {
+    const { data, error } = await supabase.from('ministries')
+      .select('*, head:users!head_user_id(user_id,name,photo_url,role,role_secondary,status)')
       .order('organization_order').order('name')
+    if (!error) return { ministries: data || [], headSourceAvailable: true }
+    // Selama v99 belum tersedia atau cache relasi PostgREST belum segar,
+    // daftar Ministry tetap dapat dibuka tanpa menawarkan editor MH.
+    if (!['42703', 'PGRST200', 'PGRST204'].includes(error.code)) throw error
+    const fallback = await supabase.from('ministries').select('*')
+      .order('organization_order').order('name')
+    if (fallback.error) throw fallback.error
+    return { ministries: fallback.data || [], headSourceAvailable: false }
+  },
+
+  async getAll() {
+    const result = await this.getAllWithHeadSupport()
+    return result.ministries
+  },
+
+  async getHeadCandidates(ministryId) {
+    if (!ministryId) return []
+    const { data: links, error: linksError } = await supabase.from('user_ministries')
+      .select('user_id').eq('ministry_id', ministryId)
+    if (linksError) throw linksError
+    const memberIds = [...new Set((links || []).map(link => link.user_id))]
+    if (memberIds.length === 0) return []
+    const { data, error } = await supabase.from('users')
+      .select('user_id,name,photo_url,role,role_secondary,status')
+      .in('user_id', memberIds).eq('status', 'Aktif').eq('role', 'Volunteer').order('name')
     if (error) throw error
-    return data
+    return (data || []).filter(person => person.status === 'Aktif' && person.role === 'Volunteer'
+      && !['Admin', 'Super Admin', 'Gembala'].includes(person.role_secondary))
+      .map(({ role_secondary: _roleSecondary, ...person }) => person)
   },
 
   async create(ministry) {
-    const { data, error } = await supabase.from('ministries').insert(ministry).select().single()
+    const payload = { ...ministry }
+    if ('head_user_id' in payload) payload.head_user_id = payload.head_user_id || null
+    const { data, error } = await supabase.from('ministries').insert(payload).select().single()
     if (error) throw error
     return data
   },
 
   async update(id, updates) {
+    const payload = { ...updates }
+    if ('head_user_id' in updates) payload.head_user_id = updates.head_user_id || null
     const { data, error } = await supabase
-      .from('ministries').update(updates).eq('ministry_id', id).select().single()
+      .from('ministries').update(payload).eq('ministry_id', id).select().single()
     if (error) throw error
     return data
   },

@@ -7,7 +7,7 @@ import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { Card, PageHeader, Button, Input, Textarea, Select, Spinner, EmptyState, Avatar, StatusBadge, Badge } from '@/components/ui'
 
-const emptyForm = { name: '', description: '', department_id: '' }
+const emptyForm = { name: '', description: '', department_id: '', head_user_id: '' }
 const emptyDepartmentForm = { name: '', head_user_id: '' }
 
 export default function AdminMinistryPage() {
@@ -40,6 +40,11 @@ export default function AdminMinistryPage() {
   const [departmentError, setDepartmentError] = useState('')
   const [departmentSaving, setDepartmentSaving] = useState(false)
   const [headCandidates, setHeadCandidates] = useState([])
+  const [ministryHeadCandidates, setMinistryHeadCandidates] = useState([])
+  const [ministryHeadsLoading, setMinistryHeadsLoading] = useState(false)
+  const [ministryHeadsError, setMinistryHeadsError] = useState('')
+  const [headSourceAvailable, setHeadSourceAvailable] = useState(true)
+  const [headChangePending, setHeadChangePending] = useState(false)
   const [organizationSaving, setOrganizationSaving] = useState(false)
 
   function closeMembers() {
@@ -60,13 +65,31 @@ export default function AdminMinistryPage() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    if (!showModal) return
+    let current = true
+    setMinistryHeadCandidates([])
+    setMinistryHeadsLoading(Boolean(editing?.ministry_id && headSourceAvailable))
+    setMinistryHeadsError('')
+    if (!editing?.ministry_id || !headSourceAvailable) return () => { current = false }
+    ministriesService.getHeadCandidates(editing.ministry_id).then(people => {
+      if (current) setMinistryHeadCandidates(people)
+    }).catch(() => {
+      if (current) setMinistryHeadsError(t('amin.ministryHeadsLoadFailed'))
+    }).finally(() => {
+      if (current) setMinistryHeadsLoading(false)
+    })
+    return () => { current = false }
+  }, [showModal, editing?.ministry_id, headSourceAvailable, t])
+
   function load() {
     setLoading(true)
     Promise.all([
-      ministriesService.getAll(),
+      ministriesService.getAllWithHeadSupport(),
       ministryDepartmentsService.getAll(),
     ]).then(([loadedMinistries, loadedDepartments]) => {
-      setMinistries(loadedMinistries)
+      setMinistries(loadedMinistries.ministries)
+      setHeadSourceAvailable(loadedMinistries.headSourceAvailable)
       setDepartments(loadedDepartments)
     }).catch(() => {}).finally(() => setLoading(false))
   }
@@ -77,13 +100,15 @@ export default function AdminMinistryPage() {
     setEditing(null)
     setForm(emptyForm)
     setError('')
+    setHeadChangePending(false)
     setShowModal(true)
   }
 
   function openEdit(item) {
     setEditing(item)
-    setForm({ name: item.name || '', description: item.description || '', department_id: item.department_id || '' })
+    setForm({ name: item.name || '', description: item.description || '', department_id: item.department_id || '', head_user_id: item.head_user_id || '' })
     setError('')
+    setHeadChangePending(false)
     setShowModal(true)
   }
 
@@ -219,6 +244,7 @@ export default function AdminMinistryPage() {
       await ministriesService.addMember(membersView.ministry_id, member.user_id)
       toast.success(t('amin.memberAdded', { name: member.name, ministry: membersView.name }))
       await openMembers(membersView, false)
+      load()
     } catch (err) {
       toast.error(err.message || t('amin.memberActionFailed'))
     } finally {
@@ -241,6 +267,7 @@ export default function AdminMinistryPage() {
       await ministriesService.removeMember(membersView.ministry_id, member.user_id)
       toast.success(t('amin.memberRemoved', { name: member.name, ministry: membersView.name }))
       await openMembers(membersView, false)
+      load()
     } catch (err) {
       toast.error(err.message || t('amin.memberActionFailed'))
     } finally {
@@ -248,14 +275,20 @@ export default function AdminMinistryPage() {
     }
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(headChangeApproved = false) {
+    if (saving) return
     setError('')
     if (!form.name.trim()) { setError(t('amin.nameRequired')); return }
+    if (editing?.head_user_id && editing.head_user_id !== form.head_user_id && !headChangeApproved) {
+      setHeadChangePending(true)
+      return
+    }
     setSaving(true)
     try {
       // Select HTML mengembalikan string kosong; FK Department membutuhkan
       // NULL saat Ministry sengaja belum dikelompokkan.
       const ministryPayload = { ...form, department_id: form.department_id || null }
+      if (!headSourceAvailable || !editing) delete ministryPayload.head_user_id
       if (editing) {
         await ministriesService.update(editing.ministry_id, ministryPayload)
       } else {
@@ -269,6 +302,7 @@ export default function AdminMinistryPage() {
       toast.error(err.message || t('amin.saveFailed'))
     } finally {
       setSaving(false)
+      setHeadChangePending(false)
     }
   }
 
@@ -345,6 +379,7 @@ export default function AdminMinistryPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
                 {item.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{item.description}</p>}
+                <p className="text-xs text-gray-500 mt-0.5 break-words">{t('amin.ministryHead')}: {item.head?.name || t('amin.noMinistryHead')}</p>
                 {item.department_id && departmentsById.get(item.department_id) && (
                   <Badge color="purple" className="mt-1">{departmentsById.get(item.department_id).name}</Badge>
                 )}
@@ -532,19 +567,35 @@ export default function AdminMinistryPage() {
 
             {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
 
+            {headChangePending ? <div role="alertdialog" aria-labelledby="ministry-head-change-title" className="space-y-4">
+              <h3 id="ministry-head-change-title" className="text-sm font-semibold text-gray-900">{t('amin.changeMinistryHeadTitle')}</h3>
+              <p className="text-sm text-gray-600">{t('amin.changeMinistryHeadMsg', { name: editing.head?.name || editing.head_user_id })}</p>
+              <div className="flex gap-2"><Button variant="ghost" className="flex-1" disabled={saving} onClick={() => setHeadChangePending(false)}>{t('a.cancel')}</Button><Button variant="danger" className="flex-1" loading={saving} onClick={() => handleSubmit(true)}>{t('amin.changeMinistryHead')}</Button></div>
+            </div> : <>
             <Input label={t('amin.nameLabel')} required value={form.name} onChange={event => set('name', event.target.value)} />
             <Textarea label={t('acls.description')} rows={3} value={form.description} onChange={event => set('description', event.target.value)} />
             <Select label={t('amin.departmentLabel')} value={form.department_id} onChange={event => set('department_id', event.target.value)}>
               <option value="">{t('amin.noDepartment')}</option>
               {departments.map(department => <option key={department.department_id} value={department.department_id}>{department.name}</option>)}
             </Select>
+            <Select label={t('amin.ministryHead')} value={form.head_user_id} disabled={!editing || !headSourceAvailable || ministryHeadsLoading || Boolean(ministryHeadsError)} error={ministryHeadsError} onChange={event => set('head_user_id', event.target.value)}>
+              <option value="">{t('amin.noMinistryHead')}</option>
+              {editing?.head_user_id && !ministryHeadCandidates.some(person => person.user_id === editing.head_user_id) && (
+                <option value={editing.head_user_id}>{ministryHeadsLoading || ministryHeadsError ? editing.head?.name || editing.head_user_id : t('amin.ministryHeadUnavailable', { name: editing.head?.name || editing.head_user_id })}</option>
+              )}
+              {ministryHeadCandidates.map(person => <option key={person.user_id} value={person.user_id}>{person.name}</option>)}
+            </Select>
+            {!headSourceAvailable && <p className="text-xs text-gray-600">{t('amin.ministryHeadMigrationRequired')}</p>}
+            {headSourceAvailable && !editing && <p className="text-xs text-gray-600">{t('amin.ministryHeadCreateHint')}</p>}
+            {headSourceAvailable && editing && !ministryHeadsLoading && !ministryHeadsError && ministryHeadCandidates.length === 0 && <p className="text-xs text-gray-600">{t('amin.ministryHeadNoMembersHint')}</p>}
 
             <div className="flex gap-2 pt-1">
               <Button variant="ghost" className="flex-1" onClick={() => setShowModal(false)}>{t('a.cancel')}</Button>
-              <Button className="flex-1" loading={saving} onClick={handleSubmit}>
+              <Button className="flex-1" loading={saving} onClick={() => handleSubmit()}>
                 {editing ? t('a.save') : t('a.add')}
               </Button>
             </div>
+            </>}
           </Card>
         </div>
       )}

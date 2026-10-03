@@ -1,0 +1,80 @@
+.monthly-workspace { min-width:0; max-width:1500px; margin:auto; color:var(--color-gray-900); }
+.monthly-workspace button,.monthly-workspace input,.monthly-workspace select,.monthly-workspace textarea { border-radius:6px; }
+.monthly-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+.monthly-heading h1 { font-size:24px; line-height:1.3; font-weight:650; }
+.monthly-heading h2,.monthly-toolbar h2 { font-size:17px; font-weight:600; }
+.monthly-tabs { display:flex; flex-wrap:wrap; width:fit-content; max-width:100%; gap:2px; padding:3px; background:var(--color-control); border-radius:6px; margin-bottom:8px; }
+.monthly-tabs button { min-height:44px; max-width:100%; padding:8px 12px; border:1px solid transparent; font-size:14px; color:var(--color-gray-600); }
+.monthly-tabs button[aria-pressed="true"] { color:var(--color-brand-700); background:var(--color-surface); border:1px solid var(--color-gray-200); }
+.monthly-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:14px 0; border-top:1px solid var(--color-gray-200); border-bottom:1px solid var(--color-gray-200); }
+.monthly-toolbar > select { max-width:240px; }
+.monthly-month { display:flex; align-items:center; gap:6px; }
+.monthly-month > div { width:186px; }
+.monthly-month input { min-height:44px; background:var(--color-control); }
+.monthly-filters { border-top:0; margin-bottom:14px; }
+.monthly-filters > div { min-width:170px; max-width:260px; }
+.monthly-filters select { background:var(--color-control); }
+.monthly-summary { font-size:13px; color:var(--color-gray-600); }
+.monthly-error { display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin:12px 0; padding:12px; border:1px solid var(--color-red-200); background:var(--color-red-50); color:var(--color-red-700); border-radius:6px; font-size:13px; overflow-wrap:anywhere; }
+.monthly-template-list { margin-top:8px; }
+.monthly-template-item { display:flex; align-items:center; gap:10px; padding:16px 0; border-bottom:1px solid var(--color-gray-200); }
+.monthly-template-item > div { flex:1; min-width:0; }
+.monthly-template-item h3 { font-size:15px; font-weight:600; overflow-wrap:anywhere; }
+.monthly-template-item p,.monthly-muted { color:var(--color-gray-500); font-size:13px; }
+.monthly-dialog { width:min(760px,calc(100% - 32px)); max-height:calc(100dvh - 40px); border:1px solid var(--color-gray-200); border-radius:8px; padding:0; background:var(--color-surface); color:var(--color-gray-900); }
+.monthly-dialog::backdrop { background:#0007; }
+.monthly-dialog button,.monthly-dialog input,.monthly-dialog select,.monthly-dialog textarea { border-radius:6px; min-height:44px; }
+.monthly-dialog input,.monthly-dialog select,.monthly-dialog textarea { background:var(--color-control); }
+.monthly-dialog input[type="checkbox"] { min-height:0; accent-color:var(--color-brand-500); }
+.monthly-dialog-header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 20px; border-bottom:1px solid var(--color-gray-200); }
+.monthly-dialog-header h2 { font-size:18px; font-weight:600; }
+.monthly-dialog-header button { padding:8px; min-width:44px; }
+.monthly-dialog-body { padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
+.monthly-dialog-footer { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:14px 20px; border-top:1px solid var(--color-gray-200); }
+.monthly-section-editor { padding:14px 0; border-top:1px solid var(--color-gray-200); min-width:0; }
+.monthly-section-editor legend { padding:0 8px 0 0; font-size:15px; font-weight:600; }
+.monthly-editor-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.monthly-part-editor { margin:16px 0; padding-bottom:14px; border-bottom:1px solid var(--color-gray-200); }
+.monthly-inline { display:flex; align-items:flex-end; flex-wrap:wrap; gap:8px; }
+.monthly-inline > div:first-child { flex:1; min-width:140px; }
+.monthly-position-options { margin:12px 0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; }
+.monthly-position-options .monthly-inline { align-items:center; flex-wrap:nowrap; }
+.monthly-position-options label { flex:1; min-width:0; overflow-wrap:anywhere; }
+.monthly-position-options .monthly-inline > div { width:74px; flex:none; min-width:0; }
+.monthly-date-picks { display:flex; flex-wrap:wrap; gap:7px; }
+.monthly-subheading { font-size:14px; font-weight:600; }
+.monthly-context { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--color-gray-500); }
+.monthly-context strong { font-size:15px; color:var(--color-gray-900); }
+.schedule-access-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; padding:18px 0; }
+.schedule-access-grid > section { min-width:0; }
+.schedule-access h2 { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:600; margin-bottom:14px; }
+.schedule-access-head { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding-bottom:10px; }
+.schedule-access-head > div { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.schedule-access-row { display:flex; align-items:center; gap:8px; min-height:52px; padding:8px 0; border-bottom:1px solid var(--color-gray-200); font-size:14px; }
+.schedule-access-row > div,.schedule-access-row > strong,.schedule-access-row > span:first-child { flex:1; min-width:0; overflow-wrap:anywhere; }
+.schedule-access-row > div { display:flex; flex-direction:column; gap:3px; }
+.schedule-access-row button { flex-shrink:0; min-width:44px; min-height:44px; }
+.schedule-access-list { margin-bottom:18px; }
+.schedule-access .monthly-subheading { margin:16px 0 8px; }
+.schedule-position-form { display:flex; flex-direction:column; gap:12px; border-top:1px solid var(--color-gray-200); padding-top:16px; }
+.schedule-access input,.schedule-access select { background:var(--color-control); min-height:44px; }
+.monthly-member-list { display:flex; flex-direction:column; gap:0; max-height:280px; overflow:auto; }
+.monthly-member-list label { padding:12px 2px; min-height:44px; border-bottom:1px solid var(--color-gray-200); }
+.monthly-dialog :focus-visible,.monthly-workspace :focus-visible { outline:2px solid var(--color-brand-500); outline-offset:2px; }
+@media(max-width:700px) {
+  .schedule-access-grid { grid-template-columns:1fr; gap:28px; }
+  .monthly-heading h1 { font-size:21px; }
+  .monthly-tabs button { font-size:12px; padding:8px; }
+  .monthly-month { width:100%; }
+  .monthly-month > div { flex:1; width:0; min-width:0; }
+  .monthly-month input { width:100%; min-width:0; }
+  .monthly-toolbar { gap:8px; }
+  .monthly-toolbar > button { font-size:12px; padding:8px 10px; }
+  .monthly-filters > div { min-width:0; width:calc(50% - 4px); }
+  .monthly-filters select { font-size:12px; }
+  .monthly-summary { font-size:12px; }
+  .monthly-dialog { width:calc(100% - 20px); max-height:calc(100dvh - 20px); }
+  .monthly-dialog-header,.monthly-dialog-footer { padding:12px 14px; }
+  .monthly-dialog-body { padding:16px 14px; }
+  .monthly-editor-grid,.monthly-position-options { grid-template-columns:1fr; }
+}

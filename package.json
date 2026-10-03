@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src api tests vite.config.js --ext js,jsx,mjs --max-warnings 0",
-    "test": "node --test --test-concurrency=1 tests/quality.test.mjs tests/roster-notifications.test.mjs tests/roster-api.test.mjs tests/roster-db.test.mjs tests/api-routing.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/quality.test.mjs tests/roster-notifications.test.mjs tests/roster-api.test.mjs tests/roster-db.test.mjs tests/api-routing.test.mjs tests/monthly-roster-db.test.mjs tests/ministry-head-db.test.mjs tests/service-schedule-matrix.test.mjs tests/service-schedule-demo.test.mjs tests/monthly-notifications.test.mjs",
     "check": "npm run lint && npm test && npm run build"
   },
   "dependencies": {

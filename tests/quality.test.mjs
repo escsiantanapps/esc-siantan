@@ -86,6 +86,128 @@ test('Email login internal tidak ditampilkan sebagai alamat kontak', () => {
   assert.equal(displayEmail('jemaat@example.com'), 'jemaat@example.com')
 })
 
+test('Ministry baru disimpan sebelum MH dapat dipilih dari anggotanya', async () => {
+  await scenario({}, async f => {
+    await f.goto('/admin/ministry')
+    await f.page.getByRole('button', { name: 'Tambah Ministry', exact: true }).click()
+    const head = f.page.getByLabel('Ministry Head (MH)', { exact: true })
+    assert.equal(await head.isDisabled(), true)
+    await f.page.getByText('Simpan Ministry, tambahkan anggota, lalu pilih MH dari Volunteer aktif di Ministry ini.', { exact: true }).waitFor()
+    await f.page.getByLabel('Nama Ministry').fill('Ministry QA Baru')
+    const saving = f.page.waitForResponse(response => response.url().includes('/rest/v1/ministries') && response.request().method() === 'POST')
+    await f.page.getByRole('button', { name: 'Tambah', exact: true }).click()
+    await saving
+    const creation = f.requests.find(request => request.path.endsWith('/ministries') && request.method === 'POST')
+    assert.equal(creation.body.name, 'Ministry QA Baru')
+    assert.equal(Object.hasOwn(creation.body, 'head_user_id'), false)
+    assert.equal(creation.body.department_id, null)
+    assert.equal(f.requests.filter(request => request.path.endsWith('/user_ministries') && request.method === 'GET').length, 0)
+    const ministryRead = f.requests.find(request => request.path.endsWith('/ministries') && request.method === 'GET')
+    assert.equal(new URLSearchParams(ministryRead.search).get('select'), '*,head:users!head_user_id(user_id,name,photo_url,role,role_secondary,status)')
+    assert.equal(f.requests.filter(request => request.path.endsWith('/ministry_schedule_managers') && request.method !== 'GET').length, 0)
+  })
+})
+
+test('Volunteer yang baru ditambahkan ke Ministry dapat ditetapkan sebagai MH', async () => {
+  const person = { user_id: 'QA-HEAD-NEW', name: 'Volunteer Baru', role: 'Volunteer', status: 'Aktif', photo_url: null }
+  await scenario({
+    ministries: [{ ministry_id: 'QA-MIN', name: 'Ministry QA', description: '', department_id: null, organization_order: 1, head_user_id: null, head: null }],
+    members: [person],
+    ministryMembers: [],
+  }, async f => {
+    await f.goto('/admin/ministry')
+    await f.page.getByRole('button', { name: 'Edit ministry Ministry QA', exact: true }).click()
+    await f.page.getByText('Tambahkan anggota Volunteer aktif sebelum menetapkan MH.', { exact: true }).waitFor()
+    await f.page.getByRole('button', { name: 'Batal', exact: true }).last().click()
+    await f.page.getByRole('button', { name: 'Lihat anggota ministry Ministry QA', exact: true }).click()
+    await f.page.getByRole('button', { name: 'Tambah anggota', exact: true }).click()
+    const added = f.page.waitForResponse(response => response.url().includes('/rest/v1/user_ministries')
+      && response.request().method() === 'POST')
+    await f.page.getByRole('button', { name: 'Tambahkan Volunteer Baru ke ministry', exact: true }).click()
+    await added
+    await f.page.getByRole('button', { name: 'Tutup daftar anggota', exact: true }).click()
+    await f.page.getByRole('button', { name: 'Edit ministry Ministry QA', exact: true }).click()
+    const select = f.page.getByLabel('Ministry Head (MH)', { exact: true })
+    await select.locator('option[value="QA-HEAD-NEW"]').waitFor({ state: 'attached' })
+    await select.selectOption('QA-HEAD-NEW')
+    const saved = f.page.waitForResponse(response => response.url().includes('/rest/v1/ministries')
+      && response.request().method() === 'PATCH')
+    await f.page.getByRole('button', { name: 'Simpan', exact: true }).click()
+    await saved
+    assert.equal(f.requests.find(request => request.path.endsWith('/ministries')
+      && request.method === 'PATCH').body.head_user_id, person.user_id)
+  })
+})
+
+test('Ministry: mengganti atau mengosongkan MH meminta konfirmasi tanpa otomatis memberi akses jadwal', async () => {
+  const head = { user_id: 'QA-HEAD-A', name: 'MH Sebelumnya', role: 'Volunteer', status: 'Aktif', photo_url: null }
+  const replacement = { user_id: 'QA-HEAD-B', name: 'MH Pengganti', role: 'Volunteer', status: 'Aktif', photo_url: null }
+  const outsider = { user_id: 'QA-OUTSIDE', name: 'Volunteer Ministry Lain', role: 'Volunteer', status: 'Aktif', photo_url: null }
+  const member = user => ({ ministry_id: 'QA-MIN', user_id: user.user_id })
+  await scenario({
+    ministries: [{ ministry_id: 'QA-MIN', name: 'Ministry QA', description: '', department_id: null, organization_order: 1, head_user_id: head.user_id, head }],
+    members: [head, replacement, outsider,
+      { user_id: 'QA-JEMAAT', name: 'Jemaat Anggota', role: 'Jemaat', status: 'Aktif' },
+      { user_id: 'QA-INACTIVE', name: 'Volunteer Nonaktif', role: 'Volunteer', status: 'Nonaktif' },
+      { user_id: 'QA-ADMIN-SECONDARY', name: 'Volunteer Admin Sekunder', role: 'Volunteer', role_secondary: 'Admin', status: 'Aktif' }],
+    ministryMembers: [member(head), member(replacement), member({ user_id: 'QA-JEMAAT' }),
+      member({ user_id: 'QA-INACTIVE' }), member({ user_id: 'QA-ADMIN-SECONDARY' })],
+  }, async f => {
+    await f.goto('/admin/ministry')
+    await f.page.getByText('Ministry Head (MH): MH Sebelumnya', { exact: true }).waitFor()
+    await f.page.getByRole('button', { name: 'Edit ministry Ministry QA', exact: true }).click()
+    const headSelect = f.page.getByLabel('Ministry Head (MH)', { exact: true })
+    await headSelect.locator('option[value="QA-HEAD-B"]').waitFor({ state: 'attached' })
+    assert.equal(await headSelect.locator('option[value="QA-OUTSIDE"],option[value="QA-JEMAAT"],option[value="QA-INACTIVE"],option[value="QA-ADMIN-SECONDARY"]').count(), 0)
+    const links = f.requests.find(request => request.path.endsWith('/user_ministries') && request.method === 'GET')
+    assert.equal(new URLSearchParams(links.search).get('ministry_id'), 'eq.QA-MIN')
+    const candidates = f.requests.find(request => request.path.endsWith('/users') && new URLSearchParams(request.search).get('role') === 'eq.Volunteer')
+    assert.ok(candidates, 'Calon MH harus difilter menjadi Volunteer aktif dalam daftar anggota Ministry')
+    assert.equal(new URLSearchParams(candidates.search).get('status'), 'eq.Aktif')
+    assert.ok(new URLSearchParams(candidates.search).get('user_id')?.startsWith('in.('))
+    await headSelect.selectOption('QA-HEAD-B')
+    await f.page.getByRole('button', { name: 'Simpan', exact: true }).click()
+    await f.page.getByRole('heading', { name: 'Ganti Ministry Head?', exact: true }).waitFor()
+    await f.page.getByText('Akses jadwal MH MH Sebelumnya akan dinonaktifkan. MH baru tetap memerlukan persetujuan akses jadwal.', { exact: true }).waitFor()
+    assert.equal(f.requests.filter(request => request.path.endsWith('/ministries') && request.method === 'PATCH').length, 0)
+    await f.page.getByRole('button', { name: 'Batal', exact: true }).last().click()
+    assert.equal(f.requests.filter(request => request.path.endsWith('/ministries') && request.method === 'PATCH').length, 0)
+    await f.page.getByRole('button', { name: 'Simpan', exact: true }).click()
+    const replacing = f.page.waitForResponse(response => response.url().includes('/rest/v1/ministries') && response.request().method() === 'PATCH')
+    await f.page.getByRole('button', { name: 'Ganti MH', exact: true }).click()
+    await replacing
+    assert.equal(f.requests.find(request => request.path.endsWith('/ministries') && request.method === 'PATCH').body.head_user_id, 'QA-HEAD-B')
+    await f.page.getByRole('heading', { name: 'Edit Ministry', exact: true }).waitFor({ state: 'hidden' })
+    await f.page.getByRole('button', { name: 'Edit ministry Ministry QA', exact: true }).click()
+    await f.page.getByLabel('Ministry Head (MH)', { exact: true }).selectOption('')
+    await f.page.getByRole('button', { name: 'Simpan', exact: true }).click()
+    const clearing = f.page.waitForResponse(response => response.url().includes('/rest/v1/ministries') && response.request().method() === 'PATCH')
+    await f.page.getByRole('button', { name: 'Ganti MH', exact: true }).click()
+    await clearing
+    const changes = f.requests.filter(request => request.path.endsWith('/ministries') && request.method === 'PATCH')
+    assert.equal(changes.length, 2)
+    assert.equal(changes[1].body.head_user_id, null)
+    assert.equal(f.requests.filter(request => request.path.endsWith('/ministry_schedule_managers') && request.method !== 'GET').length, 0)
+    assert.equal(f.requests.filter(request => request.path.endsWith('/users') && ['POST', 'PATCH'].includes(request.method)
+      && (request.body?.role !== undefined || request.body?.role_secondary !== undefined)).length, 0)
+  })
+})
+
+test('Ministry tetap dapat dibuka sebelum migrasi MH, editor MH dinonaktifkan', async () => {
+  await scenario({
+    ministryHeadSourceMissing: true,
+    ministries: [{ ministry_id: 'QA-MIN', name: 'Ministry Lama', description: '', department_id: null, organization_order: 1 }],
+  }, async f => {
+    await f.goto('/admin/ministry')
+    await f.page.getByRole('button', { name: 'Edit ministry Ministry Lama', exact: true }).click()
+    assert.equal(await f.page.getByLabel('Ministry Head (MH)', { exact: true }).isDisabled(), true)
+    await f.page.getByText('Migrasi v99 diperlukan sebelum MH dapat ditetapkan.', { exact: true }).waitFor()
+    const ministryReads = f.requests.filter(request => request.path.endsWith('/ministries') && request.method === 'GET')
+    assert.ok(ministryReads.length >= 2)
+    assert.ok(ministryReads.some(request => new URLSearchParams(request.search).get('select') === '*'))
+  })
+})
+
 test('MH: pencarian anggota ministry memfilter status dan nama di server sebelum batas 50 hasil', async () => {
   const membership = (id, name, status = 'Aktif', ministryId = 'QA-MIN') => ({
     ministry_id: ministryId, user_id: id,
@@ -255,8 +377,66 @@ test('Tautan Draft ditolak pada tampilan anggota walaupun backend mengembalikan 
   })
 })
 
+function monthlyManagementFixture(managerOnly = false, monthOffset = 0) {
+  const today = new Date()
+  const month = new Date(Date.UTC(today.getFullYear(), today.getMonth() + monthOffset, 1)).toISOString().slice(0, 7)
+  const ministries = [{ ministry_id: 'QA-MIN', name: 'Worship' }, { ministry_id: 'QA-MEDIA', name: 'Multimedia' }]
+  const servicePositions = [
+    { position_id: 'QA-POS', ministry_id: 'QA-MIN', name: 'Worship Leader', is_active: true, default_slots: 1, sort_order: 0, ministries: { name: 'Worship' } },
+    { position_id: 'QA-MEDIA-POS', ministry_id: 'QA-MEDIA', name: 'Operator Media', is_active: true, default_slots: 1, sort_order: 0, ministries: { name: 'Multimedia' } },
+  ]
+  const definition = { sections: [{
+    section_id: 'QA-SECTION', title: 'Ibadah Gabungan', source_type: 'Ibadah',
+    start_time: '08:00', end_time: '10:00', class_session_no: null,
+    parts: servicePositions.map(position => ({ ministry_id: position.ministry_id, positions: [{ position_id: position.position_id, capacity: 1 }] })),
+  }] }
+  const occurrence = {
+    occurrence_id: 'QA-OCCURRENCE', month_id: 'QA-MONTH', section_id: 'QA-SECTION',
+    title: 'Ibadah Gabungan', source_type: 'Ibadah', service_date: `${month}-07`,
+    start_time: '08:00:00', end_time: '10:00:00', location: 'Aula QA', dress_code: 'Batik',
+  }
+  const parts = servicePositions.map(position => ({
+    part_id: `QA-PART-${position.ministry_id}`, occurrence_id: occurrence.occurrence_id,
+    ministry_id: position.ministry_id, roster_id: `QA-ROSTER-${position.ministry_id}`,
+    team_name: position.ministry_id === 'QA-MIN' ? 'Tim Worship QA' : 'Tim Media Rahasia',
+  }))
+  const rosters = servicePositions.map((position, index) => ({
+    roster_id: parts[index].roster_id, ministry_id: position.ministry_id, status: 'Draft',
+    title: occurrence.title, service_date: occurrence.service_date,
+    start_time: occurrence.start_time, end_time: occurrence.end_time,
+    service_roster_slots: [{
+      slot_id: `QA-SLOT-${position.position_id}`, position_id: position.position_id,
+      ministry_id: position.ministry_id, user_id: index === 0 ? 'QA-USER' : 'QA-MEDIA-USER', slot_no: 1,
+      users: { name: index === 0 ? 'Pelayan Worship QA' : 'Pelayan Media Rahasia', photo_url: null },
+    }],
+  }))
+  return {
+    ministries, servicePositions,
+    monthlyTemplates: [{ template_id: 'QA-TEMPLATE', name: 'Template Gabungan', is_active: true, definition }],
+    // RPC production mengirim kerangka semua bagian, tetapi data Draft hanya ministry berizin.
+    monthlySchedules: [{
+      month: { month_id: 'QA-MONTH', template_id: 'QA-TEMPLATE', month_date: `${month}-01`, name: 'Jadwal QA', status: 'Draft', definition },
+      sections: definition.sections, occurrences: [occurrence],
+      parts: managerOnly ? parts.filter(part => part.ministry_id === 'QA-MIN') : parts,
+      rosters: managerOnly ? rosters.filter(roster => roster.ministry_id === 'QA-MIN') : rosters,
+    }],
+  }
+}
+
+async function assertMonthlyManagementLoaded(f) {
+  await f.page.getByRole('heading', { name: 'Jadwal Pelayanan Bulanan', exact: true }).waitFor()
+  const monthlyTab = f.page.getByRole('button', { name: 'Bulanan', exact: true })
+  assert.equal(await monthlyTab.getAttribute('aria-pressed'), 'true')
+  await f.page.getByRole('table', { name: /^Jadwal pelayanan / }).waitFor()
+  const request = f.requests.find(row => row.path.endsWith('/get_service_schedule_month'))
+  assert.equal(request?.method, 'POST', 'Panel harus memuat snapshot bulanan melalui RPC')
+  assert.deepEqual(request?.body, { p_month_id: 'QA-MONTH' })
+  const expectedMonth = `eq.${await f.page.getByLabel('Bulan', { exact: true }).inputValue()}-01`
+  assert.ok(f.requests.some(row => row.path.endsWith('/service_schedule_months') && new URLSearchParams(row.search).get('month_date') === expectedMonth), 'Snapshot harus dimuat untuk bulan yang sedang ditampilkan')
+}
+
 test('Super Admin: menu jadwal mobile tidak tampil, rute lihat terpisah dari panel admin', async () => {
-  await scenario({ secondary: 'Volunteer', ministries: [{ ministry_id: 'QA-MIN', name: 'Worship' }] }, async f => {
+  await scenario({ secondary: 'Volunteer', ...monthlyManagementFixture() }, async f => {
     await f.goto('/')
     await f.page.getByRole('heading', { name: /Shalom/ }).waitFor()
     assert.equal(await f.page.locator('a[href="/jadwal-pelayanan"]').count(), 0)
@@ -264,7 +444,12 @@ test('Super Admin: menu jadwal mobile tidak tampil, rute lihat terpisah dari pan
     await f.page.getByRole('heading', { name: 'Jadwal Pelayanan' }).waitFor()
     assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 0)
     await f.goto('/admin/jadwal-pelayanan')
-    await f.page.getByRole('button', { name: 'Kelola', exact: true }).waitFor()
+    await assertMonthlyManagementLoaded(f)
+    assert.equal(await f.page.getByRole('button', { name: 'Template', exact: true }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: 'Terbitkan Bulan', exact: true }).isEnabled(), true)
+    assert.equal(await f.page.getByRole('button', { name: /^Atur Worship Leader untuk Ibadah Gabungan,/ }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: /^Atur Operator Media untuk Ibadah Gabungan,/ }).count(), 1)
+    assert.equal(await f.page.getByText('Pelayan Media Rahasia', { exact: true }).count(), 1)
   })
 })
 
@@ -290,13 +475,26 @@ test('Admin tanpa izin kelola tetap bisa melihat tautan jadwal penugasannya', as
 test('Wakil ber-grant hanya membuka panel pengelola jadwal, bukan halaman Admin lain', async () => {
   await scenario({
     role: 'Volunteer',
+    ...monthlyManagementFixture(true),
     managerGrants: [{ manager_role: 'Wakil', ministries: { ministry_id: 'QA-MIN', name: 'Worship' } }],
   }, async f => {
     await f.goto('/profil')
     await f.page.getByRole('link', { name: /Kelola Jadwal Pelayanan/ }).waitFor()
     await f.goto('/admin/jadwal-pelayanan')
-    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan' }).waitFor()
-    await f.page.getByRole('button', { name: 'Kelola', exact: true }).waitFor()
+    await assertMonthlyManagementLoaded(f)
+    assert.equal(await f.page.getByRole('button', { name: /^Atur Worship Leader untuk Ibadah Gabungan,/ }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: /^Ubah tim dan materi Worship,/ }).count(), 1)
+    assert.equal(await f.page.getByText('Pelayan Worship QA', { exact: true }).count(), 1)
+    assert.equal(await f.page.getByText('Multimedia', { exact: true }).count(), 2)
+    assert.equal(await f.page.getByText('Bagian terbatas', { exact: true }).count(), 2)
+    assert.equal(await f.page.getByRole('button', { name: /^Atur Operator Media/ }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: /^Ubah tim dan materi Multimedia/ }).count(), 0)
+    assert.equal(await f.page.getByText('Pelayan Media Rahasia', { exact: true }).count(), 0)
+    assert.equal(await f.page.getByText('Tim Media Rahasia', { exact: true }).count(), 0)
+    for (const name of ['Template', 'Akses & Posisi', 'Terbitkan Bulan', 'Batalkan Bulan', 'Buat Jadwal Bulan Ini']) {
+      assert.equal(await f.page.getByRole('button', { name, exact: true }).count(), 0)
+    }
+    assert.equal(await f.page.locator('button.sched-matrix-occurrence-cell').count(), 0)
     assert.equal(await f.page.locator('aside').count(), 0)
     await f.goto('/admin/jemaat')
     await f.page.waitForURL(url => url.pathname === '/')
@@ -307,13 +505,74 @@ test('Admin terbatas: panel jadwal terbuka hanya bila halaman itu diizinkan', as
   await scenario({
     role: 'Admin',
     allowedPages: ['/admin/jadwal-pelayanan'],
-    ministries: [{ ministry_id: 'QA-MIN', name: 'Worship' }],
+    ...monthlyManagementFixture(),
   }, async f => {
     await f.goto('/admin/jadwal-pelayanan')
-    await f.page.getByRole('button', { name: 'Kelola', exact: true }).waitFor()
+    await assertMonthlyManagementLoaded(f)
+    assert.equal(await f.page.getByRole('button', { name: 'Template', exact: true }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: 'Akses & Posisi', exact: true }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: 'Terbitkan Bulan', exact: true }).isEnabled(), true)
+    assert.equal(await f.page.locator('button.sched-matrix-occurrence-cell').count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: /^Atur Operator Media untuk Ibadah Gabungan,/ }).count(), 1)
     assert.equal(await f.page.getByRole('link', { name: 'Jadwal Pelayanan', exact: true }).count(), 1)
     await f.goto('/admin/jemaat')
     await f.page.waitForURL(url => url.pathname === '/admin/jadwal-pelayanan')
+  })
+})
+
+test('Tautan pengelola roster bulanan membuka matriks bulan asal tanpa editor individual dan mempertahankan parameter lain', async () => {
+  const monthly = monthlyManagementFixture(true, 1)
+  const rosterId = monthly.monthlySchedules[0].parts[0].roster_id
+  await scenario({
+    role: 'Volunteer', ...monthly, rosterMonthLinkDelayMs: 300,
+    managerGrants: [{ manager_role: 'Wakil', ministries: { ministry_id: 'QA-MIN', name: 'Worship' } }],
+  }, async f => {
+    await f.page.addInitScript(() => {
+      window.__qaLegacyControls = []
+      new MutationObserver(records => {
+        for (const record of records) for (const node of record.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue
+          const buttons = node.matches('button') ? [node] : [...node.querySelectorAll('button')]
+          for (const button of buttons) {
+            const text = button.textContent.trim()
+            if (['Kelola', 'Tinjau & Terbitkan', 'Batalkan Jadwal'].includes(text)) window.__qaLegacyControls.push(text)
+          }
+        }
+      }).observe(document, { childList: true, subtree: true })
+    })
+    await f.goto('/admin/jadwal-pelayanan?keep=test&rosterId=' + encodeURIComponent(rosterId))
+    await f.page.waitForURL(url => !url.searchParams.has('rosterId') && url.searchParams.get('keep') === 'test')
+    await assertMonthlyManagementLoaded(f)
+    assert.equal(await f.page.getByLabel('Bulan', { exact: true }).inputValue(), monthly.monthlySchedules[0].month.month_date.slice(0, 7))
+    assert.deepEqual(await f.page.evaluate(() => window.__qaLegacyControls), [], 'Editor roster individual tidak boleh sempat dirender untuk tautan bulanan')
+    assert.equal(f.requests.some(row => row.path.endsWith('/service_rosters') && new URLSearchParams(row.search).has('roster_id')), false)
+    assert.equal(await f.page.getByRole('button', { name: 'Tinjau & Terbitkan', exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'Terbitkan Bulan', exact: true }).count(), 0)
+    const mapping = f.requests.find(row => row.path.endsWith('/service_schedule_parts'))
+    assert.equal(new URLSearchParams(mapping?.search).get('roster_id'), `eq.${rosterId}`)
+    assert.equal(new URLSearchParams(mapping?.search).get('select'), 'service_schedule_occurrences!occurrence_id(month_id,service_schedule_months!month_id(month_date))')
+  })
+})
+
+test('Tautan pengelola roster lama tetap membuka detail dan aksi individual ketika tidak terhubung ke bulan', async () => {
+  const roster = nextMonthRoster('Draft')
+  await scenario({
+    role: 'Volunteer', ...monthlyManagementFixture(true), rosters: [roster],
+    managerGrants: [{ manager_role: 'Wakil', ministries: { ministry_id: 'QA-MIN', name: 'Worship' } }],
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan?keep=test&rosterId=' + encodeURIComponent(roster.roster_id))
+    await f.page.getByRole('heading', { name: roster.title, exact: true }).waitFor()
+    assert.equal(await f.page.getByRole('button', { name: 'Roster Sebelumnya', exact: true }).getAttribute('aria-pressed'), 'true')
+    assert.equal(await f.page.getByRole('button', { name: 'Tinjau & Terbitkan', exact: true }).isEnabled(), true)
+    assert.equal(new URL(f.page.url()).searchParams.get('rosterId'), roster.roster_id)
+    assert.equal(new URL(f.page.url()).searchParams.get('keep'), 'test')
+    assert.equal(await f.page.getByRole('table', { name: /^Jadwal pelayanan / }).count(), 0)
+    const mapping = f.requests.find(row => row.path.endsWith('/service_schedule_parts'))
+    assert.equal(new URLSearchParams(mapping?.search).get('roster_id'), `eq.${roster.roster_id}`)
+    assert.ok(f.requests.some(row => row.path.endsWith('/service_rosters') && new URLSearchParams(row.search).get('roster_id') === `eq.${roster.roster_id}`))
+    await f.page.getByRole('button', { name: 'Kembali', exact: true }).click()
+    await f.page.waitForURL(url => !url.searchParams.has('rosterId') && url.searchParams.get('keep') === 'test')
+    assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 1)
   })
 })
 
