@@ -12,6 +12,18 @@ function migration(version) {
 }
 const current = migration(99)
 const membershipMigration = migration(100)
+const adminHeadMigration = migration(101)
+const adminHeadAudit = await readFile(new URL('../docs/AUDIT-MH-ADMIN.sql', import.meta.url), 'utf8')
+
+test('PostgreSQL: v101 menolak bila v100 belum terpasang', async () => {
+  const db = new PGlite()
+  try {
+    await setup(db)
+    await assert.rejects(db.exec(adminHeadMigration), /Jalankan Migrasi v100 sebelum Migrasi v101/)
+    assert.equal((await db.query(`SELECT count(*)::INT AS n FROM pg_constraint
+      WHERE conname='ministries_head_membership_fkey'`)).rows[0].n, 0)
+  } finally { await db.close() }
+})
 
 async function caller(db, id, pages = '/admin/ministry,/admin/jadwal-pelayanan') {
   await db.query("SELECT set_config('test.caller_id',$1,true),set_config('test.pages',$2,true)", [id, pages])
@@ -363,5 +375,106 @@ test('PostgreSQL: kepala lama tanpa keanggotaan tidak dapat dikosongkan langsung
       await db.exec('RESET ROLE')
       assert.equal((await db.query("SELECT head_user_id FROM ministries WHERE ministry_id='M1'")).rows[0].head_user_id, null)
     } finally { await db.exec('ROLLBACK; RESET ROLE') }
+  } finally { await db.close() }
+})
+
+test('PostgreSQL: Admin anggota dapat menjadi MH organisasi tanpa grant pengelola MH', async t => {
+  const db = new PGlite()
+  try {
+    await setup(db)
+    await db.exec(membershipMigration)
+    const grantGuardsBefore = await db.query(`SELECT proname, pg_get_functiondef(oid) AS definition
+      FROM pg_proc WHERE proname IN ('auth_manages_ministry',
+        'guard_schedule_manager_recipient_role', 'guard_schedule_manager_head_source')
+      ORDER BY proname`)
+    await db.exec(adminHeadMigration)
+
+    await t.test('v101 idempotent dan tidak mengubah penjaga grant atau keanggotaan v100', async () => {
+      await db.exec(adminHeadMigration)
+      assert.deepEqual(await db.query(`SELECT proname, pg_get_functiondef(oid) AS definition
+        FROM pg_proc WHERE proname IN ('auth_manages_ministry',
+          'guard_schedule_manager_recipient_role', 'guard_schedule_manager_head_source')
+        ORDER BY proname`), grantGuardsBefore)
+      assert.equal((await db.query(`SELECT count(*)::INT AS n FROM pg_trigger
+        WHERE tgname IN ('trg_validate_ministry_head_membership',
+          'trg_validate_schedule_manager_head_membership',
+          'trg_guard_ministry_head_member_removal')`)).rows[0].n, 3)
+      const audit = (await db.query(adminHeadAudit)).rows[0].audit_mh_admin
+      assert.equal(audit.v100_triggers.length, 3)
+      assert.match(audit.guard_ministry_head_source, /pg_trigger_depth\(\) > 1/)
+    })
+
+    await t.test('Admin aktif anggota Ministry dapat ditunjuk, tanpa grant baru dan tanpa bypass hak jadwal', async () => {
+      await fixture(db, async () => {
+        await rejected(db, "UPDATE ministries SET head_user_id='ADMIN' WHERE ministry_id='M1'", [], /terdaftar melayani/)
+        await db.exec("INSERT INTO user_ministries(user_id,ministry_id) VALUES ('ADMIN','M2')")
+        await rejected(db, "UPDATE ministries SET head_user_id='ADMIN' WHERE ministry_id='M1'", [], /terdaftar melayani/)
+        await db.exec("INSERT INTO user_ministries(user_id,ministry_id) VALUES ('ADMIN','M1')")
+        await db.exec("UPDATE users SET role_secondary='Volunteer' WHERE user_id='ADMIN'")
+        await caller(db, 'ADMIN', '/admin/ministry')
+        await db.exec("UPDATE ministries SET head_user_id='ADMIN' WHERE ministry_id='M1'")
+        assert.equal((await db.query("SELECT head_user_id FROM ministries WHERE ministry_id='M1'")).rows[0].head_user_id, 'ADMIN')
+        assert.equal((await db.query("SELECT count(*)::INT AS n FROM ministry_schedule_managers WHERE user_id='ADMIN'")).rows[0].n, 0)
+        assert.equal(await manages(db, 'ADMIN'), false)
+        await caller(db, 'ADMIN', '/admin/ministry')
+        assert.equal((await db.query("SELECT auth_service_schedule_admin() AS allowed")).rows[0].allowed, false)
+        await caller(db, 'ADMIN', '/admin/jadwal-pelayanan')
+        assert.equal((await db.query("SELECT auth_service_schedule_admin() AS allowed")).rows[0].allowed, true)
+        await rejected(db, "INSERT INTO ministry_schedule_managers(ministry_id,user_id,manager_role) VALUES ('M1','ADMIN','Ministry Head')", [], /ber-role Volunteer|tidak dapat menerima akses/)
+      })
+    })
+
+    await t.test('PostgREST langsung tetap memerlukan izin Admin Ministry untuk menetapkan MH Admin', async () => {
+      await fixture(db, async () => {
+        await db.exec("INSERT INTO user_ministries(user_id,ministry_id) VALUES ('ADMIN','M1')")
+        await db.exec("UPDATE users SET role_secondary='Volunteer' WHERE user_id='ADMIN'")
+        await caller(db, 'ADMIN', '/admin/jadwal-pelayanan')
+        await db.exec('SET ROLE authenticated')
+        await rejected(db, "UPDATE ministries SET head_user_id='ADMIN' WHERE ministry_id='M1'", [], /Penetapan Ministry Head/)
+        await db.exec('RESET ROLE')
+        await caller(db, 'ADMIN', '/admin/ministry')
+        await db.exec('SET ROLE authenticated')
+        await db.exec("UPDATE ministries SET head_user_id='ADMIN' WHERE ministry_id='M1'")
+        await db.exec('RESET ROLE')
+        assert.equal((await db.query("SELECT head_user_id FROM ministries WHERE ministry_id='M1'")).rows[0].head_user_id, 'ADMIN')
+      })
+    })
+
+    await t.test('grant MH lama tidak menjadi jalur alternatif sesudah role utama berubah ke Admin', async () => {
+      await fixture(db, async () => {
+        await db.exec("INSERT INTO user_ministries(user_id,ministry_id) VALUES ('OLD','M1')")
+        await db.exec("UPDATE ministries SET head_user_id='OLD' WHERE ministry_id='M1'")
+        assert.equal(await manages(db, 'OLD'), true)
+        await caller(db, 'ADMIN')
+        await db.exec("UPDATE users SET role='Admin',role_secondary='Volunteer' WHERE user_id='OLD'")
+        assert.equal(await manages(db, 'OLD'), false)
+        await caller(db, 'OLD', '/admin/ministry')
+        assert.equal((await db.query("SELECT auth_service_schedule_admin() AS allowed")).rows[0].allowed, false)
+      })
+    })
+
+    await t.test('Admin nonaktif dan role lain tetap tidak layak; Volunteer lama tetap layak', async () => {
+      await fixture(db, async () => {
+        await db.exec("INSERT INTO user_ministries(user_id,ministry_id) VALUES ('INACTIVE-ADMIN','M1'),('OLD','M1'),('SUPER','M1'),('OTHER','M1')")
+        await rejected(db, "UPDATE ministries SET head_user_id='INACTIVE-ADMIN' WHERE ministry_id='M1'", [], /pengguna Aktif/)
+        await rejected(db, "UPDATE ministries SET head_user_id='SUPER' WHERE ministry_id='M1'", [], /ber-role Admin atau Volunteer/)
+        await rejected(db, "UPDATE ministries SET head_user_id='OTHER' WHERE ministry_id='M1'", [], /ber-role Admin atau Volunteer/)
+        await db.exec("UPDATE ministries SET head_user_id='OLD' WHERE ministry_id='M1'")
+        assert.equal(await manages(db, 'OLD'), true)
+        await caller(db, 'ADMIN')
+        await db.exec("UPDATE users SET role_secondary='Admin' WHERE user_id='VOL'")
+        await db.exec("INSERT INTO user_ministries(user_id,ministry_id) VALUES ('VOL','M1')")
+        await rejected(db, "UPDATE ministries SET head_user_id='VOL' WHERE ministry_id='M1'", [], /ber-role Admin atau Volunteer/)
+      })
+    })
+
+    await t.test('cleanup FK v100 tetap bekerja ketika MH organisasi adalah Admin', async () => {
+      await fixture(db, async () => {
+        await db.exec("INSERT INTO user_ministries(user_id,ministry_id) VALUES ('ADMIN','M1')")
+        await db.exec("UPDATE ministries SET head_user_id='ADMIN' WHERE ministry_id='M1'")
+        await db.exec("DELETE FROM user_ministries WHERE user_id='ADMIN' AND ministry_id='M1'")
+        assert.equal((await db.query("SELECT head_user_id FROM ministries WHERE ministry_id='M1'")).rows[0].head_user_id, null)
+      })
+    })
   } finally { await db.close() }
 })

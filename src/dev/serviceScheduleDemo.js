@@ -1,7 +1,7 @@
 // Adapter lokal sengaja tidak mengimpor Supabase, fetch, atau data jemaat sungguhan.
 const copy = value => structuredClone(value)
 export const demoProfiles = {
-  admin: { user_id: 'DEMO-ADMIN', name: 'Admin Lokal', role: 'Admin', status: 'Aktif' },
+  admin: { user_id: 'DEMO-ADMIN', name: 'Admin Lokal', role: 'Admin', role_secondary: 'Volunteer', status: 'Aktif' },
   mh: { user_id: 'DEMO-MH', name: 'MH Musik Lokal', role: 'Volunteer', status: 'Aktif', ministry_ids: ['DEMO-M1'] },
   volunteer: { user_id: 'DEMO-BIMA', name: 'Bima', role: 'Volunteer', status: 'Aktif' },
   empty: { user_id: 'DEMO-EMPTY', name: 'Anggota Tanpa Jadwal', role: 'Volunteer', status: 'Aktif' },
@@ -47,7 +47,7 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
   const id = prefix => `DEMO-${prefix}-${++serial}`
   const isAdmin = () => ['Admin', 'Super Admin'].includes(caller?.role) && caller.status === 'Aktif'
   const eligibleManager = user => user?.status === 'Aktif' && ['Jemaat', 'Volunteer', 'PKS'].includes(user.role) && !['Admin', 'Super Admin', 'Gembala'].includes(user.role_secondary)
-  const eligibleHead = user => eligibleManager(user) && user.role === 'Volunteer'
+  const eligibleHead = user => user?.status === 'Aktif' && (user.role === 'Admin' || eligibleManager(user) && user.role === 'Volunteer')
   const managedGrants = user => eligibleManager(user) ? state.managers.filter(grant => grant.user_id === user.user_id && grant.is_active && (grant.manager_role === 'Wakil' || grant.manager_role === 'Ministry Head' && eligibleHead(user) && eligibleHead(findUser(user.user_id)) && findUser(user.user_id)?.ministry_ids?.includes(grant.ministry_id) && state.ministries.some(ministry => ministry.ministry_id === grant.ministry_id && ministry.head_user_id === user.user_id))) : []
   const managedIds = () => managedGrants(caller).map(grant => grant.ministry_id)
   const canManage = ministryId => isAdmin() || managedIds().includes(ministryId)
@@ -224,7 +224,7 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       demandAdmin()
       const ministry = demandMinistry(ministryId)
       const nextId = userId || null
-      if (nextId && !eligibleHead(findUser(nextId))) fail('MH harus Volunteer aktif dengan role utama Volunteer.')
+      if (nextId && !eligibleHead(findUser(nextId))) fail('MH harus Volunteer atau Admin aktif.')
       if (nextId && !findUser(nextId)?.ministry_ids?.includes(ministryId)) fail('MH harus anggota aktif di Ministry ini.')
       if (ministry.head_user_id !== nextId) {
         for (const grant of state.managers) if (grant.ministry_id === ministryId && grant.manager_role === 'Ministry Head' && grant.user_id !== nextId) grant.is_active = false

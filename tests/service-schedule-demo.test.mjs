@@ -209,11 +209,11 @@ test('nama posisi yang sudah dipakai bulan Terbit tidak dapat diubah', async () 
   assert.equal((await api.listPositions()).find(position => position.position_id === drum.position_id).name, 'Drum')
 })
 
-test('MH wajib role utama Volunteer; perubahan role menutup akses walaupun grant masih aktif', async () => {
+test('grant MH hanya untuk Volunteer; perubahan role menutup grant walaupun masih aktif', async () => {
   const { api, month } = await fixture()
   assert.equal((await api.listMinistries()).find(ministry => ministry.ministry_id === 'DEMO-M1').head.role, 'Volunteer')
   assert.equal((await api.listMinistries()).find(ministry => ministry.ministry_id === 'DEMO-M1').head.role_secondary, null)
-  await assert.rejects(api.setMinistryHead('DEMO-M1', demoProfiles.admin.user_id), /role utama Volunteer/)
+  await assert.rejects(api.setMinistryHead('DEMO-M1', demoProfiles.admin.user_id), /anggota aktif di Ministry ini/)
   await assert.rejects(api.grantManager({ ministryId: 'DEMO-M1', userId: demoProfiles.admin.user_id, managerRole: 'Ministry Head' }), error => error.code === '42501')
   for (const role of ['Jemaat', 'PKS']) {
     const formerHead = { ...demoProfiles.mh, role }
@@ -224,6 +224,29 @@ test('MH wajib role utama Volunteer; perubahan role menutup akses walaupun grant
   api.setProfile(demoProfiles.admin)
   assert.equal((await api.listManagers('DEMO-M1'))[0].is_active, true)
   assert.equal((await api.listManagedMinistries(demoProfiles.mh))[0].manager_role, 'Ministry Head')
+})
+
+test('Admin anggota Ministry dapat menjadi MH organisasi tanpa grant atau perubahan hak jadwal', async () => {
+  const { api, month } = await fixture()
+  await api.setUserMinistries(demoProfiles.admin.user_id, ['DEMO-M1'])
+  await api.setMinistryHead('DEMO-M1', demoProfiles.admin.user_id)
+
+  const ministry = (await api.listMinistries()).find(item => item.ministry_id === 'DEMO-M1')
+  assert.equal(ministry.head_user_id, demoProfiles.admin.user_id)
+  assert.equal(ministry.head.role, 'Admin')
+  assert.equal(ministry.head.role_secondary, 'Volunteer')
+  assert.deepEqual(await api.listManagers('DEMO-M1'), [])
+  await assert.rejects(api.grantManager({ ministryId: 'DEMO-M1', userId: demoProfiles.admin.user_id, managerRole: 'Ministry Head' }), error => error.code === '42501')
+  await assert.rejects(api.grantManager({ ministryId: 'DEMO-M1', userId: demoProfiles.admin.user_id, managerRole: 'Wakil' }), error => error.code === '42501')
+
+  const adminAccess = await api.listManagedMinistries(demoProfiles.admin)
+  assert.equal(adminAccess.length, 5)
+  assert.equal(adminAccess.every(item => item.manager_role === 'Admin'), true)
+  assert.equal((await api.getMonth(month.month_id)).rosters.length, 56)
+
+  await api.setUserMinistries(demoProfiles.admin.user_id, [])
+  assert.equal((await api.listMinistries()).find(item => item.ministry_id === 'DEMO-M1').head_user_id, null)
+  assert.equal((await api.listManagedMinistries(demoProfiles.admin)).length, 5)
 })
 
 test('MH hanya dapat ditetapkan dari anggota Ministry; keanggotaan yang dilepas menutup jabatan dan akses', async () => {

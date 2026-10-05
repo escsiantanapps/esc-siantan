@@ -1,7 +1,7 @@
 # PRD Jadwal Pelayanan Bulanan
 
-Status: rancangan disetujui; implementasi dan pengujian lokal selesai.
-Tanggal: 3 Oktober 2026.
+Status: rancangan bulanan diterapkan; aturan Admin sebagai MH terverifikasi di production, UI lokal menunggu rilis.
+Tanggal: 3 Oktober 2026. Pembaruan keputusan: 4 Oktober 2026.
 Referensi: gambar jadwal bulanan yang dikirim pengguna, bukan instruksi sistem.
 
 ## 1. Tujuan Dan Batas Dokumen
@@ -10,9 +10,12 @@ Mengganti pengalaman roster terpisah menjadi satu lembar jadwal bulanan bersama.
 Tanggal menjadi kolom; ibadah atau sesi kelas, bagian, dan posisi menjadi baris.
 Pengelola berakses mengisi bagian miliknya, anggota membaca tugas pribadinya.
 Dokumen membedakan keputusan produk, kode implementasi, dan hasil pengujian lokal.
-Kode aplikasi serta Migrasi v98-v100 disiapkan secara lokal. Operator melaporkan
-v98 dan v99 sudah dijalankan; v100 masih memerlukan penerapan manual. Tes lokal
-tidak menjalankan SQL production atau membuktikan pengiriman notifikasi nyata.
+Kode aplikasi serta Migrasi v98-v101 disiapkan secara lokal. Operator melaporkan
+v98, v99, dan v100 sudah dijalankan di production. Audit baca-saja 4 Oktober
+menunjukkan fungsi dan batas akses yang diperlukan v101 sudah aktif di production;
+riwayat penerapannya tidak dapat disimpulkan dari audit tersebut. Tidak perlu
+menjalankan ulang v101 untuk uji fitur ini.
+Tes lokal tidak menjalankan SQL production atau membuktikan pengiriman notifikasi nyata.
 
 ## 2. Kebutuhan Yang Sudah Dikonfirmasi
 
@@ -27,11 +30,17 @@ tidak menjalankan SQL production atau membuktikan pengiriman notifikasi nyata.
   bukan penerbitan terpisah oleh MH atau Wakil.
 - KEPUTUSAN OPERATOR: penugasan dengan jam bertumpuk wajib ditolak, tanpa override.
   Rangkap beberapa posisi dalam ibadah/kelas yang sama juga ditolak dahulu.
-- Admin menyetujui akses MH atau Wakil; akses tersebut tidak menaikkan role ke Admin.
+- Admin menyetujui grant MH untuk Volunteer atau grant Wakil yang memenuhi syarat;
+  grant itu tidak menaikkan role akun menjadi Admin.
 - KEPUTUSAN OPERATOR: MH khusus tiap Ministry berasal dari akun terdaftar dengan
-  role utama Volunteer, status Aktif, dan keanggotaan pada Ministry yang sama.
-  Jabatan ini diatur di menu Ministry,
-  terpisah dari Kepala Departemen dan persetujuan akses jadwal.
+  role utama Volunteer atau Admin, status Aktif, dan keanggotaan pada Ministry yang
+  sama. Jabatan ini diatur di menu Ministry, terpisah dari Kepala Departemen dan
+  persetujuan akses jadwal.
+- KEPUTUSAN OPERATOR: jika pemegang jabatan MH adalah Admin, jabatan tersebut
+  tidak menambah hak Admin dan tidak membuat grant MH. Akses jadwal Admin tetap
+  mengikuti Hak Akses Admin untuk halaman Jadwal Pelayanan. Kasus yang dilaporkan
+  memiliki role utama Admin dan role tambahan Volunteer; role tambahan itu tidak
+  mengubah jalur izin Admin menjadi grant MH.
 - KEPUTUSAN OPERATOR: data Ministry dan MH hanya dapat dibaca pengguna login,
   termasuk melalui API langsung.
 - Mengelola jadwal dipisahkan dari melihat jadwal, bukan dibedakan berdasarkan lebar layar.
@@ -115,7 +124,11 @@ Mengganti atau mengosongkan MH menonaktifkan grant MH lama tanpa membuat grant
 baru atau mengubah grant Wakil. V99 tidak menebak kepala dari grant lama: sumber
 awal NULL. Grant MH lama baru efektif ketika sumber ditetapkan ke orang yang sama
 dan grant itu masih aktif. Mengubah role/status akun dievaluasi ulang saat akses
-digunakan. Menetapkan MH tidak mengubah role akun menjadi Admin.
+digunakan. Menetapkan MH tidak mengubah role akun. Akun ber-role utama Admin boleh
+menjadi sumber MH jika ia anggota aktif Ministry, tetapi tidak boleh menerima grant
+MH/Wakil. Hak mengelola jadwalnya tetap berasal dari
+`auth_admin_can('/admin/jadwal-pelayanan')`, bukan dari jabatan MH. Mengganti atau
+melepas jabatan MH tidak mengubah Hak Akses Admin.
 
 Audit production menemukan policy `ministries_read_all` mengizinkan baca anonim.
 V99 membatasi policy baca yang sudah diverifikasi itu ke pengguna login.
@@ -126,11 +139,12 @@ Policy tulis Ministry dan approval jadwal tetap terpisah.
 | Super Admin | Mengelola sesuai kewenangan penuh yang sudah ada. |
 | Admin berhak Jadwal Pelayanan | Mengatur template, kegiatan, jam, penugasan, dan publikasi seluruh bulan. |
 | Admin tanpa hak halaman | Tidak memperoleh kemampuan tulis dari template baru. |
-| MH/Wakil dengan persetujuan Admin | Mengisi penugasan, tim, materi, dan catatan hanya pada bagian ministry yang diizinkan; tidak mengubah struktur/jam atau menerbitkan. |
-| MH/Wakil tanpa persetujuan | Tidak dapat mengelola melalui menu maupun akses API langsung. |
+| Admin yang menjabat MH | Jabatan organisasi tercatat di Ministry; hak jadwal tetap mengikuti Hak Akses Admin, tanpa grant MH. |
+| MH Volunteer atau Wakil non-Admin dengan persetujuan Admin | Mengisi penugasan, tim, materi, dan catatan hanya pada bagian ministry yang diizinkan; tidak mengubah struktur/jam atau menerbitkan. |
+| MH Volunteer atau Wakil non-Admin tanpa persetujuan | Tidak dapat mengelola melalui menu maupun akses API langsung. |
 | Volunteer | Membaca tugas yang diterbitkan; tidak mendaftar atau mengisi penugasan sendiri. |
 
-Hak akses tidak menyebar ke ministry lain, data jemaat pribadi, atau menu Admin lainnya.
+Grant MH/Wakil tidak menyebar ke ministry lain, data jemaat pribadi, atau menu Admin.
 Template dan posisi diatur Admin; MH/Wakil tidak menambah struktur atau posisi.
 Pada Draft, data bagian lain tidak diberikan kepada MH/Wakil, termasuk nama pelayan
 dan identitas roster bagian tersebut; kerangka kegiatan tetap tampil sebagai sel terkunci.
@@ -268,13 +282,16 @@ pengujian halaman Volunteer production dengan login nyata. Hasil ini juga bukan
 bukti RLS production, migrasi production sudah dijalankan, push berhasil diterima,
 cron H-1 bekerja, atau integrasi absensi selesai.
 
-Preview memori tidak memerlukan migrasi database. Operator melaporkan v98 dan
-v99 sudah diterapkan. Sebelum menguji penetapan MH pada aplikasi nyata, audit
-keanggotaan production lalu jalankan Migrasi v100 di Supabase SQL Editor.
+Preview memori tidak memerlukan migrasi database. Operator melaporkan v98-v100
+sudah diterapkan. Audit keanggotaan production menunjukkan PostgreSQL 17 tanpa MH
+yang kehilangan keanggotaan. Audit Admin-MH menunjukkan fungsi sumber MH sudah
+menerima Admin, trigger keanggotaan dan pemisahan grant aktif, serta EXECUTE
+fungsi trigger tidak tersedia untuk anon/authenticated. Deploy kode tidak
+menjalankan SQL. Pengujian dengan akun nyata tetap diperlukan.
 
-### Verifikasi Akhir 3 Oktober 2026
+### Verifikasi Akhir 4 Oktober 2026
 
-- `npm run check` lulus: lint, 145 tes, dan build production.
+- `npm run check` lulus: lint, 200 tes, dan build production.
 - Tautan pengelola dengan roster bulanan membuka matriks bulan asal; roster lama
   tetap membuka editor individual. Parameter URL lain dipertahankan.
 - PDF empat/lima tanggal diperiksa pada hasil render dua halaman A3 landscape.
@@ -283,7 +300,9 @@ keanggotaan production lalu jalankan Migrasi v100 di Supabase SQL Editor.
   menambah Serverless Function. Batas kuota tetap berlaku, dengan jeda retry terbatas.
   Admin dapat mengirim pengingat seluruh bulan yang sudah Terbit.
 - Hasil audit fungsi v98 dan sumber v99 pernah diterima; audit keanggotaan MH
-  production masih diperlukan sebelum menjalankan v100. Tes lokal tidak
-  membuktikan keadaan database production.
+  production diterima pada 3 Oktober 2026 (PostgreSQL 17, tanpa MH yang kehilangan
+  keanggotaan). Operator menyatakan v100 sudah diterapkan. Audit Admin-MH pada
+  4 Oktober menunjukkan aturan efektif v101 sudah aktif, tanpa membuktikan kapan
+  perubahan itu diterapkan. Tes lokal tidak membuktikan alur login production.
 - Login production, penerimaan push perangkat nyata, durasi invokasi server,
   join PostgREST nyata, dan race multi-session belum dibuktikan oleh tes lokal.

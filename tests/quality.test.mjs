@@ -92,7 +92,7 @@ test('Ministry baru disimpan sebelum MH dapat dipilih dari anggotanya', async ()
     await f.page.getByRole('button', { name: 'Tambah Ministry', exact: true }).click()
     const head = f.page.getByLabel('Ministry Head (MH)', { exact: true })
     assert.equal(await head.isDisabled(), true)
-    await f.page.getByText('Simpan Ministry, tambahkan anggota, lalu pilih MH dari Volunteer aktif di Ministry ini.', { exact: true }).waitFor()
+    await f.page.getByText('Simpan Ministry, tambahkan anggota, lalu pilih MH dari Volunteer atau Admin aktif di Ministry ini.', { exact: true }).waitFor()
     await f.page.getByLabel('Nama Ministry').fill('Ministry QA Baru')
     const saving = f.page.waitForResponse(response => response.url().includes('/rest/v1/ministries') && response.request().method() === 'POST')
     await f.page.getByRole('button', { name: 'Tambah', exact: true }).click()
@@ -117,7 +117,7 @@ test('Volunteer yang baru ditambahkan ke Ministry dapat ditetapkan sebagai MH', 
   }, async f => {
     await f.goto('/admin/ministry')
     await f.page.getByRole('button', { name: 'Edit ministry Ministry QA', exact: true }).click()
-    await f.page.getByText('Tambahkan anggota Volunteer aktif sebelum menetapkan MH.', { exact: true }).waitFor()
+    await f.page.getByText('Tambahkan anggota Volunteer atau Admin aktif sebelum menetapkan MH.', { exact: true }).waitFor()
     await f.page.getByRole('button', { name: 'Batal', exact: true }).last().click()
     await f.page.getByRole('button', { name: 'Lihat anggota ministry Ministry QA', exact: true }).click()
     await f.page.getByRole('button', { name: 'Tambah anggota', exact: true }).click()
@@ -139,6 +139,43 @@ test('Volunteer yang baru ditambahkan ke Ministry dapat ditetapkan sebagai MH', 
   })
 })
 
+test('Admin aktif yang melayani di Ministry dapat menjadi MH tanpa menerima akses baru', async () => {
+  const previous = { user_id: 'QA-OLD-HEAD', name: 'MH Volunteer Lama', role: 'Volunteer', status: 'Aktif' }
+  const admin = { user_id: 'QA-ADMIN-HEAD', name: 'Admin Pelayan', role: 'Admin', role_secondary: 'Volunteer', status: 'Aktif' }
+  await scenario({
+    ministries: [{ ministry_id: 'QA-MIN', name: 'Ministry QA', description: '', department_id: null, organization_order: 1, head_user_id: previous.user_id, head: previous }],
+    members: [previous, admin,
+      { user_id: 'QA-OUTSIDE-ADMIN', name: 'Admin Ministry Lain', role: 'Admin', status: 'Aktif' },
+      { user_id: 'QA-INACTIVE-ADMIN', name: 'Admin Nonaktif', role: 'Admin', status: 'Nonaktif' },
+      { user_id: 'QA-SUPER-ADMIN', name: 'Super Admin Anggota', role: 'Super Admin', status: 'Aktif' }],
+    ministryMembers: [
+      { ministry_id: 'QA-MIN', user_id: previous.user_id },
+      { ministry_id: 'QA-MIN', user_id: admin.user_id },
+      { ministry_id: 'QA-MIN', user_id: 'QA-INACTIVE-ADMIN' },
+      { ministry_id: 'QA-MIN', user_id: 'QA-SUPER-ADMIN' },
+    ],
+  }, async f => {
+    await f.goto('/admin/ministry')
+    await f.page.getByRole('button', { name: 'Edit ministry Ministry QA', exact: true }).click()
+    const select = f.page.getByLabel('Ministry Head (MH)', { exact: true })
+    await select.locator('option[value="QA-ADMIN-HEAD"]').waitFor({ state: 'attached' })
+    assert.equal(await select.locator('option[value="QA-ADMIN-HEAD"]').textContent(), 'Admin Pelayan (Admin)')
+    assert.equal(await select.locator('option[value="QA-OUTSIDE-ADMIN"],option[value="QA-INACTIVE-ADMIN"],option[value="QA-SUPER-ADMIN"]').count(), 0)
+    await select.selectOption(admin.user_id)
+    await f.page.getByText('Jabatan MH tidak menambah hak akses. Akses jadwal akun ini mengikuti Hak Akses Admin.', { exact: true }).waitFor()
+    await f.page.getByRole('button', { name: 'Simpan', exact: true }).click()
+    await f.page.getByText('Jabatan MH MH Volunteer Lama akan diganti. Persetujuan akses jadwal MH lama dinonaktifkan bila ada; Hak Akses Admin tidak berubah.', { exact: true }).waitFor()
+    const saved = f.page.waitForResponse(response => response.url().includes('/rest/v1/ministries') && response.request().method() === 'PATCH')
+    await f.page.getByRole('button', { name: 'Ganti MH', exact: true }).click()
+    await saved
+    assert.equal(f.requests.find(request => request.path.endsWith('/ministries') && request.method === 'PATCH').body.head_user_id, admin.user_id)
+    assert.equal(f.requests.filter(request => request.path.endsWith('/ministry_schedule_managers') && request.method !== 'GET').length, 0)
+    assert.equal(f.requests.filter(request => request.path.endsWith('/admin_user_permissions') && request.method !== 'GET').length, 0)
+    assert.equal(f.requests.filter(request => request.path.endsWith('/users') && ['POST', 'PATCH'].includes(request.method)
+      && (request.body?.role !== undefined || request.body?.role_secondary !== undefined)).length, 0)
+  })
+})
+
 test('Ministry: mengganti atau mengosongkan MH meminta konfirmasi tanpa otomatis memberi akses jadwal', async () => {
   const head = { user_id: 'QA-HEAD-A', name: 'MH Sebelumnya', role: 'Volunteer', status: 'Aktif', photo_url: null }
   const replacement = { user_id: 'QA-HEAD-B', name: 'MH Pengganti', role: 'Volunteer', status: 'Aktif', photo_url: null }
@@ -149,20 +186,21 @@ test('Ministry: mengganti atau mengosongkan MH meminta konfirmasi tanpa otomatis
     members: [head, replacement, outsider,
       { user_id: 'QA-JEMAAT', name: 'Jemaat Anggota', role: 'Jemaat', status: 'Aktif' },
       { user_id: 'QA-INACTIVE', name: 'Volunteer Nonaktif', role: 'Volunteer', status: 'Nonaktif' },
+      { user_id: 'QA-SUPER', name: 'Super Admin Anggota', role: 'Super Admin', status: 'Aktif' },
       { user_id: 'QA-ADMIN-SECONDARY', name: 'Volunteer Admin Sekunder', role: 'Volunteer', role_secondary: 'Admin', status: 'Aktif' }],
     ministryMembers: [member(head), member(replacement), member({ user_id: 'QA-JEMAAT' }),
-      member({ user_id: 'QA-INACTIVE' }), member({ user_id: 'QA-ADMIN-SECONDARY' })],
+      member({ user_id: 'QA-INACTIVE' }), member({ user_id: 'QA-SUPER' }), member({ user_id: 'QA-ADMIN-SECONDARY' })],
   }, async f => {
     await f.goto('/admin/ministry')
     await f.page.getByText('Ministry Head (MH): MH Sebelumnya', { exact: true }).waitFor()
     await f.page.getByRole('button', { name: 'Edit ministry Ministry QA', exact: true }).click()
     const headSelect = f.page.getByLabel('Ministry Head (MH)', { exact: true })
     await headSelect.locator('option[value="QA-HEAD-B"]').waitFor({ state: 'attached' })
-    assert.equal(await headSelect.locator('option[value="QA-OUTSIDE"],option[value="QA-JEMAAT"],option[value="QA-INACTIVE"],option[value="QA-ADMIN-SECONDARY"]').count(), 0)
+    assert.equal(await headSelect.locator('option[value="QA-OUTSIDE"],option[value="QA-JEMAAT"],option[value="QA-INACTIVE"],option[value="QA-SUPER"],option[value="QA-ADMIN-SECONDARY"]').count(), 0)
     const links = f.requests.find(request => request.path.endsWith('/user_ministries') && request.method === 'GET')
     assert.equal(new URLSearchParams(links.search).get('ministry_id'), 'eq.QA-MIN')
-    const candidates = f.requests.find(request => request.path.endsWith('/users') && new URLSearchParams(request.search).get('role') === 'eq.Volunteer')
-    assert.ok(candidates, 'Calon MH harus difilter menjadi Volunteer aktif dalam daftar anggota Ministry')
+    const candidates = f.requests.find(request => request.path.endsWith('/users') && new URLSearchParams(request.search).get('role') === 'in.(Volunteer,Admin)')
+    assert.ok(candidates, 'Calon MH harus difilter menjadi Volunteer atau Admin aktif dalam daftar anggota Ministry')
     assert.equal(new URLSearchParams(candidates.search).get('status'), 'eq.Aktif')
     assert.ok(new URLSearchParams(candidates.search).get('user_id')?.startsWith('in.('))
     await headSelect.selectOption('QA-HEAD-B')
@@ -517,6 +555,29 @@ test('Admin terbatas: panel jadwal terbuka hanya bila halaman itu diizinkan', as
     assert.equal(await f.page.getByRole('link', { name: 'Jadwal Pelayanan', exact: true }).count(), 1)
     await f.goto('/admin/jemaat')
     await f.page.waitForURL(url => url.pathname === '/admin/jadwal-pelayanan')
+  })
+})
+
+test('MH berakun Admin ditampilkan tanpa opsi persetujuan MH di panel jadwal', async () => {
+  const monthly = monthlyManagementFixture()
+  monthly.ministries[0] = {
+    ...monthly.ministries[0],
+    head_user_id: 'QA-ADMIN-HEAD',
+    head: { user_id: 'QA-ADMIN-HEAD', name: 'Admin Pelayan', role: 'Admin', status: 'Aktif' },
+  }
+  await scenario({
+    role: 'Admin',
+    allowedPages: ['/admin/jadwal-pelayanan'],
+    ...monthly,
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    await f.page.getByRole('button', { name: 'Akses & Posisi', exact: true }).click()
+    await f.page.getByText('Admin Pelayan', { exact: true }).waitFor()
+    await f.page.getByText('Hak Akses Admin', { exact: true }).waitFor()
+    await f.page.getByText('Jabatan MH tidak menambah akses jadwal. Akun ini memakai izin halaman Jadwal Pelayanan pada Hak Akses Admin.', { exact: true }).waitFor()
+    assert.equal(await f.page.getByRole('button', { name: 'Setujui akses', exact: true }).count(), 0)
+    assert.equal(f.requests.filter(request => request.path.endsWith('/ministry_schedule_managers') && request.method !== 'GET').length, 0)
   })
 })
 

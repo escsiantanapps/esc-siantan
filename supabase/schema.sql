@@ -7515,3 +7515,71 @@ END $v100_member_guard$;
 REVOKE EXECUTE ON FUNCTION guard_ministry_head_source(),
   guard_ministry_head_membership(), guard_ministry_head_member_removal()
   FROM PUBLIC, anon, authenticated;
+
+-- ── Migrasi v101: Admin anggota Ministry boleh menjadi MH organisasi ───
+-- TEMUAN (2026-10-04): sumber MH v100 hanya menerima role utama Volunteer.
+-- MH yang sudah menjadi Admin demi menu administrasi tidak dapat ditunjuk,
+-- walaupun ia Aktif dan terdaftar melayani di Ministry yang bersangkutan.
+-- KEPUTUSAN OPERATOR: jabatan MH organisasi boleh dipegang Admin ber-role
+-- utama Admin. Penunjukan ini tidak memberi grant pengelola MH atau hak jadwal;
+-- akun Admin tetap melewati auth_admin_can('/admin/jadwal-pelayanan').
+-- Syarat Volunteer lama, guard grant, dan validasi keanggotaan v100 tetap.
+DO $v101_requires_v100$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+      WHERE conname = 'ministries_head_membership_fkey'
+        AND conrelid = 'public.ministries'::regclass
+        AND confrelid = 'public.user_ministries'::regclass
+        AND contype = 'f')
+    OR NOT EXISTS (SELECT 1 FROM pg_trigger
+      WHERE tgname = 'trg_validate_ministry_head_membership'
+        AND tgrelid = 'public.ministries'::regclass AND tgenabled IN ('O', 'A'))
+    OR NOT EXISTS (SELECT 1 FROM pg_trigger
+      WHERE tgname = 'trg_validate_schedule_manager_head_membership'
+        AND tgrelid = 'public.ministry_schedule_managers'::regclass AND tgenabled IN ('O', 'A'))
+    OR NOT EXISTS (SELECT 1 FROM pg_trigger
+      WHERE tgname = 'trg_guard_ministry_head_member_removal'
+        AND tgrelid = 'public.user_ministries'::regclass AND tgenabled IN ('O', 'A')) THEN
+    RAISE EXCEPTION 'Jalankan Migrasi v100 sebelum Migrasi v101: penjaga keanggotaan MH belum lengkap.'
+      USING ERRCODE = '55000';
+  END IF;
+END $v101_requires_v100$;
+
+CREATE OR REPLACE FUNCTION guard_ministry_head_source()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE caller_role TEXT := auth_user_role();
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.head_user_id IS NOT DISTINCT FROM OLD.head_user_id THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' AND NEW.head_user_id IS NULL THEN RETURN NEW; END IF;
+
+  IF TG_OP = 'UPDATE' AND OLD.head_user_id IS NOT NULL AND NEW.head_user_id IS NULL
+     AND pg_trigger_depth() > 1
+     AND (to_jsonb(NEW) - 'head_user_id') = (to_jsonb(OLD) - 'head_user_id')
+     AND (
+       NOT EXISTS (SELECT 1 FROM users WHERE user_id = OLD.head_user_id)
+       OR NOT EXISTS (SELECT 1 FROM user_ministries
+         WHERE user_id = OLD.head_user_id AND ministry_id = OLD.ministry_id)
+     ) THEN
+    RETURN NEW;
+  END IF;
+  IF caller_role IS NOT NULL AND NOT (
+    auth_admin_can('/admin/ministry')
+    AND EXISTS (SELECT 1 FROM users WHERE user_id = auth_user_id() AND status = 'Aktif')
+  ) THEN
+    RAISE EXCEPTION 'Penetapan Ministry Head hanya melalui Admin berakses Ministry.' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.head_user_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM users WHERE user_id = NEW.head_user_id AND status = 'Aktif'
+      AND (
+        role = 'Admin'
+        OR (role = 'Volunteer' AND COALESCE(role_secondary, '') NOT IN ('Admin', 'Super Admin', 'Gembala'))
+      )
+  ) THEN
+    RAISE EXCEPTION 'Ministry Head harus pengguna Aktif ber-role Admin atau Volunteer yang memenuhi syarat.' USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION guard_ministry_head_source() FROM PUBLIC, anon, authenticated;

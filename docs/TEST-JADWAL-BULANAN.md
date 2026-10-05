@@ -1,6 +1,7 @@
 # Uji Jadwal Pelayanan Bulanan
 
-Tanggal verifikasi terakhir: 3 Oktober 2026. Status: pengujian lokal dan daftar uji production.
+Tanggal pembaruan: 4 Oktober 2026. Verifikasi penuh terakhir: 4 Oktober 2026.
+Status: pengujian lokal dan daftar uji production.
 
 ## 1. Lingkungan Lokal
 
@@ -48,10 +49,13 @@ Tema gelap/terang mengikuti provider aplikasi. Reset mengembalikan contoh Oktobe
 12. Tambah, edit, dan nonaktifkan posisi. Template menggunakan katalog posisi
     aktif, sedangkan bulan yang sudah dibuat tetap memiliki snapshot sebelumnya.
 
-Menu Ministry asli diuji dengan backend palsu: hanya Volunteer Aktif yang sudah
-menjadi anggota Ministry itu dapat dipilih sebagai MH. Ministry baru harus disimpan,
-anggotanya ditambahkan, lalu MH ditetapkan. Kosong dikirim sebagai NULL;
-membatalkan konfirmasi ganti MH tidak mengirim perubahan.
+Pada uji menu Ministry asli dengan backend palsu, kandidat MH harus ber-role utama
+Volunteer atau Admin, berstatus Aktif, dan sudah menjadi anggota Ministry itu.
+Ministry baru disimpan, anggotanya ditambahkan, lalu MH ditetapkan. Kosong dikirim
+sebagai NULL; membatalkan konfirmasi ganti MH tidak mengirim perubahan.
+Tes adapter memori menggunakan role utama Admin + role tambahan Volunteer dan
+memastikan akun anggota Ministry dapat menjadi MH organisasi, namun tidak menerima
+grant MH/Wakil; hak jadwalnya tetap mengikuti jalur Admin.
 
 ## 3. Tes Otomatis Lokal
 
@@ -62,8 +66,8 @@ $env:SCHEDULE_LOCAL_URL='http://127.0.0.1:5173'
 node scripts/test-monthly-schedule-local.mjs
 ```
 
-Gerbang `npm run check` lulus 3 Oktober 2026: lint tanpa warning, tes otomatis,
-dan build production. Tes PostgreSQL lokal memeriksa Migrasi v98-v100, batas role,
+Gerbang `npm run check` lulus 4 Oktober 2026: lint tanpa warning, 200 tes otomatis,
+dan build production. Tes PostgreSQL lokal memeriksa Migrasi v98-v101, batas role,
 keanggotaan MH, persetujuan terpisah, privasi baca anonim, dan cleanup FK.
 Tujuh belas alur browser localhost lulus, termasuk Akses & Posisi.
 Playwright menggunakan Microsoft Edge headless serta memblokir semua request ke
@@ -92,20 +96,31 @@ Tidak ada push, cron, pengujian perangkat nyata, atau absensi sungguhan pada tes
   tersedia di `docs/AUDIT-JADWAL-BULANAN.sql`; hasil fungsi diterima, sedangkan
   hasil policy/RLS dan trigger bulanan belum diterima. Cocokkan sebelum rilis.
 - Audit `docs/AUDIT-MINISTRY-HEAD.sql` diterima sebelum v99 diterapkan.
-  Operator menyatakan v99 sudah dijalankan; penetapan MH di menu Ministry
-  memerlukan akun Volunteer Aktif yang juga tercatat sebagai anggota Ministry itu.
-- Jalankan query baca-saja `docs/AUDIT-MH-KEANGGOTAAN.sql` terlebih dahulu.
-  Periksa `kepala_tanpa_keanggotaan` dan versi PostgreSQL; Migrasi v100 memakai
-  sintaks FK PostgreSQL 15 atau lebih baru. Jika ada MH lama tanpa keanggotaan,
-  tambahkan keanggotaan yang benar atau tetapkan ulang MH lewat Admin Ministry.
-- Jalankan **Migrasi v100** di Supabase SQL Editor sebelum menguji keamanan MH
-  melalui API nyata. Agen tidak menjalankan SQL production. Saat MH keluar
-  dari Ministry, sumber MH dan akses jadwal lama akan dicabut.
+  Operator menyatakan v99 sudah dijalankan. Keputusan baru memperbolehkan Admin
+  Aktif sebagai MH organisasi bila ia anggota Ministry; tidak ada grant MH untuk Admin.
+- Audit baca-saja `docs/AUDIT-MH-KEANGGOTAAN.sql` sudah diterima: PostgreSQL
+  17.0.6, `kepala_tanpa_keanggotaan` kosong, dan policy/trigger keanggotaan sesuai
+  dengan hasil yang dilaporkan. Audit itu bukan bukti penerapan v100; operator
+  mengonfirmasi penerapan v100 secara terpisah.
+- Audit baca-saja `docs/AUDIT-MH-ADMIN.sql` 4 Oktober menunjukkan fungsi sumber
+  MH sudah menerima Admin; tiga trigger keanggotaan dan tiga trigger pembatas
+  akses aktif; anon/authenticated tidak dapat mengeksekusi fungsi trigger
+  secara langsung. Karena aturan efektif v101 sudah ada, jangan menjalankan
+  ulang blok itu hanya untuk uji ini. Audit tidak membuktikan riwayat migrasi;
+  agen tidak menjalankan SQL production. Saat MH keluar dari Ministry, sumber MH
+  dicabut tanpa mengubah Hak Akses Admin.
 - Uji Admin berakses dan tanpa akses halaman, MH/Wakil berakses dan yang dicabut,
   serta Volunteer melalui login nyata. Uji penolakan RPC langsung, bukan UI saja.
 - Admin berakses Ministry saja boleh mengganti MH dan menonaktifkan grant lama,
   tetapi tidak menyetujui grant baru. Admin berakses Jadwal saja tidak dapat
-  menetapkan kepala Ministry. MH harus Volunteer Aktif, bukan Kepala Departemen.
+  menetapkan kepala Ministry. MH bukan Kepala Departemen.
+- Dengan akun ber-role utama Admin, role tambahan Volunteer, status Aktif, dan
+  tercatat pada `user_ministries` Ministry yang sama,
+  pilih ia sebagai MH dari menu Ministry. Pastikan akun Admin di luar Ministry dan
+  akun nonaktif tidak dapat dipilih. Tidak boleh terbentuk grant MH/Wakil untuk Admin.
+- Admin yang menjadi MH dan memiliki hak `/admin/jadwal-pelayanan` tetap mengelola
+  seluruh jadwal seperti Admin lain. Admin tanpa hak itu tetap ditolak walau menjadi
+  MH. Mengganti MH atau melepas keanggotaan mencabut jabatan, bukan Hak Akses Admin.
 - Anonim tidak mendapat baris Ministry, sedangkan pengguna login tetap dapat
   membaca datanya. Tidak ada NIK atau kontak pribadi pada panel sumber MH.
 - Uji dua pengelola menyimpan anggota yang sama bersamaan, pembacaan Draft lintas
@@ -119,8 +134,9 @@ Tidak ada push, cron, pengujian perangkat nyata, atau absensi sungguhan pada tes
 - Pastikan roster/absensi lama masih dapat dibaca dan riwayat tidak dihapus.
   Jadwal baru belum menjadi sumber absensi tanpa keputusan transisi tersendiri.
 
-Operator menyatakan v99 sudah diterapkan pada database; v100 masih perlu
-dijalankan manual. Deploy kode tidak otomatis menjalankan migrasi.
+Operator menyatakan v99 dan v100 sudah diterapkan pada database. Audit
+production menunjukkan aturan efektif v101 sudah aktif, meski riwayat
+penerapannya tidak diketahui. Deploy kode tidak otomatis menjalankan migrasi.
 
 ## 5. File Perubahan Fitur
 
@@ -133,9 +149,9 @@ dijalankan manual. Deploy kode tidak otomatis menjalankan migrasi.
 - Layanan: `src/services/monthlyScheduleService.js` dan `serviceRosterService.js`.
 - Helper: `src/lib/serviceScheduleMatrix.js`, `serviceScheduleNotifications.js`, dan kunci ID/EN di `src/lib/i18n.js`.
 - Notifikasi server: `api/_handlers/notify-service-roster.js`; tidak menambah endpoint top-level.
-- Database: blok v98-v100 pada `supabase/schema.sql` dan tiga audit baca-saja,
+- Database: blok v98-v101 pada `supabase/schema.sql` dan empat audit baca-saja,
   `docs/AUDIT-JADWAL-BULANAN.sql`, `docs/AUDIT-MINISTRY-HEAD.sql`,
-  serta `docs/AUDIT-MH-KEANGGOTAAN.sql`.
+  `docs/AUDIT-MH-KEANGGOTAAN.sql`, serta `docs/AUDIT-MH-ADMIN.sql`.
 - Preview terisolasi: `schedule-preview.html`, `src/dev/MonthlySchedulePreview.jsx`, `serviceScheduleDemo.js`.
 - Tes: `tests/monthly-roster-db.test.mjs`, `ministry-head-db.test.mjs`,
   `monthly-notifications.test.mjs`, `service-schedule-matrix.test.mjs`,

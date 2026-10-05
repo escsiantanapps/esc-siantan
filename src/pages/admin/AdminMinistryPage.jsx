@@ -46,6 +46,8 @@ export default function AdminMinistryPage() {
   const [headSourceAvailable, setHeadSourceAvailable] = useState(true)
   const [headChangePending, setHeadChangePending] = useState(false)
   const [organizationSaving, setOrganizationSaving] = useState(false)
+  const selectedMinistryHead = ministryHeadCandidates.find(person => person.user_id === form.head_user_id)
+  const adminHeadInChange = editing?.head?.role === 'Admin' || selectedMinistryHead?.role === 'Admin'
 
   function closeMembers() {
     setMembersView(null)
@@ -569,7 +571,7 @@ export default function AdminMinistryPage() {
 
             {headChangePending ? <div role="alertdialog" aria-labelledby="ministry-head-change-title" className="space-y-4">
               <h3 id="ministry-head-change-title" className="text-sm font-semibold text-gray-900">{t('amin.changeMinistryHeadTitle')}</h3>
-              <p className="text-sm text-gray-600">{t('amin.changeMinistryHeadMsg', { name: editing.head?.name || editing.head_user_id })}</p>
+              <p className="text-sm text-gray-600">{t(adminHeadInChange ? 'amin.changeMinistryHeadAdminMsg' : 'amin.changeMinistryHeadMsg', { name: editing.head?.name || editing.head_user_id })}</p>
               <div className="flex gap-2"><Button variant="ghost" className="flex-1" disabled={saving} onClick={() => setHeadChangePending(false)}>{t('a.cancel')}</Button><Button variant="danger" className="flex-1" loading={saving} onClick={() => handleSubmit(true)}>{t('amin.changeMinistryHead')}</Button></div>
             </div> : <>
             <Input label={t('amin.nameLabel')} required value={form.name} onChange={event => set('name', event.target.value)} />
@@ -583,11 +585,12 @@ export default function AdminMinistryPage() {
               {editing?.head_user_id && !ministryHeadCandidates.some(person => person.user_id === editing.head_user_id) && (
                 <option value={editing.head_user_id}>{ministryHeadsLoading || ministryHeadsError ? editing.head?.name || editing.head_user_id : t('amin.ministryHeadUnavailable', { name: editing.head?.name || editing.head_user_id })}</option>
               )}
-              {ministryHeadCandidates.map(person => <option key={person.user_id} value={person.user_id}>{person.name}</option>)}
+              {ministryHeadCandidates.map(person => <option key={person.user_id} value={person.user_id}>{person.role === 'Admin' ? t('amin.ministryHeadAdminOption', { name: person.name }) : person.name}</option>)}
             </Select>
             {!headSourceAvailable && <p className="text-xs text-gray-600">{t('amin.ministryHeadMigrationRequired')}</p>}
             {headSourceAvailable && !editing && <p className="text-xs text-gray-600">{t('amin.ministryHeadCreateHint')}</p>}
             {headSourceAvailable && editing && !ministryHeadsLoading && !ministryHeadsError && ministryHeadCandidates.length === 0 && <p className="text-xs text-gray-600">{t('amin.ministryHeadNoMembersHint')}</p>}
+            {selectedMinistryHead?.role === 'Admin' && <p className="text-xs text-gray-600">{t('amin.ministryHeadAdminHint')}</p>}
 
             <div className="flex gap-2 pt-1">
               <Button variant="ghost" className="flex-1" onClick={() => setShowModal(false)}>{t('a.cancel')}</Button>

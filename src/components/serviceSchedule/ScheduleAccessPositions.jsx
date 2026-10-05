@@ -25,6 +25,7 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
   const ministry = ministries.find(item => item.ministry_id === ministryId)
   const head = ministry?.head
   const sourceHeadId = ministry?.head_user_id || ''
+  const adminHead = head?.status === 'Aktif' && head.role === 'Admin'
   const headApproved = eligibleHead(head) && managers.some(item => item.user_id === head?.user_id && item.manager_role === 'Ministry Head')
   const ministryPositions = positions.filter(item => item.ministry_id === ministryId)
   const load = useCallback(async () => {
@@ -95,8 +96,9 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
           <div><span className="monthly-muted">{t('schedAccess.headSource')}</span><strong>{head?.name || t('amin.noMinistryHead')}</strong></div>
           {ministryHref && <Link to={ministryHref} className="text-sm text-brand-600 underline">{t('admin.nav.ministry')}</Link>}
         </div>
-        {head && <div className="schedule-access-row"><span>{t('sched.role.Ministry Head')}</span>{headApproved ? <Badge color="green">{t('schedAccess.approved')}</Badge> : <Button variant="outline" disabled={busy || loading || !eligibleHead(head)} onClick={() => grant(head, 'Ministry Head')}><Check size={16} />{t('schedAccess.approve')}</Button>}</div>}
-        {head && !eligibleHead(head) && <p className="monthly-muted">{t('schedAccess.ineligibleHead')}</p>}
+        {head && <div className="schedule-access-row"><span>{t('sched.role.Ministry Head')}</span>{adminHead ? <Badge color="gray">{t('schedAccess.adminPermissions')}</Badge> : headApproved ? <Badge color="green">{t('schedAccess.approved')}</Badge> : <Button variant="outline" disabled={busy || loading || !eligibleHead(head)} onClick={() => grant(head, 'Ministry Head')}><Check size={16} />{t('schedAccess.approve')}</Button>}</div>}
+        {head && adminHead && <p className="monthly-muted">{t('schedAccess.adminHeadInfo')}</p>}
+        {head && !eligibleHead(head) && !adminHead && <p className="monthly-muted">{t('schedAccess.ineligibleHead')}</p>}
         {loading ? <Spinner /> : <div className="schedule-access-list">{managers.map(manager => <div className="schedule-access-row" key={manager.user_id}><div><strong>{manager.users?.name || manager.user_id}</strong><span className="monthly-muted">{t(`sched.role.${manager.manager_role}`)}</span></div><Button variant="ghost" disabled={busy} title={t('sched.revoke')} aria-label={t('sched.revoke')} onClick={() => revoke(manager)}><Trash2 size={17} /></Button></div>)}</div>}
         <h3 className="monthly-subheading">{t('sched.deputy')}</h3>
         <Input aria-label={t('sched.searchManager')} placeholder={t('sched.searchManager')} value={query} disabled={busy || loading} onChange={event => setQuery(event.target.value)} />

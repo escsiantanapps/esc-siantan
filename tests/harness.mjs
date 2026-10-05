@@ -126,6 +126,10 @@ export async function fixture(harness, options = {}) {
           if (status?.startsWith('eq.')) data = data.filter(member => member.status === status.slice(3))
           const role = url.searchParams.get('role')
           if (role?.startsWith('eq.')) data = data.filter(member => member.role === role.slice(3))
+          if (role?.startsWith('in.(') && role.endsWith(')')) {
+            const allowed = new Set(role.slice(4, -1).split(',').map(value => value.replace(/^"|"$/g, '')))
+            data = data.filter(member => allowed.has(member.role))
+          }
           return rows(data)
         }
         return rows([])
