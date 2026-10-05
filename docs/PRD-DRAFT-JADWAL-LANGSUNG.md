@@ -60,6 +60,9 @@ menampilkan slot kosong palsu.
   sudah ada.
 - Kolom Tim dan Materi serta editor bagian Ministry tidak tampil pada alur
   baru. Data lama tidak dihapus dan jadwal Terbit lama tetap dapat dibaca.
+- Tab Roster Sebelumnya dihapus dari panel pengelola. Tautan langsung ke
+  roster lama tetap membuka detail baca-saja, lalu kembali ke lembar bulanan.
+  Aplikasi tidak lagi menawarkan pembuatan roster satuan dari panel ini.
 - Ekspor PDF, pengingat, tampilan Volunteer, serta tautan tugas tetap memakai
   roster/slot yang sama, bukan sumber penugasan kedua.
 - KEPUTUSAN OPERATOR: Admin berakses Jadwal boleh menghapus seluruh bulan

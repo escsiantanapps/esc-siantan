@@ -679,7 +679,7 @@ test('Tautan pengelola roster bulanan membuka matriks bulan asal tanpa editor in
   })
 })
 
-test('Tautan pengelola roster lama tetap membuka detail dan aksi individual ketika tidak terhubung ke bulan', async () => {
+test('Tautan roster lama tetap membuka detail baca-saja tanpa tab atau editor individual', async () => {
   const roster = nextMonthRoster('Draft')
   await scenario({
     role: 'Volunteer', ...monthlyManagementFixture(true), rosters: [roster],
@@ -687,8 +687,10 @@ test('Tautan pengelola roster lama tetap membuka detail dan aksi individual keti
   }, async f => {
     await f.goto('/admin/jadwal-pelayanan?keep=test&rosterId=' + encodeURIComponent(roster.roster_id))
     await f.page.getByRole('heading', { name: roster.title, exact: true }).waitFor()
-    assert.equal(await f.page.getByRole('button', { name: 'Roster Sebelumnya', exact: true }).getAttribute('aria-pressed'), 'true')
-    assert.equal(await f.page.getByRole('button', { name: 'Tinjau & Terbitkan', exact: true }).isEnabled(), true)
+    assert.equal(await f.page.getByRole('button', { name: 'Roster Sebelumnya', exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'Tinjau & Terbitkan', exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'Jadwal Baru', exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'Pilih anggota', exact: true }).count(), 0)
     assert.equal(new URL(f.page.url()).searchParams.get('rosterId'), roster.roster_id)
     assert.equal(new URL(f.page.url()).searchParams.get('keep'), 'test')
     assert.equal(await f.page.getByRole('table', { name: /^Jadwal pelayanan / }).count(), 0)
@@ -697,7 +699,34 @@ test('Tautan pengelola roster lama tetap membuka detail dan aksi individual keti
     assert.ok(f.requests.some(row => row.path.endsWith('/service_rosters') && new URLSearchParams(row.search).get('roster_id') === `eq.${roster.roster_id}`))
     await f.page.getByRole('button', { name: 'Kembali', exact: true }).click()
     await f.page.waitForURL(url => !url.searchParams.has('rosterId') && url.searchParams.get('keep') === 'test')
-    assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 1)
+    await assertMonthlyManagementLoaded(f)
+    assert.equal(await f.page.getByRole('button', { name: 'Roster Sebelumnya', exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'Jadwal Baru', exact: true }).count(), 0)
+  })
+})
+
+test('Panel Admin hanya menawarkan alur jadwal bulanan', async () => {
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...monthlyManagementFixture() }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    assert.equal(await f.page.getByRole('button', { name: 'Roster Sebelumnya', exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'Jadwal Baru', exact: true }).count(), 0)
+  })
+})
+
+test('Tautan roster lama Terbit tidak membuka aksi tulis dan tab Bulanan membersihkan tautan', async () => {
+  const roster = nextMonthRoster('Terbit')
+  await scenario({
+    role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'],
+    ...monthlyManagementFixture(), rosters: [roster],
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan?keep=test&rosterId=' + encodeURIComponent(roster.roster_id))
+    await f.page.getByRole('heading', { name: roster.title, exact: true }).waitFor()
+    assert.equal(await f.page.getByRole('button', { name: 'Kirim Pengingat', exact: true }).count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: 'Batalkan Jadwal', exact: true }).count(), 0)
+    await f.page.getByRole('button', { name: 'Bulanan', exact: true }).click()
+    await f.page.waitForURL(url => !url.searchParams.has('rosterId') && url.searchParams.get('keep') === 'test')
+    await assertMonthlyManagementLoaded(f)
   })
 })
 

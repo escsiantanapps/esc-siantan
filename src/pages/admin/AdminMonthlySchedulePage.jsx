@@ -9,6 +9,6 @@ const ServiceSchedulesPage = lazy(() => import('@/pages/user/ServiceSchedulesPag
 export default function AdminMonthlySchedulePage() {
   const { profile } = useAuth()
   return <MonthlyScheduleWorkspace api={monthlyScheduleService} profile={profile} ministryHref="/admin/ministry" renderLegacy={() =>
-    <Suspense fallback={<Spinner />}><ServiceSchedulesPage adminMode legacyOnly /></Suspense>
+    <Suspense fallback={<Spinner />}><ServiceSchedulesPage adminMode legacyOnly archiveOnly /></Suspense>
   } />
 }

@@ -91,6 +91,9 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     }).catch(error => { if (active) setRosterLinkState({ rosterId, error: errorKey(error) }) })
     return () => { active = false }
   }, [api, rosterId, setParams, rosterLinkAttempt])
+  useEffect(() => {
+    if (!rosterId) setView(current => current === 'legacy' ? 'monthly' : current)
+  }, [rosterId])
 
   const loadCatalog = useCallback(async () => {
     const request = ++catalogRequest.current
@@ -244,10 +247,13 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   return <div className="monthly-workspace">
     <header className="monthly-heading"><h1>{t('schedMonth.title')}</h1><Button variant="ghost" aria-label={t('schedMonth.refresh')} title={t('schedMonth.refresh')} onClick={reload} disabled={busy}><RefreshCw size={18} /></Button></header>
     <nav className="monthly-tabs" aria-label={t('schedMonth.views')}>
-      {[['monthly', 'schedMonth.monthly'], ...(canManageAll ? [['settings', 'sched.accessPositions']] : []), ...(renderLegacy ? [['legacy', 'schedMonth.legacy']] : [])].map(([id, label]) => <button type="button" key={id} disabled={busy} aria-pressed={view === id} onClick={() => setView(id)}>{t(label)}</button>)}
+      {[['monthly', 'schedMonth.monthly'], ...(canManageAll ? [['settings', 'sched.accessPositions']] : [])].map(([id, label]) => <button type="button" key={id} disabled={busy} aria-pressed={view === id} onClick={() => {
+        setView(id)
+        if (rosterId) setParams(current => { const next = new URLSearchParams(current); next.delete('rosterId'); return next }, { replace: true })
+      }}>{t(label)}</button>)}
     </nav>
     {loadError && <div className="monthly-error" role="alert">{t(loadError)}<Button variant="outline" onClick={reload}>{t('schedMonth.retry')}</Button></div>}
-    {view === 'settings' && canManageAll ? <ScheduleAccessPositions api={api} ministries={ministries} positions={positions} onChange={async () => { await loadCatalog(); await reloadSchedule() }} ministryHref={ministryHref} /> : view === 'legacy' ? renderLegacy?.(view) : <>
+    {view === 'settings' && canManageAll ? <ScheduleAccessPositions api={api} ministries={ministries} positions={positions} onChange={async () => { await loadCatalog(); await reloadSchedule() }} ministryHref={ministryHref} /> : view === 'legacy' && rosterId && renderLegacy ? renderLegacy(view) : <>
       <div className="monthly-toolbar">
         <div className="monthly-month"><Button variant="outline" disabled={busy} aria-label={t('schedMonth.previousMonth')} title={t('schedMonth.previousMonth')} onClick={() => setMonth(shiftScheduleMonth(month, -1).slice(0, 7))}><ChevronLeft size={18} /></Button><Input type="month" aria-label={t('sched.month')} value={month} disabled={busy} onChange={event => event.target.value && setMonth(event.target.value)} /><Button variant="outline" disabled={busy} aria-label={t('sched.nextMonth')} title={t('sched.nextMonth')} onClick={() => setMonth(shiftScheduleMonth(month, 1).slice(0, 7))}><ChevronRight size={18} /></Button></div>
         {months.length > 1 && <Select aria-label={t('schedMonth.monthVersion')} disabled={busy} value={monthId} onChange={event => setMonthId(event.target.value)}>{months.map(item => <option key={item.month_id} value={item.month_id}>{item.name} / {t(`sched.status.${item.status}`)}</option>)}</Select>}

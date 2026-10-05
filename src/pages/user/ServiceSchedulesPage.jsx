@@ -142,7 +142,7 @@ function Picker({ roster, slot, canPickAnyMember, onClose, onPick, t }) {
   )
 }
 
-export default function ServiceSchedulesPage({ adminMode = false, initialTab = 'manage', legacyOnly = false }) {
+export default function ServiceSchedulesPage({ adminMode = false, initialTab = 'manage', legacyOnly = false, archiveOnly = false }) {
   const { profile } = useAuth()
   const { t } = useLang()
   const { toast, confirm } = useToast()
@@ -224,7 +224,9 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
   useEffect(() => {
     if (!adminMode) return undefined
     let active = true
-    Promise.all([serviceRosterService.listManagedMinistries(profile), eventsService.getAll(), classesService.getAll()])
+    Promise.all([serviceRosterService.listManagedMinistries(profile),
+      archiveOnly ? Promise.resolve([]) : eventsService.getAll(),
+      archiveOnly ? Promise.resolve([]) : classesService.getAll()])
       .then(([grants, eventRows, classRows]) => {
         if (!active) return
         setManaged(grants)
@@ -237,10 +239,10 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
       .catch(() => { if (active) toast.error(t('sched.loadFailed')) })
       .finally(() => { if (active) setAccessLoading(false) })
     return () => { active = false }
-  }, [adminMode, profile, t, toast])
+  }, [adminMode, archiveOnly, profile, t, toast])
 
   const load = useCallback(async () => {
-    if (!profile?.user_id) return
+    if (!profile?.user_id || archiveOnly) return
     setLoading(true)
     try {
       let rows = []
@@ -252,7 +254,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
       setRosters([])
       toast.error(t('sched.loadFailed'))
     } finally { setLoading(false) }
-  }, [legacyOnly, ministryId, month, profile?.user_id, t, tab, toast])
+  }, [archiveOnly, legacyOnly, ministryId, month, profile?.user_id, t, tab, toast])
 
   useEffect(() => { load() }, [load])
 
@@ -447,13 +449,14 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
     return [...groups.values()]
   }, [selected])
 
+  if (archiveOnly && !requestedRosterId) return null
   if (adminMode && accessLoading) return <div className="py-20 text-center"><Spinner /></div>
   if (adminMode && managed.length === 0) return <EmptyState icon={CalendarClock} title={t('sched.noAccess')} description={t('sched.noAccessDesc')} />
   if (deepLinkLoading) return <div className="py-20 text-center"><Spinner /></div>
 
   if (selected) {
     const count = completion(selected)
-    const editable = tab === 'manage' && selected.status === 'Draft'
+    const editable = !archiveOnly && tab === 'manage' && selected.status === 'Draft'
     return (
       <div className={adminMode ? 'mx-auto max-w-5xl' : 'mx-auto max-w-3xl px-4 pt-4 pb-8'}>
         <button type="button" onClick={closeDetail} className="mb-3 flex min-h-11 items-center gap-2 text-sm font-medium text-gray-600"><ChevronLeft size={18} />{t('sched.back')}</button>
@@ -476,8 +479,8 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
           </Card>)}
         </div>
         {editable && <div className="sticky bottom-3 mt-5 flex gap-2 rounded-2xl border border-gray-200 bg-surface/95 p-3 backdrop-blur"><Button loading={busy} onClick={publish} className="min-h-11 flex-1">{t('sched.publish')}</Button><Button variant="danger" onClick={deleteDraft} className="min-h-11"><Trash2 size={16} />{t('common.delete')}</Button></div>}
-        {tab === 'manage' && selected.status === 'Terbit' && <div className="mt-5 flex flex-wrap justify-end gap-2"><Button variant="outline" loading={busy} onClick={sendReminder}><BellRing size={16} />{t('sched.remind')}</Button><Button variant="danger" loading={busy} onClick={cancelRoster}>{t('sched.cancelRoster')}</Button></div>}
-        {picker && <Picker roster={selected} slot={picker} canPickAnyMember={isAdmin} onClose={() => setPicker(null)} onPick={(userId, allowConflict) => setSlot(picker, userId, allowConflict)} t={t} />}
+        {!archiveOnly && tab === 'manage' && selected.status === 'Terbit' && <div className="mt-5 flex flex-wrap justify-end gap-2"><Button variant="outline" loading={busy} onClick={sendReminder}><BellRing size={16} />{t('sched.remind')}</Button><Button variant="danger" loading={busy} onClick={cancelRoster}>{t('sched.cancelRoster')}</Button></div>}
+        {!archiveOnly && picker && <Picker roster={selected} slot={picker} canPickAnyMember={isAdmin} onClose={() => setPicker(null)} onPick={(userId, allowConflict) => setSlot(picker, userId, allowConflict)} t={t} />}
       </div>
     )
   }
