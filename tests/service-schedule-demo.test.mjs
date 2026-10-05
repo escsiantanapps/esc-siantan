@@ -21,6 +21,73 @@ test('adapter lokal tidak mengimpor klien production atau mengirim request jarin
   assert.equal((await api.listMembers('DEMO-M1')).some(member => member.name === 'Bima'), true)
 })
 
+test('Draft langsung menampilkan kegiatan dan Ministry hanya pada tanggal yang dipilih', async () => {
+  const api = createServiceScheduleDemo({ seed: false })
+  const base = {
+    section_id: 'pagi', title: 'Ibadah Pagi', source_type: 'Ibadah',
+    event_id: null, class_id: null, class_session_no: null,
+    location: '', dress_code: '', pic: '', notes: '',
+  }
+  const monthId = await api.createMonthDirect({ month: '2026-10', entries: [
+    { ...base, service_date: '2026-10-04', start_time: '08:00', end_time: '10:00', ministry_ids: ['DEMO-M1'] },
+    { ...base, service_date: '2026-10-11', start_time: '09:00', end_time: '11:00', ministry_ids: ['DEMO-M2'] },
+  ] })
+  const schedule = await api.getMonth(monthId)
+  assert.equal(schedule.month.template_id, 'SSTPL-DIRECT-V102')
+  assert.equal(schedule.sections.length, 1)
+  assert.deepEqual(schedule.sections[0].participation, { '2026-10-04': ['DEMO-M1'], '2026-10-11': ['DEMO-M2'] })
+  assert.equal(schedule.rosters.length, 2)
+  assert.deepEqual(schedule.rosters.map(item => [item.service_date, item.ministry_id]), [
+    ['2026-10-04', 'DEMO-M1'], ['2026-10-11', 'DEMO-M2'],
+  ])
+  assert.equal(schedule.rosters[1].start_time, '09:00')
+  assert.equal(schedule.parts.every(item => !item.team_name && !item.material), true)
+  assert.equal(schedule.rosters[0].service_roster_slots.length, 3, 'Posisi aktif dan kapasitas Ministry diambil otomatis')
+})
+
+test('Draft langsung menolak MH sebagai pembuat struktur dan Ministry tanpa posisi aktif', async () => {
+  const api = createServiceScheduleDemo({ seed: false })
+  const entries = [{
+    section_id: 'pagi', service_date: '2026-10-04', title: 'Ibadah Pagi', source_type: 'Ibadah',
+    start_time: '08:00', end_time: '10:00', ministry_ids: ['DEMO-M1'],
+  }]
+  api.setProfile(demoProfiles.mh)
+  await assert.rejects(api.createMonthDirect({ month: '2026-10', entries }), error => error.code === '42501')
+  api.setProfile(demoProfiles.admin)
+  const id = await api.createMonthDirect({ month: '2026-10', entries })
+  await assert.rejects(api.createMonthDirect({ month: '2026-10', entries }), /sudah ada/)
+  assert.equal((await api.getMonth(id)).month.status, 'Draft')
+  for (const position of (await api.listPositions()).filter(item => item.ministry_id === 'DEMO-M1')) await api.removePosition(position.position_id)
+  await assert.rejects(api.createMonthDirect({ month: '2026-11', entries: [{ ...entries[0], service_date: '2026-11-01' }] }), /posisi aktif/)
+})
+
+test('hanya Admin dapat menghapus Draft dengan jumlah penugasan yang masih sesuai', async () => {
+  const { api, month, schedule } = await fixture()
+  const assigned = schedule.rosters.reduce((count, roster) => count + roster.service_roster_slots.filter(slot => slot.user_id).length, 0)
+  api.setProfile(demoProfiles.mh)
+  await assert.rejects(api.deleteMonthDraft(month.month_id, assigned), error => error.code === '42501')
+  api.setProfile(demoProfiles.admin)
+  await assert.rejects(api.deleteMonthDraft(month.month_id, assigned - 1), error => error.code === '40001')
+  assert.equal((await api.getMonth(month.month_id)).rosters.length, schedule.rosters.length)
+  assert.equal(await api.deleteMonthDraft(month.month_id, assigned), assigned)
+  assert.deepEqual(await api.listMonths('2026-10'), [])
+  assert.deepEqual(api.exportState().rosters.filter(roster => roster.month_id === month.month_id), [])
+  assert.deepEqual(api.exportState().occurrences.filter(item => item.month_id === month.month_id), [])
+  const replacement = await api.createMonthDirect({ month: '2026-10', entries: [{
+    section_id: 'pagi', service_date: '2026-10-04', title: 'Ibadah Pagi', source_type: 'Ibadah',
+    start_time: '08:00', end_time: '10:00', ministry_ids: ['DEMO-M1'],
+  }] })
+  assert.equal((await api.getMonth(replacement)).month.status, 'Draft')
+})
+
+test('Draft yang telah diterbitkan tidak dapat dihapus', async () => {
+  const { api, month, schedule } = await fixture()
+  const assigned = schedule.rosters.reduce((count, roster) => count + roster.service_roster_slots.filter(slot => slot.user_id).length, 0)
+  await api.publishMonth(month.month_id, true)
+  await assert.rejects(api.deleteMonthDraft(month.month_id, assigned), /tidak dapat diedit/)
+  assert.equal((await api.getMonth(month.month_id)).month.status, 'Terbit')
+})
+
 test('fixture tidak memiliki bentrok; publikasi seluruh bulan bersifat atomik dan terkunci', async () => {
   const { api, month, schedule } = await fixture()
   await assert.rejects(api.publishMonth(month.month_id, false), /posisi pelayanan yang kosong/)

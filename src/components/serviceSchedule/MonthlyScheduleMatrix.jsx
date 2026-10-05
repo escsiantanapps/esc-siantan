@@ -10,7 +10,7 @@ function DateCell({ date, currentDate, children, ...props }) {
 }
 
 export default function MonthlyScheduleMatrix({
-  schedule, managedMinistryIds = [], canManageAll = false, onEditPosition, onEditPart, onEditOccurrence,
+  schedule, managedMinistryIds = [], canManageAll = false, onEditPosition, onEditOccurrence,
   ministryFilter = '', activityFilter = '', selectedDate, onDateChange, readonly = false,
 }) {
   const { t, lang } = useLang()
@@ -33,12 +33,6 @@ export default function MonthlyScheduleMatrix({
     {occurrence.location && <span className="sched-matrix-meta"><MapPin size={13} aria-hidden="true" />{occurrence.location}</span>}
     {occurrence.pic && <span className="sched-matrix-meta">{t('schedMonth.pic')}: {occurrence.pic}</span>}
   </>
-  const partContent = part => <>
-    <span className="sched-matrix-part-line"><span>{t('schedMonth.team')}</span>{part?.team_name || '-'}</span>
-    <span className="sched-matrix-part-line"><span>{t('schedMonth.material')}</span>{part?.material || '-'}</span>
-    {part?.notes && <span className="sched-matrix-part-line"><span>{t('schedMonth.notes')}</span>{part.notes}</span>}
-  </>
-
   if (!matrix.sections.length) return <p className="sched-matrix-empty" role="status">{t('schedMonth.noRows')}</p>
 
   return <div className="sched-month-matrix">
@@ -64,9 +58,9 @@ export default function MonthlyScheduleMatrix({
           {section.ministries.map(ministry => <Fragment key={ministry.ministry_id}>
             <tr className="sched-matrix-ministry"><th scope="row" className="sched-matrix-label"><span>{ministry.ministry_name}</span>{!canEdit(ministry.ministry_id) && <LockKeyhole size={13} aria-hidden="true" />}</th>{matrix.dates.map(date => {
               const occurrence = section.occurrencesByDate.get(date)
-              const part = matrix.getPart(occurrence, ministry.ministry_id)
-              const hidden = draft && !!occurrence && !part
-              return <DateCell key={date} date={date} currentDate={currentDate}>{!occurrence ? <span className="sched-matrix-not-scheduled">-</span> : hidden ? lockedContent : canEdit(ministry.ministry_id) && part && onEditPart ? <Button type="button" variant="ghost" className="sched-matrix-cell sched-matrix-part-cell" data-cell-type="part" onClick={() => onEditPart({ occurrence, part, ministry })} title={t('schedMonth.editPart', { ministry: ministry.ministry_name, date: formatScheduleDate(date, lang) })} aria-label={t('schedMonth.editPart', { ministry: ministry.ministry_name, date: formatScheduleDate(date, lang) })}>{partContent(part)}<Pencil size={13} className="sched-matrix-edit-mark" aria-hidden="true" /></Button> : <div className="sched-matrix-cell sched-matrix-part-cell">{partContent(part)}</div>}</DateCell>
+              const participating = matrix.isParticipating(occurrence, ministry.ministry_id)
+              const hidden = participating && matrix.getCell(occurrence, ministry.positions[0]).hidden
+              return <DateCell key={date} date={date} currentDate={currentDate}>{!participating ? <span className="sched-matrix-not-scheduled" aria-label={t('schedMonth.notScheduled')}>-</span> : hidden ? lockedContent : <span className="sched-matrix-group-cell" />}</DateCell>
             })}</tr>
             {ministry.positions.map(position => <tr key={position.position_id} className="sched-matrix-position"><th scope="row" className="sched-matrix-label">{position.name}<small>{t('schedMonth.capacity', { count: position.slots || position.capacity || 1 })}</small></th>{matrix.dates.map(date => {
               const cell = matrix.getCell(section.occurrencesByDate.get(date), position)

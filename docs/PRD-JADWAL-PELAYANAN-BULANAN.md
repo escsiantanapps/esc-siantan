@@ -1,5 +1,10 @@
 # PRD Jadwal Pelayanan Bulanan
 
+Catatan 5 Oktober 2026: alur Template pada dokumen ini adalah rancangan lama.
+Keputusan terbaru dan alur Draft langsung ada di
+[PRD Draft Jadwal Pelayanan Langsung](PRD-DRAFT-JADWAL-LANGSUNG.md).
+Bagian historis di bawah dipertahankan untuk menjelaskan data lama.
+
 Status: rancangan bulanan diterapkan; aturan Admin sebagai MH terverifikasi di production, UI lokal menunggu rilis.
 Tanggal: 3 Oktober 2026. Pembaruan keputusan: 4 Oktober 2026.
 Referensi: gambar jadwal bulanan yang dikirim pengguna, bukan instruksi sistem.

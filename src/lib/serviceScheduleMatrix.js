@@ -74,20 +74,35 @@ function positionCapacity(position) {
 
 export function buildScheduleMatrix(schedule = {}, { ministryFilter = '', activityFilter = '' } = {}) {
   const dates = getScheduleDates(schedule)
+  const sectionsByKey = new Map((schedule.sections || []).map(section => [sectionKey(section), section]))
   const parts = new Map((schedule.parts || []).map(part => [`${part.occurrence_id}:${part.ministry_id}`, part]))
   const rosters = new Map((schedule.rosters || []).map(roster => [roster.roster_id, roster]))
   const rostersByOccurrence = new Map((schedule.rosters || [])
     .filter(roster => roster.occurrence_id)
     .map(roster => [`${roster.occurrence_id}:${roster.ministry_id}`, roster]))
+  const isParticipating = (occurrence, ministryId) => {
+    if (!occurrence) return false
+    const key = `${occurrence.occurrence_id}:${ministryId}`
+    // Bagian aktual tetap benar ketika tanggal kegiatan Draft dipindahkan.
+    if (parts.has(key) || rostersByOccurrence.has(key)) return true
+    const participation = sectionsByKey.get(sectionKey(occurrence))?.participation
+    if (!participation || typeof participation !== 'object' || Array.isArray(participation)) return true
+    return Array.isArray(participation[occurrence.service_date])
+      && participation[occurrence.service_date].includes(ministryId)
+  }
   const getPart = (occurrence, ministryId) => occurrence ? parts.get(`${occurrence.occurrence_id}:${ministryId}`) || null : null
   const getCell = (occurrence, position) => {
+    const capacity = positionCapacity(position)
+    if (!isParticipating(occurrence, position.ministry_id)) {
+      return { occurrence: null, position, part: null, roster: null, slots: [], assigned: [], hidden: false, capacity, filled: 0 }
+    }
     const part = getPart(occurrence, position.ministry_id)
     const roster = (part && rosters.get(part.roster_id)) || (occurrence && rostersByOccurrence.get(`${occurrence.occurrence_id}:${position.ministry_id}`)) || null
     const slots = (roster?.service_roster_slots || []).filter(slot => slot.position_id === position.position_id)
       .sort((a, b) => Number(a.slot_no || 0) - Number(b.slot_no || 0))
     const assigned = slots.filter(slot => slot.user_id)
     const hidden = !!occurrence && !part && !roster && schedule.month?.status === 'Draft'
-    return { occurrence, position, part, roster, slots, assigned, hidden, capacity: positionCapacity(position), filled: assigned.length }
+    return { occurrence, position, part, roster, slots, assigned, hidden, capacity, filled: assigned.length }
   }
   const sections = (schedule.sections || [])
     .filter(section => !activityFilter || sectionKey(section) === activityFilter)
@@ -114,12 +129,13 @@ export function buildScheduleMatrix(schedule = {}, { ministryFilter = '', activi
     const occurrence = section.occurrencesByDate.get(date)
     if (!occurrence) continue
     const cell = getCell(occurrence, position)
+    if (!cell.occurrence) continue
     if (cell.hidden) { stats.hidden += cell.capacity; continue }
     stats.assigned += cell.filled
     stats.capacity += cell.capacity
     stats.empty += Math.max(0, cell.capacity - cell.filled)
   }
-  return { dates, sections, getCell, getPart, stats }
+  return { dates, sections, getCell, getPart, isParticipating, stats }
 }
 
 function escapeHtml(value) {
@@ -141,12 +157,9 @@ export function buildMonthlySchedulePrintDocument(schedule, { t = key => key, lo
     const ministryRows = section.ministries.map(ministry => {
       const divider = `<tr class="ministry"><th scope="row">${escapeHtml(ministry.ministry_name)}</th>${matrix.dates.map(date => {
         const occurrence = section.occurrencesByDate.get(date)
-        const part = matrix.getPart(occurrence, ministry.ministry_id)
-        if (!occurrence) return '<td>-</td>'
-        if (!part && schedule.month?.status === 'Draft') return `<td>${tr('schedMonth.restricted')}</td>`
-        const text = [[t('schedMonth.team'), part?.team_name], [t('schedMonth.material'), part?.material], [t('schedMonth.notes'), part?.notes]]
-          .filter(([, value]) => value).map(([label, value]) => `${escapeHtml(label)}: ${escapeHtml(value)}`).join('<br>')
-        return `<td>${text || '-'}</td>`
+        if (!matrix.isParticipating(occurrence, ministry.ministry_id)) return '<td>-</td>'
+        if (matrix.getCell(occurrence, ministry.positions[0]).hidden) return `<td>${tr('schedMonth.restricted')}</td>`
+        return '<td></td>'
       }).join('')}</tr>`
       const positions = ministry.positions.map(position => `<tr><th scope="row">${escapeHtml(position.name)}</th>${matrix.dates.map(date => {
         const cell = matrix.getCell(section.occurrencesByDate.get(date), position)

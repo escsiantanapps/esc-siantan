@@ -43,6 +43,28 @@
 .monthly-position-options .monthly-inline > div { width:74px; flex:none; min-width:0; }
 .monthly-date-picks { display:flex; flex-wrap:wrap; gap:7px; }
 .monthly-subheading { font-size:14px; font-weight:600; }
+.monthly-direct-toolbar,.monthly-direct-actions { display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+.monthly-direct-toolbar .monthly-inline { min-width:220px; }
+.monthly-direct-toolbar .monthly-inline > div:first-child { min-width:160px; }
+.monthly-direct-dates { display:flex; align-items:stretch; gap:4px; padding-bottom:8px; overflow-x:auto; border-bottom:1px solid var(--color-gray-200); }
+.monthly-direct-date { display:flex; align-items:center; flex:none; border:1px solid var(--color-gray-200); border-radius:6px; background:var(--color-control); }
+.monthly-direct-date > button:first-child { display:flex; align-items:center; gap:8px; padding:7px 10px; white-space:nowrap; }
+.monthly-direct-date > button:first-child[aria-selected="true"] { color:var(--color-brand-700); font-weight:600; background:var(--color-surface); }
+.monthly-direct-date span { font-size:12px; color:var(--color-gray-500); }
+.monthly-direct-date > button:last-child { min-width:36px; padding:6px; }
+.monthly-direct-commands { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.monthly-direct-entry { padding:14px 0; border-top:1px solid var(--color-gray-200); }
+.monthly-direct-entry-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.monthly-direct-entry-heading h4 { font-size:14px; font-weight:600; }
+.monthly-direct-entry-heading button { min-width:40px; }
+.monthly-direct-ministries { margin-top:14px; min-width:0; }
+.monthly-direct-ministries legend { margin-bottom:8px; font-size:14px; font-weight:600; }
+.monthly-direct-ministry-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px 14px; }
+.monthly-direct-ministry-options label { min-width:0; overflow-wrap:anywhere; }
+.monthly-direct-positions { margin-top:8px; font-size:12px; color:var(--color-gray-600); overflow-wrap:anywhere; }
+.monthly-direct-details { margin-top:12px; border-top:1px solid var(--color-gray-200); }
+.monthly-direct-details summary { padding:10px 0; cursor:pointer; color:var(--color-brand-700); font-size:13px; font-weight:600; }
+.monthly-direct-details .monthly-editor-grid { margin-bottom:12px; }
 .monthly-context { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--color-gray-500); }
 .monthly-context strong { font-size:15px; color:var(--color-gray-900); }
 .schedule-access-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; padding:18px 0; }
@@ -77,4 +99,9 @@
   .monthly-dialog-header,.monthly-dialog-footer { padding:12px 14px; }
   .monthly-dialog-body { padding:16px 14px; }
   .monthly-editor-grid,.monthly-position-options { grid-template-columns:1fr; }
+  .monthly-direct-toolbar .monthly-inline { width:100%; }
+  .monthly-direct-actions { align-items:flex-start; }
+  .monthly-direct-commands { width:100%; }
+  .monthly-direct-commands button { font-size:12px; }
+  .monthly-direct-ministry-options { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }

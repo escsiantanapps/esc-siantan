@@ -28,10 +28,13 @@
 .sched-matrix-table .sched-matrix-activity .sched-matrix-label { background: color-mix(in srgb, var(--color-surface), #14b8a6 14%); padding-top: 14px; padding-bottom: 14px; }
 .sched-matrix-table .sched-matrix-activity .sched-matrix-label > span { display: block; font-size: 14px; }
 .sched-matrix-table .sched-matrix-ministry > * { background: var(--color-control); }
-.sched-matrix-table .sched-matrix-ministry .sched-matrix-label { background: var(--color-control); color: var(--color-gray-700); }
-.sched-matrix-ministry th > svg { display: block; margin-top: 5px; color: var(--color-gray-500); }
-.sched-matrix-part-line { display: block; width: 100%; color: var(--color-gray-700); font-size: 12px; }
-.sched-matrix-part-line > span { display: block; color: var(--color-gray-500); font-size: 10px; }
+.sched-matrix-table .sched-matrix-ministry .sched-matrix-label { background: var(--color-control); color: var(--color-gray-700); padding: 3px 10px; }
+.sched-matrix-ministry th > svg { display: inline-block; margin-left: 6px; vertical-align: middle; color: var(--color-gray-500); }
+.sched-matrix-ministry .sched-matrix-group-cell,
+.sched-matrix-ministry .sched-matrix-not-scheduled { min-height: 24px; }
+.sched-matrix-ministry .sched-matrix-not-scheduled,
+.sched-matrix-ministry .sched-matrix-locked { padding: 3px 10px; }
+.sched-matrix-ministry .sched-matrix-locked { min-height: 24px; }
 .sched-matrix-notes .sched-matrix-label, .sched-matrix-notes .sched-matrix-cell { color: var(--color-gray-600); font-size: 12px; }
 .sched-matrix-date-picker { display: none; }
 .sched-matrix-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }

@@ -30,8 +30,7 @@ function PersonalSchedule({ api, profile, initialMonth }) {
   const duties = schedules.flatMap(schedule => schedule.rosters.flatMap(roster => {
     const mine = roster.service_roster_slots.filter(slot => slot.user_id === profile.user_id)
     if (!mine.length) return []
-    const part = schedule.parts.find(item => item.roster_id === roster.roster_id)
-    return [{ ...roster, roles: mine.map(slot => slot.ministry_service_positions.name), team_name: part?.team_name }]
+    return [{ ...roster, roles: mine.map(slot => slot.ministry_service_positions.name) }]
   })).sort((a, b) => a.service_date.localeCompare(b.service_date) || a.start_time.localeCompare(b.start_time))
   return <section data-testid="personal-schedule">
     <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
@@ -43,7 +42,7 @@ function PersonalSchedule({ api, profile, initialMonth }) {
         <div className="flex flex-wrap justify-between gap-2"><h2 className="text-base font-semibold text-gray-900">{duty.title}</h2><Badge color={duty.status === 'Terbit' ? 'green' : 'red'}>{t(`sched.status.${duty.status}`)}</Badge></div>
         <p className="text-sm text-gray-600">{new Date(`${duty.service_date}T00:00:00Z`).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-GB', { dateStyle: 'full', timeZone: 'UTC' })}</p>
         <p className="text-sm text-gray-600">{duty.start_time.slice(0, 5)} - {duty.end_time.slice(0, 5)} | {duty.location}</p>
-        <p className="text-sm font-medium text-gray-900">{duty.roles.join(', ')} | {duty.ministries.name}{duty.team_name ? ` | ${duty.team_name}` : ''}</p>
+        <p className="text-sm font-medium text-gray-900">{duty.roles.join(', ')} | {duty.ministries.name}</p>
         {duty.dress_code && <p className="text-sm text-gray-600">{t('sched.dressCode')}: {duty.dress_code}</p>}
       </article>)}
     </div>}

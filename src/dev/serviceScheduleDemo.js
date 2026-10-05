@@ -92,20 +92,65 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
     const monthId = id('MONTH')
     state.months.push({ month_id: monthId, template_id: template.template_id, month_date: `${monthKey(month)}-01`, month: `${monthKey(month)}-01`, name: template.name, definition: copy(template.definition), status: 'Draft', version: 0, created_by: caller.user_id })
     for (const date of [...dates].sort()) for (const section of template.definition.sections) {
-      const occurrence = { ...copy(section), parts: undefined, occurrence_id: id('OCC'), month_id: monthId, section_key: section.section_id, service_date: date }
+      if (section.participation && !section.participation[date]?.length) continue
+      const day = { ...section, ...(section.occurrence_details?.[date] || {}) }
+      const occurrence = { ...copy(day), parts: undefined, occurrence_details: undefined, occurrence_id: id('OCC'), month_id: monthId, section_key: section.section_id, service_date: date }
       state.occurrences.push(occurrence)
       for (const item of section.parts) {
+        if (section.participation && !section.participation[date].includes(item.ministry_id)) continue
         const rosterId = id('ROSTER')
-        state.parts.push({ part_id: id('PART'), occurrence_id: occurrence.occurrence_id, ministry_id: item.ministry_id, roster_id: rosterId, team_name: item.ministry_id === 'DEMO-M1' ? `Tim ${date.endsWith('11') ? 2 : 1}` : '', material: section.section_id === 'kids' && item.ministry_id === 'DEMO-M2' ? 'Buah Roh dan Games' : '', notes: '' })
+        state.parts.push({ part_id: id('PART'), occurrence_id: occurrence.occurrence_id, ministry_id: item.ministry_id, roster_id: rosterId, team_name: '', material: '', notes: '' })
         const slots = []
         for (const entry of item.positions) {
           const position = state.positions.find(value => value.position_id === entry.position_id)
           for (let number = 1; number <= entry.capacity; number += 1) slots.push({ slot_id: id('SLOT'), ministry_id: item.ministry_id, position_id: entry.position_id, slot_no: number, user_id: null, users: null, ministry_service_positions: { name: position.name, sort_order: position.sort_order } })
         }
-        state.rosters.push({ roster_id: rosterId, month_id: monthId, occurrence_id: occurrence.occurrence_id, ministry_id: item.ministry_id, ministries: { name: state.ministries.find(value => value.ministry_id === item.ministry_id).name }, source_type: section.source_type, title: section.title, service_date: date, start_time: section.start_time, end_time: section.end_time, location: section.location, dress_code: section.dress_code, notes: section.notes, status: 'Draft', version: 0, service_roster_slots: slots })
+        state.rosters.push({ roster_id: rosterId, month_id: monthId, occurrence_id: occurrence.occurrence_id, ministry_id: item.ministry_id, ministries: { name: state.ministries.find(value => value.ministry_id === item.ministry_id).name }, source_type: day.source_type, title: day.title, service_date: date, start_time: day.start_time, end_time: day.end_time, location: day.location, dress_code: day.dress_code, notes: day.notes, status: 'Draft', version: 0, service_roster_slots: slots })
       }
     }
     return monthId
+  }
+  function buildDirectMonth(month, entries) {
+    const key = monthKey(month)
+    if (!Array.isArray(entries) || !entries.length || entries.length > 124) fail('Daftar kegiatan tidak valid.')
+    const sectionsById = new Map()
+    for (const entry of entries) {
+      if (!validDate(entry.service_date) || !entry.service_date.startsWith(key + '-') || !validTime(entry.start_time, entry.end_time)) fail('Tanggal atau jam kegiatan tidak valid.')
+      if (!entry.section_id || !entry.title?.trim() || !['Ibadah', 'Kelas', 'Event'].includes(entry.source_type)) fail('Identitas kegiatan tidak valid.')
+      if (entry.source_type === 'Kelas' && !entry.class_id || entry.source_type === 'Event' && !entry.event_id) fail('Kelas atau event wajib dipilih.')
+      if (!Array.isArray(entry.ministry_ids) || !entry.ministry_ids.length || entry.ministry_ids.length > 20 || new Set(entry.ministry_ids).size !== entry.ministry_ids.length) fail('Pilih Ministry yang melayani.')
+      let section = sectionsById.get(entry.section_id)
+      if (!section) {
+        section = { section_id: entry.section_id, title: entry.title.trim(), source_type: entry.source_type,
+          event_id: entry.event_id || null, class_id: entry.class_id || null, class_session_no: entry.class_session_no || null,
+          start_time: entry.start_time, end_time: entry.end_time, location: entry.location || '', dress_code: entry.dress_code || '',
+          pic: entry.pic || '', notes: entry.notes || '', parts: [], participation: {}, occurrence_details: {} }
+        sectionsById.set(entry.section_id, section)
+      } else if (section.title !== entry.title.trim() || section.source_type !== entry.source_type
+        || section.event_id !== (entry.event_id || null) || section.class_id !== (entry.class_id || null)) {
+        fail('Identitas kegiatan yang disalin harus sama.')
+      }
+      if (section.participation[entry.service_date]) fail('Kegiatan tidak boleh berulang pada tanggal yang sama.')
+      section.participation[entry.service_date] = [...entry.ministry_ids]
+      section.occurrence_details[entry.service_date] = {
+        start_time: entry.start_time, end_time: entry.end_time, location: entry.location || '',
+        dress_code: entry.dress_code || '', pic: entry.pic || '', notes: entry.notes || '',
+        class_session_no: entry.class_session_no || null,
+      }
+      for (const ministryId of entry.ministry_ids) {
+        demandMinistry(ministryId)
+        const available = state.positions.filter(position => position.is_active && position.ministry_id === ministryId)
+        if (!available.length) fail('Ministry yang dipilih belum memiliki posisi aktif.')
+        if (!section.parts.some(item => item.ministry_id === ministryId)) section.parts.push({
+          ministry_id: ministryId,
+          positions: available.map(position => ({ position_id: position.position_id, capacity: position.default_slots || 1 })),
+        })
+      }
+    }
+    if (sectionsById.size > 12) fail('Terlalu banyak jenis kegiatan.')
+    const definition = { sections: [...sectionsById.values()] }
+    return buildMonth({ template_id: 'SSTPL-DIRECT-V102', name: 'Jadwal ' + key.slice(5, 7) + '/' + key.slice(0, 4), definition },
+      key, uniqueSorted(entries.map(entry => entry.service_date)))
   }
   function conflicts(userId, target, excludePosition) {
     return state.rosters.filter(roster => roster.status !== 'Dibatalkan' && roster.service_date === target.service_date && roster.start_time < target.end_time && target.start_time < roster.end_time && roster.service_roster_slots.some(slot => slot.user_id === userId && !(roster.roster_id === target.roster_id && slot.position_id === excludePosition)))
@@ -154,6 +199,24 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       if (!template) fail('Template tidak ditemukan.')
       if (state.months.some(item => item.month_date.startsWith(monthKey(month)) && item.status !== 'Dibatalkan')) fail('Lembar bulan ini sudah ada.')
       return buildMonth(template, month, dates)
+    },
+    async createMonthDirect({ month, entries }) {
+      demandAdmin()
+      if (state.months.some(item => item.month_date.startsWith(monthKey(month)) && item.status !== 'Dibatalkan')) fail('Lembar bulan ini sudah ada.')
+      return buildDirectMonth(month, entries)
+    },
+    async deleteMonthDraft(monthId, expectedAssigned) {
+      demandAdmin()
+      demandDraft(monthId)
+      const rosters = state.rosters.filter(item => item.month_id === monthId)
+      const assigned = rosters.reduce((count, roster) => count + roster.service_roster_slots.filter(slot => slot.user_id).length, 0)
+      if (!Number.isInteger(expectedAssigned) || expectedAssigned !== assigned) fail('schedule_stale', '40001')
+      const rosterIds = new Set(rosters.map(item => item.roster_id))
+      state.parts = state.parts.filter(item => !rosterIds.has(item.roster_id))
+      state.rosters = state.rosters.filter(item => item.month_id !== monthId)
+      state.occurrences = state.occurrences.filter(item => item.month_id !== monthId)
+      state.months = state.months.filter(item => item.month_id !== monthId)
+      return assigned
     },
     async setPosition({ rosterId, positionId, userIds, expectedUserIds }) {
       const roster = demandRoster(rosterId)

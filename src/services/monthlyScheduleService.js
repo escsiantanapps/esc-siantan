@@ -91,6 +91,9 @@ export const monthlyScheduleService = {
   createMonth: ({ templateId, month, dates }) => rpc('create_service_schedule_month', {
     p_template_id: templateId, p_month: `${month.slice(0, 7)}-01`, p_dates: dates,
   }),
+  createMonthDirect: ({ month, entries }) => rpc('create_service_schedule_month_direct', {
+    p_month: `${month.slice(0, 7)}-01`, p_entries: entries,
+  }),
   setPosition: ({ rosterId, positionId, userIds, expectedUserIds }) => rpc('set_service_schedule_position', {
     p_roster_id: rosterId, p_position_id: positionId, p_user_ids: userIds, p_expected_user_ids: expectedUserIds,
   }),
@@ -100,4 +103,7 @@ export const monthlyScheduleService = {
   }),
   publishMonth: (monthId, allowIncomplete = false) => rpc('publish_service_schedule_month', { p_month_id: monthId, p_allow_incomplete: allowIncomplete }),
   cancelMonth: monthId => rpc('cancel_service_schedule_month', { p_month_id: monthId }),
+  deleteMonthDraft: (monthId, expectedAssigned) => rpc('delete_service_schedule_month_draft', {
+    p_month_id: monthId, p_expected_assigned: expectedAssigned,
+  }),
 }

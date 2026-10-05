@@ -90,6 +90,53 @@ export async function fixture(harness, options = {}) {
         if (!schedule) return reply({ message: 'Simulasi bulan tidak ditemukan', code: '22023' }, 400)
         return reply(schedule)
       }
+      if (table === 'delete_service_schedule_month_draft') {
+        const { p_month_id: monthId, p_expected_assigned: expectedAssigned } = request.postDataJSON() || {}
+        const schedule = state.monthlySchedules?.find(item => item.month.month_id === monthId)
+        if (!schedule || schedule.month.status !== 'Draft') return reply({ message: 'Hanya Draft yang dapat dihapus', code: '22023' }, 400)
+        const assigned = schedule.rosters.reduce((count, roster) => count + roster.service_roster_slots.filter(slot => slot.user_id).length, 0)
+        if (expectedAssigned !== assigned) return reply({ message: 'schedule_stale', code: '40001' }, 400)
+        state.monthlySchedules = state.monthlySchedules.filter(item => item.month.month_id !== monthId)
+        return reply(assigned)
+      }
+      if (table === 'create_service_schedule_month_direct') {
+        const payload = request.postDataJSON()
+        const monthId = 'QA-DIRECT-MONTH'
+        const entries = payload?.p_entries || []
+        const catalog = state.servicePositions || []
+        const groups = new Map()
+        const occurrences = [], parts = [], rosters = []
+        for (const [index, entry] of entries.entries()) {
+          let section = groups.get(entry.section_id)
+          if (!section) {
+            section = { ...entry, parts: [], positions: [], participation: {} }
+            groups.set(entry.section_id, section)
+          }
+          section.participation[entry.service_date] = entry.ministry_ids
+          const occurrenceId = 'QA-DIRECT-OCC-' + index
+          occurrences.push({ ...entry, occurrence_id: occurrenceId, month_id: monthId })
+          for (const ministryId of entry.ministry_ids) {
+            const positionRows = catalog.filter(item => item.is_active && item.ministry_id === ministryId)
+            if (!section.parts.some(item => item.ministry_id === ministryId)) {
+              section.parts.push({ ministry_id: ministryId, positions: positionRows.map(item => ({ position_id: item.position_id, capacity: item.default_slots || 1 })) })
+              section.positions.push(...positionRows.map(item => ({ ...item, slots: item.default_slots || 1, ministry_name: state.ministries.find(row => row.ministry_id === ministryId)?.name })))
+            }
+            const rosterId = 'QA-DIRECT-ROSTER-' + index + '-' + ministryId
+            parts.push({ part_id: 'QA-DIRECT-PART-' + index + '-' + ministryId, occurrence_id: occurrenceId, ministry_id: ministryId, roster_id: rosterId })
+            rosters.push({ roster_id: rosterId, occurrence_id: occurrenceId, ministry_id: ministryId, status: 'Draft',
+              title: entry.title, service_date: entry.service_date, start_time: entry.start_time, end_time: entry.end_time,
+              service_roster_slots: positionRows.flatMap(position => Array.from({ length: position.default_slots || 1 }, (_, slotNo) => ({
+                slot_id: 'QA-DIRECT-SLOT-' + index + '-' + ministryId + '-' + position.position_id + '-' + slotNo,
+                position_id: position.position_id, ministry_id: ministryId, slot_no: slotNo + 1, user_id: null,
+              }))) })
+          }
+        }
+        state.monthlySchedules = [...(state.monthlySchedules || []), {
+          month: { month_id: monthId, template_id: null, month_date: payload.p_month, status: 'Draft', name: 'Jadwal QA', definition: { sections: [...groups.values()] } },
+          sections: [...groups.values()], occurrences, parts, rosters,
+        }]
+        return reply(monthId)
+      }
       if (table === 'service_schedule_templates') return rows(state.monthlyTemplates || [])
       if (table === 'service_schedule_months') {
         const monthDate = url.searchParams.get('month_date')

@@ -7583,3 +7583,371 @@ BEGIN
 END $$;
 
 REVOKE EXECUTE ON FUNCTION guard_ministry_head_source() FROM PUBLIC, anon, authenticated;
+
+-- ── Migrasi v102: Draft jadwal bulanan langsung per tanggal dan Ministry ──
+-- KEPUTUSAN OPERATOR (2026-10-05): Admin memilih kegiatan, jam, dan Ministry
+-- per tanggal. MH/Wakil yang berizin hanya mengisi posisi Ministry-nya.
+-- Template lama tetap dapat dipakai jadwal lama; baris teknis ini nonaktif.
+DO $v102_preflight$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger
+      WHERE tgname = 'trg_guard_service_schedule_linked_slot'
+        AND tgrelid = 'public.service_roster_slots'::regclass AND tgenabled IN ('O', 'A'))
+    OR NOT EXISTS (SELECT 1 FROM pg_trigger
+      WHERE tgname = 'trg_guard_service_schedule_linked_roster'
+        AND tgrelid = 'public.service_rosters'::regclass AND tgenabled IN ('O', 'A'))
+    OR to_regprocedure('public.set_service_schedule_position(text,text,text[],text[])') IS NULL
+    OR to_regprocedure('public.publish_service_schedule_month(text,boolean)') IS NULL THEN
+    RAISE EXCEPTION 'Jalankan Migrasi v98 sebelum Migrasi v102: penjaga jadwal bulanan belum lengkap.'
+      USING ERRCODE = '55000';
+  END IF;
+END $v102_preflight$;
+
+INSERT INTO service_schedule_templates(template_id, name, definition, is_active)
+VALUES ('SSTPL-DIRECT-V102', 'Draft langsung (sistem)', '{"kind":"direct","sections":[]}'::JSONB, false)
+ON CONFLICT (template_id) DO NOTHING;
+DO $v102_template$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM service_schedule_templates
+    WHERE template_id = 'SSTPL-DIRECT-V102' AND NOT is_active
+      AND definition->>'kind' = 'direct') THEN
+    RAISE EXCEPTION 'Identitas template teknis sudah dipakai oleh template lain.' USING ERRCODE = '55000';
+  END IF;
+END $v102_template$;
+
+CREATE OR REPLACE FUNCTION create_service_schedule_month_direct(p_month DATE, p_entries JSONB)
+  RETURNS TEXT LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  item JSONB; raw_ministry JSONB; normalized_ministries JSONB; normalized JSONB;
+  normalized_entries JSONB := '[]'::JSONB; first_sections JSONB := '{}'::JSONB;
+  section_parts JSONB := '{}'::JSONB; section_ministries JSONB := '{}'::JSONB;
+  participation JSONB := '{}'::JSONB; snapshot_sections JSONB := '[]'::JSONB;
+  section_ids TEXT[] := ARRAY[]::TEXT[]; v_section_id TEXT; v_ministry_id TEXT;
+  day_text TEXT; service_day DATE; start_at TIME; end_at TIME;
+  source_kind TEXT; event_key TEXT; class_key TEXT; class_session INTEGER;
+  position_snapshot JSONB; part_snapshot JSONB; first_section JSONB;
+  new_month TEXT; new_occurrence TEXT; new_roster TEXT; position JSONB;
+  capacity_total INTEGER := 0; position_count INTEGER;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF p_month IS NULL OR extract(day FROM p_month) <> 1
+    OR jsonb_typeof(p_entries) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Bulan atau daftar kegiatan tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_array_length(p_entries) NOT BETWEEN 1 AND 124
+    OR octet_length(p_entries::TEXT) > 200000 THEN
+    RAISE EXCEPTION 'Bulan atau daftar kegiatan tidak valid.' USING ERRCODE = '22023';
+  END IF;
+
+  FOR item IN SELECT value FROM jsonb_array_elements(p_entries) LOOP
+    IF jsonb_typeof(item) IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'Isian kegiatan tidak valid.' USING ERRCODE = '22023';
+    END IF;
+    IF EXISTS (SELECT 1 FROM jsonb_object_keys(item) key WHERE key NOT IN
+        ('section_id','service_date','title','source_type','event_id','class_id',
+         'class_session_no','start_time','end_time','location','dress_code','pic','notes','ministry_ids')) THEN
+      RAISE EXCEPTION 'Isian kegiatan tidak valid.' USING ERRCODE = '22023';
+    END IF;
+    IF EXISTS (SELECT 1 FROM jsonb_each(item) field
+      WHERE field.key IN ('section_id','service_date','title','source_type',
+        'event_id','class_id','start_time','end_time','location','dress_code','pic','notes')
+        AND jsonb_typeof(field.value) NOT IN ('string','null')) THEN
+      RAISE EXCEPTION 'Isian kegiatan harus berupa teks.' USING ERRCODE = '22023';
+    END IF;
+    v_section_id := item->>'section_id';
+    day_text := item->>'service_date';
+    source_kind := item->>'source_type';
+    event_key := NULLIF(btrim(item->>'event_id'), '');
+    class_key := NULLIF(btrim(item->>'class_id'), '');
+    IF COALESCE(v_section_id, '') !~ '^[A-Za-z0-9_-]{1,64}$'
+      OR COALESCE(day_text, '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      OR length(btrim(COALESCE(item->>'title',''))) NOT BETWEEN 1 AND 160
+      OR COALESCE(source_kind, '') NOT IN ('Ibadah','Event','Kelas')
+      OR COALESCE(item->>'start_time','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$'
+      OR COALESCE(item->>'end_time','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$'
+      OR length(COALESCE(item->>'location','')) > 200
+      OR length(COALESCE(item->>'dress_code','')) > 200
+      OR length(COALESCE(item->>'pic','')) > 200
+      OR length(COALESCE(item->>'notes','')) > 2000 THEN
+      RAISE EXCEPTION 'Nama, tanggal, atau jam kegiatan tidak valid.' USING ERRCODE = '22023';
+    END IF;
+    service_day := day_text::DATE;
+    start_at := (item->>'start_time')::TIME;
+    end_at := (item->>'end_time')::TIME;
+    IF date_trunc('month', service_day)::DATE <> p_month OR end_at <= start_at THEN
+      RAISE EXCEPTION 'Tanggal harus di bulan jadwal dan jam selesai setelah jam mulai.' USING ERRCODE = '22023';
+    END IF;
+    IF (source_kind = 'Ibadah' AND (event_key IS NOT NULL OR class_key IS NOT NULL))
+      OR (source_kind = 'Event' AND (event_key IS NULL OR class_key IS NOT NULL))
+      OR (source_kind = 'Kelas' AND (class_key IS NULL OR event_key IS NOT NULL)) THEN
+      RAISE EXCEPTION 'Sumber kegiatan tidak sesuai.' USING ERRCODE = '22023';
+    END IF;
+    IF source_kind = 'Event' AND NOT EXISTS (SELECT 1 FROM events WHERE event_id = event_key) THEN
+      RAISE EXCEPTION 'Event tidak ditemukan.' USING ERRCODE = '22023';
+    END IF;
+    IF source_kind = 'Kelas' AND NOT EXISTS (SELECT 1 FROM classes WHERE class_id = class_key) THEN
+      RAISE EXCEPTION 'Kelas tidak ditemukan.' USING ERRCODE = '22023';
+    END IF;
+    IF item->>'class_session_no' IS NOT NULL THEN
+      IF source_kind <> 'Kelas' OR COALESCE(item->>'class_session_no','') !~ '^[0-9]{1,4}$'
+        OR (item->>'class_session_no')::INTEGER NOT BETWEEN 1 AND 1000 THEN
+        RAISE EXCEPTION 'Nomor sesi kelas tidak valid.' USING ERRCODE = '22023';
+      END IF;
+      class_session := (item->>'class_session_no')::INTEGER;
+    ELSE
+      class_session := NULL;
+    END IF;
+    IF jsonb_typeof(item->'ministry_ids') IS DISTINCT FROM 'array' THEN
+      RAISE EXCEPTION 'Pilih 1 sampai 20 Ministry per kegiatan.' USING ERRCODE = '22023';
+    END IF;
+    IF jsonb_array_length(item->'ministry_ids') NOT BETWEEN 1 AND 20 THEN
+      RAISE EXCEPTION 'Pilih 1 sampai 20 Ministry per kegiatan.' USING ERRCODE = '22023';
+    END IF;
+
+    IF NOT (v_section_id = ANY(section_ids)) THEN
+      section_ids := array_append(section_ids, v_section_id);
+      IF cardinality(section_ids) > 12 THEN
+        RAISE EXCEPTION 'Maksimal 12 jenis kegiatan dalam satu bulan.' USING ERRCODE = '22023';
+      END IF;
+      first_sections := first_sections || jsonb_build_object(v_section_id,
+        item || jsonb_build_object('title', btrim(item->>'title'),
+          'event_id', event_key, 'class_id', class_key,
+          'class_session_no', class_session));
+      section_parts := section_parts || jsonb_build_object(v_section_id, '[]'::JSONB);
+      section_ministries := section_ministries || jsonb_build_object(v_section_id, '[]'::JSONB);
+      participation := participation || jsonb_build_object(v_section_id, '{}'::JSONB);
+    ELSE
+      first_section := first_sections->v_section_id;
+      IF btrim(item->>'title') IS DISTINCT FROM btrim(first_section->>'title')
+        OR source_kind IS DISTINCT FROM first_section->>'source_type'
+        OR event_key IS DISTINCT FROM NULLIF(btrim(first_section->>'event_id'), '')
+        OR class_key IS DISTINCT FROM NULLIF(btrim(first_section->>'class_id'), '') THEN
+        RAISE EXCEPTION 'Identitas kegiatan yang sama harus tetap pada setiap tanggal.' USING ERRCODE = '22023';
+      END IF;
+    END IF;
+    IF (participation->v_section_id) ? day_text THEN
+      RAISE EXCEPTION 'Kegiatan dan tanggal tidak boleh berulang.' USING ERRCODE = '22023';
+    END IF;
+
+    normalized_ministries := '[]'::JSONB;
+    FOR raw_ministry IN SELECT value FROM jsonb_array_elements(item->'ministry_ids') LOOP
+      IF jsonb_typeof(raw_ministry) IS DISTINCT FROM 'string' THEN
+        RAISE EXCEPTION 'Identitas Ministry tidak valid.' USING ERRCODE = '22023';
+      END IF;
+      v_ministry_id := btrim(raw_ministry #>> '{}');
+      IF v_ministry_id = '' OR normalized_ministries ? v_ministry_id
+        OR NOT EXISTS (SELECT 1 FROM ministries WHERE ministry_id = v_ministry_id) THEN
+        RAISE EXCEPTION 'Ministry kosong, berulang, atau tidak ditemukan.' USING ERRCODE = '22023';
+      END IF;
+      normalized_ministries := normalized_ministries || to_jsonb(v_ministry_id);
+      PERFORM 1 FROM ministry_service_positions catalog
+        WHERE catalog.ministry_id = v_ministry_id AND catalog.is_active
+        ORDER BY catalog.position_id FOR SHARE;
+      SELECT count(*), jsonb_agg(jsonb_build_object('position_id', catalog.position_id,
+        'capacity', catalog.default_slots, 'name', catalog.name, 'sort_order', catalog.sort_order)
+        ORDER BY catalog.sort_order, catalog.name, catalog.position_id)
+        INTO position_count, position_snapshot
+      FROM ministry_service_positions catalog
+      WHERE catalog.ministry_id = v_ministry_id AND catalog.is_active;
+      IF position_count NOT BETWEEN 1 AND 30 THEN
+        RAISE EXCEPTION 'Setiap Ministry pilihan harus memiliki 1 sampai 30 posisi aktif.' USING ERRCODE = '22023';
+      END IF;
+      IF EXISTS (SELECT 1 FROM ministry_service_positions catalog
+        WHERE catalog.ministry_id = v_ministry_id AND catalog.is_active
+          AND catalog.default_slots NOT BETWEEN 1 AND 20) THEN
+        RAISE EXCEPTION 'Kapasitas posisi harus 1 sampai 20.' USING ERRCODE = '22023';
+      END IF;
+      SELECT COALESCE(sum(catalog.default_slots),0) INTO position_count
+      FROM ministry_service_positions catalog WHERE catalog.ministry_id = v_ministry_id AND catalog.is_active;
+      capacity_total := capacity_total + position_count;
+      IF capacity_total > 2000 THEN
+        RAISE EXCEPTION 'Total slot satu bulan melebihi 2000.' USING ERRCODE = '22023';
+      END IF;
+      IF NOT (section_ministries->v_section_id) ? v_ministry_id THEN
+        IF jsonb_array_length(section_ministries->v_section_id) >= 20 THEN
+          RAISE EXCEPTION 'Maksimal 20 Ministry berbeda per jenis kegiatan.' USING ERRCODE = '22023';
+        END IF;
+        SELECT jsonb_build_object('ministry_id', v_ministry_id, 'ministry_name', ministry.name,
+          'positions', position_snapshot) INTO part_snapshot
+        FROM ministries ministry WHERE ministry.ministry_id = v_ministry_id;
+        section_parts := jsonb_set(section_parts, ARRAY[v_section_id],
+          section_parts->v_section_id || part_snapshot);
+        section_ministries := jsonb_set(section_ministries, ARRAY[v_section_id],
+          section_ministries->v_section_id || to_jsonb(v_ministry_id));
+      END IF;
+    END LOOP;
+    participation := jsonb_set(participation, ARRAY[v_section_id, day_text], normalized_ministries);
+    normalized := item || jsonb_build_object('title', btrim(item->>'title'),
+      'event_id', event_key, 'class_id', class_key, 'class_session_no', class_session,
+      'ministry_ids', normalized_ministries);
+    normalized_entries := normalized_entries || jsonb_build_array(normalized);
+  END LOOP;
+
+  FOREACH v_section_id IN ARRAY section_ids LOOP
+    first_section := first_sections->v_section_id;
+    snapshot_sections := snapshot_sections || jsonb_build_array(
+      (first_section - 'service_date' - 'ministry_ids') ||
+      jsonb_build_object('title', btrim(first_section->>'title'),
+        'parts', section_parts->v_section_id, 'participation', participation->v_section_id));
+  END LOOP;
+  PERFORM validate_service_schedule_definition(jsonb_build_object('sections', snapshot_sections));
+
+  INSERT INTO service_schedule_months(template_id, month_date, name, definition, created_by)
+  VALUES ('SSTPL-DIRECT-V102', p_month, 'Jadwal ' || to_char(p_month, 'MM/YYYY'),
+    jsonb_build_object('sections', snapshot_sections, 'kind', 'direct'), auth_user_id())
+  RETURNING month_id INTO new_month;
+  PERFORM set_config('app.service_schedule_structure', new_month, true);
+  FOR normalized IN SELECT value FROM jsonb_array_elements(normalized_entries) LOOP
+    INSERT INTO service_schedule_occurrences(month_id, section_id, title, source_type, event_id, class_id,
+      class_session_no, service_date, start_time, end_time, location, dress_code, pic, notes)
+    VALUES (new_month, normalized->>'section_id', normalized->>'title', normalized->>'source_type',
+      normalized->>'event_id', normalized->>'class_id', (normalized->>'class_session_no')::INTEGER,
+      (normalized->>'service_date')::DATE, (normalized->>'start_time')::TIME, (normalized->>'end_time')::TIME,
+      NULLIF(btrim(normalized->>'location'), ''), NULLIF(btrim(normalized->>'dress_code'), ''),
+      NULLIF(btrim(normalized->>'pic'), ''), NULLIF(btrim(normalized->>'notes'), ''))
+    RETURNING occurrence_id INTO new_occurrence;
+    FOR raw_ministry IN SELECT value FROM jsonb_array_elements(normalized->'ministry_ids') LOOP
+      v_ministry_id := raw_ministry #>> '{}';
+      INSERT INTO service_rosters(ministry_id, source_type, event_id, class_id, class_session_no,
+        title, service_date, start_time, end_time, location, dress_code, notes, created_by)
+      VALUES (v_ministry_id, normalized->>'source_type', normalized->>'event_id', normalized->>'class_id',
+        (normalized->>'class_session_no')::INTEGER, normalized->>'title',
+        (normalized->>'service_date')::DATE, (normalized->>'start_time')::TIME,
+        (normalized->>'end_time')::TIME, NULLIF(btrim(normalized->>'location'), ''),
+        NULLIF(btrim(normalized->>'dress_code'), ''),
+        service_schedule_roster_notes(new_occurrence, NULL, NULL, NULL), auth_user_id())
+      RETURNING roster_id INTO new_roster;
+      INSERT INTO service_schedule_parts(occurrence_id, ministry_id, roster_id)
+      VALUES (new_occurrence, v_ministry_id, new_roster);
+      FOR position IN SELECT value FROM jsonb_array_elements(
+        (SELECT part->'positions' FROM jsonb_array_elements(section_parts->(normalized->>'section_id')) part
+          WHERE part->>'ministry_id' = v_ministry_id)) LOOP
+        INSERT INTO service_roster_slots(roster_id, ministry_id, position_id, slot_no)
+        SELECT new_roster, v_ministry_id, position->>'position_id', number
+        FROM generate_series(1, (position->>'capacity')::INTEGER) number;
+      END LOOP;
+    END LOOP;
+  END LOOP;
+  PERFORM set_config('app.service_schedule_structure', '', true);
+  RETURN new_month;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION create_service_schedule_month_direct(DATE,JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION create_service_schedule_month_direct(DATE,JSONB) TO authenticated;
+
+-- ── Migrasi v103: Hapus Draft bulanan secara utuh; katalog posisi Admin ──
+-- TEMUAN (2026-10-05): policy msp_write production masih mengizinkan
+-- MH/Wakil mengubah katalog posisi melalui PostgREST langsung.
+-- KEPUTUSAN OPERATOR: katalog posisi hanya boleh diubah Admin berakses
+-- Jadwal Pelayanan. MH/Wakil hanya mengisi pelayan pada bagian Ministry.
+-- Policy production diaudit lewat AUDIT-DRAFT-JADWAL.sql sebelum diganti.
+DO $v103$
+DECLARE
+  previous_policy RECORD;
+  old_expression TEXT :=
+    '(auth_admin_can(''/admin/jadwal-pelayanan''::text) OR auth_manages_ministry(ministry_id))';
+BEGIN
+  SELECT p.polcmd, p.polpermissive,
+         pg_get_expr(p.polqual, p.polrelid) AS using_expr,
+         pg_get_expr(p.polwithcheck, p.polrelid) AS check_expr
+    INTO previous_policy
+  FROM pg_policy p
+  WHERE p.polrelid = 'public.ministry_service_positions'::regclass
+    AND p.polname = 'msp_write';
+  IF NOT FOUND OR previous_policy.polcmd <> '*'
+     OR NOT previous_policy.polpermissive
+     OR previous_policy.using_expr IS NULL
+     OR previous_policy.check_expr IS NULL
+     OR NOT (
+       (previous_policy.using_expr = old_expression
+         AND previous_policy.check_expr = old_expression)
+       OR (previous_policy.using_expr = 'auth_service_schedule_admin()'
+         AND previous_policy.check_expr = 'auth_service_schedule_admin()')
+     )
+     OR EXISTS (
+       SELECT 1 FROM pg_policy p
+       WHERE p.polrelid = 'public.ministry_service_positions'::regclass
+         AND p.polname <> 'msp_write' AND p.polcmd IN ('*', 'a', 'w', 'd')
+     ) THEN
+    RAISE EXCEPTION 'Policy katalog posisi berbeda dari audit; hentikan Migrasi v103 dan audit ulang.'
+      USING ERRCODE = '22023';
+  END IF;
+  EXECUTE 'DROP POLICY IF EXISTS "msp_write" ON public.ministry_service_positions';
+  EXECUTE 'CREATE POLICY "msp_write" ON public.ministry_service_positions FOR ALL '
+    || 'USING (auth_service_schedule_admin()) '
+    || 'WITH CHECK (auth_service_schedule_admin())';
+END $v103$;
+
+-- KEPUTUSAN OPERATOR: Admin boleh menghapus seluruh Draft lalu membuat
+-- ulang jika struktur tanggal atau Ministry salah. Semua penugasan Draft
+-- ikut terhapus setelah jumlah terisi yang dilihat Admin diverifikasi.
+CREATE OR REPLACE FUNCTION delete_service_schedule_month_draft(
+  p_month_id TEXT, p_expected_assigned INTEGER
+) RETURNS INTEGER
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  month_status TEXT;
+  roster_ids TEXT[] := ARRAY[]::TEXT[];
+  assigned_count INTEGER;
+  deleted_rosters INTEGER;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF p_expected_assigned IS NULL OR p_expected_assigned < 0 THEN
+    RAISE EXCEPTION 'Jumlah penugasan yang dikonfirmasi tidak valid.'
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Pengisian MH dan publikasi juga mengunci bulan ini terlebih dahulu.
+  SELECT status INTO month_status
+  FROM service_schedule_months WHERE month_id = p_month_id FOR UPDATE;
+  IF NOT FOUND OR month_status <> 'Draft' THEN
+    RAISE EXCEPTION 'Hanya jadwal bulanan Draft yang dapat dihapus.'
+      USING ERRCODE = '22023';
+  END IF;
+
+  SELECT COALESCE(array_agg(part.roster_id ORDER BY part.roster_id), ARRAY[]::TEXT[])
+    INTO roster_ids
+  FROM service_schedule_parts part
+  JOIN service_schedule_occurrences occurrence
+    ON occurrence.occurrence_id = part.occurrence_id
+  WHERE occurrence.month_id = p_month_id;
+  PERFORM 1 FROM service_rosters roster
+  WHERE roster.roster_id = ANY(roster_ids)
+  ORDER BY roster.roster_id FOR UPDATE;
+  IF EXISTS (
+    SELECT 1 FROM service_rosters roster
+    WHERE roster.roster_id = ANY(roster_ids) AND roster.status <> 'Draft'
+  ) OR (
+    SELECT count(*) FROM service_rosters roster WHERE roster.roster_id = ANY(roster_ids)
+  ) <> cardinality(roster_ids) THEN
+    RAISE EXCEPTION 'Bagian jadwal tidak seluruhnya Draft; penghapusan dibatalkan.'
+      USING ERRCODE = '22023';
+  END IF;
+
+  SELECT count(*) INTO assigned_count
+  FROM service_roster_slots slot
+  WHERE slot.roster_id = ANY(roster_ids) AND slot.user_id IS NOT NULL;
+  IF assigned_count <> p_expected_assigned THEN
+    RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+  END IF;
+
+  -- FK bulan menghapus kegiatan dan bagian; roster lama tidak ikut
+  -- CASCADE sehingga dihapus eksplisit sesudah kaitannya dilepaskan.
+  DELETE FROM service_schedule_months WHERE month_id = p_month_id;
+  DELETE FROM service_rosters WHERE roster_id = ANY(roster_ids);
+  GET DIAGNOSTICS deleted_rosters = ROW_COUNT;
+  IF deleted_rosters <> cardinality(roster_ids) THEN
+    RAISE EXCEPTION 'Penghapusan roster tidak lengkap; transaksi dibatalkan.'
+      USING ERRCODE = '22023';
+  END IF;
+  RETURN assigned_count;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION delete_service_schedule_month_draft(TEXT,INTEGER)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION delete_service_schedule_month_draft(TEXT,INTEGER)
+  TO authenticated;

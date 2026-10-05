@@ -473,6 +473,70 @@ async function assertMonthlyManagementLoaded(f) {
   assert.ok(f.requests.some(row => row.path.endsWith('/service_schedule_months') && new URLSearchParams(row.search).get('month_date') === expectedMonth), 'Snapshot harus dimuat untuk bulan yang sedang ditampilkan')
 }
 
+test('Admin membuat Draft langsung per tanggal dengan Ministry berbeda tanpa Template', async () => {
+  const { ministries, servicePositions } = monthlyManagementFixture()
+  await scenario({
+    role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'],
+    ministries, servicePositions, monthlySchedules: [],
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await f.page.getByRole('button', { name: 'Buat Draft Bulanan' }).click()
+    const dialog = f.page.getByRole('dialog')
+    await dialog.getByLabel('Judul jadwal').fill('Ibadah Pagi')
+    await dialog.getByLabel('Jam mulai').fill('08:00')
+    await dialog.getByLabel('Jam selesai').fill('10:00')
+    await dialog.getByRole('checkbox', { name: 'Worship' }).check()
+    await dialog.getByRole('button', { name: 'Salin ke tanggal kosong' }).click()
+    await dialog.locator('.monthly-direct-date button[role="tab"]').nth(1).click()
+    await dialog.getByRole('checkbox', { name: 'Worship' }).uncheck()
+    await dialog.getByRole('checkbox', { name: 'Multimedia' }).check()
+    await dialog.getByRole('button', { name: 'Buat Draft', exact: true }).click()
+    await f.page.getByRole('table', { name: /^Jadwal pelayanan / }).waitFor()
+    const request = f.requests.find(row => row.path.endsWith('/create_service_schedule_month_direct'))
+    assert.equal(request?.method, 'POST')
+    assert.equal(request?.body?.p_month?.length, 10)
+    const entries = request.body.p_entries
+    assert.ok(entries.length >= 4, 'Tanggal Minggu disiapkan otomatis')
+    assert.equal(new Set(entries.map(item => item.section_id)).size, 1, 'Salinan mempertahankan identitas kegiatan')
+    assert.deepEqual(entries[0].ministry_ids, ['QA-MIN'])
+    assert.deepEqual(entries[1].ministry_ids, ['QA-MEDIA'])
+    assert.equal(entries[0].start_time, '08:00')
+    assert.equal(f.requests.some(row => row.path.endsWith('/service_schedule_templates')), false)
+  })
+})
+
+test('Admin mengonfirmasi jumlah penugasan sebelum menghapus Draft lalu dapat membuat ulang', async () => {
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...monthlyManagementFixture() }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    await f.page.getByRole('button', { name: 'Hapus Draft', exact: true }).click()
+    await f.page.getByRole('heading', { name: 'Hapus Draft Bulanan?' }).waitFor()
+    await f.page.getByText('Draft bulan ini akan dihapus bersama 2 penugasan yang sudah diisi. Tindakan ini tidak dapat dibatalkan. Setelah dihapus, buat Draft baru.', { exact: true }).waitFor()
+    await f.page.getByRole('button', { name: 'Batal', exact: true }).click()
+    assert.equal(f.requests.some(row => row.path.endsWith('/delete_service_schedule_month_draft')), false)
+    await f.page.getByRole('button', { name: 'Hapus Draft', exact: true }).click()
+    await f.page.getByRole('button', { name: 'Hapus Draft', exact: true }).last().click()
+    await f.page.getByRole('button', { name: 'Buat Draft Bulanan', exact: true }).waitFor()
+    const request = f.requests.find(row => row.path.endsWith('/delete_service_schedule_month_draft'))
+    assert.deepEqual(request?.body, { p_month_id: 'QA-MONTH', p_expected_assigned: 2 })
+    assert.equal(await f.page.getByRole('button', { name: 'Terbitkan Bulan', exact: true }).count(), 0)
+  })
+})
+
+test('penghapusan Draft ditolak bila jumlah penugasan berubah setelah dialog dibuka', async () => {
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...monthlyManagementFixture() }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    await f.page.getByRole('button', { name: 'Hapus Draft', exact: true }).click()
+    await f.page.getByText(/2 penugasan yang sudah diisi/).waitFor()
+    f.state.monthlySchedules[0].rosters[0].service_roster_slots[0].user_id = null
+    await f.page.getByRole('button', { name: 'Hapus Draft', exact: true }).last().click()
+    await f.page.getByText('Jadwal berubah sejak dibuka. Muat ulang sebelum menyimpan kembali.', { exact: true }).waitFor()
+    assert.equal(f.state.monthlySchedules.length, 1)
+    assert.equal(await f.page.getByRole('button', { name: 'Hapus Draft', exact: true }).count(), 1)
+  })
+})
+
 test('Super Admin: menu jadwal mobile tidak tampil, rute lihat terpisah dari panel admin', async () => {
   await scenario({ secondary: 'Volunteer', ...monthlyManagementFixture() }, async f => {
     await f.goto('/')
@@ -483,7 +547,7 @@ test('Super Admin: menu jadwal mobile tidak tampil, rute lihat terpisah dari pan
     assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 0)
     await f.goto('/admin/jadwal-pelayanan')
     await assertMonthlyManagementLoaded(f)
-    assert.equal(await f.page.getByRole('button', { name: 'Template', exact: true }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: 'Template', exact: true }).count(), 0)
     assert.equal(await f.page.getByRole('button', { name: 'Terbitkan Bulan', exact: true }).isEnabled(), true)
     assert.equal(await f.page.getByRole('button', { name: /^Atur Worship Leader untuk Ibadah Gabungan,/ }).count(), 1)
     assert.equal(await f.page.getByRole('button', { name: /^Atur Operator Media untuk Ibadah Gabungan,/ }).count(), 1)
@@ -521,7 +585,7 @@ test('Wakil ber-grant hanya membuka panel pengelola jadwal, bukan halaman Admin 
     await f.goto('/admin/jadwal-pelayanan')
     await assertMonthlyManagementLoaded(f)
     assert.equal(await f.page.getByRole('button', { name: /^Atur Worship Leader untuk Ibadah Gabungan,/ }).count(), 1)
-    assert.equal(await f.page.getByRole('button', { name: /^Ubah tim dan materi Worship,/ }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: /^Ubah tim dan materi Worship,/ }).count(), 0)
     assert.equal(await f.page.getByText('Pelayan Worship QA', { exact: true }).count(), 1)
     assert.equal(await f.page.getByText('Multimedia', { exact: true }).count(), 2)
     assert.equal(await f.page.getByText('Bagian terbatas', { exact: true }).count(), 2)
@@ -529,7 +593,7 @@ test('Wakil ber-grant hanya membuka panel pengelola jadwal, bukan halaman Admin 
     assert.equal(await f.page.getByRole('button', { name: /^Ubah tim dan materi Multimedia/ }).count(), 0)
     assert.equal(await f.page.getByText('Pelayan Media Rahasia', { exact: true }).count(), 0)
     assert.equal(await f.page.getByText('Tim Media Rahasia', { exact: true }).count(), 0)
-    for (const name of ['Template', 'Akses & Posisi', 'Terbitkan Bulan', 'Batalkan Bulan', 'Buat Jadwal Bulan Ini']) {
+    for (const name of ['Template', 'Akses & Posisi', 'Terbitkan Bulan', 'Batalkan Bulan', 'Buat Draft Bulanan']) {
       assert.equal(await f.page.getByRole('button', { name, exact: true }).count(), 0)
     }
     assert.equal(await f.page.locator('button.sched-matrix-occurrence-cell').count(), 0)
@@ -547,7 +611,7 @@ test('Admin terbatas: panel jadwal terbuka hanya bila halaman itu diizinkan', as
   }, async f => {
     await f.goto('/admin/jadwal-pelayanan')
     await assertMonthlyManagementLoaded(f)
-    assert.equal(await f.page.getByRole('button', { name: 'Template', exact: true }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: 'Template', exact: true }).count(), 0)
     assert.equal(await f.page.getByRole('button', { name: 'Akses & Posisi', exact: true }).count(), 1)
     assert.equal(await f.page.getByRole('button', { name: 'Terbitkan Bulan', exact: true }).isEnabled(), true)
     assert.equal(await f.page.locator('button.sched-matrix-occurrence-cell').count(), 1)

@@ -69,6 +69,36 @@ test('Draft yang disensor tidak dihitung kosong; kegiatan yang tidak ada berbeda
   assert.equal(buildScheduleMatrix(schedule).getCell(schedule.occurrences[0], mediaPosition).hidden, false)
 })
 
+test('Partisipasi Ministry per kegiatan dan tanggal membedakan tidak dijadwalkan dari Draft tersensor', () => {
+  const schedule = fixture()
+  schedule.sections[0].participation = {
+    '2026-10-04': ['M-MUSIC'],
+    '2026-10-11': ['M-MEDIA'],
+  }
+  const matrix = buildScheduleMatrix(schedule)
+  assert.equal(matrix.isParticipating(schedule.occurrences[0], 'M-MUSIC'), true)
+  assert.equal(matrix.isParticipating(schedule.occurrences[0], 'M-MEDIA'), false)
+  assert.equal(matrix.getCell(schedule.occurrences[0], mediaPosition).occurrence, null)
+  assert.equal(matrix.getCell(schedule.occurrences[0], mediaPosition).hidden, false)
+  assert.equal(matrix.getCell(schedule.occurrences[1], musicPosition).occurrence, null)
+  assert.equal(matrix.getCell(schedule.occurrences[1], mediaPosition).hidden, true)
+  assert.deepEqual(matrix.stats, { assigned: 2, capacity: 2, empty: 0, hidden: 1 })
+
+  schedule.sections.push({ key: 'PAGI', title: 'Ibadah Pagi', positions: [musicPosition], participation: { '2026-10-04': [] } })
+  schedule.occurrences.push({ occurrence_id: 'O-PAGI', section_id: 'PAGI', service_date: '2026-10-04' })
+  assert.equal(buildScheduleMatrix(schedule).getCell(schedule.occurrences[2], musicPosition).occurrence, null)
+})
+
+test('Bagian aktual tetap muncul ketika tanggal kegiatan dipindah setelah Draft dibuat', () => {
+  const schedule = fixture()
+  schedule.sections[0].participation = { '2026-10-04': ['M-MUSIC'] }
+  schedule.occurrences[0].service_date = '2026-10-18'
+  const matrix = buildScheduleMatrix(schedule)
+  assert.equal(matrix.isParticipating(schedule.occurrences[0], 'M-MUSIC'), true)
+  assert.equal(matrix.getCell(schedule.occurrences[0], musicPosition).roster.roster_id, 'R-4')
+  assert.equal(matrix.sections[0].occurrencesByDate.get('2026-10-18').occurrence_id, 'O-4')
+})
+
 test('Filter bagian dan kegiatan tidak memperlebar data yang ditampilkan', () => {
   const schedule = fixture()
   const own = buildScheduleMatrix(schedule, { ministryFilter: 'M-MUSIC', activityFilter: 'KIDS' })
@@ -93,7 +123,7 @@ test('PDF bulanan merender bagian, metadata, jam, dan beberapa nama serta menand
   assert.match(html, /schedMonth.draft/)
   assert.match(html, /07:00 - 08:30/)
   assert.match(html, /Bima<br>Nico/)
-  assert.match(html, /Buah Roh/)
+  assert.doesNotMatch(html, /Tim 1|Buah Roh|Latihan|schedMonth\.team|schedMonth\.material/)
   assert.match(html, /Batik/)
   assert.match(html, /schedMonth.restricted/)
   assert.match(html, /<table class="activity-group">/)
@@ -104,13 +134,31 @@ test('PDF bulanan merender bagian, metadata, jam, dan beberapa nama serta menand
 test('PDF meng-escape teks yang berasal dari database dan mematuhi filter bagian', () => {
   const schedule = fixture()
   schedule.sections[0].title = '<img src=x onerror=alert(1)>'
-  schedule.parts[0].material = '<script>alert(1)</script>'
+  schedule.parts[0].material = 'legacy-material-secret'
+  schedule.occurrences[0].notes = '<script>alert(2)</script>'
   schedule.rosters[0].service_roster_slots[1].users.name = 'A & B <C>'
   const html = buildMonthlySchedulePrintDocument(schedule, { t: key => key, ministryFilter: 'M-MUSIC' })
-  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/)
+  assert.doesNotMatch(html, /legacy-material-secret/)
+  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/)
+  assert.match(html, /&lt;script&gt;alert\(2\)&lt;\/script&gt;/)
   assert.match(html, /A &amp; B &lt;C&gt;/)
   assert.doesNotMatch(html, /<script>/)
   assert.doesNotMatch(html, /Multimedia/)
+})
+
+test('PDF tidak mencetak slot kosong atau pembatasan pada Ministry yang tidak ikut tanggal tersebut', () => {
+  const schedule = fixture()
+  schedule.sections[0].participation = {
+    '2026-10-04': ['M-MUSIC'],
+    '2026-10-11': ['M-MEDIA'],
+  }
+  const html = buildMonthlySchedulePrintDocument(schedule, {
+    t: (key, params) => key === 'schedMonth.emptyCount' ? `${params.count} kosong` : key,
+  })
+  const mediaRow = html.match(/<tr><th scope="row">Sound<\/th>([\s\S]*?)<\/tr>/)?.[1]
+  const musicRow = html.match(/<tr><th scope="row">Drum<\/th>([\s\S]*?)<\/tr>/)?.[1]
+  assert.match(mediaRow, /^<td>-<\/td><td>schedMonth\.restricted<\/td>$/)
+  assert.match(musicRow, /^<td>Bima<br>Nico<\/td><td>-<\/td>$/)
 })
 
 test('Setiap kegiatan PDF memiliki tanggal, konteks kegiatan dan lebar kolom yang sama', () => {

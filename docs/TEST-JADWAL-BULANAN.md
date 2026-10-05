@@ -1,5 +1,10 @@
 # Uji Jadwal Pelayanan Bulanan
 
+Catatan 5 Oktober 2026: langkah yang menyebut Template, Tim, dan Materi
+adalah pengujian alur lama. Pengujian alur Draft langsung mengikuti
+[PRD Draft Jadwal Pelayanan Langsung](PRD-DRAFT-JADWAL-LANGSUNG.md)
+dan skrip localhost yang diperbarui.
+
 Tanggal pembaruan: 4 Oktober 2026. Verifikasi penuh terakhir: 4 Oktober 2026.
 Status: pengujian lokal dan daftar uji production.
 
