@@ -15,6 +15,8 @@ export const config = { runtime: 'nodejs' }
 
 // Sumber tunggal daftar tabel (dipakai bareng halaman in-app & skrip lokal).
 import { BACKUP_TABLES } from '../../src/lib/backupTables.js'
+import { createHash } from 'node:crypto'
+import { isAllowedResponseArchiveCutoff, responseSnapshotPayload } from '../../src/lib/archiveRetention.js'
 
 const KEEP = 30 // simpan 30 arsip harian terakhir (rotasi otomatis)
 const PAGE = 1000 // batas baris per request PostgREST; tabel besar dipaginasi
@@ -52,8 +54,8 @@ async function handleColdResponses(req, res) {
   if (!token) return res.status(401).json({ error: 'Unauthorized' })
   const { data: authData, error: authError } = await admin.auth.getUser(token)
   if (authError || !authData?.user) return res.status(401).json({ error: 'Unauthorized' })
-  const { data: caller } = await admin.from('users').select('user_id, role').eq('auth_id', authData.user.id).maybeSingle()
-  if (!caller || caller.role !== 'Super Admin') return res.status(403).json({ error: 'Forbidden' })
+  const { data: caller } = await admin.from('users').select('user_id, role, status').eq('auth_id', authData.user.id).maybeSingle()
+  if (!caller || caller.role !== 'Super Admin' || caller.status !== 'Aktif') return res.status(403).json({ error: 'Forbidden' })
 
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
   const { action, archiveId } = body
@@ -63,11 +65,15 @@ async function handleColdResponses(req, res) {
 
   if (action === 'record') {
     const { manifest } = body
-    if (!manifest || !Array.isArray(manifest.responseIds) || manifest.responseIds.length === 0 || manifest.responseIds.length > 5000) {
+    if (!manifest || !Array.isArray(manifest.responseIds) || manifest.responseIds.length === 0 || manifest.responseIds.length > 250) {
       return res.status(400).json({ error: 'Manifest arsip tidak valid.' })
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(manifest.cutoffDate || ''))) {
-      return res.status(400).json({ error: 'Tanggal batas arsip tidak valid.' })
+    if (!isAllowedResponseArchiveCutoff(manifest.cutoffDate)) {
+      return res.status(400).json({ error: 'Respons harus berusia lebih dari 6 bulan untuk diarsipkan.' })
+    }
+    if (!/^[a-f0-9]{64}$/i.test(String(manifest.sha256 || ''))
+      || !/^[a-f0-9]{64}$/i.test(String(manifest.responseSha256 || ''))) {
+      return res.status(400).json({ error: 'Checksum arsip tidak valid.' })
     }
     const cleanIds = [...new Set(manifest.responseIds)].filter(id => typeof id === 'string' && id.length <= 100)
     const cleanFiles = [...new Set(Array.isArray(manifest.filePaths) ? manifest.filePaths : [])]
@@ -82,7 +88,7 @@ async function handleColdResponses(req, res) {
       response_ids: cleanIds,
       file_paths: cleanFiles,
       local_filename: String(manifest.filename || '').slice(0, 200),
-      sha256: String(manifest.sha256 || '').slice(0, 128),
+      sha256: `${manifest.sha256}:${manifest.responseSha256}`,
       status: 'Siap Dihapus',
       created_by: caller.user_id,
     }, { onConflict: 'archive_id' })
@@ -94,16 +100,49 @@ async function handleColdResponses(req, res) {
     const { data: archive, error } = await admin.from('cold_archives').select('*').eq('archive_id', archiveId).maybeSingle()
     if (error) throw error
     if (!archive || archive.status !== 'Siap Dihapus') return res.status(409).json({ error: 'Arsip belum siap dihapus atau sudah diproses.' })
+    const [zipHash, responseHash] = String(archive.sha256 || '').split(':')
+    if (!isAllowedResponseArchiveCutoff(archive.cutoff_date)
+      || !/^[a-f0-9]{64}$/i.test(zipHash || '')
+      || !/^[a-f0-9]{64}$/i.test(responseHash || '')
+      || zipHash !== body.verifiedSha256) {
+      return res.status(409).json({ error: 'Arsip lokal belum terverifikasi atau batas enam bulan belum terpenuhi.' })
+    }
     const ids = Array.isArray(archive.response_ids) ? archive.response_ids : []
-    const cutoff = `${archive.cutoff_date}T00:00:00.000Z`
+    const cutoff = `${archive.cutoff_date}T00:00:00+07:00`
     const rows = []
     for (const responseIds of chunks(ids, RESPONSE_BATCH_SIZE)) {
       const { data, error: rowsError } = await admin.from('form_responses')
-        .select('response_id, submitted_at, data_json').in('response_id', responseIds)
+        .select('response_id, form_id, volunteer_id, submitted_at, data_json').in('response_id', responseIds)
       if (rowsError) throw rowsError
       rows.push(...(data || []))
     }
+    if (rows.length !== ids.length
+      || createHash('sha256').update(responseSnapshotPayload(rows)).digest('hex') !== responseHash) {
+      return res.status(409).json({ error: 'Respons berubah sejak arsip dibuat. Buat arsip ulang.' })
+    }
     if (rows.some(row => row.submitted_at >= cutoff)) return res.status(409).json({ error: 'Manifest memuat respons yang belum melewati tanggal batas.' })
+    const paths = [...new Set(rows.flatMap(row => [...responseFilePaths(row.data_json)]))]
+    const archivedPaths = new Set(Array.isArray(archive.file_paths) ? archive.file_paths : [])
+    if (paths.some(path => !archivedPaths.has(path))) {
+      return res.status(409).json({ error: 'Lampiran respons berubah sejak arsip dibuat. Buat arsip ulang.' })
+    }
+    const sharedPaths = new Set()
+    if (paths.length) {
+      const pathSet = new Set(paths)
+      const archivedIds = new Set(ids)
+      for (let from = 0; ; from += PAGE) {
+        const { data, error: refsError } = await admin.from('form_responses')
+          .select('response_id, data_json').order('response_id').range(from, from + PAGE - 1)
+        if (refsError) throw refsError
+        for (const row of data || []) {
+          if (archivedIds.has(row.response_id)) continue
+          for (const path of responseFilePaths(row.data_json)) {
+            if (pathSet.has(path)) sharedPaths.add(path)
+          }
+        }
+        if (!data || data.length < PAGE) break
+      }
+    }
 
     // Validasi seluruh batch lebih dahulu. Setelah lolos, hapus bertahap agar
     // query PostgREST tidak melewati batas panjang URL untuk manifest besar.
@@ -112,9 +151,9 @@ async function handleColdResponses(req, res) {
       if (deleteError) throw deleteError
     }
 
-    const paths = [...new Set(rows.flatMap(row => [...responseFilePaths(row.data_json)]))]
     let fileErrors = 0
-    for (const filePaths of chunks(paths, RESPONSE_BATCH_SIZE)) {
+    const removablePaths = paths.filter(path => !sharedPaths.has(path))
+    for (const filePaths of chunks(removablePaths, RESPONSE_BATCH_SIZE)) {
       const { error: storageError } = await admin.storage.from('task-files').remove(filePaths)
       if (storageError) fileErrors += filePaths.length
     }
@@ -122,7 +161,10 @@ async function handleColdResponses(req, res) {
       status: 'Dipindahkan', deleted_at: new Date().toISOString(), deleted_by: caller.user_id,
     }).eq('archive_id', archiveId)
     if (updateError) throw updateError
-    return res.status(200).json({ ok: true, deletedResponses: rows.length, deletedFiles: paths.length - fileErrors, fileErrors })
+    return res.status(200).json({
+      ok: true, deletedResponses: rows.length,
+      deletedFiles: removablePaths.length - fileErrors, fileErrors, retainedFiles: sharedPaths.size,
+    })
   }
   return res.status(400).json({ error: 'Aksi tidak valid.' })
 }

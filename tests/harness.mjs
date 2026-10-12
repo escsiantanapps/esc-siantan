@@ -250,6 +250,20 @@ export async function fixture(harness, options = {}) {
     }
     if (url.origin === harness.baseUrl && url.pathname.startsWith('/api/')) {
       if (url.pathname === '/api/check-phone') return reply(state.checkPhone || {})
+      if (url.pathname === '/api/storage-cleanup') {
+        const body = request.postDataJSON()
+        requests.push({ path: url.pathname, method: request.method(), body })
+        if (body.action === 'scan') return reply(state.storageCleanup || {
+          files: [], candidateCount: 0, candidateBytes: 0, scannedFiles: 0,
+        })
+        if (body.action === 'delete') {
+          state.cleanupDeleted = body.paths
+          state.storageCleanup.files = state.storageCleanup.files.filter(file => !body.paths.includes(file.path))
+          state.storageCleanup.candidateCount = state.storageCleanup.files.length
+          state.storageCleanup.candidateBytes = state.storageCleanup.files.reduce((sum, file) => sum + file.size, 0)
+          return reply({ deleted: body.paths, failed: [], freedBytes: 1024 })
+        }
+      }
       return reply({})
     }
     if (!['fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname)) unexpected.push(url.hostname)

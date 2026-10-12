@@ -2,11 +2,13 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { storageCleanupPreview } from './dev/storage-cleanup-preview.js'
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    storageCleanupPreview(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['church-icon.svg', 'apple-touch-icon.png', 'animations/bouncing-sheep.lottie'],

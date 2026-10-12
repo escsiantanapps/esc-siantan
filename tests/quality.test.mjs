@@ -18,6 +18,25 @@ async function scenario(options, action) {
   } finally { await f.close() }
 }
 
+test('Backup: Super Admin memeriksa media berita pada localhost baca-saja di layar HP', async () => {
+  const files = [
+    { path: 'news/video/orphan.mp4', size: 5 * 1024 * 1024, createdAt: '2026-09-01T00:00:00Z' },
+    { path: 'news/pdf/old.pdf', size: 1024 * 1024, createdAt: '2026-09-01T00:00:00Z' },
+  ]
+  await scenario({
+    storageCleanup: { files, candidateCount: 2, candidateBytes: 6 * 1024 * 1024, scannedFiles: 3 },
+  }, async f => {
+    await f.goto('/admin/backup')
+    await f.page.getByRole('button', { name: 'Periksa File' }).click()
+    await f.page.getByText('2 kandidat (6.0 MB) dari 3 file berita diperiksa.').waitFor()
+    assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+    await f.page.getByRole('checkbox', { name: /news\/video\/orphan.mp4/ }).check()
+    assert.equal(await f.page.getByRole('button', { name: 'Hapus 1 file terpilih' }).isDisabled(), true)
+    await f.page.getByText('Localhost hanya untuk memeriksa kandidat. Penghapusan aktif setelah rilis.').waitFor()
+    assert.equal(f.state.cleanupDeleted, undefined)
+  })
+})
+
 test('Evaluasi: setiap izin disetujui dihitung satu dan hanya untuk form terkait', () => {
   const common = {
     startDate: '2026-09-01', endDate: '2026-09-21',

@@ -1,11 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdir } from 'node:fs/promises'
-import { createECDH } from 'node:crypto'
+import { createECDH, createHash } from 'node:crypto'
 import apiRouter from '../api/[endpoint].js'
+import { responseSnapshotPayload } from '../src/lib/archiveRetention.js'
 
 const notificationEndpoints = ['notify-admin', 'notify-pks', 'notify-service-roster', 'send-push']
 const cronEndpoints = ['cron-reminders', 'cron-service-roster-reminders', 'cron-birthdays', 'cron-backup']
+const adminEndpoints = ['storage-cleanup']
 const envKeys = [
   'SUPABASE_URL', 'VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'CRON_SECRET',
   'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT',
@@ -96,9 +98,9 @@ test('Router API: inventaris fungsi Vercel tetap delapan dan di bawah batas Hobb
   assert.ok(files.length <= 12)
 })
 
-test('Router API: metode seluruh delapan handler tetap dijaga tanpa akses backend', async () => {
+test('Router API: metode seluruh handler tetap dijaga tanpa akses backend', async () => {
   await routingFixture(async ({ request, calls }) => {
-    for (const endpoint of [...notificationEndpoints, ...cronEndpoints]) {
+    for (const endpoint of [...notificationEndpoints, ...cronEndpoints, ...adminEndpoints]) {
       const response = await request(endpoint, { method: 'DELETE', headers: { authorization: 'Bearer qa-cron-secret' } })
       assert.equal(response.statusCode, 405, endpoint)
       assert.deepEqual(response.body, { error: 'Method not allowed' })
@@ -111,7 +113,7 @@ test('Router API: metode seluruh delapan handler tetap dijaga tanpa akses backen
 
 test('Router API: alias ekstensi .js dan satu slash akhir tetap memakai guard yang sama', async () => {
   await routingFixture(async ({ request, calls }) => {
-    for (const endpoint of [...notificationEndpoints, ...cronEndpoints]) {
+    for (const endpoint of [...notificationEndpoints, ...cronEndpoints, ...adminEndpoints]) {
       for (const suffix of ['.js', '/', '.js/']) {
         const response = await request(endpoint + suffix, { method: 'DELETE', headers: { authorization: 'Bearer qa-cron-secret' } })
         assert.equal(response.statusCode, 405, endpoint + suffix)
@@ -121,14 +123,30 @@ test('Router API: alias ekstensi .js dan satu slash akhir tetap memakai guard ya
   })
 })
 
-test('Router API: seluruh delapan URL menolak pemanggil tanpa autentikasi', async () => {
+test('Router API: seluruh URL menolak pemanggil tanpa autentikasi', async () => {
   await routingFixture(async ({ request, calls }) => {
-    for (const endpoint of [...notificationEndpoints, ...cronEndpoints]) {
+    for (const endpoint of [...notificationEndpoints, ...cronEndpoints, ...adminEndpoints]) {
       const response = await request(endpoint)
       assert.equal(response.statusCode, 401, endpoint)
       assert.deepEqual(response.body, { error: 'Unauthorized' })
     }
     assert.equal(calls.length, 0)
+  })
+})
+
+test('Pembersihan Storage: Admin biasa ditolak sebelum membaca file', async () => {
+  await routingFixture(async ({ request, calls }) => {
+    const response = await request('storage-cleanup', {
+      headers: { authorization: 'Bearer qa-admin-token' },
+      body: { action: 'delete', paths: ['news/video/file.mp4'] },
+    })
+    assert.equal(response.statusCode, 403)
+    assert.deepEqual(response.body, { error: 'Forbidden' })
+    assert.equal(calls.some(url => url.pathname.startsWith('/storage/v1/')), false)
+  }, url => {
+    if (url.pathname === '/auth/v1/user') return { id: 'qa-auth-id' }
+    if (url.pathname === '/rest/v1/users') return { role: 'Admin', status: 'Aktif' }
+    return undefined
   })
 })
 
@@ -232,6 +250,95 @@ test('Router API: cold-response menolak JWT Volunteer sebelum mengakses arsip', 
   }, url => {
     if (url.pathname === '/auth/v1/user') return { id: 'QA-AUTH', aud: 'authenticated' }
     if (url.pathname === '/rest/v1/users') return [{ user_id: 'QA-VOLUNTEER', role: 'Volunteer' }]
+  })
+})
+
+test('Arsip respons: batas enam bulan dan checksum diverifikasi sebelum penghapusan', async () => {
+  await routingFixture(async ({ request, calls }) => {
+    const options = {
+      url: '/api/cron-backup?action=cold-response', query: { action: 'cold-response' },
+      headers: { authorization: 'Bearer qa-super-admin' },
+    }
+    const tooRecent = await request('cron-backup', {
+      ...options, body: { action: 'record', archiveId: 'COLD-qa-archive-id', manifest: {
+        cutoffDate: new Date().toISOString().slice(0, 10),
+        responseIds: ['RESP-1'], filePaths: [], sha256: 'a'.repeat(64),
+      } },
+    })
+    assert.equal(tooRecent.statusCode, 400)
+    assert.match(tooRecent.body.error, /6 bulan/)
+    const noHash = await request('cron-backup', {
+      ...options, body: { action: 'purge', archiveId: 'COLD-qa-archive-id' },
+    })
+    assert.equal(noHash.statusCode, 409)
+    assert.equal(calls.some(url => url.pathname === '/rest/v1/form_responses'), false)
+  }, url => {
+    if (url.pathname === '/auth/v1/user') return { id: 'QA-AUTH', aud: 'authenticated' }
+    if (url.pathname === '/rest/v1/users') return [{ user_id: 'QA-SUPER', role: 'Super Admin', status: 'Aktif' }]
+    if (url.pathname === '/rest/v1/cold_archives') return [{
+      archive_id: 'COLD-qa-archive-id', cutoff_date: '2025-01-01', status: 'Siap Dihapus',
+      sha256: 'b'.repeat(64), response_ids: ['RESP-1'],
+    }]
+  })
+})
+
+test('Arsip respons: perubahan jawaban setelah ZIP dibuat menolak hapus tanpa menyentuh file', async () => {
+  const zipHash = 'a'.repeat(64)
+  await routingFixture(async ({ request, calls }) => {
+    const response = await request('cron-backup', {
+      url: '/api/cron-backup?action=cold-response', query: { action: 'cold-response' },
+      headers: { authorization: 'Bearer qa-super-admin' },
+      body: { action: 'purge', archiveId: 'COLD-qa-archive-id', verifiedSha256: zipHash },
+    })
+    assert.equal(response.statusCode, 409)
+    assert.match(response.body.error, /berubah/)
+    assert.equal(calls.some(url => url.pathname.startsWith('/storage/v1/')), false)
+  }, url => {
+    if (url.pathname === '/auth/v1/user') return { id: 'QA-AUTH', aud: 'authenticated' }
+    if (url.pathname === '/rest/v1/users') return [{ user_id: 'QA-SUPER', role: 'Super Admin', status: 'Aktif' }]
+    if (url.pathname === '/rest/v1/cold_archives') return [{
+      archive_id: 'COLD-qa-archive-id', cutoff_date: '2025-01-01', status: 'Siap Dihapus',
+      sha256: `${zipHash}:${'b'.repeat(64)}`, response_ids: ['RESP-1'], file_paths: [],
+    }]
+    if (url.pathname === '/rest/v1/form_responses') return [{
+      response_id: 'RESP-1', form_id: 'FORM-1', volunteer_id: 'USER-1',
+      submitted_at: '2024-12-01T00:00:00Z', data_json: { answer: 'berubah' },
+    }]
+  })
+})
+
+test('Arsip respons: lampiran yang masih dipakai jawaban lain tidak ikut dihapus', async () => {
+  const zipHash = 'a'.repeat(64)
+  const path = 'responses/U/photo.jpg'
+  const url = `https://example.test/storage/v1/object/public/task-files/${path}`
+  const archived = {
+    response_id: 'RESP-1', form_id: 'FORM-1', volunteer_id: 'USER-1',
+    submitted_at: '2024-12-01T00:00:00Z', data_json: { photo: url },
+  }
+  const responseHash = createHash('sha256').update(responseSnapshotPayload([archived])).digest('hex')
+  await routingFixture(async ({ request, calls }) => {
+    const response = await request('cron-backup', {
+      url: '/api/cron-backup?action=cold-response', query: { action: 'cold-response' },
+      headers: { authorization: 'Bearer qa-super-admin' },
+      body: { action: 'purge', archiveId: 'COLD-qa-archive-id', verifiedSha256: zipHash },
+    })
+    assert.equal(response.statusCode, 200)
+    assert.equal(response.body.deletedResponses, 1)
+    assert.equal(response.body.deletedFiles, 0)
+    assert.equal(response.body.retainedFiles, 1)
+    assert.equal(calls.some(item => item.pathname.startsWith('/storage/v1/')), false)
+  }, route => {
+    if (route.pathname === '/auth/v1/user') return { id: 'QA-AUTH', aud: 'authenticated' }
+    if (route.pathname === '/rest/v1/users') return [{ user_id: 'QA-SUPER', role: 'Super Admin', status: 'Aktif' }]
+    if (route.pathname === '/rest/v1/cold_archives' && route.searchParams.has('archive_id')) return [{
+      archive_id: 'COLD-qa-archive-id', cutoff_date: '2025-01-01', status: 'Siap Dihapus',
+      sha256: `${zipHash}:${responseHash}`, response_ids: ['RESP-1'], file_paths: [path],
+    }]
+    if (route.pathname === '/rest/v1/cold_archives') return []
+    if (route.pathname === '/rest/v1/form_responses' && route.searchParams.has('response_id')) return [archived]
+    if (route.pathname === '/rest/v1/form_responses') return [
+      archived, { ...archived, response_id: 'RESP-2', submitted_at: '2026-09-01T00:00:00Z' },
+    ]
   })
 })
 

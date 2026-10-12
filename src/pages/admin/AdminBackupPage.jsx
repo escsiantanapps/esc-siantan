@@ -4,10 +4,12 @@ import JSZip from 'jszip'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { Card, PageHeader, Button, Input, Select, Avatar, Badge } from '@/components/ui'
+import { Card, PageHeader, Button, Input, Select, Avatar, Badge, Checkbox } from '@/components/ui'
 import { BACKUP_TABLES } from '@/lib/backupTables'
 import { buildBackupWorkbook, buildBackupJson } from '@/lib/backupBuild'
 import { coldArchiveService } from '@/services/coldArchiveService'
+import { storageCleanupService } from '@/services/storageCleanupService'
+import { latestResponseArchiveCutoff, responseSnapshotPayload } from '@/lib/archiveRetention'
 
 // File System Access API tersedia di Chrome/Edge — tidak di Firefox/Safari.
 const FS_SUPPORTED = typeof window !== 'undefined' && 'showDirectoryPicker' in window
@@ -61,18 +63,22 @@ async function listBackupFiles(dirHandle) {
 // Daftar semua file di satu bucket Storage (paginasi 1000).
 async function listBucketFiles(bucket) {
   const files = []
-  // Supabase Storage list() hanya satu level — perlu rekursi per folder.
+  // Supabase Storage list() hanya satu level dan maksimal 1000 entri per halaman.
   async function listFolder(prefix) {
-    const { data, error } = await supabase.storage.from(bucket).list(prefix || undefined, { limit: 1000 })
-    if (error) throw error
-    for (const item of data || []) {
-      if (item.id === null) {
-        // folder (metadata id null = subfolder)
-        const sub = prefix ? `${prefix}/${item.name}` : item.name
-        await listFolder(sub)
-      } else {
-        files.push(prefix ? `${prefix}/${item.name}` : item.name)
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await supabase.storage.from(bucket).list(prefix || undefined, {
+        limit: 1000, offset, sortBy: { column: 'name', order: 'asc' },
+      })
+      if (error) throw error
+      for (const item of data || []) {
+        if (item.id === null) {
+          const sub = prefix ? `${prefix}/${item.name}` : item.name
+          await listFolder(sub)
+        } else {
+          files.push(prefix ? `${prefix}/${item.name}` : item.name)
+        }
       }
+      if (!data || data.length < 1000) break
     }
   }
   await listFolder('')
@@ -156,11 +162,12 @@ export default function AdminBackupPage() {
   const [archiving, setArchiving] = useState(false)
   const [archiveProgress, setArchiveProgress] = useState({ current: 0, total: 0, label: '' })
   const [archiveResult, setArchiveResult] = useState(null)
+  const [cleanupBusy, setCleanupBusy] = useState(false)
+  const [cleanupData, setCleanupData] = useState(null)
+  const [cleanupSelected, setCleanupSelected] = useState([])
 
   // Arsip data dingin SOP: salin lokal dulu, hapus sumber pada aksi kedua.
-  const [coldCutoff, setColdCutoff] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().slice(0, 10)
-  })
+  const [coldCutoff, setColdCutoff] = useState(latestResponseArchiveCutoff)
   const [coldPreview, setColdPreview] = useState(null)
   const [coldBusy, setColdBusy] = useState(false)
   const [coldResult, setColdResult] = useState(null)
@@ -364,6 +371,59 @@ export default function AdminBackupPage() {
     }
   }
 
+  async function scanUnusedNews() {
+    setCleanupBusy(true)
+    setCleanupSelected([])
+    try {
+      setCleanupData(await storageCleanupService.scan())
+    } catch (err) {
+      setCleanupData(null)
+      toast.error(t('backup.cleanupError', { msg: err.message }))
+    } finally {
+      setCleanupBusy(false)
+    }
+  }
+
+  function toggleCleanupFile(path) {
+    if (!cleanupSelected.includes(path) && cleanupSelected.length >= 20) {
+      toast.info(t('backup.cleanupLimit'))
+      return
+    }
+    setCleanupSelected(current => {
+      if (current.includes(path)) return current.filter(item => item !== path)
+      return current.length < 20 ? [...current, path] : current
+    })
+  }
+
+  async function deleteUnusedNews() {
+    if (!cleanupSelected.length) return
+    const selected = cleanupData?.files?.filter(file => cleanupSelected.includes(file.path)) || []
+    const bytes = selected.reduce((sum, file) => sum + file.size, 0)
+    const ok = await confirm({
+      title: t('backup.cleanupConfirmTitle'),
+      message: t('backup.cleanupConfirmMessage', { count: selected.length, size: formatSize(bytes) }),
+      confirmText: t('backup.cleanupDelete'),
+      danger: true,
+    })
+    if (!ok) return
+    setCleanupBusy(true)
+    try {
+      const result = await storageCleanupService.delete(cleanupSelected)
+      if (result.deleted.length) toast.success(t('backup.cleanupDeleted', {
+        count: result.deleted.length, size: formatSize(result.freedBytes),
+      }))
+      if (result.failed.length) toast.error(t('backup.cleanupFailed', { count: result.failed.length }))
+      setCleanupSelected([])
+      setCleanupData(await storageCleanupService.scan())
+    } catch (err) {
+      toast.error(t('backup.cleanupError', { msg: err.message }))
+      setCleanupSelected([])
+      setCleanupData(null)
+    } finally {
+      setCleanupBusy(false)
+    }
+  }
+
   async function previewColdArchive() {
     setColdBusy(true)
     try {
@@ -400,10 +460,14 @@ export default function AdminBackupPage() {
       }
       const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
       await saveToFolder(dirHandle, blob, filename)
-      const recorded = { ...manifest, sha256: await sha256(blob) }
+      const recorded = {
+        ...manifest,
+        sha256: await sha256(blob),
+        responseSha256: await sha256(new Blob([responseSnapshotPayload(responses)])),
+      }
       await coldArchiveService.record(archiveId, recorded)
       await refreshFolderFiles(dirHandle)
-      setColdResult({ archiveId, filename, responses: responses.length, files: filePaths.length })
+      setColdResult({ archiveId, filename, sha256: recorded.sha256, responses: responses.length, files: filePaths.length })
       toast.success(t('backup.coldCreated'))
     } catch (err) {
       toast.error(t('backup.coldCreateError', { msg: err.message }))
@@ -414,16 +478,31 @@ export default function AdminBackupPage() {
 
   async function purgeColdSource() {
     if (!coldResult) return
-    const ok = await confirm({ title: t('backup.coldPurgeTitle'), message: t('backup.coldPurgeMessage', { count: coldResult.responses }), confirmText: t('backup.coldPurgeBtn'), danger: true })
-    if (!ok) return
     setColdBusy(true)
     try {
-      const result = await coldArchiveService.purge(coldResult.archiveId)
+      const archiveHandle = await dirHandle.getFileHandle(coldResult.filename)
+      const archiveFile = await archiveHandle.getFile()
+      const verifiedSha256 = await sha256(archiveFile)
+      if (verifiedSha256 !== coldResult.sha256) throw new Error(t('backup.coldVerifyMismatch'))
+      const zip = await JSZip.loadAsync(archiveFile)
+      const manifest = JSON.parse(await zip.file('manifest.json').async('string'))
+      if (manifest.archiveId !== coldResult.archiveId
+        || manifest.responseIds.length !== coldResult.responses
+        || manifest.filePaths.some(path => !zip.file(`task-files/${path}`))
+        || !zip.file('form_responses.json') || !zip.file('evaluation_context.json')) {
+        throw new Error(t('backup.coldVerifyMismatch'))
+      }
+      const ok = await confirm({ title: t('backup.coldPurgeTitle'), message: t('backup.coldPurgeMessage', { count: coldResult.responses }), confirmText: t('backup.coldPurgeBtn'), danger: true })
+      if (!ok) return
+      const result = await coldArchiveService.purge(coldResult.archiveId, verifiedSha256)
       setColdResult(prev => ({ ...prev, purged: result }))
       setColdPreview(null)
       toast.success(t('backup.coldPurged', { count: result.deletedResponses }))
+      if (result.fileErrors || result.retainedFiles) {
+        toast.info(t('backup.coldFilesRemaining', { failed: result.fileErrors, shared: result.retainedFiles }))
+      }
     } catch (err) {
-      toast.error(t('backup.coldPurgeError', { msg: err.message }))
+      toast.error(t('backup.coldVerifyError', { msg: err.message }))
     } finally {
       setColdBusy(false)
     }
@@ -639,23 +718,24 @@ export default function AdminBackupPage() {
         </Card>
       )}
 
-      <Card className="mb-4">
+      <Card id="backup-cold-archive" className="mb-4">
         <div className="p-5 space-y-3">
           <div>
             <p className="text-sm font-semibold text-gray-900">{t('backup.coldTitle')}</p>
             <p className="text-xs text-gray-500 mt-1">{t('backup.coldDesc')}</p>
+            {import.meta.env.DEV && <p className="text-xs text-gray-500 mt-1">{t('backup.coldLocalPreview')}</p>}
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
-            <Input label={t('backup.coldCutoff')} type="date" value={coldCutoff} onChange={e => { setColdCutoff(e.target.value); setColdPreview(null); setColdResult(null) }} />
+            <Input label={t('backup.coldCutoff')} type="date" max={latestResponseArchiveCutoff()} value={coldCutoff} onChange={e => { setColdCutoff(e.target.value); setColdPreview(null); setColdResult(null) }} />
             <Button variant="outline" className="sm:self-end" onClick={previewColdArchive} loading={coldBusy}>{t('backup.coldPreviewBtn')}</Button>
           </div>
           {coldPreview && <div className="rounded-xl bg-control px-3 py-2 text-xs text-gray-600">{t('backup.coldPreviewResult', { responses: coldPreview.responses.length, files: coldPreview.filePaths.length })}</div>}
           {!coldResult ? (
-            <Button className="w-full" onClick={createColdArchive} disabled={coldBusy || !coldPreview?.responses?.length}>{t('backup.coldCreateBtn')}</Button>
+            <Button className="w-full" onClick={createColdArchive} disabled={import.meta.env.DEV || coldBusy || !coldPreview?.responses?.length}>{t('backup.coldCreateBtn')}</Button>
           ) : (
             <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700 space-y-2">
               <p>{t('backup.coldCreatedResult', { file: coldResult.filename, responses: coldResult.responses })}</p>
-              {!coldResult.purged ? <Button variant="outline" className="w-full border-rose-200 text-rose-600" onClick={purgeColdSource} loading={coldBusy}>{t('backup.coldPurgeBtn')}</Button> : <p>{t('backup.coldPurged', { count: coldResult.purged.deletedResponses })}</p>}
+              {!coldResult.purged ? <Button variant="outline" className="w-full border-rose-200 text-rose-600" onClick={purgeColdSource} loading={coldBusy} disabled={import.meta.env.DEV || coldBusy}>{t('backup.coldPurgeBtn')}</Button> : <p>{t('backup.coldPurged', { count: coldResult.purged.deletedResponses })}</p>}
             </div>
           )}
           {dirHandle && permGranted && folderFiles.filter(f => f.name.startsWith('ESC-Siantan-Respon-')).length > 0 && (
@@ -887,6 +967,79 @@ export default function AdminBackupPage() {
           </Button>
           </div>
         </details>
+      </Card>
+
+      <Card className="mb-4 p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-control flex items-center justify-center shrink-0">
+            <Trash2 size={19} className="text-brand-600" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-gray-900">{t('backup.cleanupTitle')}</h2>
+            <p className="text-xs text-gray-500 mt-1">{t('backup.cleanupDesc')}</p>
+          </div>
+        </div>
+        <Button variant="outline" onClick={scanUnusedNews} loading={cleanupBusy} disabled={cleanupBusy}>
+          <RefreshCw size={16} /> {t('backup.cleanupScan')}
+        </Button>
+        {import.meta.env.DEV && <p className="text-xs text-gray-500">{t('backup.cleanupLocalPreview')}</p>}
+        {cleanupData && (
+          <>
+            <p className="text-xs text-gray-600" aria-live="polite">
+              {t('backup.cleanupSummary', {
+                count: cleanupData.candidateCount,
+                size: formatSize(cleanupData.candidateBytes),
+                scanned: cleanupData.scannedFiles,
+              })}
+            </p>
+            {cleanupData.files.length > 0 && (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-gray-500">{t('backup.cleanupShowing', { count: cleanupData.files.length })}</p>
+                  <Button size="sm" variant="secondary" onClick={() => setCleanupSelected(
+                    cleanupSelected.length ? [] : cleanupData.files.slice(0, 20).map(file => file.path)
+                  )} disabled={cleanupBusy}>
+                    {t(cleanupSelected.length ? 'backup.cleanupClear' : 'backup.cleanupSelectBatch')}
+                  </Button>
+                </div>
+                <div className="max-h-80 overflow-y-auto border-y border-gray-100 divide-y divide-gray-100">
+                  {cleanupData.files.map(file => (
+                    <div key={file.path} className="flex items-center gap-2 py-2.5">
+                      <Checkbox
+                        checked={cleanupSelected.includes(file.path)}
+                        onChange={() => toggleCleanupFile(file.path)}
+                        disabled={cleanupBusy}
+                        className="min-w-0 flex-1"
+                        label={<span className="min-w-0">
+                          <span className="block text-xs font-medium text-gray-800 break-all">{file.path}</span>
+                          <span className="block text-xs text-gray-500">
+                            {formatSize(file.size)} · {formatDate(file.createdAt)}
+                          </span>
+                        </span>}
+                      />
+                      <a
+                        href={supabase.storage.from('task-files').getPublicUrl(file.path).data.publicUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-brand-600 shrink-0"
+                      >
+                        {t('backup.cleanupOpen')}
+                      </a>
+                    </div>
+                  ))}
+                </div>
+                <Button variant="danger" onClick={deleteUnusedNews} loading={cleanupBusy}
+                  disabled={import.meta.env.DEV || cleanupBusy || cleanupSelected.length === 0} className="w-full">
+                  <Trash2 size={16} /> {t('backup.cleanupDeleteSelected', { count: cleanupSelected.length })}
+                </Button>
+              </>
+            )}
+          </>
+        )}
+        <p className="text-xs text-gray-600">{t('backup.cleanupWarning')}</p>
+        <a href="#backup-cold-archive" className="text-xs font-medium text-brand-600">
+          {t('backup.cleanupResponsesLink')}
+        </a>
       </Card>
 
       {/* Card restore */}

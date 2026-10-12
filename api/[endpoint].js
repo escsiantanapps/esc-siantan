@@ -11,6 +11,7 @@ const handlers = new Map([
   ['/api/cron-service-roster-reminders', () => import('./_handlers/cron-service-roster-reminders.js')],
   ['/api/cron-birthdays', () => import('./_handlers/cron-birthdays.js')],
   ['/api/cron-backup', () => import('./_handlers/cron-backup.js')],
+  ['/api/storage-cleanup', () => import('./_handlers/storage-cleanup.js')],
 ])
 
 export default async function handler(req, res) {
