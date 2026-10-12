@@ -8,7 +8,7 @@ import { useLang } from '@/hooks/useLang'
 import { usersService } from '@/services/usersService'
 import { sensitiveIdentityService } from '@/services/sensitiveIdentityService'
 import { mediaService } from '@/services/contentService'
-import { Card, Avatar, Select, Textarea, Input, Button, Spinner, Checkbox, EmptyState, StatusBadge } from '@/components/ui'
+import { Card, Avatar, Select, Textarea, Input, Button, Spinner, Checkbox, EmptyState, StatusBadge, Badge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import MembershipCard from '@/components/MembershipCard'
 import { displayEmail, formatDate, formatPhone, hitungUmur, isSyntheticLoginEmail, validateUpload } from '@/lib/utils'
@@ -35,7 +35,7 @@ export default function AdminMemberDetailPage() {
   const [success, setSuccess] = useState('')
 
   const [form, setForm] = useState({
-    role: '', role_secondary: '', is_pks: false, status: '', sp_level: '', sp_notes: '', komsel_id: '', ministry_ids: [],
+    role: '', role_secondary: '', is_pks: false, status: '', sp_level: '', sp_notes: '', komsel_id: '',
     name: '', phone: '', email: '', gender: '', birth_date: '', birth_place: '', address: '', blood_type: '', nik: '', social_media: '',
     membership_card_url: '', membership_card_issued_at: '',
   })
@@ -66,7 +66,6 @@ export default function AdminMemberDetailPage() {
         sp_level: data.sp_level || 'Aman',
         sp_notes: data.sp_notes || '',
         komsel_id: data.komsel_id || '',
-        ministry_ids: data.ministry_ids || [],
         name: data.name || '',
         phone: data.phone || '',
         email: isSyntheticLoginEmail(data.email) ? '' : (data.email || ''),
@@ -88,15 +87,6 @@ export default function AdminMemberDetailPage() {
   }
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
-
-  function toggleMinistry(ministryId) {
-    setForm(p => ({
-      ...p,
-      ministry_ids: p.ministry_ids.includes(ministryId)
-        ? p.ministry_ids.filter(m => m !== ministryId)
-        : [...p.ministry_ids, ministryId],
-    }))
-  }
 
   async function handleSave() {
     setError(''); setSuccess(''); setSaving(true)
@@ -255,6 +245,7 @@ export default function AdminMemberDetailPage() {
 
   const reactivationPending = isReactivationPending(member)
   const approvalBlocked = !reactivationPending && member?.registration_photo_required === true && !member?.photo_url
+  const memberMinistries = ministries.filter(m => member?.ministry_ids?.includes(m.ministry_id))
 
   if (!member) {
     return (
@@ -555,18 +546,11 @@ export default function AdminMemberDetailPage() {
       {/* Ministry */}
       <Card className="p-4 mb-4 space-y-3">
         <h2 className="text-sm font-semibold text-gray-900">Ministry</h2>
-        {ministries.length === 0 ? (
-          <p className="text-sm text-gray-400">Belum ada data ministry.</p>
+        {memberMinistries.length === 0 ? (
+          <p className="text-sm text-gray-400">-</p>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-2">
-            {ministries.map(m => (
-              <Checkbox
-                key={m.ministry_id}
-                label={m.name}
-                checked={form.ministry_ids.includes(m.ministry_id)}
-                onChange={() => toggleMinistry(m.ministry_id)}
-              />
-            ))}
+          <div className="flex flex-wrap gap-2">
+            {memberMinistries.map(m => <Badge key={m.ministry_id} color="orange">{m.name}</Badge>)}
           </div>
         )}
       </Card>

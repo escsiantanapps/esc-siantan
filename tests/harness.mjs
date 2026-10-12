@@ -84,6 +84,16 @@ export async function fixture(harness, options = {}) {
         })
       }
       if (table === 'get_points_leaderboard_with_me') return reply(state.leaderboard || [])
+      if (table === 'add_ministry_member') {
+        const { p_ministry_id: ministryId, p_user_id: userId } = request.postDataJSON()
+        const created = { ministry_id: ministryId, user_id: userId }
+        if (!(state.ministryMembers || []).some(row => row.ministry_id === ministryId && row.user_id === userId)) {
+          state.ministryMembers = [...(state.ministryMembers || []), created]
+        }
+        const member = state.members?.find(row => row.user_id === userId)
+        if (member?.role === 'Jemaat') member.role = 'Volunteer'
+        return reply(created)
+      }
       if (table === 'get_service_schedule_month') {
         const monthId = request.postDataJSON()?.p_month_id
         const schedule = state.monthlySchedules?.find(item => item.month.month_id === monthId)
@@ -182,11 +192,7 @@ export async function fixture(harness, options = {}) {
         return rows([])
       }
       if (table === 'user_ministries') {
-        if (request.method() === 'POST') {
-          const created = request.postDataJSON()
-          state.ministryMembers = [...(state.ministryMembers || []), created]
-          return rows([created])
-        }
+        if (request.method() === 'POST') return reply({ message: 'Gunakan add_ministry_member' }, 403)
         let data = state.ministryMembers || []
         const ministryId = url.searchParams.get('ministry_id')
         if (ministryId?.startsWith('eq.')) data = data.filter(row => row.ministry_id === ministryId.slice(3))

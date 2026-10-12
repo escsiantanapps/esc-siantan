@@ -239,12 +239,12 @@ export default function AdminMinistryPage() {
     }
   }
 
-  async function handleAddMember(member) {
+  async function handleAddMember(member, promoteExisting = false) {
     if (!membersView) return
     setMemberActionId(`add:${member.user_id}`)
     try {
       await ministriesService.addMember(membersView.ministry_id, member.user_id)
-      toast.success(t('amin.memberAdded', { name: member.name, ministry: membersView.name }))
+      toast.success(t(promoteExisting ? 'amin.memberPromoted' : 'amin.memberAdded', { name: member.name, ministry: membersView.name }))
       await openMembers(membersView, false)
       load()
     } catch (err) {
@@ -757,6 +757,20 @@ export default function AdminMinistryPage() {
                         <p className="text-xs text-gray-500 mt-0.5">{t('role.' + member.role)}</p>
                       </div>
                       <StatusBadge status={member.status} />
+                      {member.role === 'Jemaat' && member.status === 'Aktif' && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="min-h-11 min-w-11 px-2.5 shrink-0"
+                          loading={memberActionId === `add:${member.user_id}`}
+                          disabled={memberActionId !== null}
+                          onClick={() => handleAddMember(member, true)}
+                          aria-label={t('amin.promoteMemberAria', { name: member.name })}
+                          title={t('amin.promoteMember')}
+                        >
+                          <UserPlus size={16} />
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"

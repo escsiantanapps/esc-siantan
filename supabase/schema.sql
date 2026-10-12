@@ -7951,3 +7951,222 @@ REVOKE EXECUTE ON FUNCTION delete_service_schedule_month_draft(TEXT,INTEGER)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION delete_service_schedule_month_draft(TEXT,INTEGER)
   TO authenticated;
+
+-- ── Migrasi v104: Admin Ministry mendaftarkan Volunteer ──────────────
+-- TEMUAN (2026-10-09): user_ministries menerima INSERT mandiri Jemaat dan
+-- INSERT langsung semua Admin. Promosi otomatis pada trigger INSERT biasa
+-- akan membuka eskalasi role mandiri; INSERT Admin langsung juga dapat
+-- menghasilkan anggota Ministry yang tetap ber-role Jemaat.
+-- KEPUTUSAN OPERATOR: hanya Admin berakses Ministry menambahkan anggota.
+-- Jika role utama anggota Aktif masih Jemaat, aksi itu sekaligus mengubahnya
+-- menjadi Volunteer. Role kedua dan role lain tidak diubah; penghapusan
+-- keanggotaan tidak menurunkan role. Policy dan guard production diverifikasi
+-- lewat AUDIT-PROMOSI-VOLUNTEER-MINISTRY.sql sebelum blok ini ditulis.
+BEGIN;
+
+DO $v104_preflight$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger t
+    WHERE t.tgrelid = 'public.users'::regclass
+      AND t.tgname = 'trg_guard_user_privilege'
+      AND t.tgenabled IN ('O', 'A')
+      AND t.tgfoid = 'public.guard_user_privilege_cols()'::regprocedure
+  ) THEN
+    RAISE EXCEPTION 'Penjaga role users berbeda dari audit; hentikan Migrasi v104.'
+      USING ERRCODE = '22023';
+  END IF;
+  IF NOT (SELECT c.relrowsecurity FROM pg_class c
+    WHERE c.oid = 'public.user_ministries'::regclass) THEN
+    RAISE EXCEPTION 'RLS user_ministries harus aktif sebelum Migrasi v104.'
+      USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger t
+    WHERE t.tgrelid = 'public.user_ministries'::regclass
+      AND t.tgname = 'trg_guard_ministry_head_member_removal'
+      AND t.tgenabled IN ('O', 'A')
+      AND t.tgfoid = 'public.guard_ministry_head_member_removal()'::regprocedure
+  ) THEN
+    RAISE EXCEPTION 'Jalankan Migrasi v100 sebelum v104: penjaga MH belum lengkap.'
+      USING ERRCODE = '22023';
+  END IF;
+END $v104_preflight$;
+
+-- Pengecualian hanya berlaku saat RPC tepercaya sedang menugaskan satu
+-- anggota. Semua pembatasan status, PKS, poin, komsel, dan kartu dari v45
+-- dipertahankan.
+CREATE OR REPLACE FUNCTION guard_user_privilege_cols() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  caller_role text := auth_user_role();
+BEGIN
+  IF caller_role IS NOT NULL AND caller_role <> 'Super Admin' THEN
+    IF NEW.role IS DISTINCT FROM OLD.role
+       OR NEW.role_secondary IS DISTINCT FROM OLD.role_secondary THEN
+      IF NOT COALESCE(
+        caller_role = 'Admin'
+        AND auth_admin_can('/admin/ministry')
+        AND EXISTS (SELECT 1 FROM users actor
+          WHERE actor.user_id = auth_user_id() AND actor.status = 'Aktif')
+        AND OLD.status = 'Aktif'
+        AND OLD.role = 'Jemaat' AND NEW.role = 'Volunteer'
+        AND NEW.role_secondary IS NOT DISTINCT FROM OLD.role_secondary
+        AND COALESCE(current_setting('app.ministry_promote_user_id', true), '') = OLD.user_id
+        AND COALESCE(current_setting('app.ministry_promote_ministry_id', true), '') <> ''
+        AND EXISTS (SELECT 1 FROM user_ministries um
+          WHERE um.user_id = OLD.user_id
+            AND um.ministry_id = current_setting('app.ministry_promote_ministry_id', true))
+        AND (to_jsonb(NEW) - 'role') = (to_jsonb(OLD) - 'role'),
+        false
+      ) THEN
+        RAISE EXCEPTION 'Hanya Super Admin yang dapat mengubah role/role_secondary.'
+          USING ERRCODE = '42501';
+      END IF;
+    END IF;
+  END IF;
+
+  IF COALESCE(NEW.is_pks, false) IS DISTINCT FROM COALESCE(OLD.is_pks, false)
+     AND caller_role IS NOT NULL
+     AND NOT auth_admin_can('/admin/komsel') THEN
+    RAISE EXCEPTION 'Menetapkan/mengubah PKS adalah hak khusus admin dengan akses Komsel.';
+  END IF;
+
+  IF caller_role NOT IN ('Admin', 'Super Admin') THEN
+    IF NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.sp_level IS DISTINCT FROM OLD.sp_level
+       OR NEW.sp_notes IS DISTINCT FROM OLD.sp_notes THEN
+      RAISE EXCEPTION 'Tidak diizinkan mengubah kolom hak akses/status/SP sendiri.';
+    END IF;
+    IF NEW.komsel_id IS DISTINCT FROM OLD.komsel_id
+       AND COALESCE(current_setting('app.allow_komsel_reassign', true), '') <> '1' THEN
+      RAISE EXCEPTION 'Tidak diizinkan mengubah keanggotaan komsel sendiri.';
+    END IF;
+    IF COALESCE(current_setting('app.allow_points_update', true), '') <> '1' THEN
+      IF NEW.points IS DISTINCT FROM OLD.points
+         OR NEW.biodata_points_awarded IS DISTINCT FROM OLD.biodata_points_awarded THEN
+        RAISE EXCEPTION 'Poin tidak dapat diubah langsung.';
+      END IF;
+    END IF;
+    IF NEW.nij IS DISTINCT FROM OLD.nij
+       OR NEW.membership_card_url IS DISTINCT FROM OLD.membership_card_url
+       OR NEW.membership_card_issued_at IS DISTINCT FROM OLD.membership_card_issued_at THEN
+      RAISE EXCEPTION 'Kolom kartu jemaat hanya dapat diubah Admin.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION add_ministry_member(p_ministry_id TEXT, p_user_id TEXT)
+  RETURNS user_ministries
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  target_role TEXT;
+  target_status TEXT;
+  added_member user_ministries%ROWTYPE;
+BEGIN
+  IF NOT auth_admin_can('/admin/ministry')
+     OR NOT EXISTS (SELECT 1 FROM users actor
+       WHERE actor.user_id = auth_user_id() AND actor.status = 'Aktif') THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF NULLIF(btrim(p_ministry_id), '') IS NULL
+     OR NULLIF(btrim(p_user_id), '') IS NULL THEN
+    RAISE EXCEPTION 'Ministry dan anggota wajib dipilih.' USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM ministries WHERE ministry_id = p_ministry_id) THEN
+    RAISE EXCEPTION 'Ministry tidak ditemukan.' USING ERRCODE = '22023';
+  END IF;
+
+  -- Kunci akun menserialkan dua Admin yang menugaskan Jemaat yang sama.
+  SELECT role, status INTO target_role, target_status
+  FROM users WHERE user_id = p_user_id FOR UPDATE;
+  IF NOT FOUND OR target_status IS DISTINCT FROM 'Aktif' THEN
+    RAISE EXCEPTION 'Anggota harus terdaftar dan berstatus Aktif.'
+      USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO user_ministries(user_id, ministry_id)
+  VALUES (p_user_id, p_ministry_id)
+  ON CONFLICT (user_id, ministry_id) DO NOTHING;
+  SELECT * INTO added_member FROM user_ministries
+  WHERE user_id = p_user_id AND ministry_id = p_ministry_id;
+
+  IF target_role = 'Jemaat' THEN
+    PERFORM set_config('app.ministry_promote_user_id', p_user_id, true);
+    PERFORM set_config('app.ministry_promote_ministry_id', p_ministry_id, true);
+    UPDATE users SET role = 'Volunteer' WHERE user_id = p_user_id;
+    PERFORM set_config('app.ministry_promote_user_id', '', true);
+    PERFORM set_config('app.ministry_promote_ministry_id', '', true);
+  END IF;
+  RETURN added_member;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION add_ministry_member(TEXT,TEXT)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION add_ministry_member(TEXT,TEXT) TO authenticated;
+
+-- Satu pintu tulis: setelah migrasi, INSERT keanggotaan hanya lewat RPC.
+-- Admin berakses Ministry tetap dapat mengeluarkan anggota, dengan penjaga
+-- MH v100 tetap berlaku. Policy baca um_select tidak diubah.
+DO $v104_policies$
+DECLARE
+  old_count INTEGER;
+  new_count INTEGER;
+  old_admin_expression TEXT :=
+    '(auth_user_role() = ANY (ARRAY[''Admin''::text, ''Super Admin''::text]))';
+  old_self_expression TEXT := '(user_id = auth_user_id())';
+BEGIN
+  SELECT count(*) INTO old_count FROM pg_policy p
+  WHERE p.polrelid = 'public.user_ministries'::regclass
+    AND p.polname IN ('um_admin_write', 'um_self_write');
+  SELECT count(*) INTO new_count FROM pg_policy p
+  WHERE p.polrelid = 'public.user_ministries'::regclass
+    AND p.polname = 'um_admin_delete';
+
+  IF NOT ((old_count = 2 AND new_count = 0)
+       OR (old_count = 0 AND new_count = 1))
+     OR EXISTS (
+       SELECT 1 FROM pg_policy p
+       WHERE p.polrelid = 'public.user_ministries'::regclass
+         AND p.polcmd IN ('*', 'a', 'w', 'd')
+         AND p.polname NOT IN ('um_admin_write', 'um_self_write', 'um_admin_delete')
+     )
+     OR EXISTS (
+       SELECT 1 FROM pg_policy p
+       WHERE p.polrelid = 'public.user_ministries'::regclass
+         AND p.polname = 'um_admin_write'
+         AND (p.polcmd IS DISTINCT FROM '*' OR NOT p.polpermissive
+           OR pg_get_expr(p.polqual, p.polrelid) IS DISTINCT FROM old_admin_expression
+           OR pg_get_expr(p.polwithcheck, p.polrelid) IS DISTINCT FROM old_admin_expression)
+     )
+     OR EXISTS (
+       SELECT 1 FROM pg_policy p
+       WHERE p.polrelid = 'public.user_ministries'::regclass
+         AND p.polname = 'um_self_write'
+         AND (p.polcmd IS DISTINCT FROM '*' OR NOT p.polpermissive
+           OR pg_get_expr(p.polqual, p.polrelid) IS DISTINCT FROM old_self_expression
+           OR pg_get_expr(p.polwithcheck, p.polrelid) IS DISTINCT FROM old_self_expression)
+     )
+     OR EXISTS (
+       SELECT 1 FROM pg_policy p
+       WHERE p.polrelid = 'public.user_ministries'::regclass
+         AND p.polname = 'um_admin_delete'
+         AND (p.polcmd IS DISTINCT FROM 'd' OR NOT p.polpermissive
+           OR pg_get_expr(p.polqual, p.polrelid)
+              IS DISTINCT FROM 'auth_admin_can(''/admin/ministry''::text)'
+           OR p.polwithcheck IS NOT NULL)
+     ) THEN
+    RAISE EXCEPTION 'Policy user_ministries berbeda dari audit; hentikan Migrasi v104.'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF old_count = 2 THEN
+    EXECUTE 'DROP POLICY IF EXISTS "um_admin_write" ON public.user_ministries';
+    EXECUTE 'DROP POLICY IF EXISTS "um_self_write" ON public.user_ministries';
+    EXECUTE 'CREATE POLICY "um_admin_delete" ON public.user_ministries '
+      || 'FOR DELETE USING (auth_admin_can(''/admin/ministry''))';
+  END IF;
+END $v104_policies$;
+
+COMMIT;

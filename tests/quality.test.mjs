@@ -121,10 +121,13 @@ test('Volunteer yang baru ditambahkan ke Ministry dapat ditetapkan sebagai MH', 
     await f.page.getByRole('button', { name: 'Batal', exact: true }).last().click()
     await f.page.getByRole('button', { name: 'Lihat anggota ministry Ministry QA', exact: true }).click()
     await f.page.getByRole('button', { name: 'Tambah anggota', exact: true }).click()
-    const added = f.page.waitForResponse(response => response.url().includes('/rest/v1/user_ministries')
+    const added = f.page.waitForResponse(response => response.url().includes('/rest/v1/rpc/add_ministry_member')
       && response.request().method() === 'POST')
     await f.page.getByRole('button', { name: 'Tambahkan Volunteer Baru ke ministry', exact: true }).click()
     await added
+    const addRequest = f.requests.find(request => request.path.endsWith('/rpc/add_ministry_member'))
+    assert.deepEqual(addRequest.body, { p_ministry_id: 'QA-MIN', p_user_id: person.user_id })
+    assert.equal(f.requests.some(request => request.path.endsWith('/user_ministries') && request.method === 'POST'), false)
     await f.page.getByRole('button', { name: 'Tutup daftar anggota', exact: true }).click()
     await f.page.getByRole('button', { name: 'Edit ministry Ministry QA', exact: true }).click()
     const select = f.page.getByLabel('Ministry Head (MH)', { exact: true })
@@ -136,6 +139,57 @@ test('Volunteer yang baru ditambahkan ke Ministry dapat ditetapkan sebagai MH', 
     await saved
     assert.equal(f.requests.find(request => request.path.endsWith('/ministries')
       && request.method === 'PATCH').body.head_user_id, person.user_id)
+  })
+})
+
+test('Jemaat yang ditambahkan ke Ministry naik menjadi Volunteer melalui RPC', async () => {
+  const person = { user_id: 'QA-JEMAAT-NEW', name: 'Jemaat Baru', role: 'Jemaat', status: 'Aktif', photo_url: null }
+  await scenario({
+    ministries: [{ ministry_id: 'QA-MIN', name: 'Ministry QA', description: '', department_id: null, organization_order: 1, head_user_id: null, head: null }],
+    members: [person],
+    ministryMembers: [],
+  }, async f => {
+    await f.goto('/admin/ministry')
+    await f.page.getByRole('button', { name: 'Lihat anggota ministry Ministry QA', exact: true }).click()
+    await f.page.getByRole('button', { name: 'Tambah anggota', exact: true }).click()
+    const added = f.page.waitForResponse(response => response.url().includes('/rest/v1/rpc/add_ministry_member')
+      && response.request().method() === 'POST')
+    await f.page.getByRole('button', { name: 'Tambahkan Jemaat Baru ke ministry', exact: true }).click()
+    await added
+    const request = f.requests.find(row => row.path.endsWith('/rpc/add_ministry_member'))
+    assert.deepEqual(request.body, { p_ministry_id: 'QA-MIN', p_user_id: person.user_id })
+    assert.equal(f.state.members.find(row => row.user_id === person.user_id).role, 'Volunteer')
+    assert.equal(f.requests.some(row => row.path.endsWith('/user_ministries') && row.method === 'POST'), false)
+    assert.equal(f.requests.some(row => row.path.endsWith('/users') && row.method === 'PATCH'
+      && (row.body?.role !== undefined || row.body?.role_secondary !== undefined)), false)
+    await f.page.getByRole('button', { name: 'Tutup daftar anggota', exact: true }).click()
+    await f.page.getByRole('button', { name: 'Edit ministry Ministry QA', exact: true }).click()
+    await f.page.getByLabel('Ministry Head (MH)', { exact: true })
+      .locator('option[value="QA-JEMAAT-NEW"]').waitFor({ state: 'attached' })
+  })
+})
+
+test('Admin memperbaiki role anggota lama tanpa mencabut keanggotaan Ministry', async () => {
+  const person = { user_id: 'QA-LEGACY-JEMAAT', name: 'Anggota Lama', role: 'Jemaat', status: 'Aktif', photo_url: null }
+  await scenario({
+    ministries: [{ ministry_id: 'QA-MIN', name: 'Ministry QA', description: '', department_id: null, organization_order: 1, head_user_id: null, head: null }],
+    members: [person],
+    ministryMembers: [{ ministry_id: 'QA-MIN', user_id: person.user_id }],
+  }, async f => {
+    await f.page.setViewportSize({ width: 390, height: 844 })
+    await f.goto('/admin/ministry')
+    await f.page.getByRole('button', { name: 'Lihat anggota ministry Ministry QA', exact: true }).click()
+    const promote = f.page.getByRole('button', { name: 'Jadikan Anggota Lama Volunteer', exact: true })
+    await promote.waitFor()
+    assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+    const promoted = f.page.waitForResponse(response => response.url().includes('/rest/v1/rpc/add_ministry_member')
+      && response.request().method() === 'POST')
+    await promote.click()
+    await promoted
+    await f.page.getByText('Anggota Lama sekarang ber-role Volunteer.', { exact: true }).waitFor()
+    await promote.waitFor({ state: 'detached' })
+    assert.equal(f.state.ministryMembers.filter(row => row.user_id === person.user_id).length, 1)
+    assert.equal(f.requests.some(row => row.path.endsWith('/user_ministries') && row.method === 'DELETE'), false)
   })
 })
 

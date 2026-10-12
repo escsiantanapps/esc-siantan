@@ -585,11 +585,10 @@ export const ministriesService = {
   },
 
   async addMember(ministryId, userId) {
-    const { data, error } = await supabase
-      .from('user_ministries')
-      .insert({ ministry_id: ministryId, user_id: userId })
-      .select()
-      .single()
+    const { data, error } = await supabase.rpc('add_ministry_member', {
+      p_ministry_id: ministryId,
+      p_user_id: userId,
+    })
     if (error) throw error
     return data
   },

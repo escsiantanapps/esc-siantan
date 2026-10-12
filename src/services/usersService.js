@@ -139,16 +139,12 @@ export const usersService = {
   },
 
   async update(id, updates) {
-    // ministry_ids bukan kolom lagi — kelola lewat tabel relasi.
+    // Keanggotaan Ministry hanya dikelola lewat menu Ministry.
     const { ministry_ids, user_ministries, ...scalar } = updates
     const { data, error } = await supabase
       .from('users').update(scalar).eq('user_id', id).select('*, user_ministries(ministry_id)').single()
     if (error) throw error
-    if (ministry_ids !== undefined) await this.setUserMinistries(id, ministry_ids)
-    return {
-      ...data,
-      ministry_ids: ministry_ids !== undefined ? ministry_ids : (data.user_ministries || []).map(r => r.ministry_id),
-    }
+    return withMinistryIds(data)
   },
 
   // Email akun login harus diubah melalui backend agar public.users dan
@@ -171,22 +167,6 @@ export const usersService = {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Gagal memperbarui email akun.')
     return data
-  },
-
-  // Selaraskan ministry seorang user dengan daftar id yang diinginkan.
-  async setUserMinistries(userId, ids = []) {
-    const { data: existing } = await supabase
-      .from('user_ministries').select('ministry_id').eq('user_id', userId)
-    const have = new Set((existing || []).map(r => r.ministry_id))
-    const want = new Set(ids)
-    const toAdd = ids.filter(x => !have.has(x))
-    const toRemove = [...have].filter(x => !want.has(x))
-    if (toRemove.length) {
-      await supabase.from('user_ministries').delete().eq('user_id', userId).in('ministry_id', toRemove)
-    }
-    if (toAdd.length) {
-      await supabase.from('user_ministries').insert(toAdd.map(ministry_id => ({ user_id: userId, ministry_id })))
-    }
   },
 
   // Hapus akun permanen (auth + profil) via serverless function dengan service
