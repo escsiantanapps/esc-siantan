@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { sanitizeFilename } from '@/lib/utils'
+import { startOfWeek, startOfMonth } from 'date-fns'
 
 // Cek apakah role user cocok dengan salah satu role target. User dapat punya
 // role utama (role) dan role kedua (role_secondary) — keduanya dipertimbangkan.
@@ -175,13 +176,51 @@ export const tasksService = {
     return data
   },
 
-  async getMyResponses(userId, formId, weekStart) {
+  // Riwayat pengguna hanya menampilkan waktu, bukan isi jawaban/lampiran.
+  async getMyResponseHistory(userId, formId, weekStart) {
     let query = supabase.from('form_responses')
-      .select('*').eq('volunteer_id', userId).eq('form_id', formId)
+      .select('response_id, submitted_at').eq('volunteer_id', userId).eq('form_id', formId)
     if (weekStart) query = query.gte('submitted_at', weekStart)
     const { data, error } = await query
     if (error) throw error
     return data
+  },
+
+  // Satu query per kelompok form menggantikan satu query per form. Ambil hanya
+  // ID form untuk menghitung; isi jawaban dan URL lampiran tidak diperlukan.
+  async getMyResponseCounts(userId, formIds, periodStart) {
+    const ids = [...new Set(formIds)]
+    const counts = Object.fromEntries(ids.map(id => [id, 0]))
+    if (!userId || ids.length === 0) return counts
+    // Batasi panjang URL PostgREST dan paginasi agar gabungan jawaban banyak
+    // form tidak terpotong oleh batas baris server. Urutan PK harus stabil.
+    for (let i = 0; i < ids.length; i += 50) {
+      let offset = 0
+      for (;;) {
+        const { data, error, count } = await supabase.from('form_responses')
+          .select('form_id', { count: 'exact' })
+          .eq('volunteer_id', userId).in('form_id', ids.slice(i, i + 50))
+          .gte('submitted_at', periodStart)
+          .order('response_id', { ascending: true }).range(offset, offset + 499)
+        if (error) throw error
+        for (const row of data || []) counts[row.form_id] += 1
+        offset += data?.length || 0
+        if (!data?.length || (count != null && offset >= count)) break
+      }
+    }
+    return counts
+  },
+
+  async getMyProgress(userId, templates) {
+    const now = new Date()
+    const groups = [
+      { forms: templates.filter(t => t.period !== 'bulan'), start: startOfWeek(now, { weekStartsOn: 1 }) },
+      { forms: templates.filter(t => t.period === 'bulan'), start: startOfMonth(now) },
+    ]
+    const counts = await Promise.all(groups.map(({ forms, start }) =>
+      this.getMyResponseCounts(userId, forms.map(t => t.form_id), start.toISOString())
+    ))
+    return Object.assign({}, ...counts)
   },
 
   async getAllResponses(formId, { page = 1, limit = 30, startDate = null, endDate = null } = {}) {
@@ -241,25 +280,17 @@ export const tasksService = {
 
   // Rangkuman SOP yang belum tuntas untuk 1 user. Dipakai kartu nudge Beranda.
   // Mengkomposisi ulang logic cron reminder tapi dari sisi klien (anon key + RLS),
-  // reuse canAccessTemplate() + getMyResponses() bawaan file ini — TIDAK
+  // reuse canAccessTemplate() + getMyProgress() bawaan file ini — TIDAK
   // menduplikasi query template_ministries/user_ministries manual (versi cron
   // pakai service role sehingga harus manual; klien tidak perlu).
   async getIncompleteSopSummary(profile) {
     if (!profile?.user_id) return []
     const templates = await this.getTemplates().catch(() => [])
     const eligible = templates.filter(t => t.reminder_enabled && canAccessTemplate(t, profile))
-    const now = new Date()
-    const startOfWeekMonday = () => {
-      const d = new Date(now)
-      const day = (d.getDay() + 6) % 7
-      d.setDate(d.getDate() - day); d.setHours(0, 0, 0, 0); return d
-    }
-    const startOfMonth = () => new Date(now.getFullYear(), now.getMonth(), 1)
+    const progress = await this.getMyProgress(profile.user_id, eligible).catch(() => ({}))
     const summary = []
     for (const tpl of eligible) {
-      const periodStart = tpl.period === 'bulan' ? startOfMonth() : startOfWeekMonday()
-      const resp = await this.getMyResponses(profile.user_id, tpl.form_id, periodStart.toISOString()).catch(() => [])
-      const completed = (resp || []).length
+      const completed = progress[tpl.form_id] || 0
       const goal = tpl.weekly_goal || 1
       if (completed < goal) {
         summary.push({ formId: tpl.form_id, formTitle: tpl.title, completed, goal })

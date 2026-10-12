@@ -76,11 +76,8 @@ export default function NotificationBell() {
       const all = await tasksService.getTemplates()
       const mine = all.filter(t => canAccessTemplate(t, profile))
       const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString()
-      let incomplete = 0
-      await Promise.all(mine.map(async t => {
-        const res = await tasksService.getMyResponses(profile.user_id, t.form_id, weekStart)
-        if (res.length < (t.weekly_goal || 1)) incomplete++
-      }))
+      const counts = await tasksService.getMyResponseCounts(profile.user_id, mine.map(t => t.form_id), weekStart)
+      const incomplete = mine.filter(t => (counts[t.form_id] || 0) < (t.weekly_goal || 1)).length
       if (incomplete > 0) list.push({
         id: 'tasks', icon: ClipboardList,
         title: `${incomplete} tugas belum selesai`,

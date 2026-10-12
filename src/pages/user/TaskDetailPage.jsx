@@ -46,7 +46,7 @@ export default function TaskDetailPage() {
         return
       }
       setTemplate(tmpl)
-      const all = await tasksService.getMyResponses(profile.user_id, id)
+      const all = await tasksService.getMyResponseHistory(profile.user_id, id)
       setResponses(all.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at)))
       setForm(initialForm(tmpl))
     } catch (err) {
@@ -115,7 +115,7 @@ export default function TaskDetailPage() {
       })
       // Beri tahu PKS komsel bahwa SOP ini sudah diisi (non-blocking).
       pushService.notifyLeaders(id).catch(() => {})
-      const all = await tasksService.getMyResponses(profile.user_id, id)
+      const all = await tasksService.getMyResponseHistory(profile.user_id, id)
       setResponses(all.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at)))
       setForm(initialForm(template))
       toast.success(t('taskDetail.submitted'))

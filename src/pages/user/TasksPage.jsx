@@ -6,7 +6,6 @@ import { tasksService, canAccessTemplate, getTemplateSchedule } from '@/services
 import { Card, GradientHeader, Spinner, EmptyState } from '@/components/ui'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { startOfWeek, startOfMonth } from 'date-fns'
 
 // Tema warna folder — diputar berdasarkan urutan kategori supaya tiap
 // folder punya identitas visual sendiri (kelas Tailwind ditulis literal,
@@ -47,17 +46,7 @@ export default function TasksPage() {
       // Cek progress periode berjalan — per template: form bulanan dihitung
       // sejak awal bulan, mingguan sejak Senin. (Dulu SEMUA form dihitung
       // sejak awal minggu → progress form bulanan tampil kurang dari semestinya.)
-      const now = new Date()
-      const weekStart = startOfWeek(now, { weekStartsOn: 1 })
-      const monthStart = startOfMonth(now)
-      const progressMap = {}
-      await Promise.all(
-        tmpls.map(async (tpl) => {
-          const periodStart = (tpl.period === 'bulan' ? monthStart : weekStart).toISOString()
-          const responses = await tasksService.getMyResponses(profile.user_id, tpl.form_id, periodStart)
-          progressMap[tpl.form_id] = responses.length
-        })
-      )
+      const progressMap = await tasksService.getMyProgress(profile.user_id, tmpls)
       setProgress(progressMap)
     } catch (err) {
       toast.error(err.message || t('tasks.loadFailed'))
