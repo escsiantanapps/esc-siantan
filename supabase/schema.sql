@@ -8170,3 +8170,98 @@ BEGIN
 END $v104_policies$;
 
 COMMIT;
+
+-- ── Migrasi v105: Hak tulis Ministry dan daftar anggota untuk jadwal ──
+-- TEMUAN (2026-10-15): policy ministries_admin_write production mengizinkan
+-- semua Admin menulis Ministry tanpa Hak Akses /admin/ministry.
+-- Policy um_select production juga tidak memberi MH/Wakil akses baca anggota
+-- Ministry, sehingga pemilih pelayan pada jadwal menampilkan daftar parsial.
+-- KEPUTUSAN OPERATOR: tulis Ministry mengikuti Hak Akses Ministry; MH/Wakil
+-- membaca identitas ringkas anggota aktif hanya pada Ministry yang dikelola.
+-- RLS user_ministries tidak dilonggarkan.
+
+BEGIN;
+
+DO $v105_policy$
+DECLARE
+  previous_policy RECORD;
+  old_expression TEXT :=
+    '(auth_user_role() = ANY (ARRAY[''Admin''::text, ''Super Admin''::text]))';
+  new_expression TEXT := 'auth_admin_can(''/admin/ministry''::text)';
+BEGIN
+  IF NOT (SELECT relrowsecurity FROM pg_class
+    WHERE oid = 'public.ministries'::regclass) THEN
+    RAISE EXCEPTION 'RLS ministries tidak aktif; hentikan Migrasi v105.'
+      USING ERRCODE = '55000';
+  END IF;
+
+  SELECT p.polcmd, p.polpermissive,
+         pg_get_expr(p.polqual, p.polrelid) AS using_expr,
+         pg_get_expr(p.polwithcheck, p.polrelid) AS check_expr
+    INTO previous_policy
+  FROM pg_policy p
+  WHERE p.polrelid = 'public.ministries'::regclass
+    AND p.polname = 'ministries_admin_write';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Policy tulis ministries tidak ditemukan; hentikan Migrasi v105.'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF previous_policy.polcmd <> '*'
+     OR NOT previous_policy.polpermissive
+     OR EXISTS (
+       SELECT 1 FROM pg_policy p
+       WHERE p.polrelid = 'public.ministries'::regclass
+         AND p.polname <> 'ministries_admin_write'
+         AND p.polcmd IN ('*', 'a', 'w', 'd')
+     ) THEN
+    RAISE EXCEPTION 'Policy tulis ministries berbeda dari audit; hentikan Migrasi v105.'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF previous_policy.using_expr = old_expression
+     AND previous_policy.check_expr = old_expression THEN
+    -- ALTER mempertahankan role dan mode policy production yang telah diaudit.
+    EXECUTE 'ALTER POLICY "ministries_admin_write" ON public.ministries '
+      || 'USING (auth_admin_can(''/admin/ministry'')) '
+      || 'WITH CHECK (auth_admin_can(''/admin/ministry''))';
+  ELSIF previous_policy.using_expr IS DISTINCT FROM new_expression
+     OR previous_policy.check_expr IS DISTINCT FROM new_expression THEN
+    RAISE EXCEPTION 'Policy tulis ministries berbeda dari audit; hentikan Migrasi v105.'
+      USING ERRCODE = '55000';
+  END IF;
+END $v105_policy$;
+
+CREATE OR REPLACE FUNCTION list_ministry_schedule_members_v105(
+  p_ministry_id TEXT, p_query TEXT DEFAULT ''
+) RETURNS TABLE(user_id TEXT, name TEXT, photo_url TEXT)
+  LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF p_ministry_id IS NULL OR NOT auth_manages_ministry(p_ministry_id) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF length(btrim(COALESCE(p_query, ''))) > 100 THEN
+    RAISE EXCEPTION 'Pencarian anggota terlalu panjang.' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+    SELECT u.user_id, u.name, u.photo_url
+    FROM user_ministries um
+    JOIN users u ON u.user_id = um.user_id
+    WHERE um.ministry_id = p_ministry_id
+      AND u.status = 'Aktif'
+      AND (
+        COALESCE(btrim(p_query), '') = ''
+        OR strpos(lower(u.name), lower(btrim(p_query))) > 0
+      )
+    ORDER BY lower(u.name), u.user_id
+    LIMIT 50;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION list_ministry_schedule_members_v105(TEXT,TEXT)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION list_ministry_schedule_members_v105(TEXT,TEXT)
+  TO authenticated;
+
+COMMIT;

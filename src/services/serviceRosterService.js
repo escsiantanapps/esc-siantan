@@ -278,19 +278,14 @@ export const serviceRosterService = {
   },
 
   async listMinistryMembers(ministryId, query = '') {
-    let request = supabase
-      .from('user_ministries')
-      .select('user_id, users!user_id!inner(user_id, name, photo_url, status)')
-      .eq('ministry_id', ministryId)
-      .eq('users.status', 'Aktif')
-    // INNER join menyaring keanggotaan sebelum batas hasil, bukan hanya data users yang di-embed.
-    if (query.trim()) request = request.ilike('users.name', `%${query.trim()}%`)
-    const { data, error } = await request.limit(50)
+    // RLS user_ministries tidak membuka daftar anggota kepada MH/Wakil.
+    // RPC ini mengembalikan identitas ringkas hanya untuk ministry yang dikelola.
+    const { data, error } = await supabase.rpc('list_ministry_schedule_members_v105', {
+      p_ministry_id: ministryId,
+      p_query: query.trim(),
+    })
     if (error) throw error
-    return (data || [])
-      .map(row => row.users)
-      .filter(Boolean)
-      .sort((a, b) => a.name.localeCompare(b.name, 'id'))
+    return data || []
   },
 
   async searchActiveUsers(query = '') {
