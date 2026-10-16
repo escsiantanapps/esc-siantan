@@ -33,6 +33,7 @@ export const monthlyScheduleService = {
   grantManager: payload => serviceRosterService.grantManager(payload),
   revokeManager: (ministryId, userId) => serviceRosterService.revokeManager(ministryId, userId),
   searchActiveUsers: query => serviceRosterService.searchActiveUsers(query),
+  listManagerCandidates: () => serviceRosterService.listManagerCandidates(),
   savePosition: payload => serviceRosterService.savePosition(payload),
   removePosition: positionId => serviceRosterService.removePosition(positionId),
   listEvents: () => eventsService.getAll(),
@@ -40,9 +41,7 @@ export const monthlyScheduleService = {
   notify: (rosterId, kind) => serviceRosterService.notify(rosterId, kind),
   notifyMonth: (monthId, kind) => serviceRosterService.notifyMonth(monthId, kind),
   findConflicts: (userId, rosterId, slotId) => serviceRosterService.findConflicts(userId, rosterId, slotId),
-  listMembers: (ministryId, query, canManageAll) => canManageAll
-    ? serviceRosterService.searchActiveUsers(query)
-    : serviceRosterService.listMinistryMembers(ministryId, query),
+  listMembers: (ministryId, query, canManageAll) => serviceRosterService.listMinistryMembers(ministryId, query, canManageAll),
   async listMinistries() {
     const { data, error } = await supabase.from('ministries')
       .select('ministry_id, name, head_user_id, head:users!head_user_id(user_id, name, photo_url, role, role_secondary, status)').order('name')
@@ -103,6 +102,12 @@ export const monthlyScheduleService = {
   }),
   publishMonth: (monthId, allowIncomplete = false) => rpc('publish_service_schedule_month', { p_month_id: monthId, p_allow_incomplete: allowIncomplete }),
   cancelMonth: monthId => rpc('cancel_service_schedule_month', { p_month_id: monthId }),
+  syncDraftPositions: (monthId, expectedVersion, expectedCatalog) => rpc('sync_service_schedule_draft_positions', {
+    p_month_id: monthId, p_expected_version: expectedVersion, p_expected_catalog: expectedCatalog,
+  }),
+  reassignAndSyncDraftPositions: (monthId, expectedVersion, expectedCatalog, moves) => rpc('reassign_and_sync_service_schedule_draft_positions', {
+    p_month_id: monthId, p_expected_version: expectedVersion, p_expected_catalog: expectedCatalog, p_moves: moves,
+  }),
   deleteMonthDraft: (monthId, expectedAssigned) => rpc('delete_service_schedule_month_draft', {
     p_month_id: monthId, p_expected_assigned: expectedAssigned,
   }),

@@ -94,12 +94,22 @@ export async function fixture(harness, options = {}) {
         if (member?.role === 'Jemaat') member.role = 'Volunteer'
         return reply(created)
       }
+      if (table === 'list_ministry_schedule_members_v105') {
+        const { p_ministry_id: ministryId, p_query: query = '' } = request.postDataJSON() || {}
+        const needle = query.trim().toLocaleLowerCase('id')
+        return reply((state.ministryMembers || [])
+          .filter(row => row.ministry_id === ministryId && row.users?.status === 'Aktif'
+            && row.users.name.toLocaleLowerCase('id').includes(needle))
+          .map(row => ({ user_id: row.users.user_id, name: row.users.name, photo_url: row.users.photo_url }))
+          .sort((a, b) => a.name.localeCompare(b.name) || a.user_id.localeCompare(b.user_id)).slice(0, 50))
+      }
       if (table === 'get_service_schedule_month') {
         const monthId = request.postDataJSON()?.p_month_id
         const schedule = state.monthlySchedules?.find(item => item.month.month_id === monthId)
         if (!schedule) return reply({ message: 'Simulasi bulan tidak ditemukan', code: '22023' }, 400)
         return reply(schedule)
       }
+      if (table === 'reassign_and_sync_service_schedule_draft_positions') return reply(1)
       if (table === 'delete_service_schedule_month_draft') {
         const { p_month_id: monthId, p_expected_assigned: expectedAssigned } = request.postDataJSON() || {}
         const schedule = state.monthlySchedules?.find(item => item.month.month_id === monthId)

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { BellRing, CalendarDays, ChevronLeft, ChevronRight, Copy, Plus, Printer, RefreshCw, Save, Search, Send, Trash2, X } from 'lucide-react'
+import { BellRing, CalendarDays, ChevronLeft, ChevronRight, Copy, Pencil, Plus, Printer, RefreshCw, Save, Search, Send, Trash2, X } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
 import { Badge, Button, Checkbox, EmptyState, Input, Select, Spinner, Textarea } from '@/components/ui'
 import MonthlyScheduleMatrix from '@/components/serviceSchedule/MonthlyScheduleMatrix'
 import ScheduleAccessPositions from '@/components/serviceSchedule/ScheduleAccessPositions'
-import { buildScheduleMatrix, getMonthDates, printMonthlySchedule, shiftScheduleMonth } from '@/lib/serviceScheduleMatrix'
+import { buildScheduleMatrix, formatScheduleDate, getMonthDates, printMonthlySchedule, shiftScheduleMonth } from '@/lib/serviceScheduleMatrix'
+import { buildDraftPositionSync } from '@/lib/monthlyPositionSync'
 import './monthlyScheduleWorkspace.css'
 
 const currentMonth = () => {
@@ -16,11 +17,28 @@ const currentMonth = () => {
 const newEntry = serviceDate => ({ section_id: `SEC-${crypto.randomUUID()}`, service_date: serviceDate,
   title: '', source_type: 'Ibadah', event_id: null, class_id: null, class_session_no: null,
   start_time: '', end_time: '', location: '', dress_code: '', pic: '', notes: '', ministry_ids: [] })
+const monthDraftKey = (userId, month) => 'esc:monthly-schedule-form:v1:' + userId + ':' + month
+function readMonthDraft(userId, month, sundays) {
+  const initial = { dates: sundays, selectedDate: sundays[0] || '', entries: sundays[0] ? [newEntry(sundays[0])] : [] }
+  if (!userId || typeof window === 'undefined') return initial
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(monthDraftKey(userId, month)))
+    if (!saved || !Array.isArray(saved.dates) || !Array.isArray(saved.entries)) return initial
+    const dates = [...new Set(saved.dates.filter(date => typeof date === 'string' && date.startsWith(month + '-') && /^\d{4}-\d{2}-\d{2}$/.test(date)))].sort()
+    if (!dates.length) return initial
+    const entries = saved.entries.filter(item => item && dates.includes(item.service_date) && typeof item.section_id === 'string')
+      .map(item => ({ ...newEntry(item.service_date), ...item, ministry_ids: Array.isArray(item.ministry_ids) ? item.ministry_ids : [] }))
+    return { dates, selectedDate: dates.includes(saved.selectedDate) ? saved.selectedDate : dates[0], entries }
+  } catch { return initial }
+}
 const timeLabel = item => `${String(item.start_time || '').slice(0, 5)} - ${String(item.end_time || '').slice(0, 5)}`
 const statusColor = value => value === 'Terbit' ? 'green' : value === 'Dibatalkan' ? 'red' : 'amber'
 const errorKey = error => {
   const text = String(error?.message || '')
+  if (error?.code === 'PGRST202' && text.includes('reassign_and_sync_service_schedule_draft_positions')) return 'schedMonth.editMigrationRequired'
   if (['PGRST200', 'PGRST202', 'PGRST205', '42P01', '42703'].includes(error?.code)) return 'schedMonth.migrationRequired'
+  if (text.includes('schedule_position_assigned')) return 'schedMonth.syncBlocked'
+  if (text.includes('schedule_ministry_membership_required')) return 'schedMonth.membershipRequired'
   if (error?.code === '42501' || text.includes('not_authorized')) return 'sched.noAccess'
   if (error?.code === '23P01' || text.includes('schedule_conflict')) return 'schedMonth.conflictBlocked'
   if (error?.code === '40001' || text.includes('schedule_changed') || text.includes('concurrent') || text.includes('stale')) return 'schedMonth.changed'
@@ -63,6 +81,7 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const [positionEditor, setPositionEditor] = useState(null)
   const [occurrenceEditor, setOccurrenceEditor] = useState(null)
   const [ministryFilter, setMinistryFilter] = useState('')
@@ -208,6 +227,18 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     catch (error) { toast.error(t(errorKey(error))) }
     finally { setBusy(false) }
   }
+  async function openEditSchedule() {
+    if (busy || loading || !canManageAll || !isDraft) return
+    setBusy(true)
+    try {
+      const [positionRows, latestSchedule] = await Promise.all([api.listPositions(), api.getMonth(monthId)])
+      setPositions(positionRows)
+      setSchedule(latestSchedule)
+      if (latestSchedule.month.status !== 'Draft') { toast.error(t('schedMonth.editDraftOnly')); return }
+      setEditOpen(true)
+    } catch (error) { toast.error(t(errorKey(error))) }
+    finally { setBusy(false) }
+  }
   async function deleteMonthDraft() {
     if (busy || loading || !canManageAll || !isDraft) return
     const expectedAssigned = schedule.rosters.reduce((count, roster) =>
@@ -246,6 +277,10 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
 
   return <div className="monthly-workspace">
     <header className="monthly-heading"><h1>{t('schedMonth.title')}</h1><Button variant="ghost" aria-label={t('schedMonth.refresh')} title={t('schedMonth.refresh')} onClick={reload} disabled={busy}><RefreshCw size={18} /></Button></header>
+    <div className={`monthly-access-scope${canManageAll ? ' is-admin' : ' is-manager'}`} role="note">
+      <strong>{t(canManageAll ? 'schedMonth.accessAdmin' : 'schedMonth.accessManager')}</strong>
+      <span>{t(canManageAll ? 'schedMonth.accessAdminHint' : 'schedMonth.accessManagerHint')}</span>
+    </div>
     <nav className="monthly-tabs" aria-label={t('schedMonth.views')}>
       {[['monthly', 'schedMonth.monthly'], ...(canManageAll ? [['settings', 'sched.accessPositions']] : [])].map(([id, label]) => <button type="button" key={id} disabled={busy} aria-pressed={view === id} onClick={() => {
         setView(id)
@@ -259,6 +294,7 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
         {months.length > 1 && <Select aria-label={t('schedMonth.monthVersion')} disabled={busy} value={monthId} onChange={event => setMonthId(event.target.value)}>{months.map(item => <option key={item.month_id} value={item.month_id}>{item.name} / {t(`sched.status.${item.status}`)}</option>)}</Select>}
         {canManageAll && !months.some(item => item.status !== 'Dibatalkan') && <Button onClick={() => setCreateOpen(true)} disabled={busy}><Plus size={16} />{t('schedMonth.createMonth')}</Button>}
         {schedule && <Button variant="outline" onClick={exportPdf} disabled={busy}><Printer size={16} />{t('sched.pdf')}</Button>}
+        {canManageAll && isDraft && <Button variant="outline" onClick={openEditSchedule} disabled={busy || loading}><Pencil size={16} />{t('schedMonth.editSchedule')}</Button>}
         {canManageAll && isDraft && <Button onClick={publishMonth} disabled={busy || loading} loading={busy}><Send size={16} />{t('schedMonth.publishMonth')}</Button>}
         {canManageAll && isDraft && <Button variant="danger" onClick={deleteMonthDraft} disabled={busy || loading}><Trash2 size={16} />{t('schedMonth.deleteDraft')}</Button>}
         {canManageAll && schedule?.month.status === 'Terbit' && <Button variant="outline" onClick={sendReminder} disabled={busy || loading} loading={busy}><BellRing size={16} />{t('sched.remind')}</Button>}
@@ -269,20 +305,30 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
         <MonthlyScheduleMatrix schedule={schedule} managedMinistryIds={managedMinistryIds} canManageAll={canManageAll} ministryFilter={ministryFilter} activityFilter={activityFilter} selectedDate={selectedDate} onDateChange={setSelectedDate} readonly={busy} onEditPosition={setPositionEditor} onEditOccurrence={setOccurrenceEditor} />
       </>}
     </>}
-    {createOpen && <MonthCreator month={month} ministries={ministries} positions={positions} events={events} classes={classes} busy={busy} onClose={() => setCreateOpen(false)} onSave={payload => save(async () => { const id = await api.createMonthDirect(payload); await loadMonths(); setMonthId(id) }, () => setCreateOpen(false), 'schedMonth.monthCreated', false)} />}
+    {createOpen && <MonthCreator profileId={profile?.user_id} month={month} ministries={ministries} positions={positions} events={events} classes={classes} busy={busy} onClose={() => setCreateOpen(false)} onSave={payload => save(async () => { const id = await api.createMonthDirect(payload); if (profile?.user_id) { try { window.localStorage.removeItem(monthDraftKey(profile.user_id, month)) } catch { /* Jadwal sudah dibuat di database. */ } } await loadMonths(); setMonthId(id) }, () => setCreateOpen(false), 'schedMonth.monthCreated', false)} />}
+    {editOpen && schedule && <EditScheduleDialog schedule={schedule} positions={positions} busy={busy} onClose={() => setEditOpen(false)} onSave={(catalog, moves) => save(() => api.reassignAndSyncDraftPositions(monthId, schedule.month.version, catalog, moves), () => setEditOpen(false), 'schedMonth.positionsSynced')} />}
     {positionEditor && <PositionEditor context={positionEditor} api={api} canManageAll={canManageAll} busy={busy} onClose={() => setPositionEditor(null)} onSave={payload => save(() => api.setPosition(payload), () => setPositionEditor(null), 'sched.assignmentSaved')} />}
     {occurrenceEditor && <OccurrenceEditor occurrence={occurrenceEditor} month={month} busy={busy} onClose={() => setOccurrenceEditor(null)} onSave={data => save(() => api.updateOccurrence(occurrenceEditor.occurrence_id, data), () => setOccurrenceEditor(null))} />}
   </div>
 }
 
-function MonthCreator({ month, ministries, positions, events, classes, onClose, onSave, busy }) {
+function MonthCreator({ profileId, month, ministries, positions, events, classes, onClose, onSave, busy }) {
   const { t, lang } = useLang()
   const sundays = useMemo(() => getMonthDates(month), [month])
-  const [dates, setDates] = useState(sundays)
-  const [selectedDate, setSelectedDate] = useState(sundays[0] || '')
-  const [entries, setEntries] = useState(() => sundays[0] ? [newEntry(sundays[0])] : [])
+  const [initial] = useState(() => readMonthDraft(profileId, month, sundays))
+  const [dates, setDates] = useState(initial.dates)
+  const [selectedDate, setSelectedDate] = useState(initial.selectedDate)
+  const [entries, setEntries] = useState(initial.entries)
+  const [saveFailed, setSaveFailed] = useState(false)
   const [newDate, setNewDate] = useState('')
   const [error, setError] = useState('')
+  useEffect(() => {
+    if (!profileId) return
+    try {
+      window.localStorage.setItem(monthDraftKey(profileId, month), JSON.stringify({ dates, selectedDate, entries }))
+      setSaveFailed(false)
+    } catch { setSaveFailed(true) }
+  }, [profileId, month, dates, selectedDate, entries])
   const [year, number] = month.split('-').map(Number)
   const maxDate = new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10)
   const dateEntries = entries.filter(item => item.service_date === selectedDate)
@@ -349,8 +395,10 @@ function MonthCreator({ month, ministries, positions, events, classes, onClose, 
           <Input required type="time" label={t('sched.startTime')} value={item.start_time} disabled={busy} onChange={event => updateEntry(item, { start_time: event.target.value })} />
           <Input required type="time" label={t('sched.endTime')} value={item.end_time} disabled={busy} onChange={event => updateEntry(item, { end_time: event.target.value })} />
         </div>
-        <fieldset className="monthly-direct-ministries"><legend>{t('sched.ministry')}</legend><div className="monthly-direct-ministry-options">{ministries.map(ministry => <Checkbox key={ministry.ministry_id} label={ministry.name} checked={item.ministry_ids.includes(ministry.ministry_id)} disabled={busy || !activePositions(ministry.ministry_id).length} onChange={event => updateEntry(item, { ministry_ids: event.target.checked ? [...item.ministry_ids, ministry.ministry_id] : item.ministry_ids.filter(id => id !== ministry.ministry_id) })} />)}</div>
-          {item.ministry_ids.map(id => { const ministry = ministries.find(row => row.ministry_id === id); const available = activePositions(id); const capacity = available.reduce((sum, row) => sum + (row.default_slots || 1), 0); return <p className="monthly-direct-positions" key={id}>{ministry?.name}: {available.map(row => row.name).join(', ')} ({t('schedMonth.capacity', { count: capacity })})</p> })}
+        <fieldset className="monthly-direct-ministries"><legend>{t('sched.ministry')}</legend><div className="monthly-direct-ministry-options">{ministries.map(ministry => {
+          const jobs = activePositions(ministry.ministry_id)
+          return <Checkbox key={ministry.ministry_id} label={<span className="monthly-direct-ministry-label"><strong>{ministry.name}</strong><small>{jobs.length ? t('schedMonth.jobsPreview', { jobs: jobs.map(job => job.name + ' (' + (job.default_slots || 1) + ')').join(' · ') }) : t('schedMonth.noJobs')}</small></span>} checked={item.ministry_ids.includes(ministry.ministry_id)} disabled={busy || !jobs.length} onChange={event => updateEntry(item, { ministry_ids: event.target.checked ? [...item.ministry_ids, ministry.ministry_id] : item.ministry_ids.filter(id => id !== ministry.ministry_id) })} />
+        })}</div>
           {!ministries.some(ministry => activePositions(ministry.ministry_id).length) && <p className="monthly-error" role="alert">{t('schedMonth.noPositionsForPart')}</p>}
         </fieldset>
         <details className="monthly-direct-details"><summary>{t('schedMonth.moreDetails')}</summary><div className="monthly-editor-grid">
@@ -360,8 +408,67 @@ function MonthCreator({ month, ministries, positions, events, classes, onClose, 
         </div><Textarea label={t('sched.notes')} maxLength={1000} value={item.notes} disabled={busy} onChange={event => updateEntry(item, { notes: event.target.value })} /></details>
       </section>)}
       {error && <p className="monthly-error" role="alert">{t(error)}</p>}
-    </div><footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('common.cancel')}</Button><Button type="submit" disabled={!entries.length} loading={busy}><CalendarDays size={16} />{t('sched.createDraft')}</Button></footer>
+      <p className={saveFailed ? 'monthly-error' : 'monthly-muted'} role={saveFailed ? 'alert' : 'status'}>{t(saveFailed ? 'schedMonth.localDraftFailed' : 'schedMonth.localDraftSaved')}</p>
+    </div><footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('sched.close')}</Button><Button type="submit" disabled={!entries.length} loading={busy}><CalendarDays size={16} />{t('schedMonth.createMonth')}</Button></footer>
   </form></Modal>
+}
+
+function EditScheduleDialog({ schedule, positions, busy, onClose, onSave }) {
+  const { t, lang } = useLang()
+  const preview = useMemo(() => buildDraftPositionSync(schedule, positions), [schedule, positions])
+  const [choices, setChoices] = useState({})
+  const affected = preview.changes.flatMap(item => item.affected)
+  const missingChoice = affected.some(item => !choices[item.slotId])
+  const capacityExceeded = useMemo(() => {
+    const counts = new Map()
+    const capacities = new Map(positions.filter(item => item.is_active)
+      .map(item => [item.position_id, Number(item.default_slots)]))
+    for (const roster of schedule.rosters || []) for (const slot of roster.service_roster_slots || []) {
+      if (!slot.user_id || !capacities.has(slot.position_id)
+        || Number(slot.slot_no) > capacities.get(slot.position_id)) continue
+      const key = `${roster.roster_id}:${slot.position_id}`
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+    for (const item of affected) {
+      const positionId = choices[item.slotId]
+      if (!positionId) continue
+      const key = `${item.rosterId}:${positionId}`
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+    return [...counts].some(([key, count]) => count > (capacities.get(key.slice(key.lastIndexOf(':') + 1)) || 0))
+  }, [affected, choices, positions, schedule.rosters])
+  return <Modal title={t('schedMonth.editSchedule')} onClose={onClose} busy={busy}>
+    <div className="monthly-dialog-body">
+      <p className="monthly-muted">{t('schedMonth.editScheduleHint')}</p>
+      {!preview.changes.length && <p className="monthly-muted">{t('schedMonth.syncNoChanges')}</p>}
+      {preview.changes.map(item => <section className="monthly-sync-row" key={item.sectionId + ':' + item.ministryId}>
+        <h3>{item.sectionTitle} · {item.ministryName}</h3>
+        <div className="monthly-sync-columns">
+          <div><h4>{t('schedMonth.syncBefore')}</h4><div className="monthly-sync-jobs">{item.before.map((name, index) => <span key={index}>{name}</span>)}</div></div>
+          <div><h4>{t('schedMonth.syncAfter')}</h4><div className="monthly-sync-jobs is-new">{item.after.map((name, index) => <span key={index}>{name}</span>)}</div></div>
+        </div>
+        {!!item.affected.length && <div className="monthly-sync-affected">
+          <h4>{t('schedMonth.syncAffectedTitle')}</h4>
+          <p>{t('schedMonth.syncAffectedHint')}</p>
+          {item.affected.map(person => <Select key={person.slotId}
+            label={t('schedMonth.syncChooseJobFor', { name: person.userName,
+              date: formatScheduleDate(person.serviceDate, lang), job: person.oldPositionName })}
+            value={choices[person.slotId] || ''} disabled={busy}
+            onChange={event => setChoices(current => ({ ...current, [person.slotId]: event.target.value }))}>
+            <option value="">{t('schedMonth.syncChooseJob')}</option>
+            {positions.filter(position => position.is_active && position.ministry_id === item.ministryId)
+              .map(position => <option key={position.position_id} value={position.position_id}>
+                {position.name} ({position.default_slots})</option>)}
+          </Select>)}
+        </div>}
+      </section>)}
+      {!!preview.missingJobsCount && <p className="monthly-error" role="alert">{t('schedMonth.syncNoJobs')}</p>}
+      {!!affected.length && missingChoice && <p className="monthly-error" role="status">{t('schedMonth.syncNeedAssignment')}</p>}
+      {capacityExceeded && <p className="monthly-error" role="alert">{t('schedMonth.syncCapacityExceeded')}</p>}
+    </div>
+    <footer className="monthly-dialog-footer"><Button variant="outline" disabled={busy} onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} disabled={!preview.changes.length || preview.missingJobsCount > 0 || missingChoice || capacityExceeded} onClick={() => onSave(preview.catalog,
+      affected.map(item => ({ slot_id: item.slotId, user_id: item.userId, position_id: choices[item.slotId] })))}><Save size={16} />{t('common.save')}</Button></footer>
+  </Modal>
 }
 
 function PositionEditor({ context, api, canManageAll, onClose, onSave, busy }) {

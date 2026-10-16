@@ -277,12 +277,24 @@ export const serviceRosterService = {
     if (error) throw error
   },
 
-  async listMinistryMembers(ministryId, query = '') {
+  async listMinistryMembers(ministryId, query = '', canManageAll = false) {
+    const search = query.trim()
+    if (canManageAll) {
+      // Policy production memberi Admin akses baca user_ministries; tetap batasi
+      // hasil pada Ministry tujuan sebelum pagination 50 anggota diterapkan.
+      let request = supabase.from('user_ministries')
+        .select('users!user_id!inner(user_id,name,photo_url,status)')
+        .eq('ministry_id', ministryId).eq('users.status', 'Aktif')
+        .order('user_id').limit(50)
+      if (search) request = request.ilike('users.name', `%${search}%`)
+      const { data, error } = await request
+      if (error) throw error
+      return (data || []).map(row => row.users)
+    }
     // RLS user_ministries tidak membuka daftar anggota kepada MH/Wakil.
-    // RPC ini mengembalikan identitas ringkas hanya untuk ministry yang dikelola.
     const { data, error } = await supabase.rpc('list_ministry_schedule_members_v105', {
       p_ministry_id: ministryId,
-      p_query: query.trim(),
+      p_query: search,
     })
     if (error) throw error
     return data || []
@@ -302,6 +314,25 @@ export const serviceRosterService = {
     return (data || []).filter(user => !FORBIDDEN_SCHEDULE_MANAGER_ROLES.has(user.role_secondary))
   },
 
+  async listManagerCandidates() {
+    const candidates = new Map()
+    const pageSize = 500
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabase.from('user_ministries')
+        .select('ministry_id, users!user_id(user_id, name, role, role_secondary, status)')
+        .order('ministry_id').order('user_id').range(offset, offset + pageSize - 1)
+      if (error) throw error
+      for (const membership of data || []) {
+        const user = membership.users
+        if (user?.status !== 'Aktif' || !['Jemaat', 'Volunteer', 'PKS'].includes(user.role)
+          || FORBIDDEN_SCHEDULE_MANAGER_ROLES.has(user.role_secondary)) continue
+        if (!candidates.has(user.user_id)) candidates.set(user.user_id, { ...user, ministry_ids: [] })
+        candidates.get(user.user_id).ministry_ids.push(membership.ministry_id)
+      }
+      if ((data || []).length < pageSize) return [...candidates.values()]
+        .sort((a, b) => a.name.localeCompare(b.name) || a.user_id.localeCompare(b.user_id))
+    }
+  },
   async listManagers(ministryId) {
     const { data, error } = await supabase
       .from('ministry_schedule_managers')

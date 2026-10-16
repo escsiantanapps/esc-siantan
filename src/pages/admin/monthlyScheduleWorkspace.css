@@ -3,6 +3,10 @@
 .monthly-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
 .monthly-heading h1 { font-size:24px; line-height:1.3; font-weight:650; }
 .monthly-heading h2,.monthly-toolbar h2 { font-size:17px; font-weight:600; }
+.monthly-access-scope { display:flex; flex-direction:column; gap:3px; margin-bottom:12px; padding:10px 14px; border:1px solid var(--color-gray-200); border-left:3px solid var(--color-brand-500); border-radius:6px; background:var(--color-control); font-size:13px; }
+.monthly-access-scope strong { font-weight:650; color:var(--color-gray-900); }
+.monthly-access-scope span { color:var(--color-gray-600); line-height:1.4; }
+.monthly-access-scope.is-manager { border-left-color:var(--color-gray-500); }
 .monthly-tabs { display:flex; flex-wrap:wrap; width:fit-content; max-width:100%; gap:2px; padding:3px; background:var(--color-control); border-radius:6px; margin-bottom:8px; }
 .monthly-tabs button { min-height:44px; max-width:100%; padding:8px 12px; border:1px solid transparent; font-size:14px; color:var(--color-gray-600); }
 .monthly-tabs button[aria-pressed="true"] { color:var(--color-brand-700); background:var(--color-surface); border:1px solid var(--color-gray-200); }
@@ -61,14 +65,28 @@
 .monthly-direct-ministries legend { margin-bottom:8px; font-size:14px; font-weight:600; }
 .monthly-direct-ministry-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px 14px; }
 .monthly-direct-ministry-options label { min-width:0; overflow-wrap:anywhere; }
-.monthly-direct-positions { margin-top:8px; font-size:12px; color:var(--color-gray-600); overflow-wrap:anywhere; }
+.monthly-direct-ministry-options label { align-items:flex-start; padding:10px; border:1px solid var(--color-gray-200); border-radius:6px; background:var(--color-control); }
+.monthly-direct-ministry-options label:has(input:checked) { border-color:var(--color-brand-500); background:var(--color-surface); }
+.monthly-direct-ministry-options label:has(input:disabled) { opacity:.62; }
+.monthly-direct-ministry-options input { flex:none; margin-top:3px; }
+.monthly-direct-ministry-label { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.monthly-direct-ministry-label strong { font-size:13px; color:var(--color-gray-900); }
+.monthly-direct-ministry-label small { font-size:12px; line-height:1.45; color:var(--color-gray-600); overflow-wrap:anywhere; }
 .monthly-direct-details { margin-top:12px; border-top:1px solid var(--color-gray-200); }
 .monthly-direct-details summary { padding:10px 0; cursor:pointer; color:var(--color-brand-700); font-size:13px; font-weight:600; }
 .monthly-direct-details .monthly-editor-grid { margin-bottom:12px; }
 .monthly-context { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--color-gray-500); }
 .monthly-context strong { font-size:15px; color:var(--color-gray-900); }
-.schedule-access-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; padding:18px 0; }
-.schedule-access-grid > section { min-width:0; }
+.schedule-access-grant { display:flex; flex-direction:column; gap:10px; width:100%; padding:18px; border:1px solid var(--color-gray-200); border-radius:8px; background:var(--color-surface); }
+.schedule-access-grant h2 { margin-bottom:0; }
+.schedule-access-candidates { display:flex; flex-direction:column; max-height:220px; overflow-y:auto; border:1px solid var(--color-gray-200); border-radius:6px; background:var(--color-control); }
+.schedule-access-candidate { min-height:44px; padding:10px 12px; text-align:left; border-bottom:1px solid var(--color-gray-200); }
+.schedule-access-candidate:last-child { border-bottom:0; }
+.schedule-access-candidate[aria-pressed="true"] { background:var(--color-surface); color:var(--color-brand-700); font-weight:600; }
+.schedule-access-grant-target { display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:14px; border:1px solid var(--color-gray-200); border-radius:6px; background:var(--color-surface); }
+.schedule-access-grant-target > div { width:100%; }
+.schedule-access-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:14px 0; }
+.schedule-access-grid > section { min-width:0; padding:18px; border:1px solid var(--color-gray-200); border-radius:8px; background:var(--color-surface); }
 .schedule-access h2 { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:600; margin-bottom:14px; }
 .schedule-access-head { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding-bottom:10px; }
 .schedule-access-head > div { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
@@ -77,6 +95,13 @@
 .schedule-access-row > div { display:flex; flex-direction:column; gap:3px; }
 .schedule-access-row button { flex-shrink:0; min-width:44px; min-height:44px; }
 .schedule-access-list { margin-bottom:18px; }
+.schedule-position-heading { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.schedule-position-heading h2 { margin-bottom:10px; }
+.schedule-position-list { border-top:1px solid var(--color-gray-200); }
+.schedule-position-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; width:100%; }
+.schedule-position-row > div:first-child { min-width:0; }
+.schedule-access-row > .schedule-position-actions { display:flex; flex-direction:row; align-items:center; justify-content:flex-end; gap:2px; flex:none; }
+.schedule-position-actions button { flex:none; }
 .schedule-access .monthly-subheading { margin:16px 0 8px; }
 .schedule-position-form { display:flex; flex-direction:column; gap:12px; border-top:1px solid var(--color-gray-200); padding-top:16px; }
 .schedule-access input,.schedule-access select { background:var(--color-control); min-height:44px; }
@@ -85,6 +110,8 @@
 .monthly-dialog :focus-visible,.monthly-workspace :focus-visible { outline:2px solid var(--color-brand-500); outline-offset:2px; }
 @media(max-width:700px) {
   .schedule-access-grid { grid-template-columns:1fr; gap:28px; }
+  .schedule-position-row { grid-template-columns:minmax(0,1fr) auto; }
+  .schedule-access-row > .schedule-position-actions { gap:0; }
   .monthly-heading h1 { font-size:21px; }
   .monthly-tabs button { font-size:12px; padding:8px; }
   .monthly-month { width:100%; }
@@ -103,5 +130,19 @@
   .monthly-direct-actions { align-items:flex-start; }
   .monthly-direct-commands { width:100%; }
   .monthly-direct-commands button { font-size:12px; }
-  .monthly-direct-ministry-options { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .monthly-direct-ministry-options { grid-template-columns:1fr; }
 }
+
+.monthly-sync-row { border:1px solid var(--color-gray-200); border-radius:7px; padding:12px 14px; background:var(--color-control); overflow-wrap:anywhere; }
+.monthly-sync-row h3 { font-size:14px; font-weight:600; margin-bottom:8px; }
+.monthly-sync-row p { font-size:13px; line-height:1.55; margin-top:4px; }
+.monthly-sync-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
+.monthly-sync-columns > div { min-width:0; }
+.monthly-sync-columns h4,.monthly-sync-affected h4 { font-size:12px; font-weight:700; color:var(--color-gray-600); margin-bottom:7px; }
+.monthly-sync-jobs { display:flex; flex-wrap:wrap; gap:6px; }
+.monthly-sync-jobs span { padding:5px 8px; border:1px solid var(--color-gray-200); border-radius:5px; font-size:12px; line-height:1.4; background:var(--color-surface); color:var(--color-gray-900); }
+.monthly-sync-jobs.is-new span { border-color:var(--color-brand-500); }
+.monthly-sync-affected { margin-top:14px; padding-top:12px; border-top:1px solid var(--color-gray-200); display:flex; flex-direction:column; gap:9px; }
+.monthly-sync-affected > p { margin:0 0 2px; color:var(--color-gray-600); }
+.monthly-sync-affected select { width:100%; }
+@media(max-width:700px) { .monthly-sync-columns { grid-template-columns:1fr; } }

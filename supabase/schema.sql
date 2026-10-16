@@ -8265,3 +8265,379 @@ GRANT EXECUTE ON FUNCTION list_ministry_schedule_members_v105(TEXT,TEXT)
   TO authenticated;
 
 COMMIT;
+
+-- ── Migrasi v106: Anggota Ministry wajib untuk pengelola dan pelayan ──
+-- TEMUAN (2026-10-16): pemilih Admin dan guard slot lama mengizinkan
+-- pengguna aktif dari luar Ministry tujuan. Wakil yang kehilangan keanggotaan
+-- juga masih lolos auth_manages_ministry().
+-- KEPUTUSAN OPERATOR: pengelola dan pelayan harus menjadi anggota Ministry
+-- tujuan. Pemeriksaan berlaku saat penugasan dan saat terbit, termasuk RPC
+-- serta penulisan backend; pengosongan slot dan pencabutan akses tetap boleh.
+
+BEGIN;
+
+-- Definisi production fungsi ini telah dikirim operator sebelum migrasi ini.
+CREATE OR REPLACE FUNCTION auth_manages_ministry(p_ministry_id TEXT)
+  RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM ministry_schedule_managers msm
+    JOIN users u ON u.user_id = msm.user_id
+    JOIN ministries ministry ON ministry.ministry_id = msm.ministry_id
+    WHERE msm.ministry_id = p_ministry_id
+      AND msm.user_id = auth_user_id()
+      AND msm.is_active = true
+      AND u.status = 'Aktif'
+      AND u.role IN ('Jemaat', 'Volunteer', 'PKS')
+      AND COALESCE(u.role_secondary, '') NOT IN ('Admin', 'Super Admin', 'Gembala')
+      AND EXISTS (
+        SELECT 1 FROM user_ministries member
+        WHERE member.user_id = msm.user_id
+          AND member.ministry_id = msm.ministry_id
+      )
+      AND (msm.manager_role = 'Wakil'
+        OR (msm.manager_role = 'Ministry Head' AND u.role = 'Volunteer'
+          AND ministry.head_user_id = msm.user_id))
+  )
+$$;
+REVOKE EXECUTE ON FUNCTION auth_manages_ministry(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_manages_ministry(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION guard_schedule_ministry_membership_v106()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'ministry_schedule_managers' THEN
+    IF NEW.is_active AND NOT EXISTS (
+      SELECT 1 FROM user_ministries member
+      WHERE member.user_id = NEW.user_id AND member.ministry_id = NEW.ministry_id
+    ) THEN
+      RAISE EXCEPTION 'schedule_ministry_membership_required' USING ERRCODE = '23514';
+    END IF;
+  ELSIF TG_TABLE_NAME = 'service_roster_slots' THEN
+    IF NEW.user_id IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM user_ministries member
+      WHERE member.user_id = NEW.user_id AND member.ministry_id = NEW.ministry_id
+    ) THEN
+      RAISE EXCEPTION 'schedule_ministry_membership_required' USING ERRCODE = '23514';
+    END IF;
+  ELSIF TG_TABLE_NAME = 'service_rosters' THEN
+    IF NEW.status = 'Terbit' AND NEW.status IS DISTINCT FROM OLD.status
+       AND EXISTS (
+         SELECT 1 FROM service_roster_slots slot
+         WHERE slot.roster_id = NEW.roster_id AND slot.user_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM user_ministries member
+             WHERE member.user_id = slot.user_id
+               AND member.ministry_id = NEW.ministry_id
+           )
+       ) THEN
+      RAISE EXCEPTION 'schedule_ministry_membership_required' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_schedule_membership_manager_v106 ON ministry_schedule_managers;
+CREATE TRIGGER trg_schedule_membership_manager_v106
+  BEFORE INSERT OR UPDATE ON ministry_schedule_managers
+  FOR EACH ROW EXECUTE FUNCTION guard_schedule_ministry_membership_v106();
+
+DROP TRIGGER IF EXISTS trg_schedule_membership_slot_v106 ON service_roster_slots;
+CREATE TRIGGER trg_schedule_membership_slot_v106
+  BEFORE INSERT OR UPDATE ON service_roster_slots
+  FOR EACH ROW EXECUTE FUNCTION guard_schedule_ministry_membership_v106();
+
+DROP TRIGGER IF EXISTS trg_schedule_membership_publish_v106 ON service_rosters;
+CREATE TRIGGER trg_schedule_membership_publish_v106
+  BEFORE UPDATE OF status ON service_rosters
+  FOR EACH ROW EXECUTE FUNCTION guard_schedule_ministry_membership_v106();
+
+COMMIT;
+
+-- ── Migrasi v107: Sinkronkan posisi jadwal Draft ──────────────────────
+-- KEPUTUSAN OPERATOR (2026-10-16): Edit Jadwal hanya untuk Draft. Posisi
+-- terbaru dari katalog menggantikan snapshot lama; penugasan yang masih
+-- cocok dipertahankan. Posisi/slot terisi yang hilang harus dikosongkan dulu.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION sync_service_schedule_draft_positions(
+  p_month_id TEXT, p_expected_version INTEGER, p_expected_catalog JSONB
+) RETURNS INTEGER
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  target service_schedule_months%ROWTYPE;
+  section JSONB; part JSONB; position JSONB;
+  new_sections JSONB := '[]'::JSONB;
+  new_parts JSONB; desired JSONB; catalog_map JSONB;
+  catalog_count INTEGER; total_slots INTEGER := 0;
+  roster RECORD;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO target FROM service_schedule_months
+    WHERE month_id = p_month_id FOR UPDATE;
+  IF NOT FOUND OR target.status <> 'Draft' THEN
+    RAISE EXCEPTION 'Hanya jadwal Draft yang dapat diedit.' USING ERRCODE = '22023';
+  END IF;
+  IF p_expected_version IS NULL OR target.version <> p_expected_version THEN
+    RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+  END IF;
+  IF jsonb_typeof(p_expected_catalog) IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'Katalog posisi tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_typeof(target.definition->'sections') IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Struktur jadwal tidak valid.' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM set_config('app.service_schedule_structure', p_month_id, true);
+  FOR section IN SELECT value FROM jsonb_array_elements(target.definition->'sections') LOOP
+    new_parts := '[]'::JSONB;
+    FOR part IN SELECT value FROM jsonb_array_elements(section->'parts') LOOP
+      -- Kunci katalog mencegah posisi berubah di tengah sinkronisasi.
+      PERFORM 1 FROM ministry_service_positions catalog
+        WHERE catalog.ministry_id = part->>'ministry_id' AND catalog.is_active
+        ORDER BY catalog.position_id FOR SHARE;
+      SELECT count(*), jsonb_agg(jsonb_build_object(
+        'position_id', catalog.position_id, 'capacity', catalog.default_slots,
+        'name', catalog.name, 'sort_order', catalog.sort_order
+      ) ORDER BY catalog.sort_order, catalog.name, catalog.position_id)
+        INTO catalog_count, desired
+      FROM ministry_service_positions catalog
+      WHERE catalog.ministry_id = part->>'ministry_id' AND catalog.is_active;
+      SELECT COALESCE(jsonb_object_agg(catalog.position_id, jsonb_build_object(
+        'name', catalog.name, 'capacity', catalog.default_slots, 'sort_order', catalog.sort_order
+      )), '{}'::JSONB) INTO catalog_map
+      FROM ministry_service_positions catalog
+      WHERE catalog.ministry_id = part->>'ministry_id' AND catalog.is_active;
+      IF catalog_map IS DISTINCT FROM p_expected_catalog->(part->>'ministry_id') THEN
+        RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+      END IF;
+      IF catalog_count NOT BETWEEN 1 AND 30 OR EXISTS (
+        SELECT 1 FROM ministry_service_positions catalog
+        WHERE catalog.ministry_id = part->>'ministry_id' AND catalog.is_active
+          AND catalog.default_slots NOT BETWEEN 1 AND 20
+      ) THEN
+        RAISE EXCEPTION 'Setiap Ministry jadwal harus memiliki 1 sampai 30 posisi aktif dengan kapasitas 1 sampai 20.'
+          USING ERRCODE = '22023';
+      END IF;
+      total_slots := total_slots + (
+        SELECT COALESCE(sum((item->>'capacity')::INTEGER), 0)
+        FROM jsonb_array_elements(desired) item
+      ) * (
+        SELECT count(*) FROM service_schedule_occurrences occurrence
+        JOIN service_schedule_parts schedule_part ON schedule_part.occurrence_id = occurrence.occurrence_id
+        WHERE occurrence.month_id = p_month_id
+          AND occurrence.section_id = section->>'section_id'
+          AND schedule_part.ministry_id = part->>'ministry_id'
+      );
+      IF total_slots > 2000 THEN
+        RAISE EXCEPTION 'Total slot satu bulan melebihi 2000.' USING ERRCODE = '22023';
+      END IF;
+      FOR roster IN
+        SELECT schedule_part.roster_id FROM service_schedule_parts schedule_part
+        JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = schedule_part.occurrence_id
+        JOIN service_rosters sr ON sr.roster_id = schedule_part.roster_id
+        WHERE occurrence.month_id = p_month_id
+          AND occurrence.section_id = section->>'section_id'
+          AND schedule_part.ministry_id = part->>'ministry_id'
+        ORDER BY schedule_part.roster_id FOR UPDATE OF sr
+      LOOP
+        IF EXISTS (
+          SELECT 1 FROM service_roster_slots slot
+          WHERE slot.roster_id = roster.roster_id AND slot.user_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM jsonb_array_elements(desired) item
+              WHERE item->>'position_id' = slot.position_id
+                AND slot.slot_no <= (item->>'capacity')::INTEGER
+            )
+        ) THEN
+          RAISE EXCEPTION 'schedule_position_assigned' USING ERRCODE = '22023';
+        END IF;
+        DELETE FROM service_roster_slots slot
+        WHERE slot.roster_id = roster.roster_id AND NOT EXISTS (
+          SELECT 1 FROM jsonb_array_elements(desired) item
+          WHERE item->>'position_id' = slot.position_id
+            AND slot.slot_no <= (item->>'capacity')::INTEGER
+        );
+        FOR position IN SELECT value FROM jsonb_array_elements(desired) LOOP
+          INSERT INTO service_roster_slots(roster_id, ministry_id, position_id, slot_no)
+          SELECT roster.roster_id, part->>'ministry_id', position->>'position_id', number
+          FROM generate_series(1, (position->>'capacity')::INTEGER) number
+          WHERE NOT EXISTS (
+            SELECT 1 FROM service_roster_slots slot
+            WHERE slot.roster_id = roster.roster_id
+              AND slot.position_id = position->>'position_id' AND slot.slot_no = number
+          );
+        END LOOP;
+      END LOOP;
+      new_parts := new_parts || jsonb_build_array(part || jsonb_build_object(
+        'positions', desired,
+        'ministry_name', (SELECT ministry.name FROM ministries ministry
+          WHERE ministry.ministry_id = part->>'ministry_id')
+      ));
+    END LOOP;
+    new_sections := new_sections || jsonb_build_array(section || jsonb_build_object('parts', new_parts));
+  END LOOP;
+  PERFORM validate_service_schedule_definition(jsonb_build_object('sections', new_sections));
+  UPDATE service_schedule_months SET
+    definition = jsonb_set(target.definition, '{sections}', new_sections),
+    version = version + 1, updated_at = now()
+  WHERE month_id = p_month_id;
+  PERFORM set_config('app.service_schedule_structure', '', true);
+  RETURN target.version + 1;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION sync_service_schedule_draft_positions(TEXT,INTEGER,JSONB)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION sync_service_schedule_draft_positions(TEXT,INTEGER,JSONB)
+  TO authenticated;
+
+COMMIT;
+
+-- ── Migrasi v108: Pindahkan pelayan saat posisi Draft diganti ─────────
+-- KEPUTUSAN OPERATOR (2026-10-16): setiap pelayan pada posisi lama yang
+-- hilang/menyusut dipilihkan job baru per tanggal. Sinkronisasi posisi dan
+-- pemindahan harus atomik agar nama tidak hilang ketika tahap kedua gagal.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION reassign_and_sync_service_schedule_draft_positions(
+  p_month_id TEXT, p_expected_version INTEGER, p_expected_catalog JSONB,
+  p_moves JSONB
+) RETURNS INTEGER
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  month_status TEXT; month_version INTEGER; affected_count INTEGER;
+  item JSONB; source_slot RECORD; group_row RECORD;
+  validated_moves JSONB := '[]'::JSONB;
+  old_users TEXT[]; keep_users TEXT[]; moved_users TEXT[];
+  next_version INTEGER;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF jsonb_typeof(p_moves) IS DISTINCT FROM 'array'
+    OR jsonb_array_length(p_moves) > 2000 OR octet_length(p_moves::TEXT) > 200000 THEN
+    RAISE EXCEPTION 'Pilihan job baru tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  SELECT status, version INTO month_status, month_version
+  FROM service_schedule_months WHERE month_id = p_month_id FOR UPDATE;
+  IF NOT FOUND OR month_status <> 'Draft' THEN
+    RAISE EXCEPTION 'Hanya jadwal Draft yang dapat diedit.' USING ERRCODE = '22023';
+  END IF;
+  IF p_expected_version IS NULL OR month_version <> p_expected_version THEN
+    RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+  END IF;
+
+  SELECT count(*) INTO affected_count
+  FROM service_roster_slots slot
+  JOIN service_schedule_parts part ON part.roster_id = slot.roster_id
+  JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id
+  WHERE occurrence.month_id = p_month_id AND slot.user_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM ministry_service_positions catalog
+      WHERE catalog.position_id = slot.position_id AND catalog.is_active
+        AND slot.slot_no <= catalog.default_slots
+    );
+  IF affected_count <> jsonb_array_length(p_moves)
+    OR EXISTS (SELECT 1 FROM jsonb_array_elements(p_moves) move
+      GROUP BY move->>'slot_id' HAVING count(*) > 1) THEN
+    RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+  END IF;
+
+  FOR item IN SELECT value FROM jsonb_array_elements(p_moves) LOOP
+    IF jsonb_typeof(item) IS DISTINCT FROM 'object'
+      OR EXISTS (SELECT 1 FROM jsonb_object_keys(item) key
+        WHERE key NOT IN ('slot_id','user_id','position_id'))
+      OR jsonb_typeof(item->'slot_id') IS DISTINCT FROM 'string'
+      OR jsonb_typeof(item->'user_id') IS DISTINCT FROM 'string'
+      OR jsonb_typeof(item->'position_id') IS DISTINCT FROM 'string' THEN
+      RAISE EXCEPTION 'Pilihan job baru tidak valid.' USING ERRCODE = '22023';
+    END IF;
+    SELECT slot.slot_id, slot.roster_id, slot.position_id, slot.user_id,
+      slot.ministry_id, slot.slot_no INTO source_slot
+    FROM service_roster_slots slot
+    JOIN service_schedule_parts part ON part.roster_id = slot.roster_id
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id
+    WHERE slot.slot_id = item->>'slot_id' AND occurrence.month_id = p_month_id
+    FOR UPDATE OF slot;
+    IF NOT FOUND OR source_slot.user_id IS DISTINCT FROM item->>'user_id'
+      OR EXISTS (
+        SELECT 1 FROM ministry_service_positions catalog
+        WHERE catalog.position_id = source_slot.position_id AND catalog.is_active
+          AND source_slot.slot_no <= catalog.default_slots
+      ) THEN
+      RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM ministry_service_positions catalog
+      WHERE catalog.position_id = item->>'position_id'
+        AND catalog.ministry_id = source_slot.ministry_id AND catalog.is_active
+    ) THEN
+      RAISE EXCEPTION 'Job baru harus aktif dalam Ministry yang sama.' USING ERRCODE = '22023';
+    END IF;
+    validated_moves := validated_moves || jsonb_build_array(jsonb_build_object(
+      'roster_id', source_slot.roster_id, 'source_position_id', source_slot.position_id,
+      'target_position_id', item->>'position_id', 'user_id', source_slot.user_id,
+      'slot_id', source_slot.slot_id
+    ));
+  END LOOP;
+
+  -- Seluruh slot terdampak sudah terwakili tepat sekali. Fungsi penugasan
+  -- existing mengosongkan dan menata ulang satu posisi dengan guard aktif.
+  FOR group_row IN
+    SELECT move->>'roster_id' AS roster_id,
+      move->>'source_position_id' AS position_id
+    FROM jsonb_array_elements(validated_moves) move
+    GROUP BY move->>'roster_id', move->>'source_position_id'
+    ORDER BY move->>'roster_id', move->>'source_position_id'
+  LOOP
+    SELECT COALESCE(array_agg(slot.user_id ORDER BY slot.slot_no)
+      FILTER (WHERE slot.user_id IS NOT NULL), ARRAY[]::TEXT[])
+      INTO old_users FROM service_roster_slots slot
+      WHERE slot.roster_id = group_row.roster_id
+        AND slot.position_id = group_row.position_id;
+    SELECT COALESCE(array_agg(slot.user_id ORDER BY slot.slot_no)
+      FILTER (WHERE slot.user_id IS NOT NULL), ARRAY[]::TEXT[])
+      INTO keep_users FROM service_roster_slots slot
+      WHERE slot.roster_id = group_row.roster_id
+        AND slot.position_id = group_row.position_id
+        AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(validated_moves) move
+          WHERE move->>'slot_id' = slot.slot_id);
+    PERFORM set_service_schedule_position(group_row.roster_id,
+      group_row.position_id, keep_users, old_users);
+  END LOOP;
+
+  next_version := sync_service_schedule_draft_positions(
+    p_month_id, p_expected_version, p_expected_catalog);
+
+  FOR group_row IN
+    SELECT move->>'roster_id' AS roster_id,
+      move->>'target_position_id' AS position_id
+    FROM jsonb_array_elements(validated_moves) move
+    GROUP BY move->>'roster_id', move->>'target_position_id'
+    ORDER BY move->>'roster_id', move->>'target_position_id'
+  LOOP
+    SELECT COALESCE(array_agg(slot.user_id ORDER BY slot.slot_no)
+      FILTER (WHERE slot.user_id IS NOT NULL), ARRAY[]::TEXT[])
+      INTO old_users FROM service_roster_slots slot
+      WHERE slot.roster_id = group_row.roster_id
+        AND slot.position_id = group_row.position_id;
+    SELECT COALESCE(array_agg(move->>'user_id' ORDER BY move->>'slot_id'),
+      ARRAY[]::TEXT[]) INTO moved_users
+    FROM jsonb_array_elements(validated_moves) move
+    WHERE move->>'roster_id' = group_row.roster_id
+      AND move->>'target_position_id' = group_row.position_id;
+    PERFORM set_service_schedule_position(group_row.roster_id,
+      group_row.position_id, old_users || moved_users, old_users);
+  END LOOP;
+  RETURN next_version;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION reassign_and_sync_service_schedule_draft_positions(
+  TEXT,INTEGER,JSONB,JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION reassign_and_sync_service_schedule_draft_positions(
+  TEXT,INTEGER,JSONB,JSONB) TO authenticated;
+
+COMMIT;

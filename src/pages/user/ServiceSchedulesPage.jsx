@@ -59,25 +59,24 @@ function ScheduleCard({ roster, mine, onClick, t }) {
   )
 }
 
-function Picker({ roster, slot, canPickAnyMember, onClose, onPick, t }) {
+function Picker({ roster, slot, canManageAll, onClose, onPick, t }) {
   const { confirm, toast } = useToast()
   const [query, setQuery] = useState('')
   const [members, setMembers] = useState([])
+  const [membersError, setMembersError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [checkingId, setCheckingId] = useState(null)
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    const request = canPickAnyMember
-      ? serviceRosterService.searchActiveUsers(query)
-      : serviceRosterService.listMinistryMembers(roster.ministry_id, query)
+    setLoading(true); setMembersError(false)
+    const request = serviceRosterService.listMinistryMembers(roster.ministry_id, query, canManageAll)
     request
       .then(rows => { if (active) setMembers(rows) })
-      .catch(() => { if (active) setMembers([]) })
+      .catch(() => { if (active) { setMembers([]); setMembersError(true) } })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [canPickAnyMember, query, roster.ministry_id])
+  }, [canManageAll, query, roster.ministry_id])
 
   async function choose(member) {
     setCheckingId(member.user_id)
@@ -127,7 +126,8 @@ function Picker({ roster, slot, canPickAnyMember, onClose, onPick, t }) {
         </header>
         <div className="p-4"><Input icon={Search} value={query} onChange={e => setQuery(e.target.value)} placeholder={t('sched.searchMember')} /></div>
         <div className="max-h-[55vh] overflow-y-auto px-4 pb-4">
-          {loading ? <div className="py-10 text-center"><Spinner size="sm" /></div> : members.length === 0
+          {loading ? <div className="py-10 text-center"><Spinner size="sm" /></div> : membersError
+            ? <p role="alert" className="py-10 text-center text-sm text-red-700">{t('schedMonth.membersFailed')}</p> : members.length === 0
             ? <p className="py-10 text-center text-sm text-gray-500">{t('sched.noMembers')}</p>
             : members.map(member => (
               <button key={member.user_id} type="button" disabled={!!checkingId} onClick={() => choose(member)} className="flex min-h-14 w-full items-center gap-3 border-b border-gray-100 py-2 text-left last:border-0 hover:bg-control disabled:opacity-50">
@@ -273,9 +273,9 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
   useEffect(() => { if (tab === 'settings') loadSettings() }, [loadSettings, tab])
   useEffect(() => {
     if (tab !== 'settings' || !managerQuery.trim()) { setManagerCandidates([]); return }
-    const timer = setTimeout(() => serviceRosterService.searchActiveUsers(managerQuery).then(setManagerCandidates).catch(() => setManagerCandidates([])), 250)
+    const timer = setTimeout(() => serviceRosterService.listManagerCandidates().then(rows => setManagerCandidates(rows.filter(user => user.ministry_ids?.includes(ministryId) && user.name.toLowerCase().includes(managerQuery.trim().toLowerCase())))).catch(() => setManagerCandidates([])), 250)
     return () => clearTimeout(timer)
-  }, [managerQuery, tab])
+  }, [managerQuery, ministryId, tab])
 
   function updateForm(key, value) { setForm(current => ({ ...current, [key]: value })) }
   function chooseEvent(id) {
@@ -309,7 +309,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
       setPicker(null)
       toast.success(t('sched.assignmentSaved'))
     } catch (error) {
-      toast.error(error.message?.includes('schedule_conflict') ? t('sched.conflictChanged') : (error.message || t('sched.saveFailed')))
+      toast.error(error.message?.includes('schedule_conflict') ? t('sched.conflictChanged') : error.message?.includes('schedule_ministry_membership_required') ? t('schedMonth.membershipRequired') : (error.message || t('sched.saveFailed')))
     }
     finally { setBusy(false) }
   }
@@ -427,7 +427,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
       setManagerQuery('')
       loadSettings()
       toast.success(t('sched.accessGranted'))
-    } catch (error) { toast.error(error.message || t('sched.saveFailed')) }
+    } catch (error) { toast.error(error.message?.includes('schedule_ministry_membership_required') ? t('schedMonth.membershipRequired') : (error.message || t('sched.saveFailed'))) }
   }
 
   async function revoke(row) {
@@ -480,7 +480,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
         </div>
         {editable && <div className="sticky bottom-3 mt-5 flex gap-2 rounded-2xl border border-gray-200 bg-surface/95 p-3 backdrop-blur"><Button loading={busy} onClick={publish} className="min-h-11 flex-1">{t('sched.publish')}</Button><Button variant="danger" onClick={deleteDraft} className="min-h-11"><Trash2 size={16} />{t('common.delete')}</Button></div>}
         {!archiveOnly && tab === 'manage' && selected.status === 'Terbit' && <div className="mt-5 flex flex-wrap justify-end gap-2"><Button variant="outline" loading={busy} onClick={sendReminder}><BellRing size={16} />{t('sched.remind')}</Button><Button variant="danger" loading={busy} onClick={cancelRoster}>{t('sched.cancelRoster')}</Button></div>}
-        {!archiveOnly && picker && <Picker roster={selected} slot={picker} canPickAnyMember={isAdmin} onClose={() => setPicker(null)} onPick={(userId, allowConflict) => setSlot(picker, userId, allowConflict)} t={t} />}
+        {!archiveOnly && picker && <Picker roster={selected} slot={picker} canManageAll={isAdmin} onClose={() => setPicker(null)} onPick={(userId, allowConflict) => setSlot(picker, userId, allowConflict)} t={t} />}
       </div>
     )
   }

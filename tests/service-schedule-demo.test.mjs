@@ -117,7 +117,7 @@ test('Draft MH hanya membuka bagiannya; grant tidak mengubah role menjadi Admin'
   await assert.rejects(api.updateOccurrence(limited.occurrences[0].occurrence_id, { location: 'Lain' }), error => error.code === '42501')
   await assert.rejects(api.publishMonth(month.month_id, true), error => error.code === '42501')
   const own = limited.rosters[0]
-  await assert.rejects(api.setPosition({ rosterId: own.roster_id, positionId: 'DEMO-POS-DRUM', userIds: ['DEMO-ALYA'], expectedUserIds: current(own, 'DEMO-POS-DRUM') }), error => error.code === '42501')
+  await assert.rejects(api.setPosition({ rosterId: own.roster_id, positionId: 'DEMO-POS-DRUM', userIds: ['DEMO-ALYA'], expectedUserIds: current(own, 'DEMO-POS-DRUM') }), error => error.code === '23514')
   await api.updatePart(own.roster_id, { team_name: 'Tim Lokal' })
   assert.equal((await api.getMonth(month.month_id)).parts.find(part => part.roster_id === own.roster_id).team_name, 'Tim Lokal')
 })

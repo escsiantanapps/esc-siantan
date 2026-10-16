@@ -57,6 +57,10 @@ async function setup(db) {
   for (const version of [95, 96, 97, 98]) await db.exec(migration(version))
   await db.exec(directMigration)
   await db.exec(cleanupMigration)
+  await db.exec(migration(107))
+  await db.exec(migration(107))
+  await db.exec(migration(108))
+  await db.exec(migration(108))
   await db.exec(`
     INSERT INTO auth.users(id) VALUES ('00000000-0000-4000-8000-000000000001');
     INSERT INTO users(user_id,name,role,auth_id) VALUES
@@ -289,6 +293,102 @@ test('PostgreSQL: draft langsung menghormati per-tanggal, akses dan guard lama',
       assert.equal((await db.query('SELECT count(*)::INT AS n FROM service_roster_slots WHERE roster_id=ANY($1::TEXT[])',[rosterIds])).rows[0].n,0)
       assert.equal((await db.query('SELECT count(*)::INT AS n FROM service_schedule_occurrences WHERE month_id=$1',[id])).rows[0].n,0)
       assert.notEqual(await create(db,december,'2026-12-01'),id)
+    })
+    await t.test('Edit Jadwal menyinkronkan posisi Draft dan menjaga penugasan', async () => {
+      await caller(db)
+      const id = await create(db,[{ ...entries[0], service_date:'2027-01-03', ministry_ids:['M-MUSIC'] }],'2027-01-01')
+      const initial = (await db.query('SELECT get_service_schedule_month($1) AS data',[id])).rows[0].data
+      const rosterId = initial.rosters[0].roster_id
+      await db.query('SELECT set_service_schedule_position($1,$2,$3::TEXT[],$4::TEXT[])',
+        [rosterId,'P-SINGER',['M1'],[]])
+      await db.exec("UPDATE ministry_service_positions SET default_slots=3 WHERE position_id='P-SINGER'")
+      await db.exec("INSERT INTO ministry_service_positions(position_id,ministry_id,name,default_slots) VALUES ('P-BASS','M-MUSIC','Bass',1)")
+      const catalog = { 'M-MUSIC': {
+        'P-SINGER': { name:'Singer', capacity:3, sort_order:0 },
+        'P-BASS': { name:'Bass', capacity:1, sort_order:0 },
+      } }
+      await db.exec('SET ROLE authenticated')
+      const version = (await db.query('SELECT sync_service_schedule_draft_positions($1,$2,$3::JSONB) AS version',
+        [id,0,JSON.stringify(catalog)])).rows[0].version
+      assert.equal(version,1)
+      await db.exec('RESET ROLE')
+      const updated = (await db.query('SELECT get_service_schedule_month($1) AS data',[id])).rows[0].data
+      assert.deepEqual(updated.sections[0].positions.map(item => item.name).sort(), ['Bass','Singer'])
+      assert.equal(updated.rosters[0].service_roster_slots.length,4)
+      assert.equal(updated.rosters[0].service_roster_slots.filter(slot => slot.user_id === 'M1').length,1)
+      await db.exec("UPDATE ministry_service_positions SET default_slots=1 WHERE position_id='P-SINGER'")
+      catalog['M-MUSIC']['P-SINGER'].capacity = 1
+      await db.query('SELECT sync_service_schedule_draft_positions($1,$2,$3::JSONB)',[id,1,JSON.stringify(catalog)])
+      assert.equal((await db.query('SELECT count(*)::INT AS n FROM service_roster_slots WHERE roster_id=$1',[rosterId])).rows[0].n,2)
+      await db.exec("UPDATE ministry_service_positions SET is_active=false WHERE position_id='P-SINGER'")
+      delete catalog['M-MUSIC']['P-SINGER']
+      await db.exec('SAVEPOINT expected_catalog_stale')
+      try { await assert.rejects(db.query('SELECT sync_service_schedule_draft_positions($1,$2,$3::JSONB)',
+        [id,2,JSON.stringify({ 'M-MUSIC': { ...catalog['M-MUSIC'], 'P-SINGER': { name:'Singer', capacity:1, sort_order:0 } } })]),/schedule_stale/) }
+      finally { await db.exec('ROLLBACK TO SAVEPOINT expected_catalog_stale; RELEASE SAVEPOINT expected_catalog_stale') }
+      await db.exec('SAVEPOINT expected_published_rejection')
+      try { await assert.rejects(db.query('SELECT sync_service_schedule_draft_positions($1,$2,$3::JSONB)',
+        [publishedMonthId,0,JSON.stringify(catalog)]),/Hanya jadwal Draft/) }
+      finally { await db.exec('ROLLBACK TO SAVEPOINT expected_published_rejection; RELEASE SAVEPOINT expected_published_rejection') }
+      await db.exec('SAVEPOINT expected_sync_rejection')
+      try { await assert.rejects(db.query('SELECT sync_service_schedule_draft_positions($1,$2,$3::JSONB)',
+        [id,2,JSON.stringify(catalog)]),/schedule_position_assigned/) }
+      finally { await db.exec('ROLLBACK TO SAVEPOINT expected_sync_rejection; RELEASE SAVEPOINT expected_sync_rejection') }
+      assert.equal((await db.query('SELECT version FROM service_schedule_months WHERE month_id=$1',[id])).rows[0].version,2)
+      const permission = (await db.query("SELECT has_function_privilege('anon','sync_service_schedule_draft_positions(text,integer,jsonb)','EXECUTE') AS anon")).rows[0]
+      assert.equal(permission.anon,false)
+      for (const [role, restricted] of [['Jemaat',false],['Volunteer',false],['PKS',false],['Admin',true]]) {
+        await caller(db,role === 'Admin' ? 'ADMIN' : 'VOL',role,restricted)
+        await db.exec('SET ROLE authenticated')
+        await db.exec('SAVEPOINT expected_unauthorized')
+        try { await assert.rejects(db.query('SELECT sync_service_schedule_draft_positions($1,$2,$3::JSONB)',
+          [id,2,JSON.stringify(catalog)]),/not_authorized/) }
+        finally { await db.exec('ROLLBACK TO SAVEPOINT expected_unauthorized; RELEASE SAVEPOINT expected_unauthorized') }
+        await db.exec('RESET ROLE')
+      }
+      await caller(db)
+    })
+    await t.test('Edit Jadwal memindahkan pelayan dari posisi lama ke job baru secara atomik', async () => {
+      await caller(db)
+      await db.exec("INSERT INTO ministry_service_positions(position_id,ministry_id,name,default_slots) VALUES ('P-LEGACY','M-MUSIC','Music',2)")
+      const id = await create(db,[{ ...entries[0], service_date:'2027-02-07', ministry_ids:['M-MUSIC'] }],'2027-02-01')
+      const before = (await db.query('SELECT get_service_schedule_month($1) AS data',[id])).rows[0].data
+      const rosterId = before.rosters[0].roster_id
+      await db.query('SELECT set_service_schedule_position($1,$2,$3::TEXT[],$4::TEXT[])',
+        [rosterId,'P-LEGACY',['M1','M2'],[]])
+      const assigned = (await db.query("SELECT slot_id,user_id FROM service_roster_slots WHERE roster_id=$1 AND position_id='P-LEGACY' ORDER BY slot_no",[rosterId])).rows
+      await db.exec("UPDATE ministry_service_positions SET is_active=false WHERE position_id='P-LEGACY'")
+      await db.exec("INSERT INTO ministry_service_positions(position_id,ministry_id,name,default_slots) VALUES ('P-DRUM','M-MUSIC','Drum',1),('P-KEYBOARD','M-MUSIC','Keyboard',1)")
+      const catalog = { 'M-MUSIC': {
+        'P-BASS': { name:'Bass', capacity:1, sort_order:0 },
+        'P-DRUM': { name:'Drum', capacity:1, sort_order:0 },
+        'P-KEYBOARD': { name:'Keyboard', capacity:1, sort_order:0 },
+      } }
+      const moves = assigned.map((slot,index) => ({ slot_id:slot.slot_id, user_id:slot.user_id,
+        position_id:index === 0 ? 'P-DRUM' : 'P-KEYBOARD' }))
+      await db.exec('SAVEPOINT invalid_capacity')
+      try { await assert.rejects(db.query('SELECT reassign_and_sync_service_schedule_draft_positions($1,$2,$3::JSONB,$4::JSONB)',
+        [id,0,JSON.stringify(catalog),JSON.stringify(moves.map(move => ({ ...move, position_id:'P-DRUM' })))]),/Kapasitas posisi tidak mencukupi/) }
+      finally { await db.exec('ROLLBACK TO SAVEPOINT invalid_capacity; RELEASE SAVEPOINT invalid_capacity') }
+      assert.equal((await db.query('SELECT version FROM service_schedule_months WHERE month_id=$1',[id])).rows[0].version,0)
+      assert.equal((await db.query("SELECT count(*)::INT AS n FROM service_roster_slots WHERE roster_id=$1 AND position_id='P-LEGACY' AND user_id IS NOT NULL",[rosterId])).rows[0].n,2)
+      await db.exec('SET ROLE authenticated')
+      assert.equal((await db.query('SELECT reassign_and_sync_service_schedule_draft_positions($1,$2,$3::JSONB,$4::JSONB) AS version',
+        [id,0,JSON.stringify(catalog),JSON.stringify(moves)])).rows[0].version,1)
+      await db.exec('RESET ROLE')
+      const after = (await db.query('SELECT get_service_schedule_month($1) AS data',[id])).rows[0].data
+      assert.deepEqual(after.sections[0].positions.map(item => item.name).sort(), ['Bass','Drum','Keyboard'])
+      assert.deepEqual((await db.query('SELECT position_id,user_id FROM service_roster_slots WHERE roster_id=$1 AND user_id IS NOT NULL ORDER BY position_id',[rosterId])).rows,
+        [{ position_id:'P-DRUM', user_id:'M1' },{ position_id:'P-KEYBOARD', user_id:'M2' }])
+      assert.equal((await db.query("SELECT has_function_privilege('anon','reassign_and_sync_service_schedule_draft_positions(text,integer,jsonb,jsonb)','EXECUTE') AS allowed")).rows[0].allowed,false)
+      await caller(db,'VOL','Volunteer')
+      await db.exec('SET ROLE authenticated')
+      await db.exec('SAVEPOINT unauthorized_move')
+      try { await assert.rejects(db.query('SELECT reassign_and_sync_service_schedule_draft_positions($1,$2,$3::JSONB,$4::JSONB)',
+        [id,1,JSON.stringify(catalog),'[]']),/not_authorized/) }
+      finally { await db.exec('ROLLBACK TO SAVEPOINT unauthorized_move; RELEASE SAVEPOINT unauthorized_move') }
+      await db.exec('RESET ROLE')
+      await caller(db)
     })
     await db.exec('ROLLBACK')
   } finally { await db.close() }

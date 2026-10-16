@@ -16,8 +16,13 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
   const [managers, setManagers] = useState([])
   const [query, setQuery] = useState('')
   const [candidates, setCandidates] = useState([])
+  const [selectedUserId, setSelectedUserId] = useState('')
+  const [grantMinistryId, setGrantMinistryId] = useState('')
+  const [targetManagers, setTargetManagers] = useState([])
+  const [checkingTarget, setCheckingTarget] = useState(false)
+  const [targetError, setTargetError] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [searching, setSearching] = useState(false)
+  const [loadingCandidates, setLoadingCandidates] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [position, setPosition] = useState(emptyPosition)
@@ -26,8 +31,14 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
   const head = ministry?.head
   const sourceHeadId = ministry?.head_user_id || ''
   const adminHead = head?.status === 'Aktif' && head.role === 'Admin'
-  const headApproved = eligibleHead(head) && managers.some(item => item.user_id === head?.user_id && item.manager_role === 'Ministry Head')
+  const headIsMember = candidates.some(item => item.user_id === head?.user_id && item.ministry_ids?.includes(ministryId))
+  const headApproved = headIsMember && eligibleHead(head) && managers.some(item => item.user_id === head?.user_id && item.manager_role === 'Ministry Head')
   const ministryPositions = positions.filter(item => item.ministry_id === ministryId)
+  const selectedUser = candidates.find(item => item.user_id === selectedUserId)
+  const filteredCandidates = candidates.filter(item => item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  const targetMinistry = ministries.find(item => item.ministry_id === grantMinistryId)
+  const alreadyManager = targetManagers.some(item => item.user_id === selectedUserId)
+  const selectedIsHead = selectedUserId && targetMinistry?.head_user_id === selectedUserId
   const load = useCallback(async () => {
     const current = ++request.current
     setLoading(true); setError('')
@@ -42,36 +53,46 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
     if (!ministries.some(item => item.ministry_id === ministryId)) setMinistryId(ministries[0]?.ministry_id || '')
   }, [ministries, ministryId])
   useEffect(() => {
-    setManagers([]); setQuery(''); setCandidates([]); setPosition(emptyPosition())
+    setManagers([]); setPosition(emptyPosition())
     if (ministryId) load()
     else setLoading(false)
     return () => { request.current += 1 }
   }, [load, ministryId])
   useEffect(() => {
     let active = true
-    setCandidates([]); setSearching(false)
-    if (!query.trim()) return undefined
-    setSearching(true)
-    const timer = setTimeout(() => {
-      api.searchActiveUsers(query.trim()).then(rows => { if (active) setCandidates(rows) })
-        .catch(() => { if (active) toast.error(t('sched.loadFailed')) })
-        .finally(() => { if (active) setSearching(false) })
-    }, 250)
-    return () => { active = false; clearTimeout(timer) }
-  }, [api, query, ministryId, t, toast])
+    setLoadingCandidates(true)
+    const getCandidates = api.listManagerCandidates || (() => api.searchActiveUsers(''))
+    getCandidates().then(rows => { if (active) setCandidates(rows) })
+      .catch(() => { if (active) toast.error(t('sched.loadFailed')) })
+      .finally(() => { if (active) setLoadingCandidates(false) })
+    return () => { active = false }
+  }, [api, t, toast])
+  useEffect(() => {
+    if (!grantMinistryId) { setTargetManagers([]); setTargetError(false); return undefined }
+    let active = true
+    setCheckingTarget(true); setTargetError(false)
+    api.listManagers(grantMinistryId).then(rows => { if (active) setTargetManagers(rows) })
+      .catch(() => { if (active) { setTargetManagers([]); setTargetError(true) } })
+      .finally(() => { if (active) setCheckingTarget(false) })
+    return () => { active = false }
+  }, [api, grantMinistryId])
   async function change(action, success) {
     if (busy) return
     setBusy(true)
-    try { await action(); await load(); await onChange(); toast.success(t(success)) }
+    try { await action(); await load(); await onChange(); toast.success(t(success)); return true }
     catch (failure) {
-      const code = ['PGRST200', 'PGRST202', 'PGRST205', '42703', '42P01'].includes(failure?.code)
-        ? 'schedMonth.migrationRequired' : failure?.code === '42501' ? 'sched.noAccess' : 'sched.saveFailed'
-      toast.error(t(code))
+      const code = String(failure?.message || '').includes('schedule_ministry_membership_required')
+        ? 'schedMonth.membershipRequired' : ['PGRST200', 'PGRST202', 'PGRST205', '42703', '42P01'].includes(failure?.code)
+          ? 'schedMonth.migrationRequired' : failure?.code === '42501' ? 'sched.noAccess' : 'sched.saveFailed'
+      toast.error(t(code)); return false
     } finally { setBusy(false) }
   }
-  async function grant(user, managerRole) {
-    if (!await confirm({ title: t('schedAccess.approveTitle'), message: t('schedAccess.approveMessage', { name: user.name, ministry: ministry.name }), confirmText: t('schedAccess.approve') })) return
-    await change(() => api.grantManager({ ministryId, userId: user.user_id, managerRole }), 'sched.accessGranted')
+  async function grant(user, managerRole, targetId = ministryId) {
+    const target = ministries.find(item => item.ministry_id === targetId)
+    if (!target || !await confirm({ title: t('schedAccess.approveTitle'), message: t('schedAccess.approveMessage', { name: user.name, ministry: target.name }), confirmText: t('schedAccess.approve') })) return
+    if (await change(() => api.grantManager({ ministryId: targetId, userId: user.user_id, managerRole }), 'sched.accessGranted')) {
+      setMinistryId(targetId); setSelectedUserId(''); setGrantMinistryId('')
+    }
   }
   async function revoke(manager) {
     if (!await confirm({ title: t('sched.revokeTitle'), message: t('sched.revokeMessage', { name: manager.users?.name }), confirmText: t('sched.revoke'), danger: true })) return
@@ -87,6 +108,26 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
     await change(() => api.removePosition(item.position_id), 'sched.positionSaved')
   }
   return <section className="schedule-access">
+    <section className="schedule-access-grant" aria-labelledby="schedule-access-grant-title">
+      <h2 id="schedule-access-grant-title"><ShieldCheck size={18} />{t('schedAccess.grantTitle')}</h2>
+      <p className="monthly-muted">{t('schedAccess.grantHint')}</p>
+      <Input label={t('schedAccess.choosePerson')} placeholder={t('sched.searchManager')} value={query} disabled={busy || loadingCandidates} onChange={event => setQuery(event.target.value)} />
+      {loadingCandidates ? <Spinner /> : <div className="schedule-access-candidates">
+        {filteredCandidates.map(user => <button type="button" aria-pressed={selectedUserId === user.user_id} className="schedule-access-candidate" key={user.user_id} disabled={busy} onClick={() => { setSelectedUserId(user.user_id); setGrantMinistryId('') }}>{user.name}</button>)}
+        {!filteredCandidates.length && <p className="monthly-muted">{t('schedAccess.noResults')}</p>}
+      </div>}
+      {selectedUser && <div className="schedule-access-grant-target">
+        <strong>{selectedUser.name}</strong>
+        <Select label={t('schedAccess.chooseMinistry')} value={grantMinistryId} disabled={busy} onChange={event => setGrantMinistryId(event.target.value)}>
+          <option value="">{t('schedAccess.chooseMinistryPlaceholder')}</option>
+          {ministries.filter(item => selectedUser.ministry_ids?.includes(item.ministry_id)).map(item => <option key={item.ministry_id} value={item.ministry_id}>{item.name}</option>)}
+        </Select>
+        {selectedIsHead && <p className="monthly-muted">{t('schedAccess.headUseApproval')}</p>}
+        {alreadyManager && <p className="monthly-muted">{t('schedAccess.alreadyManager')}</p>}
+        {targetError && <p className="monthly-error" role="alert">{t('sched.loadFailed')}</p>}
+        <Button type="button" disabled={busy || !grantMinistryId || checkingTarget || targetError || selectedIsHead || alreadyManager} onClick={() => grant(selectedUser, 'Wakil', grantMinistryId)}><Plus size={16} />{t('schedAccess.approve')}</Button>
+      </div>}
+    </section>
     <div className="monthly-toolbar"><Select label={t('sched.ministry')} value={ministryId} disabled={busy} onChange={event => setMinistryId(event.target.value)}>{ministries.map(item => <option key={item.ministry_id} value={item.ministry_id}>{item.name}</option>)}</Select></div>
     {error && <div className="monthly-error" role="alert">{t(error)}<Button variant="outline" onClick={load}>{t('schedMonth.retry')}</Button></div>}
     {ministry && <div className="schedule-access-grid">
@@ -96,20 +137,15 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
           <div><span className="monthly-muted">{t('schedAccess.headSource')}</span><strong>{head?.name || t('amin.noMinistryHead')}</strong></div>
           {ministryHref && <Link to={ministryHref} className="text-sm text-brand-600 underline">{t('admin.nav.ministry')}</Link>}
         </div>
-        {head && <div className="schedule-access-row"><span>{t('sched.role.Ministry Head')}</span>{adminHead ? <Badge color="gray">{t('schedAccess.adminPermissions')}</Badge> : headApproved ? <Badge color="green">{t('schedAccess.approved')}</Badge> : <Button variant="outline" disabled={busy || loading || !eligibleHead(head)} onClick={() => grant(head, 'Ministry Head')}><Check size={16} />{t('schedAccess.approve')}</Button>}</div>}
+        {head && <div className="schedule-access-row"><span>{t('sched.role.Ministry Head')}</span>{adminHead ? <Badge color="gray">{t('schedAccess.adminPermissions')}</Badge> : headApproved ? <Badge color="green">{t('schedAccess.approved')}</Badge> : <Button variant="outline" disabled={busy || loading || loadingCandidates || !eligibleHead(head) || !headIsMember} onClick={() => grant(head, 'Ministry Head')}><Check size={16} />{t('schedAccess.approve')}</Button>}</div>}
         {head && adminHead && <p className="monthly-muted">{t('schedAccess.adminHeadInfo')}</p>}
         {head && !eligibleHead(head) && !adminHead && <p className="monthly-muted">{t('schedAccess.ineligibleHead')}</p>}
+        {head && eligibleHead(head) && !loadingCandidates && !headIsMember && <p className="monthly-muted">{t('schedMonth.membershipRequired')}</p>}
         {loading ? <Spinner /> : <div className="schedule-access-list">{managers.map(manager => <div className="schedule-access-row" key={manager.user_id}><div><strong>{manager.users?.name || manager.user_id}</strong><span className="monthly-muted">{t(`sched.role.${manager.manager_role}`)}</span></div><Button variant="ghost" disabled={busy} title={t('sched.revoke')} aria-label={t('sched.revoke')} onClick={() => revoke(manager)}><Trash2 size={17} /></Button></div>)}</div>}
-        <h3 className="monthly-subheading">{t('sched.deputy')}</h3>
-        <Input aria-label={t('sched.searchManager')} placeholder={t('sched.searchManager')} value={query} disabled={busy || loading} onChange={event => setQuery(event.target.value)} />
-        {searching ? <Spinner /> : query.trim() && <div className="schedule-access-list">{candidates.map(user => {
-          const existing = managers.some(manager => manager.user_id === user.user_id)
-          return <div key={user.user_id} className="schedule-access-row"><strong>{user.name}</strong><Button variant="ghost" disabled={busy || existing || user.user_id === head?.user_id} aria-label={t('schedAccess.approveDeputy', { name: user.name })} title={t('schedAccess.approveDeputy', { name: user.name })} onClick={() => grant(user, 'Wakil')}><Plus size={17} /></Button></div>
-        })}{!candidates.length && <p className="monthly-muted">{t('schedAccess.noResults')}</p>}</div>}
       </section>
       <section aria-labelledby="schedule-positions-title">
-        <h2 id="schedule-positions-title">{t('sched.positionsTitle')}</h2>
-        <div className="schedule-access-list">{ministryPositions.map(item => <div className="schedule-access-row" key={item.position_id}><div><strong>{item.name}</strong><span className="monthly-muted">{t('schedAccess.slotCount', { count: item.default_slots })}</span></div>{!item.is_active && <Badge color="gray">{t('schedAccess.inactive')}</Badge>}<Button variant="ghost" disabled={busy} onClick={() => setPosition({ ...item })} title={t('a.edit')} aria-label={t('a.edit')}><Pencil size={16} /></Button>{item.is_active && <Button variant="ghost" disabled={busy} onClick={() => deactivate(item)} title={t('sched.deactivate')} aria-label={t('sched.deactivate')}><Trash2 size={16} /></Button>}</div>)}</div>
+        <div className="schedule-position-heading"><h2 id="schedule-positions-title">{t('sched.positionsTitle')}</h2><span className="monthly-muted">{t('schedAccess.positionCount', { count: ministryPositions.length })}</span></div>
+        <div className="schedule-access-list schedule-position-list">{ministryPositions.map(item => <div className="schedule-access-row schedule-position-row" key={item.position_id}><div><strong>{item.name}</strong><span className="monthly-muted">{t('schedAccess.slotCount', { count: item.default_slots })}</span></div><div className="schedule-position-actions">{!item.is_active && <Badge color="gray">{t('schedAccess.inactive')}</Badge>}<Button variant="ghost" disabled={busy} onClick={() => setPosition({ ...item })} title={t('a.edit')} aria-label={t('a.edit')}><Pencil size={16} /></Button>{item.is_active && <Button variant="ghost" disabled={busy} onClick={() => deactivate(item)} title={t('sched.deactivate')} aria-label={t('sched.deactivate')}><Trash2 size={16} /></Button>}</div></div>)}</div>
         <form className="schedule-position-form" onSubmit={savePosition}>
           <Input label={t('sched.positionName')} required maxLength={100} value={position.name} disabled={busy} onChange={event => setPosition(current => ({ ...current, name: event.target.value }))} />
           <div className="monthly-editor-grid"><Input label={t('sched.defaultSlots')} type="number" required min="1" max="20" value={position.default_slots} disabled={busy} onChange={event => setPosition(current => ({ ...current, default_slots: event.target.value }))} /><Input label={t('sched.order')} type="number" required min="0" value={position.sort_order} disabled={busy} onChange={event => setPosition(current => ({ ...current, sort_order: event.target.value }))} /></div>

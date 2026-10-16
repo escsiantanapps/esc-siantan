@@ -18,7 +18,8 @@ export default function MonthlyScheduleMatrix({
   const matrix = useMemo(() => buildScheduleMatrix(schedule, { ministryFilter, activityFilter }), [schedule, ministryFilter, activityFilter])
   const currentDate = matrix.dates.includes(selectedDate) ? selectedDate : matrix.dates.includes(localDate) ? localDate : matrix.dates[0]
   const draft = schedule?.month?.status === 'Draft'
-  const canEdit = ministryId => !readonly && draft && (canManageAll || managedMinistryIds.includes(ministryId))
+  const hasAccess = ministryId => canManageAll || managedMinistryIds.includes(ministryId)
+  const canEdit = ministryId => !readonly && draft && hasAccess(ministryId)
   const chooseDate = date => {
     setLocalDate(date)
     onDateChange?.(date)
@@ -56,7 +57,7 @@ export default function MonthlyScheduleMatrix({
             return <DateCell key={date} date={date} currentDate={currentDate}>{!occurrence ? <span className="sched-matrix-not-scheduled" aria-label={t('schedMonth.notScheduled')}>-</span> : !readonly && draft && canManageAll && onEditOccurrence ? <Button type="button" variant="ghost" className="sched-matrix-cell sched-matrix-occurrence-cell" onClick={() => onEditOccurrence(occurrence)} title={t('schedMonth.editActivity', { activity: section.title, date: formatScheduleDate(date, lang) })} aria-label={t('schedMonth.editActivity', { activity: section.title, date: formatScheduleDate(date, lang) })}>{occurrenceContent(occurrence)}<Pencil size={13} className="sched-matrix-edit-mark" aria-hidden="true" /></Button> : <div className="sched-matrix-cell sched-matrix-occurrence-cell">{occurrenceContent(occurrence)}</div>}</DateCell>
           })}</tr>
           {section.ministries.map(ministry => <Fragment key={ministry.ministry_id}>
-            <tr className="sched-matrix-ministry"><th scope="row" className="sched-matrix-label"><span>{ministry.ministry_name}</span>{!canEdit(ministry.ministry_id) && <LockKeyhole size={13} aria-hidden="true" />}</th>{matrix.dates.map(date => {
+            <tr className={`sched-matrix-ministry${draft && !hasAccess(ministry.ministry_id) ? ' is-restricted' : ''}`}><th scope="row" className="sched-matrix-label"><span>{ministry.ministry_name}</span><small className="sched-matrix-scope">{draft && hasAccess(ministry.ministry_id) ? t('schedMonth.sectionEditable') : <><LockKeyhole size={12} aria-hidden="true" />{t(draft ? 'schedMonth.restricted' : 'schedMonth.sectionReadOnly')}</>}</small></th>{matrix.dates.map(date => {
               const occurrence = section.occurrencesByDate.get(date)
               const participating = matrix.isParticipating(occurrence, ministry.ministry_id)
               const hidden = participating && matrix.getCell(occurrence, ministry.positions[0]).hidden
