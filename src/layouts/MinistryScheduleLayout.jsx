@@ -7,8 +7,8 @@ export default function MinistryScheduleLayout({ children }) {
   const { t } = useLang()
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-surface">
+    <div className="app-glass-shell min-h-screen">
+      <header className="glass-card sticky top-0 z-20 border-b">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 pb-3" style={{ paddingTop: 'calc(var(--safe-top, 28px) + 0.75rem)' }}>
           <Link to="/" aria-label={t('admin.switchApp')} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-control">
             <ArrowLeft size={20} />

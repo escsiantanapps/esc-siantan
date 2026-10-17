@@ -99,8 +99,8 @@ export default function AccountStatusPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex justify-center items-center px-4 py-10">
-      <div className="w-full max-w-md bg-surface rounded-3xl shadow-2xl shadow-black/10 p-8 text-center">
+    <div className="auth-glass-page min-h-screen flex justify-center items-center px-4 py-10">
+      <div className="auth-glass-panel w-full max-w-md rounded-3xl p-8 text-center">
         <div className="w-16 h-16 mx-auto bg-brand-50 rounded-2xl flex items-center justify-center mb-4">
           <StatusIcon size={28} className="text-brand-500" aria-hidden="true" />
         </div>

@@ -11,9 +11,9 @@ export function Button({ children, variant = 'primary', size = 'md', loading, di
   const sizes = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2.5 text-sm', lg: 'px-6 py-3 text-base' }
   // Latar brand yang tetap gelap menjaga kontras teks putih pada kedua tema.
   const variants = {
-    primary: 'bg-[var(--color-primary-deeper)] text-white hover:brightness-105',
-    secondary: 'bg-control text-gray-700 hover:bg-control-hover',
-    outline: 'border border-gray-200 text-gray-700 hover:bg-control',
+    primary: 'glass-button-primary bg-[var(--color-primary-deeper)] text-white hover:brightness-105',
+    secondary: 'glass-button-secondary bg-control text-gray-700 hover:bg-control-hover',
+    outline: 'glass-button-secondary border border-gray-200 text-gray-700 hover:bg-control',
     danger: 'bg-red-500 text-white hover:bg-red-600',
     ghost: 'text-gray-600 hover:bg-control',
   }
@@ -39,9 +39,9 @@ export function Input({ label, error, required, icon: Icon, rightElement, classN
         </label>
       )}
       <div className="relative">
-        {Icon && <Icon size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />}
+        {Icon && <Icon size={18} className="absolute z-10 left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />}
         <input
-          className={`w-full py-2.5 text-base bg-gray-50 border rounded-xl transition
+          className={`glass-field w-full py-2.5 text-base border rounded-xl transition
             ${Icon ? 'pl-10' : 'pl-3'} ${rightElement ? 'pr-10' : 'pr-3'}
             ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
           {...props}
@@ -72,7 +72,7 @@ export function Textarea({ label, error, required, rows = 3, className = '', id,
       )}
       <textarea
         rows={rows}
-        className={`w-full px-3 py-2.5 text-base bg-gray-50 border rounded-xl resize-none transition
+        className={`glass-field w-full px-3 py-2.5 text-base border rounded-xl resize-none transition
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
         {...props}
         id={fieldId}
@@ -103,7 +103,7 @@ export function Select({ label, error, required, children, className = '', id, '
         </label>
       )}
       <select
-        className={`appearance-none w-full pl-3 pr-10 py-2.5 text-sm bg-gray-50 border rounded-xl transition cursor-pointer
+        className={`glass-field appearance-none w-full pl-3 pr-10 py-2.5 text-sm border rounded-xl transition cursor-pointer
           ${error ? 'border-red-400' : 'border-gray-200'} ${className}`}
         style={{ backgroundImage: SELECT_CHEVRON, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.7rem center', backgroundSize: '1.1em', ...style }}
         {...props}
@@ -125,7 +125,7 @@ export function Checkbox({ label, className = '', ...props }) {
     <label className={`flex items-center gap-2.5 cursor-pointer ${className}`}>
       <input
         type="checkbox"
-        className="w-4.5 h-4.5 rounded-md border-gray-300 text-brand-500"
+        className="glass-checkbox w-4.5 h-4.5 rounded-md text-brand-500"
         {...props}
       />
       {label && <span className="text-sm text-gray-700">{label}</span>}
@@ -135,7 +135,9 @@ export function Checkbox({ label, className = '', ...props }) {
 
 // ─── Card ────────────────────────────────────────────────
 export function Card({ children, className = '', onClick, glass = false, lift = false, ...props }) {
-  const surface = glass ? 'glass-card' : 'bg-surface border border-gray-100'
+  // Latar status (sukses, peringatan, bahaya) yang dipilih halaman tetap utuh.
+  const hasOwnSurface = className.split(/\s+/).some(token => token.startsWith('bg-'))
+  const surface = hasOwnSurface ? 'border' : glass ? 'glass-card glass-card-emphasis' : 'glass-card'
   const interactive = onClick || lift ? 'card-lift' : 'transition-colors duration-300'
   return (
     <div
@@ -157,7 +159,7 @@ export function Skeleton({ className = '' }) {
 // (beranda, events, kelas, informasi) supaya loading terasa "berbentuk".
 export function SkeletonCard({ className = '' }) {
   return (
-    <div aria-hidden="true" className={`bg-surface border border-gray-100 rounded-2xl p-3.5 flex items-center gap-3 ${className}`}>
+    <div aria-hidden="true" className={`glass-card rounded-2xl p-3.5 flex items-center gap-3 ${className}`}>
       <Skeleton className="w-11 h-11 rounded-xl shrink-0" />
       <div className="flex-1 space-y-2">
         <Skeleton className="h-3.5 w-3/4 rounded-md" />

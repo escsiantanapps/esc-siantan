@@ -91,7 +91,7 @@ export default function UserLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto relative">
+    <div className="app-glass-shell min-h-screen flex flex-col max-w-md mx-auto relative">
       {/* Main content */}
       <main className={`flex-1 overflow-y-auto ${inPanel ? 'pb-6' : 'pb-[calc(7.5rem+env(safe-area-inset-bottom))]'}`}>
         <Outlet />
@@ -99,7 +99,7 @@ export default function UserLayout() {
 
       {/* Bottom navigation — bar mengambang dengan tombol Scan menonjol (FAB) */}
       {!inPanel && (
-      <nav className="user-bottom-nav fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[26rem] bg-surface/95 backdrop-blur-xl border border-gray-200 rounded-[1.75rem] shadow-[0_12px_32px_rgba(2,32,71,0.16)] z-50">
+      <nav className="user-bottom-nav fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[26rem] rounded-[1.75rem] border z-50">
         <div className="flex items-end px-2">
           {LEFT_ITEMS.map(item => <NavItem key={item.to} {...item} />)}
 

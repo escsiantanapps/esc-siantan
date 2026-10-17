@@ -191,8 +191,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex justify-center sm:items-center sm:px-4 sm:py-10">
-      <div className="w-full max-w-md min-h-screen sm:min-h-0 flex flex-col bg-surface sm:rounded-3xl sm:shadow-2xl sm:shadow-black/10 sm:overflow-hidden">
+    <div className="auth-glass-page min-h-screen flex justify-center sm:items-center sm:px-4 sm:py-10">
+      <div className="auth-glass-panel w-full max-w-md min-h-screen sm:min-h-0 flex flex-col sm:rounded-3xl sm:overflow-hidden">
         <GradientHeader
           title={t('auth.createAccount')}
           subtitle={t('auth.createSubtitle')}

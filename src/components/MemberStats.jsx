@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Cake, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Card, Spinner } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
@@ -57,16 +57,16 @@ export default function MemberStats() {
   }, [members])
 
   if (!members) {
-    return <Card className="p-4 mb-6"><div className="flex justify-center py-6"><Spinner /></div></Card>
+    return <Card className="admin-panel p-4 mb-5"><div className="flex justify-center py-6"><Spinner /></div></Card>
   }
 
-  const genderTotal = gender.male + gender.female || 1
-  const malePct = Math.round((gender.male / genderTotal) * 100)
-  const femalePct = 100 - malePct
+  const genderTotal = gender.male + gender.female
+  const malePct = genderTotal ? Math.round((gender.male / genderTotal) * 100) : 0
+  const femalePct = genderTotal ? 100 - malePct : 0
   const selectedBucket = buckets.find(b => b.key === selected)
 
   return (
-    <Card className="p-4 mb-6">
+    <Card className="admin-panel admin-member-stats p-4 mb-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-gray-900">{t('stats.title')}</h3>
         <Link to="/admin/jemaat" className="text-xs text-brand-500 flex items-center gap-0.5">
@@ -74,40 +74,26 @@ export default function MemberStats() {
         </Link>
       </div>
 
-      {/* Ringkasan: umur rata-rata + gender */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        <div className="rounded-2xl bg-brand-50 p-3 text-center">
-          <div className="w-9 h-9 mx-auto rounded-xl bg-brand-100 flex items-center justify-center mb-1.5">
-            <Cake size={18} className="text-brand-500" />
-          </div>
-          <p className="text-2xl font-bold text-brand-600 leading-none">{avg ?? '-'}</p>
-          <p className="text-[11px] text-gray-500 mt-1">{t('stats.avgAge')}</p>
-        </div>
-        <div className="rounded-2xl bg-blue-50 p-3 text-center">
-          <p className="text-2xl font-bold text-blue-600 leading-none mt-2">{gender.male}</p>
-          <p className="text-[11px] text-gray-500 mt-1">{t('stats.male')}</p>
-        </div>
-        <div className="rounded-2xl bg-pink-50 p-3 text-center">
-          <p className="text-2xl font-bold text-pink-600 leading-none mt-2">{gender.female}</p>
-          <p className="text-[11px] text-gray-500 mt-1">{t('stats.female')}</p>
-        </div>
+      <div className="admin-member-summary mb-5">
+        <div><span>{t('stats.avgAge')}</span><strong className="tabular-nums">{avg ?? '–'}</strong></div>
+        <div><span>{t('stats.male')}</span><strong className="tabular-nums">{gender.male}</strong></div>
+        <div><span>{t('stats.female')}</span><strong className="tabular-nums">{gender.female}</strong></div>
       </div>
 
-      {/* Bar komposisi gender */}
-      <div className="mb-5">
+      {genderTotal > 0 && <div className="mb-5">
         <div className="flex h-3 rounded-full overflow-hidden bg-control">
-          <div className="bg-blue-400" style={{ width: `${malePct}%` }} />
-          <div className="bg-pink-400" style={{ width: `${femalePct}%` }} />
+          <div className="bg-brand-600" style={{ width: `${malePct}%` }} />
+          <div className="bg-gray-400" style={{ width: `${femalePct}%` }} />
         </div>
-        <div className="flex justify-between text-[11px] text-gray-400 mt-1">
+        <div className="flex justify-between text-xs text-gray-500 mt-1">
           <span>{t('stats.maleShort')} {malePct}%</span>
           {gender.other > 0 && <span>{t('stats.unfilled')}: {gender.other}</span>}
           <span>{t('stats.femaleShort')} {femalePct}%</span>
         </div>
-      </div>
+      </div>}
 
-      {/* Grafik kelompok umur — klik untuk lihat siapa saja */}
-      <p className="text-xs font-semibold text-gray-500 mb-2">{t('stats.ageGroups')} <span className="font-normal text-gray-400">{t('stats.clickToView')}</span></p>
+      {withAgeCount === 0 ? <p className="admin-empty-note">{t('stats.noBirthData')}</p> : <>
+      <p className="text-xs font-semibold text-gray-600 mb-2">{t('stats.ageGroups')} <span className="font-normal text-gray-500">{t('stats.clickToView')}</span></p>
       <div className="space-y-2">
         {buckets.map(b => {
           const count = b.people.length
@@ -116,7 +102,7 @@ export default function MemberStats() {
             <button
               key={b.key}
               onClick={() => setSelected(active ? null : b.key)}
-              className="w-full flex items-center gap-3 group"
+              className="w-full min-h-11 flex items-center gap-3 group"
             >
               <span className={`w-12 text-xs font-medium text-right shrink-0 ${active ? 'text-brand-600' : 'text-gray-500'}`}>{b.label}</span>
               <span className="flex-1 h-6 rounded-lg bg-control overflow-hidden relative">
@@ -130,10 +116,6 @@ export default function MemberStats() {
           )
         })}
       </div>
-
-      {withAgeCount === 0 && (
-        <p className="text-xs text-gray-400 text-center mt-3">{t('stats.noBirthData')}</p>
-      )}
 
       {/* Daftar anggota pada kelompok terpilih */}
       {selectedBucket && (
@@ -167,6 +149,7 @@ export default function MemberStats() {
           )}
         </div>
       )}
+      </>}
     </Card>
   )
 }

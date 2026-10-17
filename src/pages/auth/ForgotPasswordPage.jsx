@@ -78,8 +78,8 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex justify-center sm:items-center sm:px-4 sm:py-10">
-      <div className="w-full max-w-md min-h-screen sm:min-h-0 flex flex-col bg-surface sm:rounded-3xl sm:shadow-2xl sm:shadow-black/10 sm:overflow-hidden">
+    <div className="auth-glass-page min-h-screen flex justify-center sm:items-center sm:px-4 sm:py-10">
+      <div className="auth-glass-panel w-full max-w-md min-h-screen sm:min-h-0 flex flex-col sm:rounded-3xl sm:overflow-hidden">
         <div className="gradient-main pt-16 pb-10 px-6 flex flex-col items-center text-center">
           <div className="w-16 h-16 text-white bg-white/20 rounded-2xl flex items-center justify-center mb-4">
             {step === 'email' ? <KeyRound size={28} aria-hidden="true" /> : <ShieldCheck size={28} aria-hidden="true" />}

@@ -6,9 +6,18 @@
   --color-primary: #F4511E;
   --color-primary-dark: #E23E17;
   --color-primary-deeper: #C62F14;
-  --color-surface: #ffffff;
+  --color-surface: rgb(255 255 255 / 0.86);
   /* Latar oranye-hangat lembut ala desain Stitch (surface/background hangat) */
   --color-gray-50: #fefaf7;
+  --color-gray-100: #fff2e9;
+  --color-gray-200: #efd9cc;
+  --color-gray-300: #d7bdb0;
+  --color-gray-400: #917a6e;
+  --color-gray-500: #715c52;
+  --color-gray-600: #59473f;
+  --color-gray-700: #46362f;
+  --color-gray-800: #332721;
+  --color-gray-900: #241b18;
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
 
@@ -36,12 +45,17 @@
   --gradient-2: #EF4E23;
   --gradient-3: #DC2626;
 
-  /* Permukaan netral utk elemen INTERAKTIF (tombol secondary/ghost, tab/segment
-     control, chip filter, badge netral) -- token terpisah dari gray-100/200
-     karena gray-100/200 juga dipakai utk divider/track yang sengaja low-contrast.
-     Light mode: sama persis dgn gray-100/200 bawaan (tidak ada perubahan visual). */
-  --color-control: #f3f4f6;
-  --color-control-hover: #e5e7eb;
+  /* Kontrol interaktif memakai krem hangat agar tetap terlihat di atas kaca. */
+  --color-control: #fff0e5;
+  --color-control-hover: #ffe2cc;
+}
+
+:root {
+  --glass-surface: rgb(255 255 255 / 0.78);
+  --glass-border: rgb(255 255 255 / 0.88);
+  --glass-shadow: 0 16px 40px -26px rgb(59 35 29 / 0.36),
+    inset 0 1px 0 rgb(255 255 255 / 0.86);
+  --glass-field: rgb(255 255 255 / 0.58);
 }
 
 * {
@@ -125,6 +139,9 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   background-color: var(--color-gray-50);
+  background-image: radial-gradient(circle at 10% 4%, rgb(255 185 137 / 0.26), transparent 32%),
+    radial-gradient(circle at 93% 40%, rgb(231 193 184 / 0.24), transparent 35%),
+    linear-gradient(155deg, #fffaf6, #fff1e5 70%, #fff8f0);
   color: var(--color-gray-900);
   transition: background-color 0.25s ease, color 0.25s ease;
 }
@@ -178,23 +195,79 @@ h1, h2, h3 {
 
 /* ─── Gaya Stitch: glass card & ambient shadow ─────────── */
 .glass-card {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: var(--glass-surface);
+  backdrop-filter: blur(12px) saturate(1.12);
+  -webkit-backdrop-filter: blur(12px) saturate(1.12);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 .dark .glass-card {
-  background: rgba(26, 29, 34, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--glass-surface);
+  border-color: var(--glass-border);
 }
 
-/* Bayangan lembut beraura biru brand untuk kartu */
+/* Lapisan kaca memakai token yang sama pada halaman jemaat dan Admin. */
+.app-glass-shell {
+  background: radial-gradient(circle at 8% 8%, rgb(255 190 147 / 0.32), transparent 31%),
+    radial-gradient(circle at 88% 45%, rgb(255 208 194 / 0.28), transparent 39%),
+    linear-gradient(155deg, #fffaf7, #ffefe2 68%, #fff6ec);
+}
+.app-glass-shell .bg-gray-50 { background-color: rgb(255 255 255 / 0.22); }
+.user-bottom-nav {
+  background: var(--glass-surface);
+  border-color: var(--glass-border);
+  backdrop-filter: blur(18px) saturate(1.18);
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  box-shadow: var(--glass-shadow);
+}
+.glass-field {
+  background: var(--glass-field);
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 2px rgb(61 48 42 / 0.04), 0 3px 10px -8px rgb(61 48 42 / 0.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.glass-field:hover { border-color: var(--color-brand-200); }
+.glass-field[aria-invalid="true"] { border-color: var(--color-red-700); }
+.glass-checkbox {
+  appearance: none;
+  flex: none;
+  border: 1px solid var(--color-gray-400);
+  background: var(--glass-field);
+  cursor: pointer;
+}
+.glass-checkbox:checked {
+  border-color: var(--color-brand-600);
+  background-color: var(--color-brand-600);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m4 10 4 4 8-8' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 90%;
+}
+.glass-button-primary {
+  background-image: linear-gradient(145deg, rgb(255 255 255 / 0.2), transparent 42%);
+  border: 1px solid rgb(255 255 255 / 0.28);
+  box-shadow: 0 10px 22px -14px rgb(154 44 17 / 0.72), inset 0 1px 0 rgb(255 255 255 / 0.24);
+}
+.glass-button-secondary {
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4);
+}
+.glass-card-emphasis { border-color: rgb(255 255 255 / 0.96); }
+:is(a, button):focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 3px;
+}
+
+/* Bayangan lembut berwarna brand untuk kartu lama. */
 .ambient-shadow {
   box-shadow: 0 10px 30px -14px rgba(244, 81, 30, 0.28);
 }
 .dark .ambient-shadow {
   box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.6);
 }
+.glass-card.ambient-shadow,
+.dark .glass-card.ambient-shadow { box-shadow: var(--glass-shadow); }
 
 .gradient-text {
   background: linear-gradient(135deg, #F97316, #DC2626);
@@ -371,18 +444,23 @@ h1, h2, h3 {
 
 /* ─── Dark mode ───────────────────────────────────────── */
 .dark {
-  --color-surface: #1a1d22;
+  --color-surface: rgb(39 30 26 / 0.88);
+  --glass-surface: rgb(44 33 29 / 0.84);
+  --glass-border: rgb(255 255 255 / 0.13);
+  --glass-shadow: 0 18px 42px -25px rgb(0 0 0 / 0.72),
+    inset 0 1px 0 rgb(255 255 255 / 0.07);
+  --glass-field: rgb(55 41 35 / 0.84);
 
-  --color-gray-50:  #0f1115;
-  --color-gray-100: #1a1d23;
-  --color-gray-200: #262a32;
-  --color-gray-300: #3a4049;
-  --color-gray-400: #6b7280;
-  --color-gray-500: #9aa3b0;
-  --color-gray-600: #b6bec9;
-  --color-gray-700: #d1d6dd;
-  --color-gray-800: #e8ebee;
-  --color-gray-900: #f5f6f8;
+  --color-gray-50:  #171310;
+  --color-gray-100: #241b17;
+  --color-gray-200: #382924;
+  --color-gray-300: #594137;
+  --color-gray-400: #aa9082;
+  --color-gray-500: #c0aa9e;
+  --color-gray-600: #d5c2b8;
+  --color-gray-700: #e8d8ce;
+  --color-gray-800: #f3e8e0;
+  --color-gray-900: #fff8f2;
 
   --color-brand-50:  #2a1206;
   --color-brand-100: #3a1a0b;
@@ -421,14 +499,126 @@ h1, h2, h3 {
   --color-pink-50:  #2a1722;
   --color-pink-100: #3d2030;
 
-  /* Permukaan interaktif harus jelas lebih terang dari --color-surface (#1a1d22)
-     -- nilai gray-100 reguler (#1a1d23) nyaris identik dgn surface (rasio kontras
-     ~1:1, alias tak kelihatan), makanya tombol secondary/ghost/tab nyaris tak
-     kelihatan tanpa token terpisah ini. Nilai di bawah diukur (WCAG relative
-     luminance) supaya rasio kontras vs surface ~2:1 (rest) / ~2.8:1 (hover) --
-     cukup tegas terlihat sebagai chip terangkat tanpa terlalu terang/menyilaukan. */
-  --color-control: #454c59;
-  --color-control-hover: #5a6371;
+  /* Kontrol dark mode memakai cokelat hangat yang tetap terpisah dari kartu. */
+  --color-control: #4a342e;
+  --color-control-hover: #62433a;
+}
+
+.dark body {
+  background-image: radial-gradient(circle at 10% 10%, rgb(159 58 25 / 0.2), transparent 34%),
+    linear-gradient(155deg, #151210, #211a19 70%, #171313);
+}
+.dark .app-glass-shell {
+  background: radial-gradient(circle at 8% 10%, rgb(180 67 29 / 0.2), transparent 34%),
+    radial-gradient(circle at 90% 62%, rgb(126 37 28 / 0.16), transparent 35%),
+    linear-gradient(155deg, #171411, #241b19 70%, #1a1514);
+}
+.dark .app-glass-shell .bg-gray-50 { background-color: rgb(23 18 18 / 0.26); }
+.dark .glass-card-emphasis { border-color: rgb(255 255 255 / 0.2); }
+
+/* Halaman di luar layout jemaat memakai kanvas yang sama dengan login. */
+.auth-glass-page {
+  background: radial-gradient(circle at 8% 12%, rgb(255 166 104 / 0.34), transparent 34%),
+    radial-gradient(circle at 95% 88%, rgb(234 78 52 / 0.2), transparent 35%),
+    linear-gradient(145deg, #fffaf5, #fff0e5 72%, #ffe9dd);
+}
+.auth-glass-panel {
+  background: var(--glass-surface);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(20px) saturate(1.12);
+  -webkit-backdrop-filter: blur(20px) saturate(1.12);
+}
+.auth-glass-panel .bg-surface { background-color: transparent; }
+.auth-glass-panel .bg-surface.rounded-t-3xl { background: var(--glass-surface); }
+.dark .auth-glass-page {
+  background: radial-gradient(circle at 10% 10%, rgb(175 57 24 / 0.3), transparent 36%),
+    linear-gradient(145deg, #171512, #241a18 72%, #1b1515);
+}
+
+/* Kartu lama yang memakai utilitas putih tetap mengikuti tema, tanpa
+   mengubah latar semantik seperti sukses, peringatan, dan bahaya. */
+.app-glass-shell .bg-surface,
+.admin-shell .admin-main .bg-surface { background-color: var(--glass-surface); }
+.app-glass-shell .bg-white.rounded-2xl,
+.admin-shell .admin-main .bg-white.rounded-2xl { background-color: var(--glass-surface); }
+.dark .app-glass-shell .bg-white.rounded-2xl,
+.dark .admin-shell .admin-main .bg-white.rounded-2xl { color: var(--color-gray-900); }
+.app-glass-shell :is(.bg-surface, .bg-white.rounded-2xl),
+.admin-shell .admin-main :is(.bg-surface, .bg-white.rounded-2xl) {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Admin tetap memakai warna brand. Bentuk panelnya mengikuti bahasa kaca
+   tanpa memberi nuansa abu-abu pada kanvas dan navigasi. */
+.admin-shell.admin-shell {
+  --admin-canvas: #fff5ed;
+  --admin-sidebar-bg: rgb(255 251 247 / 0.83);
+  --admin-border: rgb(214 130 88 / 0.24);
+  --admin-hover: rgb(255 226 205 / 0.65);
+  --admin-active: rgb(255 219 191 / 0.82);
+  --admin-ink: #39251f;
+  --admin-muted: #795e53;
+  --admin-accent: #a6381a;
+  background: radial-gradient(circle at 92% 5%, rgb(255 188 139 / 0.28), transparent 32%),
+    radial-gradient(circle at 5% 88%, rgb(255 217 190 / 0.3), transparent 35%),
+    linear-gradient(145deg, #fffaf6, #fff0e4);
+}
+.admin-shell .admin-main {
+  background: transparent;
+}
+.admin-shell .admin-main .bg-gray-50 { background-color: rgb(255 246 238 / 0.38); }
+.admin-shell .admin-sidebar,
+.admin-shell .admin-mobile-bar {
+  background: var(--admin-sidebar-bg);
+  backdrop-filter: blur(18px) saturate(1.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  border-color: var(--admin-border);
+}
+.admin-shell .admin-main .glass-card.ambient-shadow {
+  background: var(--glass-surface);
+  border-color: var(--admin-border);
+  border-radius: 1rem;
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.admin-shell .admin-dashboard .admin-panel {
+  background: var(--glass-surface);
+  border-color: var(--admin-border);
+  border-radius: 1rem;
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.admin-shell .admin-nav-link.is-active {
+  background: var(--admin-active);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.75);
+}
+.dark .admin-shell.admin-shell {
+  --admin-canvas: #1b1513;
+  --admin-sidebar-bg: rgb(38 29 27 / 0.86);
+  --admin-border: rgb(255 183 145 / 0.16);
+  --admin-hover: rgb(102 55 39 / 0.45);
+  --admin-active: rgb(108 55 34 / 0.65);
+  --admin-ink: #fff3eb;
+  --admin-muted: #d2b6a8;
+  --admin-accent: #ffbc91;
+  background: radial-gradient(circle at 90% 8%, rgb(173 62 31 / 0.22), transparent 36%),
+    linear-gradient(145deg, #1b1513, #2a1d19);
+}
+.dark .admin-shell .admin-main .bg-gray-50 { background-color: rgb(36 27 25 / 0.45); }
+.dark .admin-shell .admin-nav-link.is-active { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08); }
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-card, .user-bottom-nav, .admin-shell .admin-sidebar,
+  .admin-shell .admin-mobile-bar, .admin-shell .admin-main .glass-card.ambient-shadow,
+  .admin-shell .admin-dashboard .admin-panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--color-surface);
+  }
 }
 
 .dark .gradient-text {

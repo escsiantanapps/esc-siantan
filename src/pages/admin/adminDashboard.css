@@ -1,0 +1,46 @@
+.admin-dashboard { max-width: 1320px; margin-inline: auto; }
+.admin-dashboard .admin-panel { background: var(--color-surface); border: 1px solid var(--admin-border); border-radius: 10px; box-shadow: none; }
+.admin-dashboard .text-gray-400 { color: var(--admin-muted); }
+.admin-dashboard a.text-brand-500 { color: var(--admin-accent); font-size: 13px; font-weight: 650; }
+.admin-dashboard .admin-empty-note { margin: 0; padding: 16px 0; color: var(--admin-muted); font-size: 13px; line-height: 1.5; }
+
+.admin-work-queue { border-left: 3px solid var(--admin-accent) !important; }
+.admin-panel-heading { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--admin-border); }
+.admin-panel-heading > svg { color: var(--admin-accent); flex: none; }
+.admin-panel-heading h2 { color: var(--admin-ink); font-size: 14px; font-weight: 700; }
+.admin-panel-heading p { margin-top: 2px; color: var(--admin-muted); font-size: 12px; }
+.admin-queue-count { padding: 3px 8px; border-radius: 5px; background: var(--admin-active); color: var(--admin-accent); font-size: 12px; font-weight: 800; }
+.admin-queue-clear { display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 13px 18px; color: var(--admin-ink); font-size: 13px; font-weight: 600; }
+.admin-queue-clear svg { color: var(--color-green-700); flex: none; }
+
+.admin-metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); overflow: hidden; }
+.admin-metric { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; min-width: 0; min-height: 104px; padding: 17px 20px; border-right: 1px solid var(--admin-border); transition: background-color 150ms ease; }
+.admin-metric:last-child { border-right: 0; }
+.admin-metric:hover { background: var(--admin-hover); }
+.admin-metric-label { max-width: calc(100% - 18px); color: var(--admin-muted); font-size: 12px; font-weight: 600; line-height: 1.35; }
+.admin-metric-value { color: var(--admin-ink); font-family: var(--font-display); font-size: 28px; font-weight: 700; line-height: 1; letter-spacing: -.035em; }
+.admin-metric.has-alert .admin-metric-value { color: var(--color-red-700); }
+.admin-metric-arrow { position: absolute; top: 17px; right: 16px; color: var(--admin-muted); }
+.admin-dashboard-duo { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; align-items: stretch; margin-bottom: 16px; }
+.admin-dashboard-duo > .admin-panel { margin-bottom: 0; min-width: 0; }
+.admin-month-select { min-height: 44px; background: var(--color-control); color: var(--admin-ink); border-color: var(--admin-border); }
+.admin-person-row { min-height: 48px; padding-block: 6px; border-bottom: 1px solid var(--admin-border); }
+.admin-person-row:last-child { border-bottom: 0; }
+
+.admin-member-summary, .admin-eval-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); border: 1px solid var(--admin-border); border-radius: 8px; overflow: hidden; }
+.admin-member-summary > div, .admin-eval-summary > div { display: flex; flex-direction: column; gap: 9px; min-width: 0; padding: 13px 16px; border-right: 1px solid var(--admin-border); }
+.admin-member-summary > div:last-child, .admin-eval-summary > div:last-child { border-right: 0; }
+.admin-member-summary span, .admin-eval-summary span { color: var(--admin-muted); font-size: 12px; line-height: 1.35; }
+.admin-member-summary strong, .admin-eval-summary strong { color: var(--admin-ink); font-family: var(--font-display); font-size: 22px; font-weight: 700; line-height: 1; }
+
+@media (max-width: 767px) {
+  .admin-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .admin-metric { min-height: 94px; padding: 14px 16px; }
+  .admin-metric:nth-child(2) { border-right: 0; }
+  .admin-metric:nth-child(-n+2) { border-bottom: 1px solid var(--admin-border); }
+  .admin-dashboard-duo { grid-template-columns: 1fr; gap: 16px; }
+  .admin-member-summary > div, .admin-eval-summary > div { padding: 12px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-metric { transition: none; }
+}

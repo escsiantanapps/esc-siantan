@@ -15,9 +15,9 @@ export default function PrivacyPolicyPage() {
   const navigate = useNavigate()
   const { t } = useLang()
   return (
-    <div className="min-h-screen bg-gray-50 pb-10">
+    <div className="app-glass-shell min-h-screen pb-10">
       <GradientHeader title={t('auth.privacyPolicy')} subtitle={t('privacy.updated')} back={() => navigate(-1)} />
-      <div className="px-4 pt-5 max-w-2xl mx-auto">
+      <div className="glass-card rounded-2xl px-5 py-6 mt-5 max-w-2xl mx-4 sm:mx-auto">
         <Section title={t('privacy.s1.title')}>
           <p>{t('privacy.s1.text0')}</p>
           <p>{t('privacy.s1.text1')}</p>

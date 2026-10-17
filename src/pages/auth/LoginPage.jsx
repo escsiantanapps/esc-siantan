@@ -43,8 +43,10 @@ export default function LoginPage() {
         <header className="login-brand">
           <div className="login-brand-toolbar">
             <div className="login-wordmark">
-              <img src="/icons/icon-192.png" alt="" width="56" height="56" className="login-logo" />
-              <div>
+              <span className="login-logo-frame" aria-hidden="true">
+                <img src="/icons/esc-mark.svg" alt="" width="96" height="96" className="login-logo" />
+              </span>
+              <div className="login-wordmark-copy">
                 <p className="login-brand-name">{t('auth.brandName')}</p>
                 <p className="login-brand-location">{t('auth.brandLocation')}</p>
               </div>

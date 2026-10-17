@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
-import { Users, Calendar, ClipboardList, AlertTriangle, ChevronRight, CheckCircle2, Clock, XCircle, Cake, Database, BarChart3, Bell } from 'lucide-react'
+import { ChevronRight, CheckCircle2, Database, BarChart3, Bell } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
@@ -10,6 +10,7 @@ import { Card, PageHeader, Spinner, Skeleton, StatusBadge } from '@/components/u
 import { formatDate } from '@/lib/utils'
 import MemberStats from '@/components/MemberStats'
 import AdminPendingList from '@/components/AdminPendingList'
+import './adminDashboard.css'
 
 export default function AdminDashboardPage() {
   const { profile } = useAuth()
@@ -76,10 +77,10 @@ export default function AdminDashboardPage() {
   }
 
   const statCards = [
-    { label: t('adash.totalMembers'),  value: stats.members,     icon: Users,         color: 'text-brand-500', bg: 'bg-brand-50', to: '/admin/jemaat' },
-    { label: t('adash.activeEvents'),  value: stats.events,      icon: Calendar,      color: 'text-red-500',    bg: 'bg-red-50',    to: '/admin/events' },
-    { label: t('adash.taskForms'),     value: stats.tasks,       icon: ClipboardList, color: 'text-blue-500',   bg: 'bg-blue-50',   to: '/admin/tugas' },
-    { label: t('adash.hasSP'),         value: stats.sp,          icon: AlertTriangle, color: 'text-amber-500',  bg: 'bg-amber-50',  to: '/admin/sp' },
+    { label: t('adash.totalMembers'), value: stats.members, to: '/admin/jemaat' },
+    { label: t('adash.activeEvents'), value: stats.events, to: '/admin/events' },
+    { label: t('adash.taskForms'), value: stats.tasks, to: '/admin/tugas' },
+    { label: t('adash.hasSP'), value: stats.sp, to: '/admin/sp', alert: stats.sp > 0 },
   ]
 
   // Ulang tahun pada bulan terpilih. Parse string 'YYYY-MM-DD' langsung agar
@@ -132,110 +133,74 @@ export default function AdminDashboardPage() {
   )
 
   return (
-    <div>
+    <div className="admin-dashboard">
       <PageHeader
-        title={t('adash.hello', { name: profile?.name?.split(' ')[0] || 'Admin' })}
-        subtitle={t('adash.subtitle')}
+        title={t('adash.overview')}
+        subtitle={new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'id-ID', {
+          weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+        }).format(new Date())}
       />
 
-      <Card className="mb-6 overflow-hidden">
-        <div className="flex items-start gap-3 border-b border-gray-100 px-4 py-3.5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-            <Bell size={19} strokeWidth={1.75} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-semibold text-gray-900">{t('admin.pendingTitle')}</h2>
-            <p className="mt-0.5 text-xs text-gray-500">{t('admin.pendingSummary', { count: pendingTotal })}</p>
+      <Card className="admin-panel admin-work-queue mb-5 overflow-hidden">
+        {pendingTotal > 0 ? <>
+          <div className="admin-panel-heading">
+            <Bell size={18} aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <h2>{t('admin.pendingTitle')}</h2>
+              <p>{t('admin.pendingSummary', { count: pendingTotal })}</p>
+            </div>
+            <span className="admin-queue-count">{pendingTotal > 99 ? '99+' : pendingTotal}</span>
           </div>
-          {pendingTotal > 0 && (
-            <span className="min-w-7 rounded-full bg-red-500 px-2 text-center text-xs font-bold leading-7 text-white">
-              {pendingTotal > 99 ? '99+' : pendingTotal}
-            </span>
-          )}
-        </div>
-        <AdminPendingList items={pendingItems} />
+          <AdminPendingList items={pendingItems} />
+        </> : <div className="admin-queue-clear">
+          <CheckCircle2 size={19} aria-hidden="true" />
+          <span>{t('admin.pendingEmpty')}</span>
+        </div>}
       </Card>
 
-      {/* Stats grid — kartu pertama tampil sebagai hero (gaya bento Stitch) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 stagger-children">
-        {statCards.map(({ label, value, icon: Icon, color, bg, to }, idx) => {
-          const hero = idx === 0
-          const wideMobile = hero || idx === statCards.length - 1
-          return (
-            <Link key={label} to={to} className={wideMobile ? 'col-span-2 lg:col-span-1' : ''}>
-              <Card lift className={`p-4 h-full relative overflow-hidden ${hero ? 'gradient-main border-transparent!' : 'hover:border-gray-200'}`}>
-                {/* Glow dekoratif kartu hero */}
-                {hero && <div aria-hidden="true" className="pointer-events-none absolute -top-10 -right-8 w-32 h-32 rounded-full bg-white/15 blur-2xl" />}
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${hero ? 'bg-white/20' : bg}`}>
-                  <Icon size={20} className={hero ? 'text-white' : color} strokeWidth={1.5} />
-                </div>
-                <p className={`font-display text-3xl font-bold tabular-nums tracking-tight ${hero ? 'text-white' : color}`}>{value}</p>
-                <p className={`text-xs mt-0.5 ${hero ? 'text-white/75' : 'text-gray-500'}`}>{label}</p>
-              </Card>
-            </Link>
-          )
-        })}
-      </div>
-
-      {/* Indikator penyimpanan Supabase — khusus Super Admin */}
-      {isSuperAdmin && (
-        <Card className="p-4 mb-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${SC.bg}`}>
-              <Database size={18} className={SC.icon} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-gray-900">{t('adash.storage')}</h3>
-              <p className="text-xs text-gray-400">
-                {storage ? t('adash.storageUsed', { used: fmtBytes(storage.total), total: '1 GB' }) : '…'}
-              </p>
-            </div>
-            {storage && <span className={`text-sm font-bold ${SC.text}`}>{Math.round(storagePct)}%</span>}
-          </div>
-          <div className="h-2.5 bg-control rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${SC.bar}`} style={{ width: `${storagePct}%` }} />
-          </div>
-          {storage && <p className={`text-xs mt-2 ${SC.text}`}>{SC.msg}</p>}
-        </Card>
-      )}
+      <Card className="admin-panel admin-metrics mb-5">
+        {statCards.map(({ label, value, to, alert }) => <Link key={label} to={to}
+          className={`admin-metric${alert ? ' has-alert' : ''}`}>
+          <span className="admin-metric-label">{label}</span>
+          <span className="admin-metric-value tabular-nums">{value}</span>
+          <ChevronRight size={16} aria-hidden="true" className="admin-metric-arrow" />
+        </Link>)}
+      </Card>
 
       {/* Statistik umur & gender jemaat */}
       <MemberStats />
 
+      <div className="admin-dashboard-duo">
       {/* Ulang Tahun pada bulan terpilih */}
-      <Card className="p-4 mb-6">
+      <Card className="admin-panel p-4 mb-5">
         <div className="flex items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-pink-50 flex items-center justify-center shrink-0">
-              <Cake size={18} className="text-pink-500" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-gray-900">{t('adash.birthdays')}</h3>
-              <p className="text-xs text-gray-400">{t('adash.birthdaysN', { n: monthBirthdays.length })}</p>
-            </div>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-gray-900">{t('adash.birthdays')}</h3>
+            <p className="text-xs text-gray-500">{t('adash.birthdaysN', { n: monthBirthdays.length })}</p>
           </div>
           <select
             value={bdayMonth}
             onChange={e => setBdayMonth(Number(e.target.value))}
-            className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-surface text-gray-700"
+            aria-label={t('adash.birthdaysMonth')}
+            className="admin-month-select text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-surface text-gray-700"
           >
             {monthNames.map((name, i) => <option key={i} value={i}>{name}</option>)}
           </select>
         </div>
         {monthBirthdays.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-4">{t('adash.noBirthdays')}</p>
+          <p className="admin-empty-note">{t('adash.noBirthdays')}</p>
         ) : (
           <div className="grid sm:grid-cols-2 gap-3">
             {monthBirthdays.map(m => (
-              <Link key={m.user_id} to={`/admin/jemaat/${m.user_id}`} className="flex items-center gap-3 group">
-                <div className="w-9 h-9 rounded-full overflow-hidden bg-pink-100 flex items-center justify-center text-pink-600 text-xs font-bold shrink-0">
+              <Link key={m.user_id} to={`/admin/jemaat/${m.user_id}`} className="admin-person-row flex items-center gap-3 group">
+                <div className="w-9 h-9 rounded-full overflow-hidden bg-control flex items-center justify-center text-gray-700 text-xs font-bold shrink-0">
                   {m.photo_url
                     ? <img src={m.photo_url} alt={m.name} className="w-full h-full object-cover" />
                     : (m.name?.slice(0, 2).toUpperCase())}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate group-hover:text-brand-600 transition-colors">{m.name}</p>
-                  <p className="text-xs text-gray-400">{formatDate(m.birth_date, 'd MMMM')}</p>
+                  <p className="text-xs text-gray-500">{formatDate(m.birth_date, 'd MMMM')}</p>
                 </div>
               </Link>
             ))}
@@ -244,7 +209,7 @@ export default function AdminDashboardPage() {
       </Card>
 
       {/* Evaluasi Minggu Ini */}
-      <Card className="p-4 mb-6">
+      <Card className="admin-panel p-4 mb-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-gray-900">{t('adash.evalThisWeek')}</h3>
           <Link to="/admin/evaluasi" className="text-xs text-brand-500 flex items-center gap-0.5">
@@ -254,39 +219,20 @@ export default function AdminDashboardPage() {
         {evalLoading ? (
           <div className="flex justify-center py-4"><Spinner /></div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="text-center">
-              <div className="w-9 h-9 mx-auto rounded-xl bg-green-50 flex items-center justify-center mb-2">
-                <CheckCircle2 size={18} className="text-green-500" />
-              </div>
-              <p className="text-xl font-bold text-green-600">{evalSummary.TERPENUHI}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{t('adash.fulfilled')}</p>
-            </div>
-            <div className="text-center">
-              <div className="w-9 h-9 mx-auto rounded-xl bg-amber-50 flex items-center justify-center mb-2">
-                <Clock size={18} className="text-amber-500" />
-              </div>
-              <p className="text-xl font-bold text-amber-600">{evalSummary.PROSES}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{t('adash.inProgress')}</p>
-            </div>
-            <div className="text-center">
-              <div className="w-9 h-9 mx-auto rounded-xl bg-red-50 flex items-center justify-center mb-2">
-                <XCircle size={18} className="text-red-500" />
-              </div>
-              <p className="text-xl font-bold text-red-600">{evalSummary.KOSONG}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{t('adash.empty')}</p>
-            </div>
+          <div className="admin-eval-summary">
+            <div><span>{t('adash.fulfilled')}</span><strong className="tabular-nums">{evalSummary.TERPENUHI}</strong></div>
+            <div><span>{t('adash.inProgress')}</span><strong className="tabular-nums">{evalSummary.PROSES}</strong></div>
+            <div><span>{t('adash.empty')}</span><strong className="tabular-nums">{evalSummary.KOSONG}</strong></div>
           </div>
         )}
       </Card>
+      </div>
 
       {/* Batang berkelompok memudahkan admin membandingkan setiap status per minggu. */}
-      <Card className="p-4 mb-6">
+      <Card className="admin-panel p-4 mb-5">
         <div className="flex items-center justify-between gap-3 mb-1">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
-              <BarChart3 size={18} className="text-brand-500" strokeWidth={1.75} />
-            </div>
+            <BarChart3 size={18} className="text-gray-500 shrink-0" strokeWidth={1.8} aria-hidden="true" />
             <div className="min-w-0">
               <h3 id="evaluation-trend-title" className="text-sm font-semibold text-gray-900">{t('adash.evalTrend')}</h3>
               <p className="text-xs text-gray-400">{t('adash.evalTrendDesc')}</p>
@@ -362,9 +308,8 @@ export default function AdminDashboardPage() {
           </figure>
         )}
       </Card>
-      <div className="grid lg:grid-cols-2 gap-4">
-        {/* Jemaat terbaru */}
-        <Card className="p-4">
+      <div className="admin-dashboard-duo">
+        <Card className="admin-panel p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-900">{t('adash.recentMembers')}</h3>
             <Link to="/admin/jemaat" className="text-xs text-brand-500 flex items-center gap-0.5">
@@ -372,6 +317,7 @@ export default function AdminDashboardPage() {
             </Link>
           </div>
           <div className="space-y-3">
+            {recentMembers.length === 0 && <p className="admin-empty-note">{t('adash.noRecentMembers')}</p>}
             {recentMembers.map((m, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full gradient-main flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
@@ -386,6 +332,23 @@ export default function AdminDashboardPage() {
             ))}
           </div>
         </Card>
+        {/* Kuota penyimpanan bukan pekerjaan harian; letakkan setelah antrean dan ringkasan. */}
+        {isSuperAdmin && <Card className="admin-panel p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <Database size={19} className={SC.icon} aria-hidden="true" />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-gray-900">{t('adash.storage')}</h3>
+              <p className="text-xs text-gray-500">
+                {storage ? t('adash.storageUsed', { used: fmtBytes(storage.total), total: '1 GB' }) : '…'}
+              </p>
+            </div>
+            {storage && <span className={`text-sm font-bold ${SC.text}`}>{Math.round(storagePct)}%</span>}
+          </div>
+          <div className="h-2 bg-control rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${SC.bar}`} style={{ width: `${storagePct}%` }} />
+          </div>
+          {storage && <p className={`text-xs mt-2 ${SC.text}`}>{SC.msg}</p>}
+        </Card>}
       </div>
     </div>
   )

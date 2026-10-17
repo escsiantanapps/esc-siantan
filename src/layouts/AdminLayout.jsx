@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
-  LogOut, ChevronRight, Smartphone, ShieldCheck, Menu, X, KeyRound, HardDrive, ScrollText,
+  LogOut, Smartphone, Search, Menu, X, KeyRound, HardDrive, ScrollText,
   MessageSquare, Users, BarChart3, LayoutDashboard, MessageSquareText, LayoutList, UsersRound, Droplet,
   Gift, Coins, Bell
 } from 'lucide-react'
@@ -8,13 +8,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
-import { ThemeToggle, Spinner, Button } from '@/components/ui'
+import { ThemeToggle, Spinner, Button, Input } from '@/components/ui'
 import { permissionsService } from '@/services/permissionsService'
 import { useBackClose } from '@/hooks/useBackClose'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 import { notificationService } from '@/services/notificationService'
 import AdminPendingList from '@/components/AdminPendingList'
+import './adminLayout.css'
 
 // Item menu Pesan Gembala — dipakai Gembala & Super Admin.
 const PESAN_ITEM = { to: '/admin/pesan', icon: MessageSquare, labelKey: 'admin.nav.pesan' }
@@ -82,6 +83,7 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
 
 export default function AdminLayout({ children }) {
   const [open, setOpen] = useState(false)
+  const [menuQuery, setMenuQuery] = useState('')
   const [pendingOpen, setPendingOpen] = useState(false)
   const pendingRef = useRef(null)
   useBackClose(open, () => setOpen(false)) // back menutup sidebar mobile dulu
@@ -243,6 +245,12 @@ export default function AdminLayout({ children }) {
   }
 
   const MENU = buildMenu(isSuperAdmin, isGembala, allowedPages)
+  const normalizedMenuQuery = menuQuery.trim().toLocaleLowerCase()
+  const visibleMenu = normalizedMenuQuery ? MENU.filter(item => item.to
+    && t(item.labelKey).toLocaleLowerCase().includes(normalizedMenuQuery)) : MENU
+  const currentMenuItem = MENU.filter(item => item.to)
+    .sort((a, b) => b.to.length - a.to.length)
+    .find(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'))
   const visiblePendingItems = MENU
     .filter(item => item.to && PENDING_DESTINATIONS[item.to])
     .map(item => ({
@@ -256,23 +264,21 @@ export default function AdminLayout({ children }) {
   const pendingTotal = visiblePendingItems.reduce((total, item) => total + item.count, 0)
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="admin-shell flex min-h-screen">
       {/* Sidebar desktop */}
       <aside className={`
-        fixed inset-y-0 left-0 z-40 w-60 bg-surface border-r border-gray-100
+        admin-sidebar fixed inset-y-0 left-0 z-40 w-64
         flex flex-col transition-transform duration-200
         ${open ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen lg:flex
       `}>
         {/* Logo */}
-        <div className="p-4 border-b border-gray-100" style={{paddingTop: 'calc(var(--safe-top, 28px) + 1rem)'}}>
+        <div className="admin-brand">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl gradient-main flex items-center justify-center">
-              <span className="text-white text-sm font-bold">ES</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900">ESC Siantan</p>
-              <p className="text-xs text-gray-500">{t('admin.panel')}</p>
+            <img src="/icons/icon-192.png" alt="" className="admin-brand-mark" />
+            <div className="flex-1 min-w-0">
+              <p className="admin-brand-name">ESC Siantan</p>
+              <p className="admin-brand-caption">{t('admin.panel')}</p>
             </div>
             <ThemeToggle />
           </div>
@@ -280,28 +286,25 @@ export default function AdminLayout({ children }) {
 
         {/* Panel switcher */}
         {(!isAdminOnly || hasSecondaryAccess) && (
-          <div className="p-3 border-b border-gray-100">
-            <div className="flex items-center gap-1 p-1 bg-control rounded-xl">
-              <NavLink
-                to="/"
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <Smartphone size={14} strokeWidth={1.5} />
-                {t('admin.switchApp')}
-              </NavLink>
-              <span className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold bg-surface text-brand-600 shadow-sm">
-                <ShieldCheck size={14} strokeWidth={2} />
-                {t('admin.adminTab')}
-              </span>
-            </div>
+          <div className="admin-app-switch">
+            <NavLink to="/" className="admin-app-link" onClick={() => setOpen(false)}>
+              <Smartphone size={17} strokeWidth={1.8} />
+              {t('admin.switchApp')}
+            </NavLink>
           </div>
         )}
 
+        <div className="admin-menu-search">
+          <Input icon={Search} type="search" value={menuQuery}
+            aria-label={t('admin.searchMenu')} placeholder={t('admin.searchMenu')}
+            onChange={event => setMenuQuery(event.target.value)} />
+        </div>
+
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-          {MENU.map((item, i) => {
+        <nav aria-label={t('admin.navigation')} className="admin-nav flex-1 overflow-y-auto">
+          {visibleMenu.map((item, i) => {
             if (!item.to) return (
-              <p key={i} className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 pt-4 pb-1">
+              <p key={i} className="admin-nav-section">
                 {item.sectionKey ? t(item.sectionKey) : item.section}
               </p>
             )
@@ -312,59 +315,50 @@ export default function AdminLayout({ children }) {
 
             return (
               <NavLink key={to} to={reminderTo} end={exact}
-                onClick={() => setOpen(false)}
+                onClick={() => { setOpen(false); setMenuQuery('') }}
                 className={({ isActive }) =>
-                  `relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                  ${isActive
-                    ? 'bg-brand-50 text-brand-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:translate-x-0.5'
-                  }`
+                  `admin-nav-link${isActive ? ' is-active' : ''}`
                 }
               >
-                {({ isActive }) => (
+                {() => (
                   <>
-                    {/* Bar aksen gradient di sisi kiri item aktif */}
-                    {isActive && <span aria-hidden="true" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full gradient-main" />}
-                    <Icon size={17} strokeWidth={isActive ? 2 : 1.5} />
+                    <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
                     <span className="flex-1">{labelKey ? t(labelKey) : label}</span>
                     {badge > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                      <span className="admin-nav-badge">
                         {badge > 99 ? '99+' : badge}
                       </span>
                     )}
-                    {isActive && badge === 0 && <ChevronRight size={14} />}
                   </>
                 )}
               </NavLink>
             )
           })}
+          {visibleMenu.length === 0 && <p className="admin-nav-empty">{t('admin.noMenuResults')}</p>}
         </nav>
 
         {/* User & logout */}
-        <div className="p-3 border-t border-gray-100">
-          <div className="flex items-center gap-2.5 px-2 py-1.5 mb-1">
-            <div className="w-8 h-8 rounded-full gradient-main flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+        <div className="admin-sidebar-footer">
+          <div className="admin-user">
+            <div className="admin-user-avatar">
               {profile?.name?.slice(0, 2).toUpperCase() || 'AD'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-gray-900 truncate">{profile?.name || 'Admin'}</p>
-              <p className="text-[10px] text-gray-500">{profile?.role}</p>
+              <p className="admin-user-name truncate">{profile?.name || 'Admin'}</p>
+              <p className="admin-user-role">{profile?.role}</p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors"
-          >
-            <LogOut size={16} />
+          <Button variant="ghost" onClick={handleLogout} className="admin-logout w-full justify-start">
+            <LogOut size={17} />
             {t('admin.logout')}
-          </button>
+          </Button>
         </div>
       </aside>
 
       {/* Overlay mobile */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-30 lg:hidden animate-fade-in"
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
           onClick={() => setOpen(false)}
         />
       )}
@@ -372,11 +366,11 @@ export default function AdminLayout({ children }) {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0" onClickCapture={handleReadOnlyCapture} onSubmitCapture={handleReadOnlyCapture}>
         {/* Top bar mobile */}
-        <header className="lg:hidden bg-surface/90 backdrop-blur-md border-b border-gray-100 px-4 pb-3 flex items-center gap-3 sticky top-0 z-20" style={{paddingTop: 'calc(var(--safe-top, 28px) + 0.75rem)'}}>
-          <button onClick={() => setOpen(true)} aria-label={t('admin.openMenu')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-500 active:scale-90 transition-transform">
+        <header className="admin-mobile-bar lg:hidden px-4 pb-3 flex items-center gap-3 sticky top-0 z-20" style={{paddingTop: 'calc(var(--safe-top, 28px) + 0.75rem)'}}>
+          <Button variant="ghost" onClick={() => setOpen(true)} aria-label={t('admin.openMenu')} className="admin-icon-button">
             <Menu size={22} />
-          </button>
-          <span className="font-semibold text-gray-900 text-sm flex-1">{t('admin.appShort')}</span>
+          </Button>
+          <span className="admin-mobile-title flex-1 truncate">{currentMenuItem?.labelKey ? t(currentMenuItem.labelKey) : t('admin.appShort')}</span>
           <div className="contents" ref={pendingRef}>
             <button
               type="button"
@@ -421,7 +415,7 @@ export default function AdminLayout({ children }) {
           <ThemeToggle />
         </header>
 
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
+        <main className="admin-main flex-1 p-4 lg:p-7 overflow-y-auto">
           {children || <Outlet context={{ pendingItems: visiblePendingItems, pendingTotal }} />}
         </main>
       </div>

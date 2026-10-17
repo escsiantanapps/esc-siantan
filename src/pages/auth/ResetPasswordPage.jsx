@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { Button, Input } from '@/components/ui'
+import { Check, LockKeyhole } from 'lucide-react'
 
 export default function ResetPasswordPage() {
   const { updatePassword } = useAuth()
@@ -31,11 +32,11 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex justify-center sm:items-center sm:px-4 sm:py-10">
-      <div className="w-full max-w-md min-h-screen sm:min-h-0 flex flex-col bg-surface sm:rounded-3xl sm:shadow-2xl sm:shadow-black/10 sm:overflow-hidden">
+    <div className="auth-glass-page min-h-screen flex justify-center sm:items-center sm:px-4 sm:py-10">
+      <div className="auth-glass-panel w-full max-w-md min-h-screen sm:min-h-0 flex flex-col sm:rounded-3xl sm:overflow-hidden">
         <div className="gradient-main pt-16 pb-10 px-6 flex flex-col items-center text-center">
           <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
-            <span className="text-3xl">🔒</span>
+            <LockKeyhole size={28} className="text-white" aria-hidden="true" />
           </div>
           <h1 className="text-white text-2xl font-bold">{t('auth.resetTitle')}</h1>
           <p className="text-white/70 text-sm mt-1">{t('auth.resetSubtitle')}</p>
@@ -44,7 +45,7 @@ export default function ResetPasswordPage() {
         <div className="flex-1 bg-surface rounded-t-3xl -mt-4 px-6 pt-8 pb-6">
           {done ? (
             <div className="text-center py-6">
-              <div className="text-5xl mb-4">✅</div>
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-green-50 text-green-700"><Check size={30} aria-hidden="true" /></div>
               <p className="text-base font-semibold text-gray-900 mb-1">{t('auth.resetDoneTitle')}</p>
               <p className="text-sm text-gray-500 mb-6">{t('auth.resetDoneDesc')}</p>
               <Button className="w-full" size="lg" onClick={() => navigate('/login')}>{t('auth.toLogin')}</Button>
