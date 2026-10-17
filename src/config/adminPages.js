@@ -22,6 +22,7 @@ export const ADMIN_PAGES = [
   { to: '/admin/berita',   icon: Newspaper,       label: 'Berita & Info',    section: 'Konten',       labelKey: 'admin.nav.berita',      sectionKey: 'admin.sec.Konten' },
   { to: '/admin/events',   icon: Calendar,        label: 'Events',           section: 'Konten',       labelKey: 'admin.nav.events',      sectionKey: 'admin.sec.Konten' },
   { to: '/admin/kelas',    icon: BookOpen,        label: 'Kelas',            section: 'Konten',       labelKey: 'admin.nav.kelas',       sectionKey: 'admin.sec.Konten' },
+  { to: '/admin/alkitab',  icon: BookOpen,        label: 'Alkitab',          section: 'Konten',       labelKey: 'admin.nav.alkitab',     sectionKey: 'admin.sec.Konten' },
   { to: '/admin/roadmap',  icon: Map,             label: 'Roadmap Pemuridan',section: 'Konten',       labelKey: 'admin.nav.roadmap',     sectionKey: 'admin.sec.Konten' },
   // ── Administrasi ──
   { to: '/admin/ibadah-minggu', icon: Church,     label: 'Ibadah Minggu',    section: 'Administrasi', labelKey: 'admin.nav.ibadahMinggu',sectionKey: 'admin.sec.Administrasi' },

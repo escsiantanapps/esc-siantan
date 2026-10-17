@@ -2,6 +2,8 @@ node_modules
 dist
 .env
 .env.local
+*.ewb
+/private/bible-tb/
 .DS_Store
 *.log
 *.xlsx

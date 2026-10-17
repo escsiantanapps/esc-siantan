@@ -435,6 +435,15 @@ h1, h2, h3 {
   -webkit-text-fill-color: transparent;
 }
 
+/* Select bawaan dan tombol pembaca harus memakai permukaan kontrol yang sama di kedua tema. */
+.bible-control {
+  background-color: var(--color-control) !important;
+}
+
+.bible-control:hover {
+  background-color: var(--color-control-hover) !important;
+}
+
 /* Pembaca PDF layar penuh mengambil alih navigasi aplikasi. */
 .pdf-viewer-open .user-bottom-nav {
   display: none;

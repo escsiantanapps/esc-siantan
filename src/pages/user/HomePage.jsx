@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, Calendar, CalendarClock, BookOpen, Droplets, Heart, Baby, Church, HandCoins, WifiOff, RefreshCw, Star, CreditCard } from 'lucide-react'
+import { Bell, Calendar, CalendarClock, BookOpen, Droplets, Heart, Baby, HandCoins, WifiOff, RefreshCw, Star, CreditCard, UserRound } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { newsService, appSettingsService } from '@/services/contentService'
@@ -66,12 +66,17 @@ export default function HomePage() {
       {/* Top AppBar ala Stitch */}
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur-md border-b border-gray-100">
         <div className="app-top-safe flex items-center justify-between px-4 pb-3 pt-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full gradient-main flex items-center justify-center text-white">
-              <Church size={18} />
-            </div>
-            <span className="font-display font-bold text-brand-500 text-base">ESC Siantan</span>
-          </div>
+          <Link to="/profil" aria-label={t('nav.profile')} className="flex min-w-0 min-h-11 items-center gap-2.5 rounded-2xl active:scale-[0.98] transition-transform">
+            <span className="w-11 h-11 rounded-full gradient-main flex items-center justify-center text-white overflow-hidden shrink-0 border-2 border-surface" style={{ boxShadow: '0 3px 12px rgba(244, 81, 30, 0.22)' }}>
+              {profile?.photo_url
+                ? <img src={profile.photo_url} alt="" className="w-full h-full object-cover" />
+                : <UserRound size={22} aria-hidden="true" />}
+            </span>
+            <span className="min-w-0 flex flex-col leading-tight">
+              <span className="text-xs text-gray-500 font-medium">{t('home.headerGreeting')}</span>
+              <span className="font-display font-bold text-gray-900 text-base truncate">{profile?.name?.split(' ')[0] || t('home.member')}</span>
+            </span>
+          </Link>
           <div className="flex items-center gap-2">
             <Link to="/poin" aria-label={t('home.points.title')} className="flex items-center gap-1.5 rounded-full min-h-11 px-3 bg-gradient-to-r from-amber-300 to-yellow-400 border border-amber-400/60 text-amber-950 active:scale-95 transition-transform">
               <Star size={14} className="fill-amber-600 text-amber-600" />

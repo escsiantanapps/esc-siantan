@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, Newspaper, ClipboardList, User, ScanLine } from 'lucide-react'
+import { Home, Newspaper, ClipboardList, BookOpen, ScanLine } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAuth'
@@ -17,7 +17,7 @@ const LEFT_ITEMS = [
 ]
 const RIGHT_ITEMS = [
   { to: '/tugas',     icon: ClipboardList, labelKey: 'nav.tasks' },
-  { to: '/profil',    icon: User,          labelKey: 'nav.profile' },
+  { to: '/alkitab',   icon: BookOpen,      labelKey: 'nav.bible' },
 ]
 
 function NavItem({ to, icon: Icon, labelKey, exact }) {
@@ -99,7 +99,7 @@ export default function UserLayout() {
 
       {/* Bottom navigation — bar mengambang dengan tombol Scan menonjol (FAB) */}
       {!inPanel && (
-      <nav className="user-bottom-nav fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-surface/85 backdrop-blur-xl border-t border-gray-100/60 rounded-t-[1.75rem] shadow-[0_-4px_24px_rgba(2,32,71,0.08)] z-50 pb-[env(safe-area-inset-bottom)]">
+      <nav className="user-bottom-nav fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[26rem] bg-surface/95 backdrop-blur-xl border border-gray-200 rounded-[1.75rem] shadow-[0_12px_32px_rgba(2,32,71,0.16)] z-50">
         <div className="flex items-end px-2">
           {LEFT_ITEMS.map(item => <NavItem key={item.to} {...item} />)}
 

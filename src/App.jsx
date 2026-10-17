@@ -23,6 +23,8 @@ import AccountStatusPage from '@/pages/auth/AccountStatusPage'
 
 // User pages (real)
 import HomePage from '@/pages/user/HomePage'
+import BiblePage from '@/pages/user/BiblePage'
+import BibleExplanationPage from '@/pages/user/BibleExplanationPage'
 import TasksPage from '@/pages/user/TasksPage'
 import ProfilePage from '@/pages/user/ProfilePage'
 import EditProfilePage from '@/pages/user/EditProfilePage'
@@ -69,6 +71,7 @@ const AdminEventFormPage = lazy(() => import('@/pages/admin/AdminEventFormPage')
 const AdminNewsPage = lazy(() => import('@/pages/admin/AdminNewsPage'))
 const AdminNewsFormPage = lazy(() => import('@/pages/admin/AdminNewsFormPage'))
 const AdminClassesPage = lazy(() => import('@/pages/admin/AdminClassesPage'))
+const AdminBiblePage = lazy(() => import('@/pages/admin/AdminBiblePage'))
 const AdminMinistryPage = lazy(() => import('@/pages/admin/AdminMinistryPage'))
 const AdminKomselPage = lazy(() => import('@/pages/admin/AdminKomselPage'))
 const AdminEvaluationPage = lazy(() => import('@/pages/admin/AdminEvaluationPage'))
@@ -188,6 +191,8 @@ export default function App() {
 
           <Route path="/" element={<PrivateRoute><UserLayout /></PrivateRoute>}>
             <Route index                        element={<HomePage />} />
+            <Route path="alkitab"              element={<BiblePage />} />
+            <Route path="alkitab/penjelasan"   element={<BibleExplanationPage />} />
             <Route path="profil"               element={<ProfilePage />} />
             <Route path="profil/edit"          element={<EditProfilePage />} />
             <Route path="pengaturan"           element={<SettingsPage />} />
@@ -229,6 +234,7 @@ export default function App() {
             <Route path="berita/baru"          element={<AdminNewsFormPage />} />
             <Route path="berita/:id/edit"      element={<AdminNewsFormPage />} />
             <Route path="kelas"                element={<AdminClassesPage />} />
+            <Route path="alkitab"              element={<AdminBiblePage />} />
             <Route path="tugas"                element={<AdminTasksPage />} />
             <Route path="tugas/baru"           element={<AdminTaskFormPage />} />
             <Route path="tugas/:id/edit"       element={<AdminTaskFormPage />} />

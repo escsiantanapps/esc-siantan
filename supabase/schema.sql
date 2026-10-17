@@ -8641,3 +8641,45 @@ GRANT EXECUTE ON FUNCTION reassign_and_sync_service_schedule_draft_positions(
   TEXT,INTEGER,JSONB,JSONB) TO authenticated;
 
 COMMIT;
+
+-- ── Migrasi v109: Penjelasan Alkitab yang diisi Admin per pasal ─────────
+-- Tabel baru; kebijakan lama di production tidak disentuh.
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS bible_explanations (
+  explanation_id TEXT PRIMARY KEY DEFAULT ('BEX-' || replace(gen_random_uuid()::TEXT, '-', '')),
+  book_id INTEGER NOT NULL CHECK (book_id BETWEEN 1 AND 66),
+  chapter_number INTEGER NOT NULL CHECK (chapter_number BETWEEN 1 AND 150),
+  introduction TEXT NOT NULL DEFAULT '',
+  reflection TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT bible_explanations_book_chapter_key UNIQUE (book_id, chapter_number),
+  CONSTRAINT bible_explanations_has_content CHECK (
+    btrim(introduction) <> '' OR btrim(reflection) <> ''
+  )
+);
+
+ALTER TABLE bible_explanations ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON bible_explanations FROM anon;
+GRANT SELECT, INSERT, UPDATE ON bible_explanations TO authenticated;
+
+DROP POLICY IF EXISTS "bible_explanations_read" ON bible_explanations;
+CREATE POLICY "bible_explanations_read" ON bible_explanations FOR SELECT TO authenticated
+USING (EXISTS (
+  SELECT 1 FROM users WHERE user_id = auth_user_id() AND status = 'Aktif'
+));
+
+DROP POLICY IF EXISTS "bible_explanations_admin_insert" ON bible_explanations;
+CREATE POLICY "bible_explanations_admin_insert" ON bible_explanations FOR INSERT TO authenticated
+WITH CHECK (auth_admin_can('/admin/alkitab') AND EXISTS (
+  SELECT 1 FROM users WHERE user_id = auth_user_id() AND status = 'Aktif'
+));
+
+DROP POLICY IF EXISTS "bible_explanations_admin_update" ON bible_explanations;
+CREATE POLICY "bible_explanations_admin_update" ON bible_explanations FOR UPDATE TO authenticated
+USING (auth_admin_can('/admin/alkitab'))
+WITH CHECK (auth_admin_can('/admin/alkitab') AND EXISTS (
+  SELECT 1 FROM users WHERE user_id = auth_user_id() AND status = 'Aktif'
+));
+
+COMMIT;
