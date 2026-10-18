@@ -103,13 +103,13 @@ export async function fixture(harness, options = {}) {
           .map(row => ({ user_id: row.users.user_id, name: row.users.name, photo_url: row.users.photo_url }))
           .sort((a, b) => a.name.localeCompare(b.name) || a.user_id.localeCompare(b.user_id)).slice(0, 50))
       }
-      if (table === 'get_service_schedule_month') {
+      if (table === 'get_service_schedule_month_v111') {
         const monthId = request.postDataJSON()?.p_month_id
         const schedule = state.monthlySchedules?.find(item => item.month.month_id === monthId)
         if (!schedule) return reply({ message: 'Simulasi bulan tidak ditemukan', code: '22023' }, 400)
         return reply(schedule)
       }
-      if (table === 'reassign_and_sync_service_schedule_draft_positions') return reply(1)
+      if (table === 'reassign_and_sync_service_schedule_draft_positions_v111') return reply(1)
       if (table === 'delete_service_schedule_month_draft') {
         const { p_month_id: monthId, p_expected_assigned: expectedAssigned } = request.postDataJSON() || {}
         const schedule = state.monthlySchedules?.find(item => item.month.month_id === monthId)
@@ -177,11 +177,20 @@ export async function fixture(harness, options = {}) {
       if (table === 'auth_admin_can') return reply(state.role === 'Super Admin' || state.allowedPages?.includes('/admin/jadwal-pelayanan') || false)
       if (table === 'admin_user_permissions') {
         if (state.permissionFailure) return reply({ message: 'Simulasi gangguan izin' }, 503)
+        if (request.method() === 'POST') {
+          state.targetAllowedPages = request.postDataJSON().allowed_pages
+          return reply({})
+        }
         return rows(state.allowedPages === null ? [] : [{ user_id: 'QA-ADMIN', allowed_pages: state.allowedPages }])
       }
       if (table === 'users') {
-        if (url.searchParams.has('auth_id')) return rows([profile])
-        if (url.searchParams.get('role') === 'eq.Admin') return rows([{ user_id: 'QA-ADMIN', name: 'Admin Uji', role: 'Admin', status: 'Aktif', photo_url: null }])
+        if (url.searchParams.has('auth_id')) return rows([{ ...profile, role: state.role }])
+        if (request.method() === 'PATCH' && url.searchParams.get('user_id') === 'eq.QA-ADMIN') {
+          if (state.targetRole && state.targetRole !== 'Admin') return rows([])
+          state.targetRole = request.postDataJSON().role
+          return rows([{ user_id: 'QA-ADMIN' }])
+        }
+        if (url.searchParams.get('role') === 'eq.Admin') return rows(state.targetRole && state.targetRole !== 'Admin' ? [] : [{ user_id: 'QA-ADMIN', name: 'Admin Uji', role: 'Admin', status: 'Aktif', photo_url: null }])
         if (request.method() === 'GET' && state.members) {
           let data = state.members
           const ids = url.searchParams.get('user_id')

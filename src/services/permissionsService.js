@@ -35,11 +35,14 @@ export const permissionsService = {
     if (error) throw error
   },
 
-  // Cabut akses admin: kembalikan ke Jemaat + hapus hak aksesnya.
-  async revokeAdmin(userId) {
-    const { error } = await supabase.from('users').update({ role: 'Jemaat' }).eq('user_id', userId)
+  // Kunci izin lebih dulu: tanpa baris hak akses, Admin justru mendapat akses penuh.
+  async revokeAdmin(userId, nextRole) {
+    if (!['Jemaat', 'Volunteer'].includes(nextRole)) throw new Error('invalid_revoke_role')
+    await this.setUserPermissions(userId, [])
+    const { data, error } = await supabase.from('users').update({ role: nextRole })
+      .eq('user_id', userId).eq('role', 'Admin').select('user_id').maybeSingle()
     if (error) throw error
-    await supabase.from('admin_user_permissions').delete().eq('user_id', userId)
+    if (!data) throw new Error('admin_role_changed')
   },
 
   // Cari user aktif yang BUKAN admin/super admin (untuk dijadikan admin).

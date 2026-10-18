@@ -5,12 +5,12 @@ import { ADMIN_PAGES, ALL_ADMIN_PAGE_PATHS } from '@/config/adminPages'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
-import { Card, PageHeader, Spinner, Checkbox, Button, Input, Avatar, Badge, EmptyState } from '@/components/ui'
+import { Card, PageHeader, Spinner, Checkbox, Button, Input, Select, Avatar, Badge, EmptyState } from '@/components/ui'
 
 const SECTIONS = [...new Set(ADMIN_PAGES.map(p => p.section))]
 
 export default function AdminPermissionsPage() {
-  const { toast, confirm } = useToast()
+  const { toast } = useToast()
   const { t } = useLang()
   const [admins, setAdmins] = useState([])
   const [loading, setLoading] = useState(true)
@@ -23,7 +23,9 @@ export default function AdminPermissionsPage() {
   const [editing, setEditing] = useState(null) // admin yang sedang diatur
   const [editPages, setEditPages] = useState([])
   const [saving, setSaving] = useState(false)
-  useBackClose(!!editing, () => setEditing(null))
+  const [revokeRole, setRevokeRole] = useState(null)
+  const [revoking, setRevoking] = useState(false)
+  useBackClose(!!editing, () => { setEditing(null); setRevokeRole(null) })
 
   useEffect(() => { load() }, [])
 
@@ -60,6 +62,7 @@ export default function AdminPermissionsPage() {
 
   function openEditor(admin) {
     setEditing(admin)
+    setRevokeRole(null)
     // null (belum diatur) = akses penuh -> tampilkan semua tercentang
     setEditPages(admin.allowed_pages ?? [...ALL_ADMIN_PAGE_PATHS])
   }
@@ -82,21 +85,21 @@ export default function AdminPermissionsPage() {
     }
   }
 
-  async function revoke(admin) {
-    const ok = await confirm({
-      title: t('aperm.revokeTitle'),
-      message: t('aperm.revokeMsg', { name: admin.name }),
-      confirmText: t('aperm.revoke'),
-      danger: true,
-    })
-    if (!ok) return
+  async function revoke() {
+    if (!['Jemaat', 'Volunteer'].includes(revokeRole) || !editing || revoking) return
+    setRevoking(true)
     try {
-      await permissionsService.revokeAdmin(admin.user_id)
-      toast.success(t('aperm.revokedToast'))
+      await permissionsService.revokeAdmin(editing.user_id, revokeRole)
+      toast.success(t('aperm.revokedToast', { role: t(`role.${revokeRole}`) }))
       setEditing(null)
+      setRevokeRole(null)
       load()
     } catch (err) {
-      toast.error(err.message || t('aperm.revokeFailed'))
+      toast.error(err.message === 'admin_role_changed' ? t('aperm.revokeRoleChanged')
+        : err.message === 'invalid_revoke_role' ? t('aperm.revokeFailed') : err.message || t('aperm.revokeFailed'))
+      if (err.message === 'admin_role_changed') { setEditing(null); setRevokeRole(null); load() }
+    } finally {
+      setRevoking(false)
     }
   }
 
@@ -172,39 +175,57 @@ export default function AdminPermissionsPage() {
       {/* Editor hak akses per-admin */}
       {editing && (
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md p-4 space-y-4 max-h-[90vh] overflow-y-auto">
+          <Card className="w-full max-w-md p-4 space-y-4 max-h-[90vh] overflow-y-auto"
+            role="dialog" aria-modal="true" aria-labelledby="admin-permissions-dialog-title">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5 min-w-0">
                 <Avatar name={editing.name} src={editing.photo_url} size="sm" />
                 <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-gray-900 truncate">{editing.name}</h2>
-                  <p className="text-xs text-gray-400">{t('aperm.configPages')}</p>
+                  <h2 id="admin-permissions-dialog-title" className="text-sm font-semibold text-gray-900 truncate">{editing.name}</h2>
+                  <p className="text-xs text-gray-400">{t(revokeRole === null ? 'aperm.configPages' : 'aperm.revokeTitle')}</p>
                 </div>
               </div>
-              <button aria-label={t('common.close')} onClick={() => setEditing(null)} className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-600 hover:bg-control shrink-0"><X size={18} /></button>
+              <button aria-label={t('common.close')} disabled={revoking || saving} onClick={() => { setEditing(null); setRevokeRole(null) }} className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-600 hover:bg-control shrink-0 disabled:opacity-50"><X size={18} /></button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setEditPages([...ALL_ADMIN_PAGE_PATHS])}>{t('aperm.selectAll')}</Button>
-              <Button size="sm" variant="ghost" onClick={() => setEditPages([])}>{t('aperm.clear')}</Button>
-            </div>
-
-            {SECTIONS.map(section => (
-              <div key={section} className="space-y-2">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t(`admin.sec.${section}`)}</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {ADMIN_PAGES.filter(p => p.section === section).map(page => (
-                    <Checkbox key={page.to} label={t(page.labelKey)}
-                      checked={editPages.includes(page.to)} onChange={() => toggle(page.to)} />
-                  ))}
+            {revokeRole !== null ? (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">{t('aperm.revokeMsg', { name: editing.name })}</p>
+                <Select label={t('aperm.revokeRoleLabel')} value={revokeRole} onChange={event => setRevokeRole(event.target.value)} required autoFocus>
+                  <option value="" disabled>{t('aperm.revokeRolePlaceholder')}</option>
+                  <option value="Jemaat">{t('role.Jemaat')}</option>
+                  <option value="Volunteer">{t('role.Volunteer')}</option>
+                </Select>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" disabled={revoking} onClick={() => setRevokeRole(null)}>{t('a.cancel')}</Button>
+                  <Button variant="danger" className="flex-1" loading={revoking} disabled={!revokeRole} onClick={revoke}>{t('aperm.revoke')}</Button>
                 </div>
               </div>
-            ))}
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setEditPages([...ALL_ADMIN_PAGE_PATHS])}>{t('aperm.selectAll')}</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditPages([])}>{t('aperm.clear')}</Button>
+                </div>
 
-            <div className="flex gap-2 pt-1">
-              <Button variant="danger" onClick={() => revoke(editing)}><Trash2 size={15} /> {t('aperm.revoke')}</Button>
-              <Button className="flex-1" loading={saving} onClick={saveEditor}>{t('a.save')}</Button>
-            </div>
+                {SECTIONS.map(section => (
+                  <div key={section} className="space-y-2">
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t(`admin.sec.${section}`)}</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {ADMIN_PAGES.filter(p => p.section === section).map(page => (
+                        <Checkbox key={page.to} label={t(page.labelKey)}
+                          checked={editPages.includes(page.to)} onChange={() => toggle(page.to)} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex gap-2 pt-1">
+                  <Button variant="danger" disabled={saving} onClick={() => setRevokeRole('')}><Trash2 size={15} /> {t('aperm.revoke')}</Button>
+                  <Button className="flex-1" loading={saving} onClick={saveEditor}>{t('a.save')}</Button>
+                </div>
+              </>
+            )}
           </Card>
         </div>
       )}

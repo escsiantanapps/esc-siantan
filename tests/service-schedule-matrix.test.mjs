@@ -137,11 +137,13 @@ test('PDF meng-escape teks yang berasal dari database dan mematuhi filter bagian
   schedule.parts[0].material = 'legacy-material-secret'
   schedule.occurrences[0].notes = '<script>alert(2)</script>'
   schedule.rosters[0].service_roster_slots[1].users.name = 'A & B <C>'
+  schedule.rosters[0].service_roster_slots[1].assignment_note = 'MD <script>unsafe</script>'
   const html = buildMonthlySchedulePrintDocument(schedule, { t: key => key, ministryFilter: 'M-MUSIC' })
   assert.doesNotMatch(html, /legacy-material-secret/)
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/)
   assert.match(html, /&lt;script&gt;alert\(2\)&lt;\/script&gt;/)
   assert.match(html, /A &amp; B &lt;C&gt;/)
+  assert.match(html, /MD &lt;script&gt;unsafe&lt;\/script&gt;/)
   assert.doesNotMatch(html, /<script>/)
   assert.doesNotMatch(html, /Multimedia/)
 })

@@ -396,7 +396,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
       title: t('sched.pdfTitle'), heading: roster.title,
       meta: [[t('sched.statusLabel'), t(`sched.status.${roster.status}`)], [t('sched.date'), formatDate(roster.service_date)], [t('sched.time'), timeText(roster)], [t('sched.location'), roster.location || '-'], [t('sched.ministry'), roster.ministries?.name || '-'], [t('sched.dressCode'), roster.dress_code || '-']],
       summary: [{ value: `${count.filled}/${count.total}`, label: t('sched.filledSlots') }],
-      sections: [{ title: t('sched.team'), tableHeaders: [t('sched.position'), t('sched.member')], tableData: (roster.service_roster_slots || []).map(slot => [slot.ministry_service_positions?.name || '-', slot.users?.name || t('sched.emptySlot')]) }, ...(roster.notes ? [{ title: t('sched.notes'), text: roster.notes }] : [])],
+      sections: [{ title: t('sched.team'), tableHeaders: [t('sched.position'), t('sched.member')], tableData: (roster.service_roster_slots || []).map(slot => [slot.ministry_service_positions?.name || '-', `${slot.users?.name || t('sched.emptySlot')}${slot.assignment_note ? ` (${slot.assignment_note})` : ''}`]) }, ...(roster.notes ? [{ title: t('sched.notes'), text: roster.notes }] : [])],
       footer: t('sched.pdfFooter'),
     })
   }
@@ -473,7 +473,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
             <h2 className="mb-3 text-sm font-semibold text-gray-900">{group.name}</h2>
             <div className="space-y-2">{group.slots.map(slot => <div key={slot.slot_id} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 px-3 py-2">
               <Avatar name={slot.users?.name || '?'} src={slot.users?.photo_url} size="sm" />
-              <span className={`min-w-0 flex-1 truncate text-sm ${slot.users ? 'font-medium text-gray-800' : 'text-gray-400'}`}>{slot.users?.name || t('sched.emptySlot')}</span>
+              <span className="min-w-0 flex-1"><span className={`block truncate text-sm ${slot.users ? 'font-medium text-gray-800' : 'text-gray-400'}`}>{slot.users?.name || t('sched.emptySlot')}</span>{slot.assignment_note && <small className="block text-xs text-gray-500">{slot.assignment_note}</small>}</span>
               {editable && <><button type="button" onClick={() => setPicker(slot)} aria-label={t('sched.chooseMember')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-brand-600 hover:bg-brand-50"><UserRound size={17} /></button>{slot.user_id && <button type="button" onClick={() => setSlot(slot, null)} aria-label={t('sched.clearSlot')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-red-500 hover:bg-red-50"><X size={17} /></button>}</>}
             </div>)}</div>
           </Card>)}

@@ -14,7 +14,7 @@ const rosterSelect = `
   *,
   ministries(name),
   service_roster_slots(
-    slot_id, ministry_id, position_id, slot_no, user_id,
+    slot_id, ministry_id, position_id, slot_no, user_id, assignment_note,
     ministry_service_positions(name, sort_order),
     users(name, photo_url)
   )
@@ -47,16 +47,31 @@ export const serviceRosterService = {
         p_page: '/admin/jadwal-pelayanan',
       })
       if (permissionError) throw permissionError
-      if (!allowed) return []
-      const { data, error } = await supabase
-        .from('ministries')
-        .select('ministry_id, name')
-        .order('name')
-      if (error) throw error
-      return (data || []).map(item => ({ ...item, manager_role: 'Admin' }))
+      if (profile.role === 'Admin') {
+        const { data, error } = await supabase.from('admin_ministry_schedule_access')
+          .select('ministry_id, ministries(ministry_id, name, head_user_id)')
+          .eq('user_id', profile.user_id).eq('is_active', true)
+        if (error) throw error
+        const rows = data || []
+        if (rows.length) {
+          const memberships = await supabase.from('user_ministries').select('ministry_id').eq('user_id', profile.user_id)
+          if (memberships.error) throw memberships.error
+          const ids = new Set((memberships.data || []).map(row => row.ministry_id))
+          return rows.filter(row => row.ministries?.head_user_id === profile.user_id && ids.has(row.ministry_id))
+            .map(row => ({ ...row.ministries, manager_role: 'Ministry Head' }))
+        }
+      }
+      if (allowed) {
+        const { data, error } = await supabase
+          .from('ministries')
+          .select('ministry_id, name')
+          .order('name')
+        if (error) throw error
+        return (data || []).map(item => ({ ...item, manager_role: 'Admin' }))
+      }
+      return []
     }
-    if (profile?.status !== 'Aktif' || !['Jemaat', 'Volunteer', 'PKS'].includes(profile?.role)
-      || FORBIDDEN_SCHEDULE_MANAGER_ROLES.has(profile?.role)
+    if (!['Jemaat', 'Volunteer', 'PKS'].includes(profile?.role)
       || FORBIDDEN_SCHEDULE_MANAGER_ROLES.has(profile?.role_secondary)) return []
     let { data, error } = await supabase
       .from('ministry_schedule_managers')
@@ -75,13 +90,13 @@ export const serviceRosterService = {
     const mhRows = (data || []).filter(row => row.manager_role === 'Ministry Head'
       && row.ministries?.head_user_id === profile.user_id && profile.role === 'Volunteer')
     let membershipIds = new Set()
-    if (mhRows.length) {
+    if ((data || []).length) {
       const memberships = await supabase.from('user_ministries').select('ministry_id').eq('user_id', profile.user_id)
       if (memberships.error) throw memberships.error
       membershipIds = new Set((memberships.data || []).map(row => row.ministry_id))
     }
-    return (data || []).filter(row => row.ministries && (row.manager_role === 'Wakil'
-      || (row.manager_role === 'Ministry Head' && mhRows.includes(row) && membershipIds.has(row.ministries.ministry_id))))
+    return (data || []).filter(row => row.ministries && membershipIds.has(row.ministries.ministry_id)
+      && (row.manager_role === 'Wakil' || (row.manager_role === 'Ministry Head' && mhRows.includes(row))))
       .map(row => ({ ...row.ministries, manager_role: row.manager_role }))
   },
 
@@ -107,7 +122,7 @@ export const serviceRosterService = {
         service_rosters(
           *, ministries(name),
           service_roster_slots(
-            slot_id, ministry_id, position_id, slot_no, user_id,
+            slot_id, ministry_id, position_id, slot_no, user_id, assignment_note,
             ministry_service_positions(name, sort_order),
             users(name, photo_url)
           )
@@ -324,8 +339,8 @@ export const serviceRosterService = {
       if (error) throw error
       for (const membership of data || []) {
         const user = membership.users
-        if (user?.status !== 'Aktif' || !['Jemaat', 'Volunteer', 'PKS'].includes(user.role)
-          || FORBIDDEN_SCHEDULE_MANAGER_ROLES.has(user.role_secondary)) continue
+        if (user?.status !== 'Aktif' || !['Jemaat', 'Volunteer', 'PKS', 'Admin'].includes(user.role)
+          || (user.role !== 'Admin' && FORBIDDEN_SCHEDULE_MANAGER_ROLES.has(user.role_secondary))) continue
         if (!candidates.has(user.user_id)) candidates.set(user.user_id, { ...user, ministry_ids: [] })
         candidates.get(user.user_id).ministry_ids.push(membership.ministry_id)
       }
@@ -334,17 +349,27 @@ export const serviceRosterService = {
     }
   },
   async listManagers(ministryId) {
-    const { data, error } = await supabase
+    const [{ data, error }, { data: adminHeads, error: adminError }] = await Promise.all([supabase
       .from('ministry_schedule_managers')
       .select('*, users!ministry_schedule_managers_user_id_fkey(user_id, name, photo_url, role, status)')
       .eq('ministry_id', ministryId)
       .eq('is_active', true)
-      .order('manager_role')
+      .order('manager_role'), supabase.from('admin_ministry_schedule_access')
+        .select('*, users!user_id(user_id, name, photo_url, role, status)')
+        .eq('ministry_id', ministryId).eq('is_active', true)])
     if (error) throw error
-    return data || []
+    if (adminError) throw adminError
+    return [...(data || []), ...(adminHeads || []).map(row => ({ ...row, manager_role: 'Ministry Head', access_source: 'admin_mh' }))]
   },
 
-  async grantManager({ ministryId, userId, managerRole }) {
+  async grantManager({ ministryId, userId, managerRole, adminHead = false }) {
+    if (adminHead) {
+      const { data, error } = await supabase.from('admin_ministry_schedule_access')
+        .upsert({ ministry_id: ministryId, user_id: userId, is_active: true }, { onConflict: 'ministry_id,user_id' })
+        .select().single()
+      if (error) throw error
+      return data
+    }
     const { data, error } = await supabase
       .from('ministry_schedule_managers')
       .upsert({
@@ -359,9 +384,9 @@ export const serviceRosterService = {
     return data
   },
 
-  async revokeManager(ministryId, userId) {
+  async revokeManager(ministryId, userId, adminHead = false) {
     const { error } = await supabase
-      .from('ministry_schedule_managers')
+      .from(adminHead ? 'admin_ministry_schedule_access' : 'ministry_schedule_managers')
       .delete()
       .eq('ministry_id', ministryId)
       .eq('user_id', userId)

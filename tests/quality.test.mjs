@@ -534,7 +534,7 @@ async function assertMonthlyManagementLoaded(f) {
   const monthlyTab = f.page.getByRole('button', { name: 'Bulanan', exact: true })
   assert.equal(await monthlyTab.getAttribute('aria-pressed'), 'true')
   await f.page.getByRole('table', { name: /^Jadwal pelayanan / }).waitFor()
-  const request = f.requests.find(row => row.path.endsWith('/get_service_schedule_month'))
+  const request = f.requests.find(row => row.path.endsWith('/get_service_schedule_month_v111'))
   assert.equal(request?.method, 'POST', 'Panel harus memuat snapshot bulanan melalui RPC')
   assert.deepEqual(request?.body, { p_month_id: 'QA-MONTH' })
   const expectedMonth = `eq.${await f.page.getByLabel('Bulan', { exact: true }).inputValue()}-01`
@@ -621,7 +621,7 @@ test('Admin melihat perubahan posisi sebelum Edit Jadwal Draft', async () => {
     await f.page.setViewportSize({ width: 390, height: 844 })
     assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false)
     await dialog.getByRole('button', { name: 'Simpan', exact: true }).click()
-    const request = f.requests.find(row => row.path.endsWith('/reassign_and_sync_service_schedule_draft_positions'))
+    const request = f.requests.find(row => row.path.endsWith('/reassign_and_sync_service_schedule_draft_positions_v111'))
     assert.deepEqual(request?.body, {
       p_month_id: 'QA-MONTH', p_expected_version: 0,
       p_expected_catalog: {
@@ -654,7 +654,7 @@ test('Edit Jadwal meminta job baru untuk pelayan pada posisi lama', async () => 
     await dialog.getByRole('combobox', { name: /Pelayan Worship QA.*sebelumnya Worship Leader/ }).selectOption('QA-DRUM')
     assert.equal(await save.isEnabled(), true)
     await save.click()
-    const request = f.requests.find(row => row.path.endsWith('/reassign_and_sync_service_schedule_draft_positions'))
+    const request = f.requests.find(row => row.path.endsWith('/reassign_and_sync_service_schedule_draft_positions_v111'))
     assert.deepEqual(request?.body?.p_moves, [{ slot_id: 'QA-SLOT-QA-POS', user_id: 'QA-USER', position_id: 'QA-DRUM' }])
   })
 })
@@ -733,6 +733,7 @@ test('Wakil ber-grant hanya membuka panel pengelola jadwal, bukan halaman Admin 
     role: 'Volunteer',
     ...monthlyManagementFixture(true),
     managerGrants: [{ manager_role: 'Wakil', ministries: { ministry_id: 'QA-MIN', name: 'Worship' } }],
+    ministryMembers: [{ user_id: 'QA-USER', ministry_id: 'QA-MIN' }],
   }, async f => {
     await f.goto('/profil')
     await f.page.getByRole('link', { name: /Kelola Jadwal Pelayanan/ }).waitFor()
@@ -754,6 +755,21 @@ test('Wakil ber-grant hanya membuka panel pengelola jadwal, bukan halaman Admin 
     assert.equal(await f.page.locator('button.sched-matrix-occurrence-cell').count(), 0)
     assert.equal(await f.page.locator('aside').count(), 0)
     await f.goto('/admin/jemaat')
+    await f.page.waitForURL(url => url.pathname === '/')
+  })
+})
+
+test('Wakil yang bukan anggota Ministry tidak mendapat panel kelola jadwal', async () => {
+  await scenario({
+    role: 'Volunteer',
+    ...monthlyManagementFixture(true),
+    managerGrants: [{ manager_role: 'Wakil', ministries: { ministry_id: 'QA-MIN', name: 'Worship' } }],
+    ministryMembers: [],
+  }, async f => {
+    await f.goto('/profil')
+    await f.page.getByRole('heading', { name: 'Pengguna QA', exact: true }).waitFor()
+    assert.equal(await f.page.getByRole('link', { name: /Kelola Jadwal Pelayanan/ }).count(), 0)
+    await f.goto('/admin/jadwal-pelayanan')
     await f.page.waitForURL(url => url.pathname === '/')
   })
 })
@@ -967,6 +983,70 @@ test('Admin: izin belum diatur mempertahankan akses default yang sah', async () 
     await f.goto('/admin/events')
     await f.page.getByRole('heading', { name: 'Kelola Events', exact: true }).waitFor()
     assert.equal(await f.page.getByRole('alert').count(), 0)
+  })
+})
+
+test('Hak Akses: pencabutan meminta pilihan role dan mengunci izin lebih dulu', async () => {
+  for (const role of ['Jemaat', 'Volunteer']) {
+    await scenario({}, async f => {
+      await f.goto('/admin/hak-akses')
+      await f.page.getByRole('button', { name: /Admin Uji/ }).click()
+      await f.page.getByRole('button', { name: 'Cabut', exact: true }).click()
+      const roleSelect = f.page.getByLabel('Role setelah dicabut')
+      await roleSelect.waitFor()
+      assert.equal(await f.page.getByRole('button', { name: 'Cabut', exact: true }).isDisabled(), true)
+      assert.equal(f.requests.some(request => request.path === '/rest/v1/admin_user_permissions'
+        && request.method === 'POST'), false)
+      await roleSelect.selectOption(role)
+      await f.page.getByRole('button', { name: 'Cabut', exact: true }).click()
+      await f.page.getByText(`Akses admin dicabut. Role kini ${role}.`, { exact: true }).waitFor()
+      const writes = f.requests.filter(request =>
+        (request.path === '/rest/v1/admin_user_permissions' && request.method === 'POST')
+        || (request.path === '/rest/v1/users' && request.method === 'PATCH' && request.body?.role === role))
+      assert.deepEqual(writes.map(request => [request.path, request.method, request.body?.allowed_pages, request.body?.role]), [
+        ['/rest/v1/admin_user_permissions', 'POST', [], undefined],
+        ['/rest/v1/users', 'PATCH', undefined, role],
+      ])
+      assert.equal(f.state.targetAllowedPages.length, 0)
+      assert.equal(f.state.targetRole, role)
+      assert.equal(f.requests.some(request => request.path === '/rest/v1/admin_user_permissions'
+        && request.method === 'DELETE'), false)
+    })
+  }
+})
+
+test('Hak Akses: batal memilih role tidak mengubah izin atau role', async () => {
+  await scenario({}, async f => {
+    await f.goto('/admin/hak-akses')
+    await f.page.getByRole('button', { name: /Admin Uji/ }).click()
+    await f.page.getByRole('button', { name: 'Cabut', exact: true }).click()
+    await f.page.getByLabel('Role setelah dicabut').selectOption('Volunteer')
+    await f.page.getByRole('button', { name: 'Batal', exact: true }).click()
+    await f.page.getByRole('button', { name: 'Simpan', exact: true }).waitFor()
+    assert.equal(f.requests.some(request => request.path === '/rest/v1/admin_user_permissions'
+      && request.method === 'POST'), false)
+    assert.equal(f.state.targetRole, undefined)
+  })
+})
+
+test('Admin: izin yang dicabut diperbarui saat tab kembali aktif', async () => {
+  await scenario({ role: 'Admin', allowedPages: ['/admin/events'] }, async f => {
+    await f.goto('/admin/events')
+    await f.page.getByRole('heading', { name: 'Kelola Events', exact: true }).waitFor()
+    f.state.allowedPages = []
+    await f.page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await f.page.getByRole('heading', { name: 'Belum ada halaman yang diizinkan', exact: true }).waitFor()
+  })
+})
+
+test('Admin: role yang dicabut diperbarui saat tab kembali aktif', async () => {
+  await scenario({ role: 'Admin', allowedPages: ['/admin/events'] }, async f => {
+    await f.goto('/admin/events')
+    await f.page.getByRole('heading', { name: 'Kelola Events', exact: true }).waitFor()
+    f.state.role = 'Jemaat'
+    await f.page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await f.page.waitForURL('**/')
+    assert.equal(new URL(f.page.url()).pathname, '/')
   })
 })
 

@@ -101,6 +101,14 @@ export const ministryScheduleService = {
     return (data || []).map(r => r.user_id)
   },
 
+  async getAssignedMembers(scheduleId) {
+    const { data, error } = await supabase.from('ministry_schedule_assignments')
+      .select('user_id, users!user_id(user_id,name,photo_url)')
+      .eq('schedule_id', scheduleId)
+    if (error) throw error
+    return (data || []).map(row => row.users).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name))
+  },
+
   // Ganti seluruh daftar penugasan jadwal ini dengan userIds (replace-set).
   async setAssignments(scheduleId, userIds) {
     const { error: delErr } = await supabase
@@ -129,7 +137,7 @@ export const ministryScheduleService = {
   // dari database; halaman hanya menyusun data lintas sesi untuk kebutuhan
   // pemantauan Admin dan tidak menghitung ulang aturan grace period di klien.
   async getDateRecap(date) {
-    const schedules = await this.listByDate(date)
+    const schedules = (await this.listByDate(date)).filter(item => item.source_status !== 'Dibatalkan')
     if (schedules.length === 0) {
       return {
         schedules: [],
@@ -214,14 +222,15 @@ export const ministryScheduleService = {
       .order('service_date', { ascending: true })
       .order('start_time', { ascending: true })
     if (scheduleError) throw scheduleError
-    if (!schedules || schedules.length === 0) {
+    const activeSchedules = (schedules || []).filter(item => item.source_status !== 'Dibatalkan')
+    if (activeSchedules.length === 0) {
       return {
         schedules: [], rows: [], lateRows: [], notYetRows: [], lateLeaders: [],
         stats: { sessions: 0, assigned: 0, attended: 0, onTime: 0, late: 0, notYet: 0 },
       }
     }
 
-    const scheduleIds = schedules.map(s => s.schedule_id)
+    const scheduleIds = activeSchedules.map(s => s.schedule_id)
     const [{ data: assignments, error: assignmentError }, { data: attendance, error: attendanceError }] = await Promise.all([
       supabase
         .from('ministry_schedule_assignments')
@@ -236,7 +245,7 @@ export const ministryScheduleService = {
     if (assignmentError) throw assignmentError
     if (attendanceError) throw attendanceError
 
-    const scheduleMap = Object.fromEntries(schedules.map(s => [s.schedule_id, s]))
+    const scheduleMap = Object.fromEntries(activeSchedules.map(s => [s.schedule_id, s]))
     const attendanceRows = attendance || []
     const attendanceMap = Object.fromEntries(
       attendanceRows.map(row => [`${row.schedule_id}:${row.user_id}`, row]),
@@ -294,9 +303,9 @@ export const ministryScheduleService = {
       .slice(0, 10)
 
     return {
-      schedules, rows, lateRows, notYetRows, lateLeaders,
+      schedules: activeSchedules, rows, lateRows, notYetRows, lateLeaders,
       stats: {
-        sessions: schedules.length, assigned: (assignments || []).length,
+        sessions: activeSchedules.length, assigned: (assignments || []).length,
         attended: attendanceRows.length,
         onTime: attendanceRows.filter(row => row.status === 'Tepat Waktu').length,
         late: lateRows.length, notYet: notYetRows.length,
@@ -325,10 +334,10 @@ export const ministryScheduleService = {
   async listMySchedules(userId) {
     const { data: asg, error: e1 } = await supabase
       .from('ministry_schedule_assignments')
-      .select('schedule_id, ministry_schedules(schedule_id, service_date, start_time, label, ministries(name))')
+      .select('schedule_id, ministry_schedules(schedule_id, service_date, start_time, label, source_status, ministries(name))')
       .eq('user_id', userId)
     if (e1) throw e1
-    const scheds = (asg || []).map(r => r.ministry_schedules).filter(Boolean)
+    const scheds = (asg || []).map(r => r.ministry_schedules).filter(s => s && s.source_status !== 'Dibatalkan')
     if (scheds.length === 0) return []
     const { data: att, error: e2 } = await supabase
       .from('ministry_attendance')

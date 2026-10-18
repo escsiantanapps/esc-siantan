@@ -146,3 +146,4 @@
 .monthly-sync-affected > p { margin:0 0 2px; color:var(--color-gray-600); }
 .monthly-sync-affected select { width:100%; }
 @media(max-width:700px) { .monthly-sync-columns { grid-template-columns:1fr; } }
+.monthly-person-notes { display: grid; gap: 10px; margin: 12px 0; }

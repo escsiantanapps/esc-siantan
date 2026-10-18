@@ -63,3 +63,5 @@
   .sched-month-matrix .sched-matrix-date-arrow { width: 44px; min-width: 44px; height: 45px; padding: 0; border-radius: 6px; }
   .sched-matrix-locked { padding: 12px 9px; }
 }
+.sched-matrix-person { display: flex; flex-direction: column; gap: 2px; }
+.sched-matrix-person small { font-size: 0.75em; line-height: 1.3; color: var(--color-gray-500); }

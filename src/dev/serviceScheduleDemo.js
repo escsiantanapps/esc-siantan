@@ -322,12 +322,13 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       state.months = state.months.filter(item => item.month_id !== monthId)
       return assigned
     },
-    async setPosition({ rosterId, positionId, userIds, expectedUserIds }) {
+    async setPosition({ rosterId, positionId, userIds, expectedUserIds, notes = {} }) {
       const roster = demandRoster(rosterId)
       const slots = roster.service_roster_slots.filter(slot => slot.position_id === positionId)
       if (!slots.length) fail('Posisi tidak ditemukan dalam bagian ini.')
       if (JSON.stringify(uniqueSorted(slots.map(slot => slot.user_id).filter(Boolean))) !== JSON.stringify(uniqueSorted(expectedUserIds))) fail('Penugasan telah berubah. Muat ulang sebelum menyimpan.', '40001')
       if (!Array.isArray(userIds) || userIds.length > slots.length || uniqueSorted(userIds).length !== userIds.length) fail('Jumlah pelayan melebihi kapasitas atau berulang.')
+      if (!notes || typeof notes !== 'object' || Array.isArray(notes) || Object.entries(notes).some(([id, note]) => !userIds.includes(id) || typeof note !== 'string' || note.trim().length > 100)) fail('Catatan pelayan tidak valid.')
       for (const userId of userIds) {
         const member = state.users.find(item => item.user_id === userId && eligibleManager(item))
         if (!member) fail('Pelayan yang dipilih harus berstatus Aktif.')
@@ -336,7 +337,7 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
         if (clash) fail(`Jadwal bentrok: ${member.name}, ${clash.title}, ${clash.service_date}, ${clash.start_time}-${clash.end_time}.`, '23P01')
       }
       // Semua kandidat diperiksa dahulu agar penyimpanan beberapa nama bersifat atomik.
-      slots.forEach((slot, index) => { const member = findUser(userIds[index]); slot.user_id = member?.user_id || null; slot.users = member ? { user_id: member.user_id, name: member.name, photo_url: member.photo_url } : null })
+      slots.forEach((slot, index) => { const member = findUser(userIds[index]); slot.user_id = member?.user_id || null; slot.assignment_note = member ? notes[member.user_id]?.trim() || null : null; slot.users = member ? { user_id: member.user_id, name: member.name, photo_url: member.photo_url } : null })
       return copy(slots)
     },
     async findConflicts(userId, rosterId, slotId = null) {
@@ -358,12 +359,10 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       return copy(occurrence)
     },
     async updatePart(rosterId, data) { demandRoster(rosterId); const value = state.parts.find(item => item.roster_id === rosterId); for (const key of ['team_name', 'material', 'notes']) if (Object.hasOwn(data, key)) value[key] = data[key] || ''; return copy(value) },
-    async publishMonth(monthId, allowIncomplete = false) {
+    async publishMonth(monthId) {
       demandAdmin()
       const month = demandDraft(monthId)
       const rosters = state.rosters.filter(item => item.month_id === monthId)
-      if (!rosters.some(item => item.service_roster_slots.some(slot => slot.user_id))) fail('Isi minimal satu pelayan sebelum menerbitkan.')
-      if (!allowIncomplete && rosters.some(item => item.service_roster_slots.some(slot => !slot.user_id))) fail('Masih ada posisi pelayanan yang kosong.')
       for (const roster of rosters) for (const slot of roster.service_roster_slots) {
         if (slot.user_id && !findUser(slot.user_id)?.ministry_ids?.includes(roster.ministry_id)) fail('schedule_ministry_membership_required', '23514')
         if (slot.user_id && conflicts(slot.user_id, roster, slot.position_id).length) fail('Bulan tidak dapat diterbitkan karena jadwal bentrok.', '23P01')

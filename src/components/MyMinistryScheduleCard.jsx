@@ -97,6 +97,7 @@ export default function MyMinistryScheduleCard() {
                     <p className="mt-0.5 truncate text-xs text-gray-400">
                       {formatDate(roster.service_date)} · {own.map(slot => slot.ministry_service_positions?.name).filter(Boolean).join(', ')}
                     </p>
+                    {own.some(slot => slot.assignment_note) && <p className="mt-1 text-xs text-gray-600">{own.map(slot => slot.assignment_note).filter(Boolean).join(' · ')}</p>}
                   </div>
                   <Badge color={roster.status === 'Dibatalkan' ? 'red' : 'green'}>{t(`sched.status.${roster.status}`)}</Badge>
                 </Link>

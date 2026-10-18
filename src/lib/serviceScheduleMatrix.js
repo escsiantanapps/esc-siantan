@@ -165,7 +165,7 @@ export function buildMonthlySchedulePrintDocument(schedule, { t = key => key, lo
         const cell = matrix.getCell(section.occurrencesByDate.get(date), position)
         if (!cell.occurrence) return '<td>-</td>'
         if (cell.hidden) return `<td>${tr('schedMonth.restricted')}</td>`
-        const names = cell.assigned.map(slot => escapeHtml(slot.users?.name || t('schedMonth.unavailableMember'))).join('<br>')
+        const names = cell.assigned.map(slot => `${escapeHtml(slot.users?.name || t('schedMonth.unavailableMember'))}${slot.assignment_note ? `<br><small>${escapeHtml(slot.assignment_note)}</small>` : ''}`).join('<br>')
         const empty = Math.max(0, cell.capacity - cell.filled)
         return `<td>${names}${empty ? `<small>${tr('schedMonth.emptyCount', { count: empty })}</small>` : ''}</td>`
       }).join('')}</tr>`).join('')

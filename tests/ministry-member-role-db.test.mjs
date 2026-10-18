@@ -267,3 +267,57 @@ test('PostgreSQL: v104 menolak policy tambahan dan membatalkan seluruh perubahan
     assert.equal((await db.query("SELECT count(*)::INT AS n FROM pg_policy WHERE polrelid='user_ministries'::regclass AND polname='unexpected_write'")).rows[0].n,1)
   } finally { await db.close() }
 })
+
+test('PostgreSQL: v110 membuka promosi Admin Ministry tanpa membuka perubahan role langsung', async () => {
+  const db = new PGlite()
+  try {
+    await setup(db)
+    await db.exec(`
+      ALTER TABLE users ADD COLUMN auth_id UUID;
+      UPDATE users SET auth_id = md5(user_id)::UUID;
+      CREATE OR REPLACE FUNCTION auth.uid() RETURNS UUID LANGUAGE sql STABLE AS $$
+        SELECT CASE WHEN auth_user_id() IS NOT NULL THEN md5(auth_user_id())::UUID ELSE NULL END
+      $$;
+      CREATE FUNCTION prevent_role_self_escalation() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.role IS DISTINCT FROM OLD.role THEN
+          IF NOT EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'Super Admin') THEN
+            RAISE EXCEPTION 'Hanya Super Admin yang dapat mengubah role pengguna';
+          END IF;
+        END IF;
+        RETURN NEW;
+      END $$;
+      CREATE TRIGGER trg_prevent_role_escalation BEFORE UPDATE ON users
+        FOR EACH ROW EXECUTE FUNCTION prevent_role_self_escalation();
+    `)
+
+    await db.exec('BEGIN')
+    try {
+      await caller(db, 'ADMIN')
+      await db.exec('SET ROLE authenticated')
+      await rejected(db, 'SELECT * FROM add_ministry_member($1,$2)',
+        ['M1', 'JEMAAT'], /Hanya Super Admin/)
+      await db.exec('RESET ROLE')
+      assert.deepEqual(await state(db, 'JEMAAT'),
+        { role: 'Jemaat', role_secondary: null, status: 'Aktif', member: false })
+
+      await db.exec('ROLLBACK')
+      await db.exec(migration(110))
+      await db.exec(migration(110))
+      await db.exec('BEGIN')
+      await caller(db, 'ADMIN')
+      await db.exec('SET ROLE authenticated')
+      await add(db, 'M1', 'JEMAAT')
+      assert.deepEqual(await state(db, 'JEMAAT'),
+        { role: 'Volunteer', role_secondary: null, status: 'Aktif', member: true })
+      await rejected(db, "UPDATE users SET role='Volunteer' WHERE user_id='JEMAAT-2'", [],
+        /Hanya Super Admin/)
+      await caller(db, 'LIMITED', '/admin/jadwal-pelayanan')
+      await rejected(db, 'SELECT * FROM add_ministry_member($1,$2)',
+        ['M1', 'JEMAAT-2'], /not_authorized/)
+      await db.exec('RESET ROLE')
+      assert.deepEqual(await state(db, 'JEMAAT-2'),
+        { role: 'Jemaat', role_secondary: null, status: 'Aktif', member: false })
+    } finally { await db.exec('ROLLBACK; RESET ROLE') }
+  } finally { await db.close() }
+})

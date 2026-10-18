@@ -14,6 +14,7 @@ import { useBackClose } from '@/hooks/useBackClose'
 import { useExitConfirm } from '@/hooks/useExitConfirm'
 import { ADMIN_PAGES, matchAdminPage } from '@/config/adminPages'
 import { notificationService } from '@/services/notificationService'
+import { serviceRosterService } from '@/services/serviceRosterService'
 import AdminPendingList from '@/components/AdminPendingList'
 import './adminLayout.css'
 
@@ -46,7 +47,7 @@ const GEMBALA_BLOCKED_ACTIONS = [
   'terbit', 'unggah', 'upload', 'buat', 'buka sesi', 'batalkan', 'nonaktifkan',
 ]
 
-function buildMenu(isSuperAdmin, isGembala, allowedPages) {
+function buildMenu(isSuperAdmin, isGembala, allowedPages, scopedScheduleAccess = false) {
   const items = []
 
   // Dashboard sekarang jadi entri ADMIN_PAGES pertama (bisa dicabut Super
@@ -54,7 +55,8 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages) {
   let lastSection = null
   for (const page of ADMIN_PAGES) {
     if (isGembala && page.to === '/admin/jadwal-pelayanan') continue
-    if (!isSuperAdmin && !isGembala && allowedPages && !allowedPages.includes(page.to)) continue
+    if (!isSuperAdmin && !isGembala && allowedPages && !allowedPages.includes(page.to)
+      && !(scopedScheduleAccess && page.to === '/admin/jadwal-pelayanan')) continue
     if (page.section !== lastSection) {
       items.push({ section: page.section, sectionKey: page.sectionKey })
       lastSection = page.section
@@ -116,6 +118,8 @@ export default function AdminLayout({ children }) {
   const isVolunteerSecondary = profile?.role_secondary === 'Volunteer'
   const hasSecondaryAccess = isPKS || isVolunteerSecondary
   const [allowedPages, setAllowedPages] = useState(null)
+  const [scopedScheduleAccess, setScopedScheduleAccess] = useState(false)
+  const [scopedScheduleLoading, setScopedScheduleLoading] = useState(false)
   const [permError, setPermError] = useState(false)
   const [permRetry, setPermRetry] = useState(0)
   const [permLoading, setPermLoading] = useState(!isSuperAdmin && !isGembala)
@@ -153,16 +157,47 @@ export default function AdminLayout({ children }) {
 
   useEffect(() => {
     let active = true
+    let inFlight = false
     setPermError(false)
     if (isSuperAdmin || isGembala || !profile?.user_id) { setPermLoading(false); return }
     setPermLoading(true)
-    permissionsService.getMyPermissions(profile.user_id)
-      .then(pages => { if (active) setAllowedPages(pages) })
-      // Kegagalan jaringan bukan izin penuh; tunggu data sah sebelum membuka panel.
-      .catch(() => { if (active) { setAllowedPages([]); setPermError(true) } })
-      .finally(() => { if (active) setPermLoading(false) })
-    return () => { active = false }
+    const refresh = async () => {
+      if (!active || inFlight || document.visibilityState !== 'visible') return
+      inFlight = true
+      try {
+        const pages = await permissionsService.getMyPermissions(profile.user_id)
+        if (active) { setAllowedPages(pages); setPermError(false) }
+      } catch {
+        // Gagal memuat izin harus menutup halaman, termasuk saat pemeriksaan ulang.
+        if (active) { setAllowedPages([]); setPermError(true) }
+      } finally {
+        inFlight = false
+        if (active) setPermLoading(false)
+      }
+    }
+    refresh()
+    const onVisible = () => { refresh() }
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    const timer = window.setInterval(refresh, 15000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [isSuperAdmin, isGembala, profile?.user_id, permRetry])
+
+  useEffect(() => {
+    if (!isAdminOnly || !profile?.user_id) { setScopedScheduleAccess(false); return undefined }
+    let active = true
+    setScopedScheduleLoading(true)
+    serviceRosterService.listManagedMinistries(profile)
+      .then(rows => { if (active) setScopedScheduleAccess(rows.some(row => row.manager_role === 'Ministry Head')) })
+      .catch(() => { if (active) setScopedScheduleAccess(false) })
+      .finally(() => { if (active) setScopedScheduleLoading(false) })
+    return () => { active = false }
+  }, [isAdminOnly, profile?.user_id, permRetry])
 
   async function handleLogout() {
     const ok = await confirm({
@@ -195,13 +230,13 @@ export default function AdminLayout({ children }) {
     toast.info('Mode Gembala hanya baca. Input tetap tersedia di menu Pesan Gembala.')
   }
 
-  if (permLoading) return (
+  if (permLoading || scopedScheduleLoading) return (
     <div className="flex items-center justify-center h-screen">
       <Spinner size="lg" />
     </div>
   )
 
-  const noAllowedPages = !isSuperAdmin && !isGembala && Array.isArray(allowedPages) && allowedPages.length === 0
+  const noAllowedPages = !isSuperAdmin && !isGembala && Array.isArray(allowedPages) && allowedPages.length === 0 && !scopedScheduleAccess
   // Admin murni tanpa halaman tidak diarahkan ke '/' karena rute itu kembali ke '/admin'.
   if (permError || noAllowedPages) return (
     <main className="min-h-svh bg-gray-50 flex items-center justify-center p-6">
@@ -224,7 +259,7 @@ export default function AdminLayout({ children }) {
     if (isSuperAdmin) return '/admin'
     if (!allowedPages || allowedPages.includes('/admin')) return '/admin'
     const first = ADMIN_PAGES.find(p => allowedPages.includes(p.to))
-    return first ? first.to : '/'
+    return first ? first.to : scopedScheduleAccess ? '/admin/jadwal-pelayanan' : '/'
   }
 
   // Halaman bagian Sistem khusus Super Admin (Hak Akses, Kategori Tugas,
@@ -239,12 +274,12 @@ export default function AdminLayout({ children }) {
   // Gembala dikecualikan: aksesnya sudah diatur GEMBALA_ALLOWED di atas.
   if (!isSuperAdmin && !isGembala && allowedPages) {
     const page = matchAdminPage(location.pathname)
-    if (page && !allowedPages.includes(page.to)) {
+    if (page && !allowedPages.includes(page.to) && !(scopedScheduleAccess && page.to === '/admin/jadwal-pelayanan')) {
       return <Navigate to={fallbackPath()} replace />
     }
   }
 
-  const MENU = buildMenu(isSuperAdmin, isGembala, allowedPages)
+  const MENU = buildMenu(isSuperAdmin, isGembala, allowedPages, scopedScheduleAccess)
   const normalizedMenuQuery = menuQuery.trim().toLocaleLowerCase()
   const visibleMenu = normalizedMenuQuery ? MENU.filter(item => item.to
     && t(item.labelKey).toLocaleLowerCase().includes(normalizedMenuQuery)) : MENU

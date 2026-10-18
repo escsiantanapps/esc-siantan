@@ -66,7 +66,7 @@ export default function MonthlyScheduleMatrix({
             {ministry.positions.map(position => <tr key={position.position_id} className="sched-matrix-position"><th scope="row" className="sched-matrix-label">{position.name}<small>{t('schedMonth.capacity', { count: position.slots || position.capacity || 1 })}</small></th>{matrix.dates.map(date => {
               const cell = matrix.getCell(section.occurrencesByDate.get(date), position)
               const content = <>
-                <span className="sched-matrix-assigned">{cell.assigned.map(slot => <span key={slot.slot_id || slot.slot_no}>{slot.users?.name || t('schedMonth.unavailableMember')}</span>)}</span>
+                <span className="sched-matrix-assigned">{cell.assigned.map(slot => <span className="sched-matrix-person" key={slot.slot_id || slot.slot_no}><span>{slot.users?.name || t('schedMonth.unavailableMember')}</span>{slot.assignment_note && <small>{slot.assignment_note}</small>}</span>)}</span>
                 {cell.filled < cell.capacity && <span className="sched-matrix-vacancy">{t('schedMonth.emptyCount', { count: cell.capacity - cell.filled })}</span>}
                 {!cell.assigned.length && !cell.capacity && '-'}
               </>

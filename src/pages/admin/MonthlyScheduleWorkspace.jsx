@@ -35,7 +35,7 @@ const timeLabel = item => `${String(item.start_time || '').slice(0, 5)} - ${Stri
 const statusColor = value => value === 'Terbit' ? 'green' : value === 'Dibatalkan' ? 'red' : 'amber'
 const errorKey = error => {
   const text = String(error?.message || '')
-  if (error?.code === 'PGRST202' && text.includes('reassign_and_sync_service_schedule_draft_positions')) return 'schedMonth.editMigrationRequired'
+  if (error?.code === 'PGRST202' && text.includes('reassign_and_sync_service_schedule_draft_positions_v111')) return 'schedMonth.migrationRequired'
   if (['PGRST200', 'PGRST202', 'PGRST205', '42P01', '42703'].includes(error?.code)) return 'schedMonth.migrationRequired'
   if (text.includes('schedule_position_assigned')) return 'schedMonth.syncBlocked'
   if (text.includes('schedule_ministry_membership_required')) return 'schedMonth.membershipRequired'
@@ -89,7 +89,7 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   const [selectedDate, setSelectedDate] = useState('')
   const catalogRequest = useRef(0)
   const monthsRequest = useRef(0)
-  const canManageAll = ['Admin', 'Super Admin'].includes(profile?.role) && !!grants?.length
+  const canManageAll = grants?.some(item => item.manager_role === 'Admin') || false
   const managedMinistryIds = useMemo(() => grants?.map(item => item.ministry_id) || [], [grants])
   const isDraft = schedule?.month.status === 'Draft'
   const matrix = useMemo(() => schedule ? buildScheduleMatrix(schedule, { ministryFilter, activityFilter }) : null, [schedule, ministryFilter, activityFilter])
@@ -210,11 +210,10 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   }
   async function publishMonth() {
     const stats = buildScheduleMatrix(schedule).stats
-    const allowIncomplete = stats.empty > 0
-    if (!await confirm({ title: t('schedMonth.publishTitle'), message: t(allowIncomplete ? 'schedMonth.publishIncomplete' : 'schedMonth.publishMessage', { empty: stats.empty }), confirmText: t('sched.publish') })) return
+    if (!await confirm({ title: t('schedMonth.publishTitle'), message: t(stats.empty > 0 ? 'schedMonth.publishIncomplete' : 'schedMonth.publishMessage', { empty: stats.empty }), confirmText: t('sched.publish') })) return
     setBusy(true)
     try {
-      const ids = await api.publishMonth(monthId, allowIncomplete)
+      const ids = await api.publishMonth(monthId)
       await reloadSchedule(); toast.success(t('schedMonth.monthPublished'))
       await notify(ids || [], 'Terbit')
     } catch (error) { toast.error(t(errorKey(error))) }
@@ -307,7 +306,7 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     </>}
     {createOpen && <MonthCreator profileId={profile?.user_id} month={month} ministries={ministries} positions={positions} events={events} classes={classes} busy={busy} onClose={() => setCreateOpen(false)} onSave={payload => save(async () => { const id = await api.createMonthDirect(payload); if (profile?.user_id) { try { window.localStorage.removeItem(monthDraftKey(profile.user_id, month)) } catch { /* Jadwal sudah dibuat di database. */ } } await loadMonths(); setMonthId(id) }, () => setCreateOpen(false), 'schedMonth.monthCreated', false)} />}
     {editOpen && schedule && <EditScheduleDialog schedule={schedule} positions={positions} busy={busy} onClose={() => setEditOpen(false)} onSave={(catalog, moves) => save(() => api.reassignAndSyncDraftPositions(monthId, schedule.month.version, catalog, moves), () => setEditOpen(false), 'schedMonth.positionsSynced')} />}
-    {positionEditor && <PositionEditor context={positionEditor} api={api} canManageAll={canManageAll} busy={busy} onClose={() => setPositionEditor(null)} onSave={payload => save(() => api.setPosition(payload), () => setPositionEditor(null), 'sched.assignmentSaved')} />}
+    {positionEditor && <PositionEditor context={positionEditor} api={api} canManageAll={canManageAll} isAdmin={profile?.role === 'Admin'} busy={busy} onClose={() => setPositionEditor(null)} onSave={payload => save(() => api.setPosition(payload), () => setPositionEditor(null), 'sched.assignmentSaved')} />}
     {occurrenceEditor && <OccurrenceEditor occurrence={occurrenceEditor} month={month} busy={busy} onClose={() => setOccurrenceEditor(null)} onSave={data => save(() => api.updateOccurrence(occurrenceEditor.occurrence_id, data), () => setOccurrenceEditor(null))} />}
   </div>
 }
@@ -471,10 +470,11 @@ function EditScheduleDialog({ schedule, positions, busy, onClose, onSave }) {
   </Modal>
 }
 
-function PositionEditor({ context, api, canManageAll, onClose, onSave, busy }) {
+function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, busy }) {
   const { t } = useLang()
   const { occurrence, position, roster, slots } = context
   const [selected, setSelected] = useState(() => slots.filter(slot => slot.user_id).map(slot => slot.user_id))
+  const [notes, setNotes] = useState(() => Object.fromEntries(slots.filter(slot => slot.user_id).map(slot => [slot.user_id, slot.assignment_note || ''])))
   const [query, setQuery] = useState('')
   const [members, setMembers] = useState([])
   const [names, setNames] = useState(() => new Map(slots.filter(slot => slot.user_id).map(slot => [slot.user_id, slot.users?.name || t('schedMonth.unavailableMember')])))
@@ -485,24 +485,24 @@ function PositionEditor({ context, api, canManageAll, onClose, onSave, busy }) {
   useEffect(() => {
     let active = true
     setLoading(true)
-    const timer = setTimeout(() => api.listMembers(position.ministry_id, query, canManageAll)
+    const timer = setTimeout(() => api.listMembers(position.ministry_id, query, canManageAll || isAdmin)
       .then(rows => { if (active) { setMembers(rows); setNames(current => new Map([...current, ...rows.map(item => [item.user_id, item.name])])) } })
       .catch(() => { if (active) { setMembers([]); setError('schedMonth.membersFailed') } })
       .finally(() => { if (active) setLoading(false) }), 200)
     return () => { active = false; clearTimeout(timer) }
-  }, [api, canManageAll, position.ministry_id, query])
+  }, [api, canManageAll, isAdmin, position.ministry_id, query])
   async function submit(event) {
     event.preventDefault(); setChecking(true); setError(''); setConflicts([])
     try {
       const findings = []
-      for (const userId of selected) {
+      for (const userId of isAdmin && !canManageAll ? [] : selected) {
         const ownSlot = slots.find(slot => slot.user_id === userId)
         const rows = await api.findConflicts(userId, roster.roster_id, ownSlot?.slot_id)
         for (const item of rows) findings.push({ ...item, memberName: names.get(userId) || '-' })
       }
       if (findings.length) { setConflicts(findings); return }
       await onSave({ rosterId: roster.roster_id, positionId: position.position_id, userIds: selected,
-        expectedUserIds: slots.filter(slot => slot.user_id).map(slot => slot.user_id) })
+        expectedUserIds: slots.filter(slot => slot.user_id).map(slot => slot.user_id), notes })
     } catch (err) { setError(errorKey(err)) }
     finally { setChecking(false) }
   }
@@ -511,6 +511,7 @@ function PositionEditor({ context, api, canManageAll, onClose, onSave, busy }) {
       <Input icon={Search} aria-label={t('sched.searchMember')} placeholder={t('sched.searchMember')} value={query} disabled={busy || checking} onChange={event => setQuery(event.target.value)} />
       <p className="monthly-muted">{t('schedMonth.selectedCount', { count: selected.length, capacity: slots.length })}</p>
       {!!selected.length && <div className="monthly-date-picks">{selected.map(id => <Button type="button" key={id} variant="outline" disabled={busy || checking} onClick={() => { setSelected(current => current.filter(item => item !== id)); setConflicts([]) }} aria-label={t('schedMonth.removeMember', { name: names.get(id) || '-' })}>{names.get(id) || '-'}<X size={14} /></Button>)}</div>}
+      {!!selected.length && <div className="monthly-person-notes">{selected.map(id => <Input key={id} label={t('schedMonth.personNoteFor', { name: names.get(id) || '-' })} placeholder={t('schedMonth.personNoteExample')} maxLength={100} value={notes[id] || ''} disabled={busy || checking} onChange={event => setNotes(current => ({ ...current, [id]: event.target.value }))} />)}</div>}
       <div className="monthly-member-list">{loading ? <Spinner size="sm" /> : !members.length ? <p>{t('sched.noMembers')}</p> : members.map(member => <Checkbox key={member.user_id} label={member.name} checked={selected.includes(member.user_id)} disabled={busy || checking || (!selected.includes(member.user_id) && selected.length >= slots.length)} onChange={event => { setSelected(current => event.target.checked ? [...current, member.user_id] : current.filter(id => id !== member.user_id)); setConflicts([]) }} />)}</div>
       {conflicts.length > 0 && <div className="monthly-error" role="alert"><strong>{t('schedMonth.conflictBlocked')}</strong>{conflicts.map((item, index) => <p key={index}>{t('schedMonth.conflictItem', { name: item.memberName, title: item.title, date: item.service_date, time: timeLabel(item), position: item.position_names, ministry: item.ministry_name })}</p>)}</div>}
       {error && <p className="monthly-error" role="alert">{t(error)}</p>}

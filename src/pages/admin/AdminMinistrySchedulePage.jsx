@@ -12,7 +12,12 @@ import { Card, PageHeader, Input, Button, Spinner, EmptyState, Badge, Avatar, Ch
 import { formatDate } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
 
-function todayISO() { return new Date().toISOString().slice(0, 10) }
+function todayISO() {
+  const values = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date()).map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
 function ymOf(date) { return date.slice(0, 7) }
 
 // Absen Pelayanan Minggu (Admin) — kelola jadwal pelayanan Volunteer per tanggal
@@ -46,6 +51,8 @@ export default function AdminMinistrySchedulePage() {
   const [members, setMembers] = useState([]) // kandidat roster (peran pelayanan)
   const [memberQuery, setMemberQuery] = useState('')
   const [assigned, setAssigned] = useState([]) // user_id[]
+  const [assignedMembers, setAssignedMembers] = useState([])
+  const [assignedMembersFailed, setAssignedMembersFailed] = useState(false)
   const [startTime, setStartTime] = useState('09:00')
   const [qr, setQr] = useState('')
   const [attendance, setAttendance] = useState([])
@@ -91,7 +98,7 @@ export default function AdminMinistrySchedulePage() {
 
   // Cari kandidat roster (debounce) saat panel sesi terbuka.
   useEffect(() => {
-    if (!selected) return
+    if (!selected || selected.source_occurrence_id) return
     const id = setTimeout(() => {
       ministryScheduleService.listAssignableUsers(memberQuery).then(setMembers).catch(() => {})
     }, 250)
@@ -124,16 +131,18 @@ export default function AdminMinistrySchedulePage() {
   async function openSchedule(sched) {
     setSelected(sched)
     setPanelLoading(true)
+    setAssignedMembersFailed(false)
     setStartTime((sched.start_time || '09:00').slice(0, 5))
     try {
-      const [mem, asg, att, late, qrUrl] = await Promise.all([
-        ministryScheduleService.listAssignableUsers('').catch(() => []),
+      const [mem, asg, assignedNames, att, late, qrUrl] = await Promise.all([
+        sched.source_occurrence_id ? Promise.resolve([]) : ministryScheduleService.listAssignableUsers('').catch(() => []),
         ministryScheduleService.getAssignments(sched.schedule_id).catch(() => []),
+        ministryScheduleService.getAssignedMembers(sched.schedule_id).catch(() => { setAssignedMembersFailed(true); return [] }),
         ministryScheduleService.getAttendance(sched.schedule_id).catch(() => []),
         ministryScheduleService.getMonthlyLateCounts(ymOf(sched.service_date)).catch(() => ({})),
         QRCode.toDataURL(`ESC-VOLUNTEER:${sched.schedule_id}`, { width: 320, margin: 1 }).catch(() => ''),
       ])
-      setMembers(mem); setAssigned(asg); setAttendance(att); setLateCounts(late); setQr(qrUrl)
+      setMembers(mem); setAssigned(asg); setAssignedMembers(assignedNames); setAttendance(att); setLateCounts(late); setQr(qrUrl)
     } finally {
       setPanelLoading(false)
     }
@@ -141,7 +150,7 @@ export default function AdminMinistrySchedulePage() {
 
   function closePanel() {
     setSelected(null)
-    setMembers([]); setAssigned([]); setAttendance([]); setQr(''); setLateCounts({}); setMemberQuery('')
+    setMembers([]); setAssigned([]); setAssignedMembers([]); setAssignedMembersFailed(false); setAttendance([]); setQr(''); setLateCounts({}); setMemberQuery('')
     loadList()
     loadDateRecap()
     loadMonthlyRecap()
@@ -482,13 +491,14 @@ export default function AdminMinistrySchedulePage() {
               <p className="text-base font-semibold text-gray-900">{selected.label || '-'}</p>
               <p className="text-xs text-gray-400">{formatDate(selected.service_date)}</p>
             </div>
-            <button onClick={() => handleDelete(selected)} className="p-2 text-gray-400 hover:text-red-500">
+            {!selected.source_occurrence_id && <button onClick={() => handleDelete(selected)} className="p-2 text-gray-400 hover:text-red-500">
               <Trash2 size={16} />
-            </button>
+            </button>}
           </div>
-          <div className="max-w-[180px] mt-3">
+          {selected.source_occurrence_id && <p className="mt-3 text-sm text-gray-600">{t('apel.autoScheduleHint')}</p>}
+          {!selected.source_occurrence_id && <div className="max-w-[180px] mt-3">
             <Input label={t('apel.startTime')} type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
-          </div>
+          </div>}
           <p className="text-[11px] text-gray-400 mt-1.5">{t('apel.graceNote')}</p>
         </Card>
 
@@ -502,15 +512,15 @@ export default function AdminMinistrySchedulePage() {
                 <Users size={16} className="text-brand-500" />
                 <p className="text-sm font-semibold text-gray-900">{t('apel.assignTitle')} ({assigned.length})</p>
               </div>
-              <div className="mb-2.5">
+              {!selected.source_occurrence_id && <div className="mb-2.5">
                 <Input
                   icon={Search}
                   placeholder={t('apel.searchAssignee')}
                   value={memberQuery}
                   onChange={e => setMemberQuery(e.target.value)}
                 />
-              </div>
-              {members.length === 0 ? (
+              </div>}
+              {selected.source_occurrence_id ? <div className="space-y-1.5">{assignedMembersFailed && <p role="alert" className="text-sm text-red-600">{t('apel.recapLoadFailed')}</p>}{assignedMembers.map(member => <div key={member.user_id} className="flex items-center gap-3 rounded-lg border border-gray-200 p-2"><Avatar name={member.name} src={member.photo_url} size="sm" /><span className="text-sm text-gray-800">{member.name}</span></div>)}{assigned.length === 0 && !assignedMembersFailed && <p className="text-sm text-gray-500">{t('apel.autoScheduleEmpty')}</p>}</div> : members.length === 0 ? (
                 <p className="text-sm text-gray-400">{t('apel.noMembers')}</p>
               ) : (
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
@@ -529,7 +539,7 @@ export default function AdminMinistrySchedulePage() {
                   ))}
                 </div>
               )}
-              <Button className="w-full mt-3" loading={savingAssign} onClick={handleSavePanel}>{t('apel.saveBtn')}</Button>
+              {!selected.source_occurrence_id && <Button className="w-full mt-3" loading={savingAssign} onClick={handleSavePanel}>{t('apel.saveBtn')}</Button>}
             </Card>
 
             {/* QR */}
@@ -601,7 +611,7 @@ export default function AdminMinistrySchedulePage() {
               <Input label={t('apel.date')} type="date" value={date} onChange={e => setDate(e.target.value)} />
             </div>
             {/* Buka sesi baru: label bebas (mis. "Minggu 1") + jam mulai. */}
-            {!isGembala && (
+            {!isGembala && !schedules.some(item => item.source_occurrence_id && item.source_status === 'Terbit') && (
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <Input label={t('apel.labelField')} placeholder={t('apel.labelPlaceholder')} value={newLabel} onChange={e => setNewLabel(e.target.value)} />
@@ -621,7 +631,7 @@ export default function AdminMinistrySchedulePage() {
           ) : (
             <Card className="divide-y divide-gray-100">
               {schedules.map(sched => (
-                <div key={sched.schedule_id} className="flex items-center gap-3 p-3.5">
+                <div key={sched.schedule_id} className="flex flex-wrap items-center gap-3 p-3.5 sm:flex-nowrap">
                   <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                     <CalendarClock size={16} className="text-brand-500" />
                   </div>
@@ -629,8 +639,9 @@ export default function AdminMinistrySchedulePage() {
                     <p className="text-sm font-medium text-gray-900 truncate">{sched.label || '-'}</p>
                     <p className="text-[11px] text-gray-400">{t('apel.startAt', { time: (sched.start_time || '').slice(0, 5) })}</p>
                   </div>
+                  {sched.source_occurrence_id && <Badge color={sched.source_status === 'Dibatalkan' ? 'red' : 'green'}>{t(sched.source_status === 'Dibatalkan' ? 'schedMonth.cancelled' : 'apel.autoSchedule')}</Badge>}
                   <Button size="sm" variant="outline" onClick={() => openSchedule(sched)}>{t('apel.open')}</Button>
-                  {!isGembala && (
+                  {!isGembala && !sched.source_occurrence_id && (
                     <button aria-label={t('common.delete')} onClick={() => handleDelete(sched)} className="p-2 text-gray-400 hover:text-red-500 cursor-pointer">
                       <Trash2 size={15} />
                     </button>

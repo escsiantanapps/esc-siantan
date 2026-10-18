@@ -88,12 +88,9 @@ test('Draft yang telah diterbitkan tidak dapat dihapus', async () => {
   assert.equal((await api.getMonth(month.month_id)).month.status, 'Terbit')
 })
 
-test('fixture tidak memiliki bentrok; publikasi seluruh bulan bersifat atomik dan terkunci', async () => {
+test('fixture tanpa bentrok dapat diterbitkan dengan posisi kosong dan tetap terkunci', async () => {
   const { api, month, schedule } = await fixture()
-  await assert.rejects(api.publishMonth(month.month_id, false), /posisi pelayanan yang kosong/)
-  assert.equal((await api.getMonth(month.month_id)).month.status, 'Draft')
-  assert.equal((await api.getMonth(month.month_id)).rosters.every(roster => roster.status === 'Draft'), true)
-  const ids = await api.publishMonth(month.month_id, true)
+  const ids = await api.publishMonth(month.month_id)
   assert.equal(ids.length, schedule.rosters.length)
   const published = await api.getMonth(month.month_id)
   assert.equal(published.month.status, 'Terbit')

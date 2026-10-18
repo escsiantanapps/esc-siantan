@@ -7,7 +7,7 @@ import { Badge, Button, Checkbox, Input, Select, Spinner } from '@/components/ui
 
 const emptyPosition = () => ({ name: '', default_slots: 1, sort_order: 0, is_active: true })
 const forbiddenRoles = ['Admin', 'Super Admin', 'Gembala']
-const eligibleHead = head => head?.status === 'Aktif' && head.role === 'Volunteer' && !forbiddenRoles.includes(head.role_secondary)
+const eligibleHead = head => head?.status === 'Aktif' && (head.role === 'Admin' || head.role === 'Volunteer' && !forbiddenRoles.includes(head.role_secondary))
 
 export default function ScheduleAccessPositions({ api, ministries, positions, onChange, ministryHref }) {
   const { t } = useLang()
@@ -90,13 +90,13 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
   async function grant(user, managerRole, targetId = ministryId) {
     const target = ministries.find(item => item.ministry_id === targetId)
     if (!target || !await confirm({ title: t('schedAccess.approveTitle'), message: t('schedAccess.approveMessage', { name: user.name, ministry: target.name }), confirmText: t('schedAccess.approve') })) return
-    if (await change(() => api.grantManager({ ministryId: targetId, userId: user.user_id, managerRole }), 'sched.accessGranted')) {
+    if (await change(() => api.grantManager({ ministryId: targetId, userId: user.user_id, managerRole, adminHead: user.role === 'Admin' }), 'sched.accessGranted')) {
       setMinistryId(targetId); setSelectedUserId(''); setGrantMinistryId('')
     }
   }
   async function revoke(manager) {
     if (!await confirm({ title: t('sched.revokeTitle'), message: t('sched.revokeMessage', { name: manager.users?.name }), confirmText: t('sched.revoke'), danger: true })) return
-    await change(() => api.revokeManager(ministryId, manager.user_id), 'sched.accessRevoked')
+    await change(() => api.revokeManager(ministryId, manager.user_id, manager.access_source === 'admin_mh'), 'sched.accessRevoked')
   }
   async function savePosition(event) {
     event.preventDefault()
@@ -120,7 +120,8 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
         <strong>{selectedUser.name}</strong>
         <Select label={t('schedAccess.chooseMinistry')} value={grantMinistryId} disabled={busy} onChange={event => setGrantMinistryId(event.target.value)}>
           <option value="">{t('schedAccess.chooseMinistryPlaceholder')}</option>
-          {ministries.filter(item => selectedUser.ministry_ids?.includes(item.ministry_id)).map(item => <option key={item.ministry_id} value={item.ministry_id}>{item.name}</option>)}
+          {ministries.filter(item => selectedUser.ministry_ids?.includes(item.ministry_id)
+            && (selectedUser.role !== 'Admin' || item.head_user_id === selectedUser.user_id)).map(item => <option key={item.ministry_id} value={item.ministry_id}>{item.name}</option>)}
         </Select>
         {selectedIsHead && <p className="monthly-muted">{t('schedAccess.headUseApproval')}</p>}
         {alreadyManager && <p className="monthly-muted">{t('schedAccess.alreadyManager')}</p>}
@@ -137,7 +138,7 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
           <div><span className="monthly-muted">{t('schedAccess.headSource')}</span><strong>{head?.name || t('amin.noMinistryHead')}</strong></div>
           {ministryHref && <Link to={ministryHref} className="text-sm text-brand-600 underline">{t('admin.nav.ministry')}</Link>}
         </div>
-        {head && <div className="schedule-access-row"><span>{t('sched.role.Ministry Head')}</span>{adminHead ? <Badge color="gray">{t('schedAccess.adminPermissions')}</Badge> : headApproved ? <Badge color="green">{t('schedAccess.approved')}</Badge> : <Button variant="outline" disabled={busy || loading || loadingCandidates || !eligibleHead(head) || !headIsMember} onClick={() => grant(head, 'Ministry Head')}><Check size={16} />{t('schedAccess.approve')}</Button>}</div>}
+        {head && <div className="schedule-access-row"><span>{t('sched.role.Ministry Head')}</span>{headApproved ? <Badge color="green">{t('schedAccess.approved')}</Badge> : <Button variant="outline" disabled={busy || loading || loadingCandidates || !eligibleHead(head) || !headIsMember} onClick={() => grant(head, 'Ministry Head')}><Check size={16} />{t('schedAccess.approve')}</Button>}</div>}
         {head && adminHead && <p className="monthly-muted">{t('schedAccess.adminHeadInfo')}</p>}
         {head && !eligibleHead(head) && !adminHead && <p className="monthly-muted">{t('schedAccess.ineligibleHead')}</p>}
         {head && eligibleHead(head) && !loadingCandidates && !headIsMember && <p className="monthly-muted">{t('schedMonth.membershipRequired')}</p>}

@@ -31,7 +31,7 @@ export const monthlyScheduleService = {
   listManagedMinistries: profile => serviceRosterService.listManagedMinistries(profile),
   listManagers: ministryId => serviceRosterService.listManagers(ministryId),
   grantManager: payload => serviceRosterService.grantManager(payload),
-  revokeManager: (ministryId, userId) => serviceRosterService.revokeManager(ministryId, userId),
+  revokeManager: (ministryId, userId, adminHead) => serviceRosterService.revokeManager(ministryId, userId, adminHead),
   searchActiveUsers: query => serviceRosterService.searchActiveUsers(query),
   listManagerCandidates: () => serviceRosterService.listManagerCandidates(),
   savePosition: payload => serviceRosterService.savePosition(payload),
@@ -83,7 +83,7 @@ export const monthlyScheduleService = {
   },
   async getMonth(monthId) {
     const [data, positions, ministries] = await Promise.all([
-      rpc('get_service_schedule_month', { p_month_id: monthId }), this.listPositions(), this.listMinistries(),
+      rpc('get_service_schedule_month_v111', { p_month_id: monthId }), this.listPositions(), this.listMinistries(),
     ])
     return normalizeMonthlySchedule(data, positions, ministries)
   },
@@ -93,19 +93,20 @@ export const monthlyScheduleService = {
   createMonthDirect: ({ month, entries }) => rpc('create_service_schedule_month_direct', {
     p_month: `${month.slice(0, 7)}-01`, p_entries: entries,
   }),
-  setPosition: ({ rosterId, positionId, userIds, expectedUserIds }) => rpc('set_service_schedule_position', {
+  setPosition: ({ rosterId, positionId, userIds, expectedUserIds, notes }) => rpc('set_service_schedule_position_v111', {
     p_roster_id: rosterId, p_position_id: positionId, p_user_ids: userIds, p_expected_user_ids: expectedUserIds,
+    p_notes: notes,
   }),
   updateOccurrence: (occurrenceId, data) => rpc('update_service_schedule_occurrence', { p_occurrence_id: occurrenceId, p_data: data }),
   updatePart: (rosterId, data) => rpc('update_service_schedule_part', {
     p_roster_id: rosterId, p_team_name: data.team_name || null, p_material: data.material || null, p_notes: data.notes || null,
   }),
-  publishMonth: (monthId, allowIncomplete = false) => rpc('publish_service_schedule_month', { p_month_id: monthId, p_allow_incomplete: allowIncomplete }),
+  publishMonth: monthId => rpc('publish_service_schedule_month_v111', { p_month_id: monthId }),
   cancelMonth: monthId => rpc('cancel_service_schedule_month', { p_month_id: monthId }),
   syncDraftPositions: (monthId, expectedVersion, expectedCatalog) => rpc('sync_service_schedule_draft_positions', {
     p_month_id: monthId, p_expected_version: expectedVersion, p_expected_catalog: expectedCatalog,
   }),
-  reassignAndSyncDraftPositions: (monthId, expectedVersion, expectedCatalog, moves) => rpc('reassign_and_sync_service_schedule_draft_positions', {
+  reassignAndSyncDraftPositions: (monthId, expectedVersion, expectedCatalog, moves) => rpc('reassign_and_sync_service_schedule_draft_positions_v111', {
     p_month_id: monthId, p_expected_version: expectedVersion, p_expected_catalog: expectedCatalog, p_moves: moves,
   }),
   deleteMonthDraft: (monthId, expectedAssigned) => rpc('delete_service_schedule_month_draft', {

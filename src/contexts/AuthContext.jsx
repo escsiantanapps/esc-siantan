@@ -70,6 +70,27 @@ export function AuthProvider({ children }) {
     }
   }, [profile?.user_id, profile?.status])
 
+  useEffect(() => {
+    if (!user || profile?.role !== 'Admin') return undefined
+    let active = true
+    let inFlight = false
+    const refreshAdminRole = async () => {
+      if (!active || inFlight || document.visibilityState !== 'visible') return
+      inFlight = true
+      try { await fetchProfile(user) } finally { inFlight = false }
+    }
+    const onVisible = () => { refreshAdminRole() }
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    const timer = window.setInterval(refreshAdminRole, 15000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [user?.id, profile?.role])
+
   async function fetchProfile(authUser) {
     try {
       let { data, error } = await supabase
