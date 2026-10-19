@@ -9144,3 +9144,44 @@ GRANT EXECUTE ON FUNCTION get_service_schedule_month_v111(TEXT),
   publish_service_schedule_month_v111(TEXT),
   reassign_and_sync_service_schedule_draft_positions_v111(TEXT,INTEGER,JSONB,JSONB) TO authenticated;
 COMMIT;
+
+-- ── Migrasi v112: Akses isi jadwal Admin per Ministry anggota ──────────
+-- TEMUAN: v111 hanya menerima grant ketika Admin menjadi MH. Admin yang
+-- tercatat sebagai anggota Ministry lain tidak bisa dipilih maupun mengisi
+-- bagian jadwal Ministry tersebut meskipun aksesnya disetujui.
+-- KEPUTUSAN OPERATOR: Admin aktif boleh diberi akses isi nama pada setiap
+-- Ministry yang diikutinya, satu persetujuan eksplisit per Ministry.
+-- Nama fungsi v111 dipertahankan agar seluruh RPC dan trigger pemanggil lama
+-- langsung memakai batas akses baru tanpa membuka hak jadwal global.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION auth_admin_mh_monthly_ministry_v111(p_ministry_id TEXT) RETURNS BOOLEAN
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT auth_user_role() = 'Admin' AND EXISTS (
+    SELECT 1 FROM admin_ministry_schedule_access grant_row
+    JOIN users u ON u.user_id = grant_row.user_id
+    JOIN user_ministries member ON member.ministry_id = grant_row.ministry_id AND member.user_id = u.user_id
+    WHERE grant_row.ministry_id = p_ministry_id AND grant_row.user_id = auth_user_id()
+      AND grant_row.is_active AND u.status = 'Aktif' AND u.role = 'Admin'
+  )
+$$;
+REVOKE EXECUTE ON FUNCTION auth_admin_mh_monthly_ministry_v111(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_admin_mh_monthly_ministry_v111(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION guard_admin_mh_schedule_access_v111() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth_user_role() IS NOT NULL AND NOT auth_admin_can('/admin/jadwal-pelayanan') THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM users u
+    JOIN user_ministries member ON member.user_id = u.user_id
+    WHERE member.ministry_id = NEW.ministry_id AND u.user_id = NEW.user_id
+      AND u.status = 'Aktif' AND u.role = 'Admin') THEN
+    RAISE EXCEPTION 'Hanya Admin aktif yang menjadi anggota Ministry ini dapat diberi akses.' USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE EXECUTE ON FUNCTION guard_admin_mh_schedule_access_v111() FROM PUBLIC, anon;
+
+COMMIT;

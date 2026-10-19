@@ -423,7 +423,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
 
   async function grant(user) {
     try {
-      await serviceRosterService.grantManager({ ministryId, userId: user.user_id, managerRole })
+      await serviceRosterService.grantManager({ ministryId, userId: user.user_id, managerRole, adminAccess: user.role === 'Admin' })
       setManagerQuery('')
       loadSettings()
       toast.success(t('sched.accessGranted'))
@@ -433,7 +433,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
   async function revoke(row) {
     if (!await confirm({ title: t('sched.revokeTitle'), message: t('sched.revokeMessage', { name: row.users?.name || '' }), confirmText: t('sched.revoke'), danger: true })) return
     try {
-      await serviceRosterService.revokeManager(ministryId, row.user_id)
+      await serviceRosterService.revokeManager(ministryId, row.user_id, row.access_source === 'admin_mh')
       loadSettings()
       toast.success(t('sched.accessRevoked'))
     } catch (error) { toast.error(error.message || t('sched.saveFailed')) }

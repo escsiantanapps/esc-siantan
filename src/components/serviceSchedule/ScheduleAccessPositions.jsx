@@ -32,7 +32,8 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
   const sourceHeadId = ministry?.head_user_id || ''
   const adminHead = head?.status === 'Aktif' && head.role === 'Admin'
   const headIsMember = candidates.some(item => item.user_id === head?.user_id && item.ministry_ids?.includes(ministryId))
-  const headApproved = headIsMember && eligibleHead(head) && managers.some(item => item.user_id === head?.user_id && item.manager_role === 'Ministry Head')
+  const headApproved = headIsMember && eligibleHead(head) && managers.some(item => item.user_id === head?.user_id
+    && (item.manager_role === 'Ministry Head' || item.access_source === 'admin_mh'))
   const ministryPositions = positions.filter(item => item.ministry_id === ministryId)
   const selectedUser = candidates.find(item => item.user_id === selectedUserId)
   const filteredCandidates = candidates.filter(item => item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
@@ -45,6 +46,7 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
     try {
       const rows = await api.listManagers(ministryId)
       if (current === request.current) setManagers(rows.filter(item => item.manager_role === 'Wakil'
+        || item.access_source === 'admin_mh'
         || (item.manager_role === 'Ministry Head' && item.user_id === sourceHeadId)))
     } catch { if (current === request.current) setError('sched.loadFailed') }
     finally { if (current === request.current) setLoading(false) }
@@ -89,8 +91,8 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
   }
   async function grant(user, managerRole, targetId = ministryId) {
     const target = ministries.find(item => item.ministry_id === targetId)
-    if (!target || !await confirm({ title: t('schedAccess.approveTitle'), message: t('schedAccess.approveMessage', { name: user.name, ministry: target.name }), confirmText: t('schedAccess.approve') })) return
-    if (await change(() => api.grantManager({ ministryId: targetId, userId: user.user_id, managerRole, adminHead: user.role === 'Admin' }), 'sched.accessGranted')) {
+    if (!target || !await confirm({ title: t('schedAccess.approveTitle'), message: t(user.role === 'Admin' ? 'schedAccess.approveAdminMessage' : 'schedAccess.approveMessage', { name: user.name, ministry: target.name }), confirmText: t('schedAccess.approve') })) return
+    if (await change(() => api.grantManager({ ministryId: targetId, userId: user.user_id, managerRole, adminAccess: user.role === 'Admin' }), 'sched.accessGranted')) {
       setMinistryId(targetId); setSelectedUserId(''); setGrantMinistryId('')
     }
   }
@@ -120,8 +122,8 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
         <strong>{selectedUser.name}</strong>
         <Select label={t('schedAccess.chooseMinistry')} value={grantMinistryId} disabled={busy} onChange={event => setGrantMinistryId(event.target.value)}>
           <option value="">{t('schedAccess.chooseMinistryPlaceholder')}</option>
-          {ministries.filter(item => selectedUser.ministry_ids?.includes(item.ministry_id)
-            && (selectedUser.role !== 'Admin' || item.head_user_id === selectedUser.user_id)).map(item => <option key={item.ministry_id} value={item.ministry_id}>{item.name}</option>)}
+          {ministries.filter(item => selectedUser.ministry_ids?.includes(item.ministry_id))
+            .map(item => <option key={item.ministry_id} value={item.ministry_id}>{item.name}</option>)}
         </Select>
         {selectedIsHead && <p className="monthly-muted">{t('schedAccess.headUseApproval')}</p>}
         {alreadyManager && <p className="monthly-muted">{t('schedAccess.alreadyManager')}</p>}

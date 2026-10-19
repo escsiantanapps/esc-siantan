@@ -11,7 +11,7 @@ function migration(version) {
   return schema.slice(headers[index].index, headers[index + 1]?.index ?? schema.length)
 }
 
-test('v111: jadwal kosong, catatan nama, dan sesi absen otomatis', async () => {
+test('v111-v112: jadwal kosong, catatan nama, absensi, dan akses Admin per Ministry', async () => {
   const db = new PGlite()
   try {
     await db.exec(`
@@ -136,5 +136,36 @@ test('v111: jadwal kosong, catatan nama, dan sesi absen otomatis', async () => {
     await db.exec('SAVEPOINT expected_cancelled_scan')
     await assert.rejects(db.query(`INSERT INTO ministry_attendance(attendance_id,schedule_id,user_id) VALUES ('QA-ABSEN',$1,'VOL')`, [cancelled.schedule_id]), /dibatalkan/)
     await db.exec('ROLLBACK TO SAVEPOINT expected_cancelled_scan; RELEASE SAVEPOINT expected_cancelled_scan')
+
+    // v112 mempertahankan akses per grant, tetapi Admin anggota tidak harus MH.
+    await db.exec(migration(112))
+    await db.exec(migration(112))
+    await db.exec('BEGIN')
+    await db.query("SELECT set_config('test.caller_id','ADMIN',true),set_config('test.caller_role','Admin',true),set_config('test.restricted','0',true)")
+    await db.query(`INSERT INTO users(user_id,name,role) VALUES ('ADMIN-KIDS','Admin Kids','Admin')`)
+    await db.query(`INSERT INTO user_ministries(user_id,ministry_id) VALUES ('ADMIN-KIDS','OTHER')`)
+    await db.exec('SAVEPOINT expected_nonmember_grant')
+    await assert.rejects(db.query(`INSERT INTO admin_ministry_schedule_access(ministry_id,user_id)
+      VALUES ('MUSIC','ADMIN-KIDS')`), /anggota Ministry ini/)
+    await db.exec('ROLLBACK TO SAVEPOINT expected_nonmember_grant; RELEASE SAVEPOINT expected_nonmember_grant')
+    await db.query(`INSERT INTO admin_ministry_schedule_access(ministry_id,user_id)
+      VALUES ('OTHER','ADMIN-KIDS')`)
+    const memberMonth = (await db.query(`SELECT create_service_schedule_month_direct('2027-12-01',
+      '[{"section_id":"kids","service_date":"2027-12-05","title":"Ibadah Kids","source_type":"Ibadah","start_time":"09:00","end_time":"11:00","ministry_ids":["MUSIC","OTHER"]}]'::jsonb) AS id`)).rows[0].id
+    const memberRosters = (await db.query(`SELECT p.ministry_id,p.roster_id FROM service_schedule_parts p
+      JOIN service_schedule_occurrences o ON o.occurrence_id=p.occurrence_id WHERE o.month_id=$1`, [memberMonth])).rows
+    await db.query("SELECT set_config('test.caller_id','ADMIN-KIDS',true),set_config('test.restricted','1',true)")
+    assert.equal((await db.query(`SELECT auth_admin_mh_monthly_ministry_v111('OTHER') AS permitted`)).rows[0].permitted, true)
+    assert.equal((await db.query(`SELECT auth_admin_mh_monthly_ministry_v111('MUSIC') AS permitted`)).rows[0].permitted, false)
+    const memberView = (await db.query('SELECT get_service_schedule_month_v111($1) AS data', [memberMonth])).rows[0].data
+    assert.deepEqual(memberView.rosters.map(row => row.ministry_id), ['OTHER'])
+    const kidsRoster = memberRosters.find(row => row.ministry_id === 'OTHER').roster_id
+    const musicRosterForMember = memberRosters.find(row => row.ministry_id === 'MUSIC').roster_id
+    await db.query(`SELECT set_service_schedule_position_v111($1,'P-OTHER',ARRAY['VOL2']::TEXT[],ARRAY[]::TEXT[],'{}'::JSONB)`, [kidsRoster])
+    await db.exec('SAVEPOINT expected_ungranted_ministry')
+    await assert.rejects(db.query(`SELECT set_service_schedule_position_v111($1,'P-NEW',ARRAY[]::TEXT[],ARRAY[]::TEXT[],'{}'::JSONB)`, [musicRosterForMember]), /not_authorized/)
+    await db.exec('ROLLBACK TO SAVEPOINT expected_ungranted_ministry; RELEASE SAVEPOINT expected_ungranted_ministry')
+    await db.query(`DELETE FROM user_ministries WHERE user_id='ADMIN-KIDS' AND ministry_id='OTHER'`)
+    assert.equal((await db.query(`SELECT auth_admin_mh_monthly_ministry_v111('OTHER') AS permitted`)).rows[0].permitted, false)
   } finally { await db.close() }
 })
