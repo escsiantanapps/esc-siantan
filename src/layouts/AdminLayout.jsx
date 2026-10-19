@@ -193,7 +193,7 @@ export default function AdminLayout({ children }) {
     let active = true
     setScopedScheduleLoading(true)
     serviceRosterService.listManagedMinistries(profile)
-      .then(rows => { if (active) setScopedScheduleAccess(rows.some(row => row.manager_role === 'Ministry Head')) })
+      .then(rows => { if (active) setScopedScheduleAccess(rows.some(row => row.manager_role === 'Admin Ministry')) })
       .catch(() => { if (active) setScopedScheduleAccess(false) })
       .finally(() => { if (active) setScopedScheduleLoading(false) })
     return () => { active = false }

@@ -489,6 +489,11 @@ export default function AdminMemberDetailPage() {
               Role Kedua opsional — mis. Admin/Super Admin yang juga Volunteer agar tetap dapat
               mengakses tugas dan menerima notifikasi untuk role tersebut.
             </p>
+            {member.role !== 'Admin' && form.role === 'Admin' && (
+              <p className="text-xs text-gray-700 bg-control border border-gray-200 rounded-xl px-3 py-2" role="note">
+                {t('amem.scheduleRoleHint')}
+              </p>
+            )}
           </>
         ) : (
           <div className="space-y-1">

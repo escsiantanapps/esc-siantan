@@ -793,6 +793,54 @@ test('Admin terbatas: panel jadwal terbuka hanya bila halaman itu diizinkan', as
   })
 })
 
+test('Admin dengan persetujuan per Ministry tetap melihat menu kelola jadwal', async () => {
+  await scenario({
+    role: 'Admin', allowedPages: [], ...monthlyManagementFixture(true),
+    adminScheduleGrants: [{
+      user_id: 'QA-USER', ministry_id: 'QA-MIN', is_active: true,
+      ministries: { ministry_id: 'QA-MIN', name: 'Worship' },
+    }],
+    ministryMembers: [{ user_id: 'QA-USER', ministry_id: 'QA-MIN' }],
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    assert.equal(await f.page.getByRole('link', { name: 'Jadwal Pelayanan', exact: true }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: /^Atur Worship Leader untuk Ibadah Gabungan,/ }).count(), 1)
+    assert.equal(await f.page.getByRole('button', { name: 'Akses & Posisi', exact: true }).count(), 0)
+    await f.goto('/admin/jemaat')
+    await f.page.waitForURL(url => url.pathname === '/admin/jadwal-pelayanan')
+  })
+})
+
+test('Admin yang juga Volunteer melihat tautan kelola jadwal pada Profil bila persetujuan masih aktif', async () => {
+  await scenario({
+    role: 'Admin', secondary: 'Volunteer', allowedPages: [], ...monthlyManagementFixture(true),
+    adminScheduleGrants: [{
+      user_id: 'QA-USER', ministry_id: 'QA-MIN', is_active: true,
+      ministries: { ministry_id: 'QA-MIN', name: 'Worship' },
+    }],
+    ministryMembers: [{ user_id: 'QA-USER', ministry_id: 'QA-MIN' }],
+  }, async f => {
+    await f.goto('/profil')
+    const link = f.page.getByRole('link', { name: /Kelola Jadwal Pelayanan/ })
+    await link.waitFor()
+    await link.click()
+    await assertMonthlyManagementLoaded(f)
+  })
+})
+
+test('Grant Volunteer lama tidak otomatis menjadi akses Admin per Ministry', async () => {
+  await scenario({
+    role: 'Admin', allowedPages: [],
+    managerGrants: [{ manager_role: 'Wakil', ministries: { ministry_id: 'QA-MIN', name: 'Worship' } }],
+    ministryMembers: [{ user_id: 'QA-USER', ministry_id: 'QA-MIN' }],
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await f.page.getByRole('heading', { name: 'Belum ada halaman yang diizinkan', exact: true }).waitFor()
+    assert.equal(await f.page.getByRole('link', { name: 'Jadwal Pelayanan', exact: true }).count(), 0)
+  })
+})
+
 test('MH berakun Admin tetap memerlukan persetujuan per Ministry di panel jadwal', async () => {
   const monthly = monthlyManagementFixture()
   monthly.ministries[0] = {

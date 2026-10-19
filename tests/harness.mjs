@@ -260,6 +260,7 @@ export async function fixture(harness, options = {}) {
         return rows(state.ministries || [])
       }
       if (table === 'ministry_schedule_managers') return rows(state.managerGrants || [])
+      if (table === 'admin_ministry_schedule_access') return rows(state.adminScheduleGrants || [])
       if (table === 'form_templates') {
         if (state.templateFailure) return reply({ message: 'Simulasi gangguan SOP' }, 503)
         return rows([state.template])

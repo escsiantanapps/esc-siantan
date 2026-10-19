@@ -31,13 +31,17 @@ export default function ProfilePage() {
   }, [profile])
 
   useEffect(() => {
-    if (!profile?.user_id || isAdmin || isGembala) return undefined
+    if (!profile?.user_id || profile.role === 'Super Admin' || isGembala) {
+      setHasScheduleManagerAccess(false)
+      return undefined
+    }
     let active = true
     serviceRosterService.listManagedMinistries(profile)
-      .then(rows => { if (active) setHasScheduleManagerAccess(rows.length > 0) })
+      .then(rows => { if (active) setHasScheduleManagerAccess(profile.role === 'Admin'
+        ? rows.some(row => row.manager_role === 'Admin Ministry') : rows.length > 0) })
       .catch(() => { if (active) setHasScheduleManagerAccess(false) })
     return () => { active = false }
-  }, [isAdmin, isGembala, profile])
+  }, [isGembala, profile])
 
   async function handleLogout() {
     const ok = await confirm({
