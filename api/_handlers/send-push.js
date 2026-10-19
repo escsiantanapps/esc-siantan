@@ -36,8 +36,8 @@ export default async function handler(req, res) {
     const { data: userData, error: uErr } = await admin.auth.getUser(token)
     if (uErr || !userData?.user) return res.status(401).json({ error: 'Unauthorized' })
     const { data: caller } = await admin
-      .from('users').select('role, user_id, last_push_sent_at').eq('auth_id', userData.user.id).single()
-    if (!caller || !['Admin', 'Super Admin', 'Gembala'].includes(caller.role)) {
+      .from('users').select('role, status, user_id, last_push_sent_at').eq('auth_id', userData.user.id).single()
+    if (!caller || caller.status !== 'Aktif' || !['Admin', 'Super Admin', 'Gembala'].includes(caller.role)) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 

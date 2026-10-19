@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { UserRound, LockKeyhole, Eye, EyeOff, ArrowRight } from 'lucide-react'
-import { Button, Input, Checkbox, ThemeToggle } from '@/components/ui'
-import './LoginPage.css'
+import { Button, Input, Checkbox } from '@/components/ui'
+import AuthScene from './AuthScene'
 
 const REMEMBER_KEY = 'esc-remember-email'
 
@@ -38,83 +38,47 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="login-page">
-      <div className="login-shell">
-        <header className="login-brand">
-          <div className="login-brand-toolbar">
-            <div className="login-wordmark">
-              <span className="login-logo-frame" aria-hidden="true">
-                <img src="/icons/esc-mark.svg" alt="" width="96" height="96" className="login-logo" />
-              </span>
-              <div className="login-wordmark-copy">
-                <p className="login-brand-name">{t('auth.brandName')}</p>
-                <p className="login-brand-location">{t('auth.brandLocation')}</p>
-              </div>
-            </div>
-            <ThemeToggle className="login-theme-toggle" ariaLabel={t('settings.darkMode')} title={t('settings.darkMode')} />
-          </div>
-          <div className="login-introduction">
-            <p className="login-church-name">{t('auth.churchName')}</p>
-            <p className="login-brand-description">{t('auth.portalDescription')}</p>
-          </div>
-          <p className="login-brand-caption">{t('auth.memberPortal')}</p>
-        </header>
-
-        <section className="login-form-panel" aria-labelledby="login-title">
-          <div className="login-form-heading">
-            <p className="login-eyebrow">{t('auth.loginTitle')}</p>
-            <h1 id="login-title" className="font-display text-3xl font-bold text-gray-900">{t('auth.welcome')}</h1>
-            <p className="text-base text-gray-600 mt-2">{t('auth.loginSubtitle')}</p>
-          </div>
-
-          {error && (
-            <div id="login-error" role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4" aria-describedby={error ? 'login-error' : undefined}>
-            <Input
-              label={t('auth.emailOrPhone')} name="username" autoComplete="username"
-              type="text" required autoCapitalize="none" autoCorrect="off" icon={UserRound} className="min-h-12"
-              value={form.email}
-              onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-            />
-            <Input
-              label={t('auth.password')} name="password" autoComplete="current-password"
-              type={showPassword ? 'text' : 'password'} required icon={LockKeyhole} className="pr-14 min-h-12"
-              value={form.password}
-              onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-              rightElement={
-                <button
-                  type="button" onClick={() => setShowPassword(s => !s)}
-                  aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
-                  aria-pressed={showPassword}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 rounded-lg flex items-center justify-center text-gray-600 hover:bg-control transition-colors"
-                >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              }
-            />
-            <div className="login-form-options">
-              <Checkbox label={t('auth.rememberMe')} checked={remember}
-                onChange={e => setRemember(e.target.checked)} className="min-h-11" />
-              <Link to="/lupa-password" className="login-link">{t('auth.forgotPassword')}</Link>
-            </div>
-            <Button type="submit" loading={loading} className="login-submit w-full min-h-12" size="lg">
-              {t('auth.signIn')} <ArrowRight size={18} aria-hidden="true" />
-            </Button>
-          </form>
-
-          <div className="login-registration">
-            <span className="text-sm text-gray-600">{t('auth.noAccount')}</span>
-            <Link to="/register" className="login-link font-semibold">{t('auth.registerNow')} <ArrowRight size={16} aria-hidden="true" /></Link>
-          </div>
-          <footer className="login-footer">
-            <Link to="/kebijakan-privasi" className="inline-flex min-h-11 items-center text-sm text-gray-600 hover:underline">{t('auth.privacyPolicy')}</Link>
-          </footer>
-        </section>
+    <AuthScene variant="login">
+      <div className="auth-card-heading">
+        <h1 id="login-title">{t('auth.loginTitle')}</h1>
+        <p>{t('auth.loginCardSubtitle')}</p>
       </div>
-    </main>
+
+      {error && <div id="login-error" role="alert" className="auth-error">{error}</div>}
+
+      <form onSubmit={handleSubmit} className="space-y-4" aria-describedby={error ? 'login-error' : undefined}>
+        <Input
+          label={t('auth.emailOrPhone')} name="username" autoComplete="username"
+          type="text" required autoCapitalize="none" autoCorrect="off" icon={UserRound}
+          value={form.email}
+          onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+        />
+        <Input
+          label={t('auth.password')} name="password" autoComplete="current-password"
+          type={showPassword ? 'text' : 'password'} required icon={LockKeyhole} className="pr-14"
+          value={form.password}
+          onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+          rightElement={
+            <button
+              type="button" onClick={() => setShowPassword(s => !s)}
+              aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+              aria-pressed={showPassword} className="auth-password-toggle"
+            >{showPassword ? <EyeOff size={20} /> : <Eye size={20} />}</button>
+          }
+        />
+        <div className="flex flex-wrap items-center justify-between gap-x-3">
+          <Checkbox label={t('auth.rememberMe')} checked={remember}
+            onChange={e => setRemember(e.target.checked)} className="min-h-11" />
+          <Link to="/lupa-password" className="auth-secondary-link">{t('auth.forgotPassword')}</Link>
+        </div>
+        <Button type="submit" loading={loading} className="auth-submit w-full" size="lg">
+          {t('auth.signIn')} <ArrowRight size={18} aria-hidden="true" />
+        </Button>
+      </form>
+
+      <div className="auth-divider" />
+      <p className="auth-footnote">{t('auth.noAccount')}{' '}<Link to="/register" className="auth-secondary-link">{t('auth.registerNow')} <ArrowRight size={16} aria-hidden="true" /></Link></p>
+      <p className="auth-footnote mt-1"><Link to="/kebijakan-privasi" className="auth-secondary-link">{t('auth.privacyPolicy')}</Link></p>
+    </AuthScene>
   )
 }

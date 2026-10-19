@@ -7,7 +7,7 @@ import { Button, Card, PageHeader, Select, Textarea } from '@/components/ui'
 import bibleBooks from '@/data/bibleBooks.json'
 import { bibleExplanationService } from '@/services/bibleExplanationService'
 
-const EMPTY = { introduction: '', reflection: '' }
+const EMPTY = { outline: '', explanation: '', reflection: '' }
 
 export default function AdminBiblePage() {
   const { t } = useLang()
@@ -26,7 +26,7 @@ export default function AdminBiblePage() {
     bibleExplanationService.get(bookId, chapterNumber)
       .then(data => {
         if (!active) return
-        setForm(data ? { introduction: data.introduction, reflection: data.reflection } : EMPTY)
+        setForm(data ? { outline: data.outline || '', explanation: data.explanation || '', reflection: data.reflection || '' } : EMPTY)
         setHasContent(Boolean(data))
         setError('')
       })
@@ -50,7 +50,7 @@ export default function AdminBiblePage() {
 
   async function save(event) {
     event.preventDefault()
-    if (!form.introduction.trim() && !form.reflection.trim()) {
+    if (!form.outline.trim() && !form.explanation.trim() && !form.reflection.trim()) {
       setError(t('bible.admin.contentRequired'))
       return
     }
@@ -88,8 +88,9 @@ export default function AdminBiblePage() {
         </div>
         {loading ? <p className="text-sm text-gray-600">{t('bible.explanationLoading')}</p> : (
           <form onSubmit={save} className="space-y-4">
-            <Textarea label={t('bible.introduction')} rows={5} value={form.introduction} onChange={event => setForm(current => ({ ...current, introduction: event.target.value }))} placeholder={t('bible.admin.introductionHint')} />
-            <Textarea label={t('bible.reflection')} rows={12} value={form.reflection} onChange={event => setForm(current => ({ ...current, reflection: event.target.value }))} placeholder={t('bible.admin.reflectionHint')} />
+            <Textarea label={t('bible.outline')} rows={5} value={form.outline} onChange={event => setForm(current => ({ ...current, outline: event.target.value }))} placeholder={t('bible.admin.outlineHint')} />
+            <Textarea label={t('bible.sectionExplanation')} rows={12} value={form.explanation} onChange={event => setForm(current => ({ ...current, explanation: event.target.value }))} placeholder={t('bible.admin.explanationHint')} />
+            <Textarea label={t('bible.reflection')} rows={8} value={form.reflection} onChange={event => setForm(current => ({ ...current, reflection: event.target.value }))} placeholder={t('bible.admin.reflectionHint')} />
             {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
             <div className="flex flex-wrap items-center gap-3">
               <Button type="submit" disabled={saving}><Save size={17} />{saving ? t('bible.admin.saving') : t('bible.admin.save')}</Button>

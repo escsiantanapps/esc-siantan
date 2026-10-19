@@ -27,8 +27,8 @@ export default async function handler(req, res) {
     if (uErr || !userData?.user) return res.status(401).json({ error: 'Unauthorized' })
 
     const { data: caller } = await admin
-      .from('users').select('user_id, role, auth_id').eq('auth_id', userData.user.id).single()
-    if (!caller || !['Admin', 'Super Admin'].includes(caller.role)) {
+      .from('users').select('user_id, role, status, auth_id').eq('auth_id', userData.user.id).single()
+    if (!caller || caller.status !== 'Aktif' || !['Admin', 'Super Admin'].includes(caller.role)) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 

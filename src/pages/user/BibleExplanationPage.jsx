@@ -42,9 +42,13 @@ export default function BibleExplanationPage() {
         {status === 'error' && <p className="mt-6 text-sm text-red-700">{t('bible.explanationError')}</p>}
         {status === 'ready' && explanation ? (
           <div className="mt-6 space-y-5">
-            {explanation.introduction && <section className="rounded-2xl border border-gray-200 bg-surface p-5">
-              <h3 className="font-display font-bold text-gray-900">{t('bible.introduction')}</h3>
-              <p className="text-sm text-gray-700 leading-7 mt-3 whitespace-pre-line">{explanation.introduction}</p>
+            {explanation.outline && <section className="rounded-2xl border border-gray-200 bg-surface p-5">
+              <h3 className="font-display font-bold text-gray-900">{t('bible.outline')}</h3>
+              <p className="text-sm text-gray-700 leading-7 mt-3 whitespace-pre-line">{explanation.outline}</p>
+            </section>}
+            {explanation.explanation && <section className="rounded-2xl border border-gray-200 bg-surface p-5">
+              <h3 className="font-display font-bold text-gray-900">{t('bible.sectionExplanation')}</h3>
+              <p className="text-sm text-gray-700 leading-7 mt-3 whitespace-pre-line">{explanation.explanation}</p>
             </section>}
             {explanation.reflection && <section className="rounded-2xl border border-gray-200 bg-surface p-5">
               <h3 className="font-display font-bold text-gray-900">{t('bible.reflection')}</h3>

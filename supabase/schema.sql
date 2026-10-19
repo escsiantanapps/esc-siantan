@@ -9185,3 +9185,175 @@ END $$;
 REVOKE EXECUTE ON FUNCTION guard_admin_mh_schedule_access_v111() FROM PUBLIC, anon;
 
 COMMIT;
+
+-- ── Migrasi v113: Lindungi identitas, poin, dan hak akun Nonaktif ──────
+-- TEMUAN (2026-10-19): policy UPDATE users di production mengizinkan Admin
+-- mengubah auth_id akun lain. Penjaga kolom lama tidak memeriksa auth_id;
+-- Admin dapat mengaitkan akun Auth miliknya ke profil Super Admin.
+-- TEMUAN: penjaga lama juga melewatkan Admin untuk perubahan points dan
+-- biodata_points_awarded langsung, sehingga saldo dapat berbeda dari ledger.
+-- Penjaga tambahan ini tidak mengganti policy atau trigger production lama.
+-- Sesi pengguna dilarang memindahkan auth_id. Penulis poin tepercaya tetap
+-- memakai segel transaksi app.allow_points_update seperti apply_points().
+-- SQL Editor dan service role tanpa auth.uid() tetap dapat memulihkan data.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION guard_user_identity_points_v113() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL THEN
+    IF NEW.auth_id IS DISTINCT FROM OLD.auth_id THEN
+      RAISE EXCEPTION 'Identitas login hanya dapat diubah melalui backend tepercaya.'
+        USING ERRCODE = '42501';
+    END IF;
+
+    IF (NEW.points IS DISTINCT FROM OLD.points
+        OR NEW.biodata_points_awarded IS DISTINCT FROM OLD.biodata_points_awarded)
+       AND COALESCE(current_setting('app.allow_points_update', true), '') <> '1' THEN
+      RAISE EXCEPTION 'Poin tidak dapat diubah langsung.'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION guard_user_identity_points_v113()
+  FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_guard_user_identity_points_v113 ON users;
+CREATE TRIGGER trg_guard_user_identity_points_v113
+  BEFORE UPDATE ON users FOR EACH ROW
+  EXECUTE FUNCTION guard_user_identity_points_v113();
+
+-- TEMUAN (2026-10-19): helper role dan PKS production mengabaikan status,
+-- sementara 13 policy lama membaca users.role langsung. Akun Nonaktif
+-- masih dapat memakai hak Admin, Super Admin, atau PKS via PostgREST.
+-- KEPUTUSAN OPERATOR: hak tersebut berhenti segera ketika status Nonaktif;
+-- profil sendiri tetap terbaca, alur reaktivasi yang ada tidak diubah.
+-- Policy yang diubah di bawah sudah diverifikasi pada production. Policy
+-- baca/tulis milik sendiri tetap terpisah dan tidak dihapus.
+DO $v113_preflight$
+DECLARE policy_count INTEGER;
+BEGIN
+  SELECT count(1) INTO policy_count
+  FROM (VALUES
+    ('admin_permissions','admin_permissions_read','r'),
+    ('admin_permissions','admin_permissions_super_admin_write','*'),
+    ('app_settings','app_settings_super_admin_all','*'),
+    ('baptism_registrations','baptism_admin_all','*'),
+    ('class_attendance','class_attendance_admin_all','*'),
+    ('event_registrations','event_registrations_admin_read','r'),
+    ('events','events_admin_write','*'),
+    ('form_templates','templates_admin_write','*'),
+    ('komsel_attendance','attendance_admin_read','r'),
+    ('komsel_attendance','attendance_pks_manage','*'),
+    ('news','news_admin_write','*'),
+    ('users','users_admin_write','w'),
+    ('wedding_registrations','wedding_admin_all','*')
+  ) AS expected(table_name, policy_name, command)
+  JOIN pg_class c ON c.relname = expected.table_name
+  JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+  JOIN pg_policy p ON p.polrelid = c.oid
+    AND p.polname = expected.policy_name AND p.polcmd = expected.command
+    AND p.polpermissive;
+  IF policy_count <> 13 THEN
+    RAISE EXCEPTION 'Policy production berbeda dari audit; hentikan Migrasi v113.'
+      USING ERRCODE = '22023';
+  END IF;
+END $v113_preflight$;
+
+-- Nilai Nonaktif dipertahankan sebagai sentinel non-NULL. Penjaga UPDATE
+-- lama menafsirkan NULL sebagai backend tepercaya; mengembalikan NULL di sini
+-- justru akan membuka bypass pada akun yang sedang dinonaktifkan.
+CREATE OR REPLACE FUNCTION auth_user_role() RETURNS text
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT CASE WHEN status = 'Aktif' THEN role ELSE 'Nonaktif' END
+  FROM users WHERE auth_id = auth.uid()
+$$;
+
+CREATE OR REPLACE FUNCTION auth_user_role_secondary() RETURNS text
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT CASE WHEN status = 'Aktif' THEN role_secondary ELSE NULL END
+  FROM users WHERE auth_id = auth.uid()
+$$;
+
+CREATE OR REPLACE FUNCTION auth_user_is_pks() RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT status = 'Aktif' AND (COALESCE(is_pks, false) OR role = 'PKS')
+  FROM users WHERE auth_id = auth.uid()
+$$;
+
+CREATE OR REPLACE FUNCTION auth_leads_komsel(target text) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM komsel_leaders kl
+    JOIN users u ON u.user_id = kl.user_id
+    WHERE kl.komsel_id = target AND u.auth_id = auth.uid()
+      AND u.status = 'Aktif'
+  )
+$$;
+
+-- Policy legacy yang membaca role langsung harus mengikuti helper status.
+ALTER POLICY admin_permissions_read ON admin_permissions
+  USING (auth_user_role() IN ('Admin','Super Admin'));
+ALTER POLICY admin_permissions_super_admin_write ON admin_permissions
+  USING (auth_user_role() = 'Super Admin')
+  WITH CHECK (auth_user_role() = 'Super Admin');
+ALTER POLICY app_settings_super_admin_all ON app_settings
+  USING (auth_user_role() = 'Super Admin')
+  WITH CHECK (auth_user_role() = 'Super Admin');
+ALTER POLICY baptism_admin_all ON baptism_registrations
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+ALTER POLICY class_attendance_admin_all ON class_attendance
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+ALTER POLICY event_registrations_admin_read ON event_registrations
+  USING (auth_user_role() IN ('Admin','Super Admin'));
+ALTER POLICY events_admin_write ON events
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+ALTER POLICY templates_admin_write ON form_templates
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+ALTER POLICY attendance_admin_read ON komsel_attendance
+  USING (auth_user_role() IN ('Admin','Super Admin'));
+ALTER POLICY attendance_pks_manage ON komsel_attendance
+  USING (auth_user_role() = 'PKS' AND komsel_id IN (
+    SELECT u.komsel_id FROM users u WHERE u.auth_id = auth.uid()
+  ))
+  WITH CHECK (auth_user_role() = 'PKS' AND komsel_id IN (
+    SELECT u.komsel_id FROM users u WHERE u.auth_id = auth.uid()
+  ));
+ALTER POLICY news_admin_write ON news
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+ALTER POLICY users_admin_write ON users
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+ALTER POLICY wedding_admin_all ON wedding_registrations
+  USING (auth_user_role() IN ('Admin','Super Admin'))
+  WITH CHECK (auth_user_role() IN ('Admin','Super Admin'));
+
+COMMIT;
+
+-- ── Migrasi v114: Outline, Penjelasan, dan Refleksi Alkitab ──────────
+-- KEPUTUSAN OPERATOR (2026-10-19): isi Pengantar lama menjadi Outline.
+-- Kolom introduction tetap dipakai agar konten lama langsung terbaca dan
+-- klien yang belum diperbarui tidak menghapusnya selama transisi rilis.
+-- Constraint production sudah diverifikasi sebelum diganti; policy tetap.
+BEGIN;
+
+ALTER TABLE bible_explanations
+  ADD COLUMN IF NOT EXISTS explanation TEXT NOT NULL DEFAULT '';
+
+COMMENT ON COLUMN bible_explanations.introduction IS
+  'Outline per pasal; nama kolom lama dipertahankan untuk kompatibilitas data.';
+
+ALTER TABLE bible_explanations
+  DROP CONSTRAINT IF EXISTS bible_explanations_has_content;
+ALTER TABLE bible_explanations
+  ADD CONSTRAINT bible_explanations_has_content CHECK (
+    btrim(introduction) <> '' OR btrim(explanation) <> '' OR btrim(reflection) <> ''
+  );
+
+COMMIT;

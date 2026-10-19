@@ -206,12 +206,49 @@ h1, h2, h3 {
   border-color: var(--glass-border);
 }
 
-/* Lapisan kaca memakai token yang sama pada halaman jemaat dan Admin. */
+/* Pola perspektif dan cahaya lembut berada di belakang konten jemaat. */
 .app-glass-shell {
-  background: radial-gradient(circle at 8% 8%, rgb(255 190 147 / 0.32), transparent 31%),
-    radial-gradient(circle at 88% 45%, rgb(255 208 194 / 0.28), transparent 39%),
-    linear-gradient(155deg, #fffaf7, #ffefe2 68%, #fff6ec);
+  --app-grid-color: rgb(148 91 64 / 0.075);
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+  background:
+    radial-gradient(circle at 88% 9%, rgb(255 207 177 / 0.42), transparent 22rem),
+    radial-gradient(circle at 9% 48%, rgb(247 212 196 / 0.25), transparent 21rem),
+    linear-gradient(165deg, #fffaf7 2%, #fff4ed 54%, #fffaf7 100%);
 }
+.app-glass-shell::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  top: 5rem;
+  left: -55%;
+  width: 210%;
+  height: 25rem;
+  background-image:
+    linear-gradient(var(--app-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-grid-color) 1px, transparent 1px);
+  background-size: 2rem 2rem;
+  transform: perspective(32rem) rotateX(62deg) scale(1.2);
+  transform-origin: center top;
+  mask-image: linear-gradient(to bottom, transparent, #000 20%, transparent 92%);
+}
+.app-glass-shell::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  top: 7rem;
+  right: -5.5rem;
+  width: 14rem;
+  height: 14rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 29% 26%, rgb(255 255 255 / 0.93), rgb(255 232 216 / 0.76) 26%, rgb(237 165 127 / 0.26) 60%, rgb(197 104 74 / 0.06) 72%, transparent 74%);
+  box-shadow: inset -17px -20px 30px rgb(168 87 56 / 0.12), 0 22px 44px -26px rgb(130 69 52 / 0.25);
+  opacity: 0.7;
+}
+.app-glass-shell > main { position: relative; z-index: 1; }
 .app-glass-shell .bg-gray-50 { background-color: rgb(255 255 255 / 0.22); }
 .user-bottom-nav {
   background: var(--glass-surface);
@@ -509,9 +546,16 @@ h1, h2, h3 {
     linear-gradient(155deg, #151210, #211a19 70%, #171313);
 }
 .dark .app-glass-shell {
-  background: radial-gradient(circle at 8% 10%, rgb(180 67 29 / 0.2), transparent 34%),
-    radial-gradient(circle at 90% 62%, rgb(126 37 28 / 0.16), transparent 35%),
-    linear-gradient(155deg, #171411, #241b19 70%, #1a1514);
+  --app-grid-color: rgb(255 198 163 / 0.055);
+  background:
+    radial-gradient(circle at 88% 9%, rgb(130 67 46 / 0.27), transparent 22rem),
+    radial-gradient(circle at 8% 48%, rgb(107 59 47 / 0.2), transparent 21rem),
+    linear-gradient(165deg, #171411 2%, #241b19 54%, #1a1514 100%);
+}
+.dark .app-glass-shell::after {
+  background: radial-gradient(circle at 29% 26%, rgb(255 192 148 / 0.22), rgb(155 87 62 / 0.16) 30%, rgb(70 42 37 / 0.14) 62%, transparent 74%);
+  box-shadow: inset -17px -20px 30px rgb(0 0 0 / 0.19), 0 22px 44px -26px rgb(0 0 0 / 0.46);
+  opacity: 0.58;
 }
 .dark .app-glass-shell .bg-gray-50 { background-color: rgb(23 18 18 / 0.26); }
 .dark .glass-card-emphasis { border-color: rgb(255 255 255 / 0.2); }

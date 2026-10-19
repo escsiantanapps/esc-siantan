@@ -28,10 +28,10 @@ export default async function handler(req, res) {
 
     const { data: caller, error: callerError } = await admin
       .from('users')
-      .select('user_id, role')
+      .select('user_id, role, status')
       .eq('auth_id', authData.user.id)
       .single()
-    if (callerError || caller?.role !== 'Super Admin') {
+    if (callerError || caller?.role !== 'Super Admin' || caller.status !== 'Aktif') {
       return res.status(403).json({ error: 'Hanya Super Admin yang dapat mengubah email akun.' })
     }
 

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, Phone, UserRound } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { compressImage, fetchApi } from '@/lib/utils'
-import { Button, Input, Select, GradientHeader } from '@/components/ui'
+import { Button, Input, Select } from '@/components/ui'
 import Uploader from '@/components/Uploader'
+import AuthScene from './AuthScene'
 
 async function postJson(url, payload) {
   const res = await fetchApi(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -26,6 +27,8 @@ export default function RegisterPage() {
   const [photoPreview, setPhotoPreview] = useState('')
   const [processingPhoto, setProcessingPhoto] = useState(false)
   const [accountCreated, setAccountCreated] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [form, setForm] = useState({
     name: '', email: '', phone: '', password: '', confirmPassword: '',
     gender: '', birth_date: '', birth_place: '', address: '',
@@ -191,43 +194,42 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="auth-glass-page min-h-screen flex justify-center sm:items-center sm:px-4 sm:py-10">
-      <div className="auth-glass-panel w-full max-w-md min-h-screen sm:min-h-0 flex flex-col sm:rounded-3xl sm:overflow-hidden">
-        <GradientHeader
-          title={t('auth.createAccount')}
-          subtitle={t('auth.createSubtitle')}
-          back={step > 1 && !accountCreated ? () => setStep(s => s - 1) : undefined}
-        />
+    <AuthScene variant="register">
+      {step > 1 && !accountCreated && <Button type="button" variant="ghost" className="auth-step-back" onClick={() => setStep(s => s - 1)}>
+        <ArrowLeft size={17} aria-hidden="true" />{t('quality.back')}
+      </Button>}
+      <div className="auth-card-heading">
+        <h1>{t('auth.registerTitle')}</h1>
+        <p>{t('auth.registerCardSubtitle')}</p>
+      </div>
 
-        {/* Step indicator */}
-        <div className="bg-surface px-6 py-3 flex items-center gap-2 border-b border-gray-100">
-          {[1, 2, 3].map(s => (
-            <div key={s} className="flex items-center gap-2 flex-1">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0
-                ${s < step ? 'gradient-main text-white' : s === step ? 'border-2 border-brand-500 text-brand-500' : 'border-2 border-gray-200 text-gray-300'}`}>
-                {s < step ? <Check size={13} aria-hidden="true" /> : s}
-              </div>
-              <span className={`text-xs ${s === step ? 'text-brand-500 font-medium' : 'text-gray-400'}`}>
-                {[t('auth.stepAccount'), t('auth.stepData'), t('auth.stepDone')][s - 1]}
-              </span>
-              {s < 3 && <div className="flex-1 h-px bg-gray-200" />}
-            </div>
-          ))}
-        </div>
+      <div className="auth-step-track" role="group" aria-label={t('auth.registrationProgress')}>
+        {[1, 2, 3].map(s => <div key={s} className={`auth-step-item ${s < step ? 'is-complete' : s === step ? 'is-current' : ''}`} aria-current={s === step ? 'step' : undefined}>
+          <span className="auth-step-number">{s < step ? <Check size={14} aria-hidden="true" /> : s}</span>
+          <span>{[t('auth.stepAccount'), t('auth.stepData'), t('auth.stepDone')][s - 1]}</span>
+        </div>)}
+      </div>
 
-        <div className="flex-1 bg-surface px-6 py-6">
-          {error && (
-            <div role="alert" className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>
-          )}
+      {error && <div role="alert" className="auth-error">{error}</div>}
+
+      <div>
 
           {step === 1 && (
             <form noValidate onSubmit={nextAccount} className="space-y-4">
-              <Input name="name" label={t('auth.fullName')} required autoComplete="name" error={fieldErrors.name && t(fieldErrors.name)} placeholder={t('auth.fullNamePh')} value={form.name} onChange={e => set('name', e.target.value)} />
-              <Input name="email" label={t('auth.email')} type="email" required autoComplete="email" inputMode="email" error={fieldErrors.email && t(fieldErrors.email)} placeholder={t('auth.emailPlaceholder')} value={form.email} onChange={e => set('email', e.target.value)} />
-              <Input name="phone" label={t('auth.phone')} type="tel" required autoComplete="tel" error={fieldErrors.phone && t(fieldErrors.phone)} placeholder={t('auth.phonePlaceholder')} value={form.phone} onChange={e => set('phone', e.target.value)} />
-              <Input name="password" label={t('auth.password')} type="password" required autoComplete="new-password" error={fieldErrors.password && t(fieldErrors.password)} placeholder={t('auth.passwordMin8')} value={form.password} onChange={e => set('password', e.target.value)} />
-              <Input name="confirmPassword" label={t('auth.repeatPassword')} type="password" required autoComplete="new-password" error={fieldErrors.confirmPassword && t(fieldErrors.confirmPassword)} placeholder={t('auth.repeatPasswordPh')} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} />
-              <Button type="submit" loading={loading} className="w-full mt-2" size="lg">{t('auth.next')}</Button>
+              <Input name="name" label={t('auth.fullName')} icon={UserRound} required autoComplete="name" error={fieldErrors.name && t(fieldErrors.name)} placeholder={t('auth.fullNamePh')} value={form.name} onChange={e => set('name', e.target.value)} />
+              <Input name="email" label={t('auth.email')} icon={Mail} type="email" required autoComplete="email" inputMode="email" error={fieldErrors.email && t(fieldErrors.email)} placeholder={t('auth.emailPlaceholder')} value={form.email} onChange={e => set('email', e.target.value)} />
+              <Input name="phone" label={t('auth.phone')} icon={Phone} type="tel" required autoComplete="tel" error={fieldErrors.phone && t(fieldErrors.phone)} placeholder={t('auth.phonePlaceholder')} value={form.phone} onChange={e => set('phone', e.target.value)} />
+              <Input name="password" label={t('auth.password')} icon={LockKeyhole} type={showPassword ? 'text' : 'password'} required autoComplete="new-password" error={fieldErrors.password && t(fieldErrors.password)} placeholder={t('auth.passwordMin8')} className="pr-14" value={form.password} onChange={e => set('password', e.target.value)} rightElement={
+                <button type="button" className="auth-password-toggle" onClick={() => setShowPassword(value => !value)} aria-label={t(showPassword ? 'auth.hidePassword' : 'auth.showPassword')} aria-pressed={showPassword}>
+                  {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                </button>
+              } />
+              <Input name="confirmPassword" label={t('auth.repeatPassword')} icon={LockKeyhole} type={showConfirmPassword ? 'text' : 'password'} required autoComplete="new-password" error={fieldErrors.confirmPassword && t(fieldErrors.confirmPassword)} placeholder={t('auth.repeatPasswordPh')} className="pr-14" value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} rightElement={
+                <button type="button" className="auth-password-toggle" onClick={() => setShowConfirmPassword(value => !value)} aria-label={t(showConfirmPassword ? 'auth.hidePassword' : 'auth.showPassword')} aria-pressed={showConfirmPassword}>
+                  {showConfirmPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                </button>
+              } />
+              <Button type="submit" loading={loading} className="auth-submit w-full mt-2" size="lg">{t('auth.next')}<ArrowRight size={18} aria-hidden="true" /></Button>
             </form>
           )}
 
@@ -255,7 +257,7 @@ export default function RegisterPage() {
                 {['A','B','AB','O'].map(b => <option key={b}>{b}</option>)}
               </Select>
               <Input label={t('auth.socialMedia')} placeholder="@username" value={form.social_media} onChange={e => set('social_media', e.target.value)} />
-              <Button className="w-full mt-2" size="lg" loading={processingPhoto} onClick={() => {
+              <Button className="auth-submit w-full mt-2" size="lg" loading={processingPhoto} onClick={() => {
                 if (!photoFile) { setError(t('auth.photoRequired')); return }
                 setError(''); setStep(3)
               }}>
@@ -275,18 +277,17 @@ export default function RegisterPage() {
                 {t('auth.consentPrefix')}{' '}
                 <Link to="/kebijakan-privasi" className="text-brand-500 font-medium" target="_blank">{t('auth.privacyPolicy')}</Link>.
               </p>
-              <Button className="w-full" size="lg" loading={loading} onClick={handleSubmit}>
+              <Button className="auth-submit w-full" size="lg" loading={loading} onClick={handleSubmit}>
                 {t(accountCreated ? 'auth.retryPhotoSubmit' : 'auth.registerSubmit')}
               </Button>
             </div>
           )}
 
-          <p className="text-center text-sm text-gray-500 mt-6">
+          <p className="auth-footnote mt-6">
             {t('auth.haveAccount')}{' '}
-            <Link to="/login" className="text-brand-500 font-medium">{t('auth.signInLink')}</Link>
+            <Link to="/login" className="auth-secondary-link">{t('auth.signInLink')}</Link>
           </p>
-        </div>
       </div>
-    </div>
+    </AuthScene>
   )
 }

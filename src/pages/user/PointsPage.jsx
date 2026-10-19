@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sparkles, Trophy, Gift, History, ScanLine, Medal, TrendingUp, TrendingDown } from 'lucide-react'
+import { Sparkles, Trophy, Gift, History, ScanLine, Crown, Medal, Award, TrendingUp, TrendingDown } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { pointsService } from '@/services/pointsService'
@@ -9,11 +9,38 @@ import { formatDate } from '@/lib/utils'
 
 const LEADERBOARD_LIMIT = 10
 
+const RANK_STYLES = {
+  1: { icon: Crown, wrapper: 'bg-amber-100 text-amber-600', badge: 'bg-amber-500' },
+  2: { icon: Medal, wrapper: 'bg-gray-100 text-gray-600', badge: 'bg-gray-500' },
+  3: { icon: Award, wrapper: 'bg-orange-100 text-orange-600', badge: 'bg-orange-500' },
+}
+
+
 const TABS = [
   { key: 'katalog', label: 'Tukar Poin', icon: Gift },
   { key: 'peringkat', label: 'Peringkat', icon: Trophy },
   { key: 'riwayat', label: 'Riwayat', icon: History },
 ]
+
+function RankBadge({ rank, label }) {
+  const style = RANK_STYLES[rank]
+  if (!style) {
+    return <span className="w-10 text-center text-sm font-bold text-gray-400 tabular-nums" aria-label={label}>#{rank}</span>
+  }
+  const Icon = style.icon
+  return (
+    <div className="w-10 flex justify-center shrink-0" role="img" aria-label={label}>
+      <div className="relative h-10 w-10">
+        <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${style.wrapper}`}>
+          <Icon size={19} strokeWidth={2.25} />
+        </div>
+        <span className={`absolute -right-0.5 -bottom-0.5 min-w-4 h-4 px-1 rounded-full text-[10px] leading-4 text-center font-extrabold text-white ${style.badge}`}>
+          {rank}
+        </span>
+      </div>
+    </div>
+  )
+}
 
 export default function PointsPage() {
   const { profile } = useAuth()
@@ -133,7 +160,6 @@ export default function PointsPage() {
               {topLeaderboard.map((u, i) => {
                 const rank = Number(u.rank_number) || i + 1
                 const isMe = u.user_id === profile?.user_id
-                const medal = ['text-amber-500', 'text-gray-400', 'text-orange-400'][rank - 1]
                 return (
                   <div
                     key={u.user_id}
@@ -142,11 +168,7 @@ export default function PointsPage() {
                       ? 'flex items-center gap-3 p-3.5 bg-brand-50'
                       : 'flex items-center gap-3 p-3.5'}
                   >
-                    <div className="w-9 flex justify-center shrink-0">
-                      {rank <= 3
-                        ? <Medal size={20} className={medal} />
-                        : <span className="text-sm font-bold text-gray-400 tabular-nums">{rank}</span>}
-                    </div>
+                    <RankBadge rank={rank} label={t('points.rankBadgeAria', { rank })} />
                     <Avatar name={u.name} src={u.photo_url} size="sm" />
                     <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate">
                       {u.name}{isMe && <span className="text-brand-500"> ({t('points.you')})</span>}
@@ -168,9 +190,7 @@ export default function PointsPage() {
                     aria-label={t('points.rankAria', { rank: myStanding.rank_number })}
                     className="flex items-center gap-3 p-3.5 bg-brand-50"
                   >
-                    <div className="w-9 flex justify-center shrink-0">
-                      <span className="text-sm font-extrabold text-brand-600 tabular-nums">#{myStanding.rank_number}</span>
-                    </div>
+                    <RankBadge rank={Number(myStanding.rank_number)} label={t('points.rankAria', { rank: myStanding.rank_number })} />
                     <Avatar name={myStanding.name} src={myStanding.photo_url} size="sm" />
                     <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate">
                       {myStanding.name} <span className="text-brand-500">({t('points.you')})</span>

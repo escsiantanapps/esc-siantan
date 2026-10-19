@@ -793,7 +793,7 @@ test('Admin terbatas: panel jadwal terbuka hanya bila halaman itu diizinkan', as
   })
 })
 
-test('MH berakun Admin ditampilkan tanpa opsi persetujuan MH di panel jadwal', async () => {
+test('MH berakun Admin tetap memerlukan persetujuan per Ministry di panel jadwal', async () => {
   const monthly = monthlyManagementFixture()
   monthly.ministries[0] = {
     ...monthly.ministries[0],
@@ -809,9 +809,8 @@ test('MH berakun Admin ditampilkan tanpa opsi persetujuan MH di panel jadwal', a
     await assertMonthlyManagementLoaded(f)
     await f.page.getByRole('button', { name: 'Akses & Posisi', exact: true }).click()
     await f.page.getByText('Admin Pelayan', { exact: true }).waitFor()
-    await f.page.getByText('Hak Akses Admin', { exact: true }).waitFor()
-    await f.page.getByText('Jabatan MH tidak menambah akses jadwal. Akun ini memakai izin halaman Jadwal Pelayanan pada Hak Akses Admin.', { exact: true }).waitFor()
-    assert.equal(await f.page.getByRole('button', { name: 'Setujui akses', exact: true }).count(), 0)
+    await f.page.getByText('Admin yang menjadi MH perlu disetujui sebelum dapat mengisi nama pada jadwal Ministry ini.', { exact: true }).waitFor()
+    assert.equal(await f.page.getByRole('button', { name: 'Setujui akses', exact: true }).count(), 1)
     assert.equal(f.requests.filter(request => request.path.endsWith('/ministry_schedule_managers') && request.method !== 'GET').length, 0)
   })
 })
@@ -822,6 +821,7 @@ test('Tautan pengelola roster bulanan membuka matriks bulan asal tanpa editor in
   await scenario({
     role: 'Volunteer', ...monthly, rosterMonthLinkDelayMs: 300,
     managerGrants: [{ manager_role: 'Wakil', ministries: { ministry_id: 'QA-MIN', name: 'Worship' } }],
+    ministryMembers: [{ user_id: 'QA-USER', ministry_id: 'QA-MIN' }],
   }, async f => {
     await f.page.addInitScript(() => {
       window.__qaLegacyControls = []
@@ -855,6 +855,7 @@ test('Tautan roster lama tetap membuka detail baca-saja tanpa tab atau editor in
   await scenario({
     role: 'Volunteer', ...monthlyManagementFixture(true), rosters: [roster],
     managerGrants: [{ manager_role: 'Wakil', ministries: { ministry_id: 'QA-MIN', name: 'Worship' } }],
+    ministryMembers: [{ user_id: 'QA-USER', ministry_id: 'QA-MIN' }],
   }, async f => {
     await f.goto('/admin/jadwal-pelayanan?keep=test&rosterId=' + encodeURIComponent(roster.roster_id))
     await f.page.getByRole('heading', { name: roster.title, exact: true }).waitFor()
@@ -1070,7 +1071,7 @@ test('Admin: KTJ menunggu tampil sebagai notifikasi dan membuka antrean terfilte
     await pendingMenu.getByRole('link', { name: 'Buka Pengajuan KTJ, 1 menunggu', exact: true }).click()
     await f.page.waitForURL(url => url.pathname === '/admin/ktj' && url.searchParams.get('status') === 'Menunggu')
     await f.page.getByRole('heading', { name: 'Pengajuan KTJ', exact: true }).waitFor()
-    assert.match(await f.page.getByRole('status').innerText(), /Pengajuan KTJ: 1 menunggu/)
+    await f.page.getByRole('status').getByText('Pengajuan KTJ: 1 menunggu').waitFor()
     assert.equal(await f.page.getByText('Pengajuan KTJ Uji', { exact: true }).count(), 1)
     assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
   })
@@ -1182,7 +1183,7 @@ test('Onboarding: klik ganda tahap ketiga tidak melewati tahap terakhir', async 
 test('Registrasi: data invalid ditahan dengan fokus dan error dekat field', async () => {
   await scenario({ authenticated: false }, async f => {
     await f.goto('/register')
-    await f.page.getByRole('button', { name: 'Lanjut →', exact: true }).click()
+    await f.page.getByRole('button', { name: 'Lanjut', exact: true }).click()
     assert.equal(await f.page.locator('input[aria-invalid=true]').count(), 5)
     assert.equal(await f.page.locator('input[name=name]').evaluate(el => el === document.activeElement), true)
     assert.equal(f.requests.some(r => r.path.includes('/signup')), false)
@@ -1197,7 +1198,7 @@ test('Registrasi: profil lama tanpa login tetap ditolak sebagai nomor terdaftar'
     await f.page.locator('input[name=phone]').fill('081234567890')
     await f.page.locator('input[name=password]').fill('Generasi2026')
     await f.page.locator('input[name=confirmPassword]').fill('Generasi2026')
-    await f.page.getByRole('button', { name: 'Lanjut →', exact: true }).click()
+    await f.page.getByRole('button', { name: 'Lanjut', exact: true }).click()
     await f.page.getByRole('alert').waitFor()
     assert.equal(new URL(f.page.url()).pathname, '/register')
     assert.match(await f.page.getByRole('alert').innerText(), /Nomor HP sudah terdaftar/)
@@ -1243,8 +1244,7 @@ for (const [lang, theme, width] of [['id', 'light', 390], ['en', 'dark', 375], [
   test(`Login ${lang}/${theme}/${width}: layout dan pembesaran teks tidak meluber`, async () => {
     await scenario({ authenticated: false, lang, theme, viewport: { width, height: width === 844 ? 390 : 900 } }, async f => {
       await f.goto('/login')
-      await f.page.getByRole('heading', { name: lang === 'id' ? 'Selamat Datang' : 'Welcome', exact: true }).waitFor()
-      await f.page.getByText('Build A Strong Generations', { exact: true }).waitFor()
+      await f.page.getByRole('heading', { name: lang === 'id' ? 'Masuk' : 'Sign in', exact: true }).waitFor()
       assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
       await f.page.evaluate(() => { document.documentElement.style.fontSize = '32px' })
       assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)

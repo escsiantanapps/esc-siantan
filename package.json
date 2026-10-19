@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src api dev tests vite.config.js --ext js,jsx,mjs --max-warnings 0",
-    "test": "node --test --test-concurrency=1 tests/quality.test.mjs tests/roster-notifications.test.mjs tests/roster-api.test.mjs tests/roster-db.test.mjs tests/api-routing.test.mjs tests/storage-cleanup.test.mjs tests/monthly-roster-db.test.mjs tests/ministry-head-db.test.mjs tests/ministry-member-role-db.test.mjs tests/direct-month-db.test.mjs tests/service-schedule-matrix.test.mjs tests/service-schedule-demo.test.mjs tests/monthly-notifications.test.mjs tests/schedule-membership-db.test.mjs tests/monthly-position-sync.test.mjs tests/service-schedule-v111-db.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/quality.test.mjs tests/roster-notifications.test.mjs tests/roster-api.test.mjs tests/roster-db.test.mjs tests/api-routing.test.mjs tests/storage-cleanup.test.mjs tests/monthly-roster-db.test.mjs tests/ministry-head-db.test.mjs tests/ministry-member-role-db.test.mjs tests/direct-month-db.test.mjs tests/service-schedule-matrix.test.mjs tests/service-schedule-demo.test.mjs tests/monthly-notifications.test.mjs tests/schedule-membership-db.test.mjs tests/monthly-position-sync.test.mjs tests/service-schedule-v111-db.test.mjs tests/user-identity-points-db.test.mjs tests/inactive-rights-db.test.mjs tests/inactive-api.test.mjs",
     "check": "npm run lint && npm test && npm run build"
   },
   "dependencies": {

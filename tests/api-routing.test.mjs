@@ -76,7 +76,7 @@ async function routingFixture(run, reply = null) {
   }
 }
 
-test('Router API: inventaris fungsi Vercel tetap delapan dan di bawah batas Hobby', async () => {
+test('Router API: inventaris fungsi Vercel tetap sembilan dan di bawah batas Hobby', async () => {
   async function entrypoints(directory, prefix = '') {
     const result = []
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -91,10 +91,10 @@ test('Router API: inventaris fungsi Vercel tetap delapan dan di bawah batas Hobb
   }
   const files = await entrypoints(new URL('../api/', import.meta.url))
   assert.deepEqual(files, [
-    '[endpoint].js', 'audit-alert.js', 'check-phone.js', 'delete-user.js',
+    '[endpoint].js', 'audit-alert.js', 'bible-chapter.js', 'check-phone.js', 'delete-user.js',
     'login-phone.js', 'request-reactivation.js', 'wa-reset-request.js', 'wa-reset-verify.js',
   ])
-  assert.equal(files.length, 8)
+  assert.equal(files.length, 9)
   assert.ok(files.length <= 12)
 })
 
