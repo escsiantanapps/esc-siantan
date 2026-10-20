@@ -988,6 +988,28 @@ test('SOP gagal dimuat menampilkan retry dan pulih tanpa reload', async () => {
   })
 })
 
+test('Draft SOP Admin merangkap Volunteer tetap ada setelah profil disegarkan', { timeout: 30000 }, async () => {
+  await scenario({
+    role: 'Admin', secondary: 'Volunteer',
+    template: {
+      form_id: 'QA-TASK', title: 'SOP simulasi', description: '',
+      fields_json: [{ key: 'jawaban', type: 'text', label: 'Jawaban' }],
+      allowed_roles: [], template_ministries: [], active_days: [], weekly_goal: 1,
+    },
+  }, async f => {
+    await f.goto('/tugas/QA-TASK')
+    const answer = f.page.getByRole('textbox', { name: 'Jawaban' })
+    await answer.fill('Jawaban yang belum dikirim')
+    const templateLoads = f.requests.filter(r => r.path.endsWith('/form_templates')).length
+    // Admin disegarkan tiap 15 detik; perubahan profil dengan hak akses sama
+    // tidak boleh memuat ulang template atau menghapus jawaban lokal.
+    await f.page.waitForTimeout(16500)
+    assert.ok(f.requests.filter(r => r.path.endsWith('/users') && r.search.includes('auth_id=')).length >= 2)
+    assert.equal(await answer.inputValue(), 'Jawaban yang belum dikirim')
+    assert.equal(f.requests.filter(r => r.path.endsWith('/form_templates')).length, templateLoads)
+  })
+})
+
 test('Hak akses: kegagalan query izin tidak menjadi akses penuh atau daftar kosong', async () => {
   await scenario({ permissionFailure: true }, async f => {
     await f.goto('/admin/hak-akses')

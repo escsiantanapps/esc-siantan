@@ -27,11 +27,17 @@ export default function TaskDetailPage() {
   const [error, setError] = useState('')
   const [denied, setDenied] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
+  // Profil Admin diperbarui tiap 15 detik dengan objek baru. Muat ulang form
+  // hanya bila identitas atau hak akses SOP benar-benar berubah, agar draft aman.
+  const accessKey = profile ? JSON.stringify([
+    profile.user_id, profile.role, profile.role_secondary, profile.is_pks === true,
+    (profile.ministry_ids || []).map(String).sort(),
+  ]) : null
 
   useEffect(() => {
     if (!profile) return
     load()
-  }, [id, profile])
+  }, [id, accessKey])
 
   async function load() {
     setLoading(true)
