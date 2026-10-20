@@ -1359,6 +1359,15 @@ export const translations = {
     'adash.storageOk': 'Penyimpanan masih aman.',
     'adash.storageWarn': 'Penyimpanan hampir penuh — pertimbangkan hapus file lama.',
     'adash.storageFull': 'Penyimpanan hampir habis! Unggahan baru bisa gagal.',
+    'adash.usageTitle': 'Penggunaan Supabase',
+    'adash.usageDesc': 'Ukuran terkini dan perubahan harian',
+    'adash.database': 'Database',
+    'adash.usageHistory': 'Perubahan per hari',
+    'adash.usageHistoryDesc': 'Selisih catatan sekitar pukul 23.00 WIB dibanding hari sebelumnya.',
+    'adash.usageDate': 'Tanggal',
+    'adash.usageEmpty': 'Riwayat tersedia setelah pencatatan harian pertama.',
+    'adash.usageError': 'Gagal memuat ukuran Supabase. Pastikan migrasi sudah dijalankan, lalu segarkan halaman.',
+    'adash.usageNote': 'Batas 1 GB/0,5 GB mengikuti paket Free pada gambar. Angka tagihan dapat berbeda karena dihitung menurut periode; transfer data dan log tetap dilihat di Dashboard Supabase.',
 
     // Statistik Jemaat (MemberStats)
     'stats.title': 'Statistik Jemaat',
@@ -3663,6 +3672,15 @@ export const translations = {
     'adash.storageOk': 'Storage is healthy.',
     'adash.storageWarn': 'Storage almost full — consider deleting old files.',
     'adash.storageFull': 'Storage nearly full! New uploads may fail.',
+    'adash.usageTitle': 'Supabase Usage',
+    'adash.usageDesc': 'Current sizes and daily changes',
+    'adash.database': 'Database',
+    'adash.usageHistory': 'Daily changes',
+    'adash.usageHistoryDesc': 'Difference between snapshots around 11 p.m. WIB on consecutive days.',
+    'adash.usageDate': 'Date',
+    'adash.usageEmpty': 'History will appear after the first daily snapshot.',
+    'adash.usageError': 'Could not load Supabase sizes. Apply the migration, then refresh this page.',
+    'adash.usageNote': 'The 1 GB/0.5 GB limits follow the Free plan shown. Billing figures may differ because they use period averages; view transfer and log usage in the Supabase Dashboard.',
 
     // Member statistics
     'stats.title': 'Member Statistics',

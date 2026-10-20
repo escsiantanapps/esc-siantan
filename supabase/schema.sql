@@ -8171,6 +8171,7 @@ END $v104_policies$;
 
 COMMIT;
 
+
 -- ── Migrasi v105: Hak tulis Ministry dan daftar anggota untuk jadwal ──
 -- TEMUAN (2026-10-15): policy ministries_admin_write production mengizinkan
 -- semua Admin menulis Ministry tanpa Hak Akses /admin/ministry.
@@ -9357,3 +9358,60 @@ ALTER TABLE bible_explanations
   );
 
 COMMIT;
+
+-- ── Migrasi v115: Pantau ukuran Supabase harian ──────────────────────
+-- KEPUTUSAN OPERATOR (2026-10-20): tampilkan ukuran Storage dan database
+-- otomatis lebih dulu; egress dan log tetap di Dashboard Supabase.
+-- TEMUAN: daftar bucket di browser bisa mengabaikan bucket privat dan error,
+-- sehingga angkanya tidak dapat dipakai sebagai ukuran seluruh Storage.
+CREATE TABLE IF NOT EXISTS supabase_usage_daily (
+  snapshot_date DATE PRIMARY KEY,
+  storage_bytes BIGINT NOT NULL CHECK (storage_bytes >= 0),
+  database_bytes BIGINT NOT NULL CHECK (database_bytes >= 0),
+  captured_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE supabase_usage_daily ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS supabase_usage_daily_super_admin_read ON supabase_usage_daily;
+CREATE POLICY supabase_usage_daily_super_admin_read ON supabase_usage_daily
+  FOR SELECT TO authenticated USING (auth_user_role() = 'Super Admin');
+REVOKE ALL ON supabase_usage_daily FROM anon, authenticated;
+GRANT SELECT ON supabase_usage_daily TO authenticated;
+
+CREATE OR REPLACE FUNCTION measure_supabase_usage()
+RETURNS TABLE(storage_bytes BIGINT, database_bytes BIGINT)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth_user_role() IS DISTINCT FROM 'Super Admin'
+     AND COALESCE(auth.jwt()->>'role', '') <> 'service_role' THEN
+    RAISE EXCEPTION 'Akses ditolak.' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT COALESCE(sum(
+           CASE WHEN o.metadata->>'size' ~ '^[0-9]+$'
+                THEN (o.metadata->>'size')::BIGINT ELSE 0 END
+         ), 0)::BIGINT,
+         pg_database_size(current_database())::BIGINT
+  FROM storage.objects AS o;
+END;
+$$;
+REVOKE ALL ON FUNCTION measure_supabase_usage() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION measure_supabase_usage() TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION capture_supabase_usage_daily()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF COALESCE(auth.jwt()->>'role', '') <> 'service_role' THEN
+    RAISE EXCEPTION 'Akses ditolak.' USING ERRCODE = '42501';
+  END IF;
+
+  INSERT INTO supabase_usage_daily (snapshot_date, storage_bytes, database_bytes)
+  SELECT (now() AT TIME ZONE 'Asia/Jakarta')::DATE,
+         m.storage_bytes, m.database_bytes
+  FROM measure_supabase_usage() AS m
+  ON CONFLICT (snapshot_date) DO NOTHING;
+END;
+$$;
+REVOKE ALL ON FUNCTION capture_supabase_usage_daily() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION capture_supabase_usage_daily() TO service_role;

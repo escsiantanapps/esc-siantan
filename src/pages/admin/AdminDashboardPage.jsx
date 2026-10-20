@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
-import { ChevronRight, CheckCircle2, Database, BarChart3, Bell } from 'lucide-react'
+import { ChevronRight, CheckCircle2, BarChart3, Bell } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { evaluationService } from '@/services/evaluationService'
-import { storageService } from '@/services/storageService'
+import SupabaseUsageCard from '@/components/SupabaseUsageCard'
 import { Card, PageHeader, Spinner, Skeleton, StatusBadge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 import MemberStats from '@/components/MemberStats'
@@ -24,17 +24,11 @@ export default function AdminDashboardPage() {
   const [evalTrend, setEvalTrend] = useState([])
   const [evalLoading, setEvalLoading] = useState(true)
   const [evalTrendError, setEvalTrendError] = useState(false)
-  const [storage, setStorage] = useState(null) // { total } byte terpakai (Super Admin)
   const [loading, setLoading] = useState(true)
 
   const isSuperAdmin = profile?.role === 'Super Admin'
 
   useEffect(() => { loadDashboard(); loadEvaluation() }, [])
-
-  useEffect(() => {
-    if (!isSuperAdmin) return
-    storageService.getUsage().then(setStorage).catch(() => {})
-  }, [isSuperAdmin])
 
   async function loadDashboard() {
     try {
@@ -90,20 +84,6 @@ export default function AdminDashboardPage() {
     .sort((a, b) => Number(a.birth_date.slice(8, 10)) - Number(b.birth_date.slice(8, 10)))
   const monthNames = Array.from({ length: 12 }, (_, i) => formatDate(new Date(2000, i, 1), 'MMMM'))
 
-  // Pemakaian storage (Super Admin). Kuota free tier Supabase = 1 GB.
-  const STORAGE_LIMIT = 1024 ** 3
-  const fmtBytes = (b) =>
-    b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(2) + ' GB'
-    : b >= 1024 ** 2 ? (b / 1024 ** 2).toFixed(1) + ' MB'
-    : b >= 1024 ? (b / 1024).toFixed(0) + ' KB'
-    : (b || 0) + ' B'
-  const storagePct = storage ? Math.min((storage.total / STORAGE_LIMIT) * 100, 100) : 0
-  const storageColor = storagePct >= 90 ? 'red' : storagePct >= 70 ? 'amber' : 'green'
-  const SC = {
-    green: { bar: 'bg-green-500', text: 'text-green-600', bg: 'bg-green-50', icon: 'text-green-500', msg: t('adash.storageOk') },
-    amber: { bar: 'bg-amber-500', text: 'text-amber-600', bg: 'bg-amber-50', icon: 'text-amber-500', msg: t('adash.storageWarn') },
-    red:   { bar: 'bg-red-500',   text: 'text-red-600',   bg: 'bg-red-50',   icon: 'text-red-500',   msg: t('adash.storageFull') },
-  }[storageColor]
   const maxWeeklyEvaluation = Math.max(
     ...evalTrend.flatMap(week => [week.TERPENUHI, week.PROSES, week.KOSONG, week.IZIN].map(value => Number(value) || 0)),
     1,
@@ -332,23 +312,7 @@ export default function AdminDashboardPage() {
             ))}
           </div>
         </Card>
-        {/* Kuota penyimpanan bukan pekerjaan harian; letakkan setelah antrean dan ringkasan. */}
-        {isSuperAdmin && <Card className="admin-panel p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <Database size={19} className={SC.icon} aria-hidden="true" />
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-gray-900">{t('adash.storage')}</h3>
-              <p className="text-xs text-gray-500">
-                {storage ? t('adash.storageUsed', { used: fmtBytes(storage.total), total: '1 GB' }) : '…'}
-              </p>
-            </div>
-            {storage && <span className={`text-sm font-bold ${SC.text}`}>{Math.round(storagePct)}%</span>}
-          </div>
-          <div className="h-2 bg-control rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${SC.bar}`} style={{ width: `${storagePct}%` }} />
-          </div>
-          {storage && <p className={`text-xs mt-2 ${SC.text}`}>{SC.msg}</p>}
-        </Card>}
+        {isSuperAdmin && <SupabaseUsageCard />}
       </div>
     </div>
   )
