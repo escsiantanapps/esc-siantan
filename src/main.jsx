@@ -39,11 +39,9 @@ if (document.readyState === 'loading') {
 // Juga jalankan ulang setelah 300ms (setelah Capacitor siap)
 setTimeout(applyStatusBarHeight, 300)
 
-// Ketika service worker baru mengambil alih (setelah deploy baru), reload otomatis
-// agar chunk JS yang di-cache SW lama tidak bentrok dengan index.html baru.
-// Ini mencegah white screen "Versi baru tersedia" pasca-deploy.
+// Periksa versi baru saat app aktif kembali, tetapi service worker baru menunggu
+// tab lama ditutup. Isian formulir tidak boleh hilang karena reload otomatis.
 if ('serviceWorker' in navigator) {
-  const reloadKey = 'esc-sw-reloaded'
   let lastUpdateCheck = 0
 
   // iOS standalone tidak menyediakan gesture refresh. Periksa pembaruan saat
@@ -58,24 +56,12 @@ if ('serviceWorker' in navigator) {
       .catch(() => { /* tetap gunakan versi aktif bila sedang offline */ })
   }
 
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // Hanya reload sekali untuk satu pergantian controller agar tidak loop.
-    if (!sessionStorage.getItem(reloadKey)) {
-      sessionStorage.setItem(reloadKey, '1')
-      window.location.reload()
-    }
-  })
-
   window.addEventListener('pageshow', checkForAppUpdate)
   window.addEventListener('online', checkForAppUpdate)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') checkForAppUpdate()
   })
   checkForAppUpdate()
-
-  // Setelah halaman baru stabil, izinkan pembaruan berikutnya pada sesi PWA
-  // yang sama. Tanpa ini, iPhone yang jarang ditutup hanya reload satu kali.
-  window.setTimeout(() => sessionStorage.removeItem(reloadKey), 5_000)
 
 }
 

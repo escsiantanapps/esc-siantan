@@ -12,7 +12,9 @@ export default defineConfig({
     storageCleanupPreview(),
     biblePreview(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Pembaruan menunggu semua tab versi lama ditutup agar isian SOP tidak
+      // hilang saat aplikasi kembali aktif di tengah pengisian.
+      registerType: 'prompt',
       includeAssets: ['church-icon.svg', 'apple-touch-icon.png', 'animations/bouncing-sheep.lottie'],
       manifest: {
         id: '/',
