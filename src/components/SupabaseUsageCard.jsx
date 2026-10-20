@@ -3,6 +3,7 @@ import { Database } from 'lucide-react'
 import { Card, Skeleton } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 import { storageService } from '@/services/storageService'
+import SupabaseManualUsage from '@/components/SupabaseManualUsage'
 
 const GB = 1000 ** 3
 const LIMITS = { storage_bytes: GB, database_bytes: GB / 2 }
@@ -91,5 +92,6 @@ export default function SupabaseUsageCard() {
       </div>
       <p className="mt-3 text-[11px] text-gray-500">{t('adash.usageNote')}</p>
     </>}
+    <SupabaseManualUsage />
   </Card>
 }

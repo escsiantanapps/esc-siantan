@@ -9415,3 +9415,34 @@ END;
 $$;
 REVOKE ALL ON FUNCTION capture_supabase_usage_daily() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION capture_supabase_usage_daily() TO service_role;
+
+-- ── Migrasi v116: Catatan manual transfer dan log Supabase ───────────
+-- KEPUTUSAN OPERATOR (2026-10-20): empat meter yang tidak tersedia sebagai
+-- angka kuota otomatis dicatat Super Admin dari Dashboard Supabase tiap hari.
+-- Catatan hanya berisi angka penggunaan, tanpa data jemaat atau kredensial.
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS supabase_usage_manual_daily (
+  snapshot_date DATE PRIMARY KEY,
+  egress_bytes BIGINT NOT NULL CHECK (egress_bytes >= 0),
+  cached_egress_bytes BIGINT NOT NULL CHECK (cached_egress_bytes >= 0),
+  log_ingest_bytes BIGINT NOT NULL CHECK (log_ingest_bytes >= 0),
+  log_query_bytes BIGINT NOT NULL CHECK (log_query_bytes >= 0),
+  recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE supabase_usage_manual_daily ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS supabase_usage_manual_daily_read ON supabase_usage_manual_daily;
+CREATE POLICY supabase_usage_manual_daily_read ON supabase_usage_manual_daily
+  FOR SELECT TO authenticated USING (auth_user_role() = 'Super Admin');
+DROP POLICY IF EXISTS supabase_usage_manual_daily_insert ON supabase_usage_manual_daily;
+CREATE POLICY supabase_usage_manual_daily_insert ON supabase_usage_manual_daily
+  FOR INSERT TO authenticated WITH CHECK (auth_user_role() = 'Super Admin');
+DROP POLICY IF EXISTS supabase_usage_manual_daily_update ON supabase_usage_manual_daily;
+CREATE POLICY supabase_usage_manual_daily_update ON supabase_usage_manual_daily
+  FOR UPDATE TO authenticated USING (auth_user_role() = 'Super Admin')
+  WITH CHECK (auth_user_role() = 'Super Admin');
+REVOKE ALL ON supabase_usage_manual_daily FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON supabase_usage_manual_daily TO authenticated;
+
+COMMIT;
