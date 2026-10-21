@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Database } from 'lucide-react'
+import { Database, ExternalLink } from 'lucide-react'
 import { Card, Skeleton } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 import { storageService } from '@/services/storageService'
-import SupabaseManualUsage from '@/components/SupabaseManualUsage'
+
+const SUPABASE_USAGE_URL = 'https://supabase.com/dashboard/org/_/usage'
 
 const GB = 1000 ** 3
 const LIMITS = { storage_bytes: GB, database_bytes: GB / 2 }
@@ -92,6 +93,19 @@ export default function SupabaseUsageCard() {
       </div>
       <p className="mt-3 text-[11px] text-gray-500">{t('adash.usageNote')}</p>
     </>}
-    <SupabaseManualUsage />
+    <section className="mt-5 border-t border-gray-200 pt-4">
+      <h4 className="text-sm font-semibold text-gray-900">{t('adash.officialUsageTitle')}</h4>
+      <p className="mt-1 text-sm text-gray-600">{t('adash.officialUsageDesc')}</p>
+      <p className="mt-2 text-xs text-gray-500">{t('adash.officialUsageScope')}</p>
+      <a
+        href={SUPABASE_USAGE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-control px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-control-hover focus:outline-2 focus:outline-offset-2 focus:outline-brand-500"
+      >
+        {t('adash.officialUsageAction')}
+        <ExternalLink size={16} aria-hidden="true" />
+      </a>
+    </section>
   </Card>
 }

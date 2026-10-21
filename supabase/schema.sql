@@ -9446,3 +9446,61 @@ REVOKE ALL ON supabase_usage_manual_daily FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON supabase_usage_manual_daily TO authenticated;
 
 COMMIT;
+
+-- ── Migrasi v117: Catat penghapusan respons SOP Rohani ────────────
+-- TEMUAN (2026-10-20): form_responses dapat dihapus dari halaman Respon SOP,
+-- tetapi belum memiliki trigger audit. Penghapusan langsung lewat PostgREST
+-- maupun akibat ON DELETE CASCADE juga tidak meninggalkan jejak respons.
+-- KEPUTUSAN OPERATOR (2026-10-20): setiap respons yang terhapus harus tercatat
+-- di Audit Log. Simpan identitas dan waktu respons, tanpa isi jawaban/lampiran.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION record_form_response_delete()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_actor_id TEXT;
+  v_actor_name TEXT;
+  v_form_title TEXT;
+  v_volunteer_name TEXT;
+BEGIN
+  v_actor_id := auth_user_id();
+  SELECT name INTO v_actor_name FROM users WHERE user_id = v_actor_id;
+  SELECT title INTO v_form_title FROM form_templates WHERE form_id = OLD.form_id;
+  SELECT name INTO v_volunteer_name FROM users WHERE user_id = OLD.volunteer_id;
+
+  -- Gagal mencatat audit harus membatalkan DELETE pada transaksi yang sama.
+  INSERT INTO audit_log (
+    actor_user_id, actor_name, actor_role, action, table_name, record_id, old_data
+  ) VALUES (
+    v_actor_id, COALESCE(v_actor_name, v_actor_id), auth_user_role(),
+    'DELETE', 'form_responses', OLD.response_id,
+    jsonb_build_object(
+      'form_id', OLD.form_id,
+      'form_title', v_form_title,
+      'volunteer_id', OLD.volunteer_id,
+      'volunteer_name', v_volunteer_name,
+      'submitted_at', OLD.submitted_at
+    )
+  );
+
+  RETURN OLD;
+END;
+$$;
+REVOKE ALL ON FUNCTION record_form_response_delete() FROM PUBLIC, anon, authenticated;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.form_responses'::regclass
+      AND tgname = 'audit_form_response_delete'
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER audit_form_response_delete
+      AFTER DELETE ON form_responses
+      FOR EACH ROW EXECUTE FUNCTION record_form_response_delete();
+  END IF;
+END;
+$$;
+
+COMMIT;

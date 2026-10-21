@@ -3,6 +3,7 @@ import { ScrollText, Plus, Pencil, Trash2, ChevronDown, ShieldQuestion } from 'l
 import { auditService } from '@/services/auditService'
 import { formatDate } from '@/lib/utils'
 import { Card, PageHeader, Spinner, Badge, Button, EmptyState } from '@/components/ui'
+import { useLang } from '@/hooks/useLang'
 
 const PAGE = 50
 
@@ -35,7 +36,7 @@ const ACTION_META = {
 const FALLBACK_META = { icon: ShieldQuestion, badge: 'gray', label: '', wrap: 'bg-gray-100', ic: 'text-gray-600' }
 
 const fieldLabel = f => FIELD_LABELS[f] || f
-const tableLabel = t => TABLE_LABELS[t] || t
+const tableLabel = (table, t) => table === 'form_responses' ? t('audit.responses') : TABLE_LABELS[table] || table
 
 function fmtVal(v) {
   if (v === null || v === undefined || v === '') return '(kosong)'
@@ -45,11 +46,13 @@ function fmtVal(v) {
 }
 
 function AuditRow({ entry }) {
+  const { t } = useLang()
   const [open, setOpen] = useState(false)
   const meta = ACTION_META[entry.action] || { ...FALLBACK_META, label: entry.action }
   const Icon = meta.icon
   const changed = entry.changed_fields || []
   const canExpand = entry.action === 'UPDATE' && changed.length > 0
+  const responseDelete = entry.action === 'DELETE' && entry.table_name === 'form_responses'
 
   return (
     <Card className="mb-2">
@@ -67,9 +70,18 @@ function AuditRow({ entry }) {
           </div>
           <p className="text-xs text-gray-600 mt-0.5">
             <span className="font-medium">{meta.label}</span>
-            {' '}data <span className="font-medium">{tableLabel(entry.table_name)}</span>
+            {' '}data <span className="font-medium">{tableLabel(entry.table_name, t)}</span>
             {entry.record_id && <span className="text-gray-400"> · {entry.record_id}</span>}
           </p>
+          {responseDelete && (
+            <div className="text-xs text-gray-600 mt-1 space-y-0.5 break-words">
+              <p>{t('audit.responseForm')}: {entry.old_data?.form_title || entry.old_data?.form_id || '—'}</p>
+              <p>{t('audit.responseMember')}: {entry.old_data?.volunteer_name || entry.old_data?.volunteer_id || '—'}</p>
+              {entry.old_data?.submitted_at && (
+                <p>{t('audit.responseSubmitted')}: {formatDate(entry.old_data.submitted_at, 'd MMM yyyy, HH:mm')}</p>
+              )}
+            </div>
+          )}
           {entry.action === 'UPDATE' && changed.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
               {changed.slice(0, 6).map(f => (
@@ -117,6 +129,7 @@ function AuditRow({ entry }) {
 }
 
 export default function AdminAuditPage() {
+  const { t } = useLang()
   const [rows, setRows] = useState([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -148,12 +161,13 @@ export default function AdminAuditPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <PageHeader title="Audit Log" subtitle="Riwayat perubahan data sensitif oleh admin" />
+      <PageHeader title="Audit Log" subtitle={t('audit.subtitle')} />
 
       <div className="flex gap-2 mb-4">
         <select className={selCls} value={tableFilter} onChange={e => setTableFilter(e.target.value)}>
           <option value="">Semua data</option>
           {Object.entries(TABLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          <option value="form_responses">{t('audit.responses')}</option>
         </select>
         <select className={selCls} value={actionFilter} onChange={e => setActionFilter(e.target.value)}>
           <option value="">Semua aksi</option>
@@ -169,7 +183,7 @@ export default function AdminAuditPage() {
         <EmptyState
           icon={ScrollText}
           title="Belum ada catatan"
-          description="Perubahan data sensitif oleh admin akan tercatat di sini secara otomatis."
+          description={t('audit.emptyDesc')}
         />
       ) : (
         <>
