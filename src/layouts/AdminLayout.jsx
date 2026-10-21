@@ -54,7 +54,8 @@ function buildMenu(isSuperAdmin, isGembala, allowedPages, scopedScheduleAccess =
   // Admin). Filter yang sama berlaku untuknya.
   let lastSection = null
   for (const page of ADMIN_PAGES) {
-    if (isGembala && page.to === '/admin/jadwal-pelayanan') continue
+    if (isGembala && ['/admin/jadwal-pelayanan', '/admin/penukaran-hadiah'].includes(page.to)) continue
+    if (!isSuperAdmin && page.to === '/admin/penukaran-hadiah' && !allowedPages?.includes(page.to)) continue
     if (!isSuperAdmin && !isGembala && allowedPages && !allowedPages.includes(page.to)
       && !(scopedScheduleAccess && page.to === '/admin/jadwal-pelayanan')) continue
     if (page.section !== lastSection) {
@@ -266,6 +267,10 @@ export default function AdminLayout({ children }) {
   // Backup, Audit, Tukar Poin, Distribusi Poin). Gembala boleh seluruh
   // halaman admin lain, tetapi tetap tidak masuk bagian Sistem.
   if (['/admin/hak-akses', '/admin/backup', '/admin/audit', '/admin/tukar-poin', '/admin/distribusi-poin'].includes(location.pathname) && !isSuperAdmin) {
+    return <Navigate to={fallbackPath()} replace />
+  }
+  if (location.pathname === '/admin/penukaran-hadiah'
+    && (isGembala || (!isSuperAdmin && !allowedPages?.includes('/admin/penukaran-hadiah')))) {
     return <Navigate to={fallbackPath()} replace />
   }
 

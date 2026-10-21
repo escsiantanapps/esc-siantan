@@ -2,7 +2,7 @@ import {
   Users, Calendar, Newspaper, BookOpen,
   ClipboardList, Droplets, Heart, AlertTriangle, BarChart3,
   Layers, Network, HandCoins, CalendarOff, Baby, Award, Map, Church, CreditCard,
-  LayoutDashboard, Inbox, CalendarClock, CalendarRange, Tag, Package,
+  LayoutDashboard, Inbox, CalendarClock, CalendarRange, Tag, Package, ScanLine,
 } from 'lucide-react'
 
 // Daftar halaman admin yang aksesnya bisa dibatasi untuk role "Admin"
@@ -34,6 +34,7 @@ export const ADMIN_PAGES = [
   { to: '/admin/sertifikat', icon: Award,         label: 'Sertifikat',       section: 'Administrasi', labelKey: 'admin.nav.sertifikat',  sectionKey: 'admin.sec.Administrasi' },
   { to: '/admin/ktj',      icon: CreditCard,      label: 'KTJ (Kartu Jemaat)',section: 'Administrasi',labelKey: 'admin.nav.ktj',         sectionKey: 'admin.sec.Administrasi' },
   { to: '/admin/inventory', icon: Package,         label: 'Inventory',         section: 'Administrasi', labelKey: 'admin.nav.inventory',   sectionKey: 'admin.sec.Administrasi' },
+  { to: '/admin/penukaran-hadiah', icon: ScanLine, label: 'Penyerahan Hadiah', section: 'Administrasi', labelKey: 'admin.nav.penukaranHadiah', sectionKey: 'admin.sec.Administrasi' },
   // ── Pelayanan ──
   { to: '/admin/tugas',    icon: ClipboardList,   label: 'Tugas & Form',     section: 'Pelayanan',    labelKey: 'admin.nav.tugas',       sectionKey: 'admin.sec.Pelayanan' },
   { to: '/admin/respon',   icon: Inbox,           label: 'Respon SOP',       section: 'Pelayanan',    labelKey: 'admin.nav.respon',      sectionKey: 'admin.sec.Pelayanan' },

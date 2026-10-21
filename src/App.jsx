@@ -82,6 +82,7 @@ const AdminBackupPage = lazy(() => import('@/pages/admin/AdminBackupPage'))
 const AdminAuditPage = lazy(() => import('@/pages/admin/AdminAuditPage'))
 const AdminRoadmapPage = lazy(() => import('@/pages/admin/AdminRoadmapPage'))
 const AdminRedeemPage = lazy(() => import('@/pages/admin/AdminRedeemPage'))
+const AdminRewardScanPage = lazy(() => import('@/pages/admin/AdminRewardScanPage'))
 const AdminPointsLogPage = lazy(() => import('@/pages/admin/AdminPointsLogPage'))
 const AdminSundayPage = lazy(() => import('@/pages/admin/AdminSundayPage'))
 const AdminMessagesPage = lazy(() => import('@/pages/admin/AdminMessagesPage'))
@@ -256,6 +257,7 @@ export default function App() {
             <Route path="izin"                 element={<AdminLeavesPage />} />
             <Route path="roadmap"              element={<AdminRoadmapPage />} />
             <Route path="tukar-poin"           element={<AdminRedeemPage />} />
+            <Route path="penukaran-hadiah"     element={<AdminRewardScanPage />} />
             <Route path="distribusi-poin"      element={<AdminPointsLogPage />} />
             <Route path="baca"                 element={<Navigate to="/admin" replace />} />
             <Route path="ibadah-minggu"        element={<AdminSundayPage />} />

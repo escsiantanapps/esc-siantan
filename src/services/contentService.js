@@ -511,12 +511,10 @@ export const ministriesService = {
     const memberIds = [...new Set((links || []).map(link => link.user_id))]
     if (memberIds.length === 0) return []
     const { data, error } = await supabase.from('users')
-      .select('user_id,name,photo_url,role,role_secondary,status')
-      .in('user_id', memberIds).eq('status', 'Aktif').in('role', ['Volunteer', 'Admin']).order('name')
+      .select('user_id,name,photo_url,role,status')
+      .in('user_id', memberIds).eq('status', 'Aktif').neq('role', 'Jemaat').order('name')
     if (error) throw error
-    return (data || []).filter(person => person.status === 'Aktif' && (person.role === 'Admin'
-      || (person.role === 'Volunteer' && !['Admin', 'Super Admin', 'Gembala'].includes(person.role_secondary))))
-      .map(({ role_secondary: _roleSecondary, ...person }) => person)
+    return data || []
   },
 
   async create(ministry) {

@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { Gift, Plus, Pencil, Trash2, X, Ticket, Download, QrCode } from 'lucide-react'
+import { Gift, Plus, Pencil, Trash2, X, Ticket, Download, QrCode, ScanLine } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
+import { useLang } from '@/hooks/useLang'
 import { useBackClose } from '@/hooks/useBackClose'
 import { pointsService } from '@/services/pointsService'
-import { Card, PageHeader, Button, Input, Textarea, Spinner, EmptyState, StatusBadge, Badge } from '@/components/ui'
+import { Card, PageHeader, Button, Input, Textarea, Checkbox, Spinner, EmptyState, StatusBadge } from '@/components/ui'
 import Uploader from '@/components/Uploader'
 import { formatDate, validateUpload, compressImage } from '@/lib/utils'
 
-const emptyProduct = { name: '', points_cost: '', description: '', image_url: '', stock: 0 }
+const emptyProduct = { name: '', points_cost: '', description: '', image_url: '', stock: 0, stock_is_limited: false }
 
 export default function AdminRedeemPage() {
   const { toast, confirm } = useToast()
+  const { t } = useLang()
+  const navigate = useNavigate()
   const [tab, setTab] = useState('produk')
 
   const [products, setProducts] = useState([])
@@ -36,7 +40,10 @@ export default function AdminRedeemPage() {
     ]).finally(() => setLoading(false))
   }
 
-  function openProduct(p) { setForm(p ? { ...p } : emptyProduct); setModal(p || {}) }
+  function openProduct(p) {
+    setForm(p ? { ...p, stock_is_limited: p.stock_is_limited ?? Number(p.stock) > 0 } : emptyProduct)
+    setModal(p || {})
+  }
   function setF(k, v) { setForm(prev => ({ ...prev, [k]: v })) }
 
   async function handleImage(file) {
@@ -65,6 +72,7 @@ export default function AdminRedeemPage() {
         description: form.description || null,
         image_url: form.image_url || null,
         stock: Number(form.stock) || 0,
+        stock_is_limited: !!form.stock_is_limited,
       }
       if (form.product_id) await pointsService.updateProduct(form.product_id, payload)
       else await pointsService.createProduct(payload)
@@ -85,18 +93,6 @@ export default function AdminRedeemPage() {
     catch (err) { toast.error(err.message || 'Gagal menghapus.') }
   }
 
-  async function makeTicket(p) {
-    try {
-      const t = await pointsService.createTicket(p.product_id, p.points_cost)
-      toast.success('Tiket dibuat — tampilkan QR untuk ditukar jemaat.')
-      const dataUrl = await QRCode.toDataURL(`ESC-REDEEM:${t.ticket_id}`, { width: 320, margin: 1 })
-      setQrModal({ ticket: { ...t, productName: p.name }, dataUrl })
-      load()
-    } catch (err) {
-      toast.error(err.message || 'Gagal membuat tiket.')
-    }
-  }
-
   async function showTicketQr(t) {
     const dataUrl = await QRCode.toDataURL(`ESC-REDEEM:${t.ticket_id}`, { width: 320, margin: 1 }).catch(() => '')
     setQrModal({ ticket: { ...t, productName: t.redeemable_products?.name }, dataUrl })
@@ -113,17 +109,30 @@ export default function AdminRedeemPage() {
     <div>
       <PageHeader
         title="Tukar Poin"
-        subtitle="Kelola katalog hadiah & tiket penukaran"
-        action={tab === 'produk' ? <Button size="sm" onClick={() => openProduct(null)}><Plus size={15} /> Produk</Button> : null}
+        subtitle={t('rewardAdmin.subtitle')}
       />
 
-      <div className="flex gap-1 p-1 bg-control rounded-xl mb-4">
-        {[['produk', 'Katalog Produk'], ['tiket', 'Tiket Penukaran']].map(([k, label]) => (
+      <Card className="p-4 mb-4 flex flex-col sm:flex-row sm:items-center gap-4 bg-brand-50 border-brand-100">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shrink-0"><ScanLine size={20} /></div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{t('rewardAdmin.scanTitle')}</p>
+            <p className="text-xs text-gray-600 mt-0.5">{t('rewardAdmin.scanHint')}</p>
+          </div>
+        </div>
+        <Button className="min-h-11 w-full sm:w-auto" onClick={() => navigate('/admin/penukaran-hadiah')}>{t('rewardAdmin.scan')}</Button>
+      </Card>
+
+      <div className="flex gap-2 items-center mb-4">
+      <div className="flex flex-1 gap-1 p-1 bg-control rounded-xl">
+        {[['produk', 'Katalog Produk'], ['tiket', t('rewardAdmin.legacyTickets')]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === k ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}>
+            className={`flex-1 min-h-11 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === k ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}>
             {label}
           </button>
         ))}
+      </div>
+      {tab === 'produk' && <Button size="sm" className="min-h-11" onClick={() => openProduct(null)}><Plus size={15} /> Produk</Button>}
       </div>
 
       {loading && <div className="flex justify-center py-10"><Spinner /></div>}
@@ -143,9 +152,8 @@ export default function AdminRedeemPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
-                  <p className="text-xs text-brand-600 font-semibold">{p.points_cost} poin {p.stock ? `· stok ${p.stock}` : ''}</p>
+                  <p className="text-xs text-brand-600 font-semibold">{p.points_cost} poin · {(p.stock_is_limited ?? (Number(p.stock) > 0)) ? t('points.stock', { count: p.stock }) : t('rewardAdmin.unlimitedStock')}</p>
                 </div>
-                <button onClick={() => makeTicket(p)} title="Buat tiket QR" className="p-2 text-gray-400 hover:text-brand-500"><Ticket size={16} /></button>
                 <button onClick={() => openProduct(p)} className="p-2 text-gray-400 hover:text-brand-500"><Pencil size={16} /></button>
                 <button onClick={() => deleteProduct(p)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
               </div>
@@ -157,7 +165,7 @@ export default function AdminRedeemPage() {
       {/* Tiket penukaran */}
       {!loading && tab === 'tiket' && (
         tickets.length === 0 ? (
-          <EmptyState icon={Ticket} title="Belum ada tiket" description="Buat tiket dari katalog produk untuk ditukar jemaat." />
+          <EmptyState icon={Ticket} title={t('rewardAdmin.noLegacyTickets')} description={t('rewardAdmin.legacyHint')} />
         ) : (
           <Card className="divide-y divide-gray-100">
             {tickets.map(t => (
@@ -196,8 +204,10 @@ export default function AdminRedeemPage() {
             <Input label="Nama Produk" required value={form.name} onChange={e => setF('name', e.target.value)} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Harga (poin)" type="number" min="1" required value={form.points_cost} onChange={e => setF('points_cost', e.target.value)} />
-              <Input label="Stok" type="number" min="0" value={form.stock} onChange={e => setF('stock', e.target.value)} />
+              {form.stock_is_limited && <Input label="Stok" type="number" min="0" value={form.stock} onChange={e => setF('stock', e.target.value)} />}
             </div>
+            <Checkbox label={t('rewardAdmin.limitedStock')} checked={!!form.stock_is_limited}
+              onChange={event => setF('stock_is_limited', event.target.checked)} />
             <Textarea label="Deskripsi" rows={2} value={form.description} onChange={e => setF('description', e.target.value)} />
             <div className="flex gap-2 pt-1">
               <Button variant="ghost" className="flex-1" onClick={() => setModal(null)}>Batal</Button>

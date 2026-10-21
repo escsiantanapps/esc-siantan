@@ -9504,3 +9504,433 @@ END;
 $$;
 
 COMMIT;
+
+-- ── Migrasi v118: MH Ministry untuk semua role selain Jemaat ──────────
+-- KEPUTUSAN OPERATOR (2026-10-21): anggota Ministry yang Aktif boleh menjadi
+-- MH tanpa pembatasan role, kecuali role utama Jemaat. Jabatan ini tidak
+-- otomatis memberikan akses jadwal atau hak administrasi.
+BEGIN;
+
+DO $v118_guard_trigger$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.ministries'::regclass
+      AND tgname = 'trg_guard_ministry_head_source'
+      AND tgfoid = 'public.guard_ministry_head_source()'::regprocedure
+      AND tgenabled IN ('O', 'A')
+  ) THEN
+    RAISE EXCEPTION 'Trigger penjaga MH Ministry belum sesuai; periksa migrasi sebelumnya.'
+      USING ERRCODE = '55000';
+  END IF;
+END $v118_guard_trigger$;
+
+CREATE OR REPLACE FUNCTION guard_ministry_head_source()
+  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE caller_role TEXT := auth_user_role();
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.head_user_id IS NOT DISTINCT FROM OLD.head_user_id THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' AND NEW.head_user_id IS NULL THEN RETURN NEW; END IF;
+
+  IF TG_OP = 'UPDATE' AND OLD.head_user_id IS NOT NULL AND NEW.head_user_id IS NULL
+     AND pg_trigger_depth() > 1
+     AND (to_jsonb(NEW) - 'head_user_id') = (to_jsonb(OLD) - 'head_user_id')
+     AND (
+       NOT EXISTS (SELECT 1 FROM users WHERE user_id = OLD.head_user_id)
+       OR NOT EXISTS (SELECT 1 FROM user_ministries
+         WHERE user_id = OLD.head_user_id AND ministry_id = OLD.ministry_id)
+     ) THEN
+    RETURN NEW;
+  END IF;
+  IF caller_role IS NOT NULL AND NOT (
+    auth_admin_can('/admin/ministry')
+    AND EXISTS (SELECT 1 FROM users WHERE user_id = auth_user_id() AND status = 'Aktif')
+  ) THEN
+    RAISE EXCEPTION 'Penetapan Ministry Head hanya melalui Admin berakses Ministry.' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.head_user_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM users WHERE user_id = NEW.head_user_id
+      AND status = 'Aktif' AND role <> 'Jemaat'
+  ) THEN
+    RAISE EXCEPTION 'Ministry Head harus anggota Aktif yang bukan Jemaat.' USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION guard_ministry_head_source() FROM PUBLIC, anon, authenticated;
+COMMIT;
+
+-- ── Migrasi v119: Kupon hadiah milik jemaat, diverifikasi petugas ─────
+-- TEMUAN (2026-10-21): tiket lama dibuat Admin dan dipindai jemaat. Tidak ada
+-- bukti penyerahan hadiah pada saat poin dipotong, dan satu tiket tidak terikat
+-- pada jemaat tertentu sebelum digunakan.
+-- KEPUTUSAN OPERATOR (2026-10-21): jemaat memilih hadiah dan menunjukkan QR
+-- miliknya; petugas memindai, memeriksa nama/hadiah, lalu mengonfirmasi.
+-- Kupon lama tetap dapat diselesaikan lewat alur lama selama masa transisi.
+BEGIN;
+
+-- NULL mempertahankan arti katalog lama: stok 0 = tidak dibatasi, stok positif
+-- = terbatas. Saat stok terbatas mencapai 0, flag disetel TRUE agar tidak
+-- berubah menjadi "tidak dibatasi" secara tidak sengaja.
+ALTER TABLE redeemable_products
+  ADD COLUMN IF NOT EXISTS stock_is_limited BOOLEAN;
+
+CREATE TABLE IF NOT EXISTS reward_coupons (
+  coupon_id TEXT PRIMARY KEY DEFAULT 'RCP-' || replace(gen_random_uuid()::text, '-', ''),
+  product_id TEXT REFERENCES redeemable_products(product_id) ON DELETE SET NULL,
+  product_name TEXT NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  points_cost INT NOT NULL CHECK (points_cost > 0),
+  status TEXT NOT NULL DEFAULT 'Menunggu'
+    CHECK (status IN ('Menunggu', 'Digunakan', 'Dibatalkan')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  confirmed_at TIMESTAMPTZ,
+  confirmed_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  cancelled_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS reward_coupons_one_pending
+  ON reward_coupons (user_id, product_id) WHERE status = 'Menunggu';
+CREATE INDEX IF NOT EXISTS reward_coupons_user_created
+  ON reward_coupons (user_id, created_at DESC);
+ALTER TABLE reward_coupons ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS reward_coupons_select_v118 ON reward_coupons;
+CREATE POLICY reward_coupons_select_v118 ON reward_coupons
+  FOR SELECT TO authenticated
+  USING (user_id = auth_user_id() OR auth_admin_can('/admin/penukaran-hadiah'));
+GRANT SELECT ON reward_coupons TO authenticated;
+REVOKE INSERT, UPDATE, DELETE ON reward_coupons FROM anon, authenticated;
+
+CREATE OR REPLACE FUNCTION request_reward_coupon(p_product_id TEXT)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user_id TEXT := auth_user_id();
+  v_user RECORD;
+  v_product RECORD;
+  v_existing TEXT;
+  v_coupon_id TEXT;
+BEGIN
+  IF v_user_id IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'no_user'); END IF;
+  SELECT status, points INTO v_user FROM users WHERE user_id = v_user_id;
+  IF v_user.status IS DISTINCT FROM 'Aktif' THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'inactive');
+  END IF;
+  IF p_product_id IS NULL OR length(p_product_id) > 80 THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'not_found');
+  END IF;
+  SELECT product_id, name, points_cost, stock, stock_is_limited INTO v_product
+    FROM redeemable_products WHERE product_id = p_product_id;
+  IF v_product.product_id IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_found'); END IF;
+  SELECT coupon_id INTO v_existing FROM reward_coupons
+    WHERE user_id = v_user_id AND product_id = p_product_id AND status = 'Menunggu';
+  IF v_existing IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', true, 'coupon_id', v_existing, 'existing', true);
+  END IF;
+  IF COALESCE(v_user.points, 0) < v_product.points_cost THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'insufficient',
+      'needed', v_product.points_cost, 'balance', COALESCE(v_user.points, 0));
+  END IF;
+  IF COALESCE(v_product.stock_is_limited, COALESCE(v_product.stock, 0) > 0)
+     AND COALESCE(v_product.stock, 0) <= 0 THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'out_of_stock');
+  END IF;
+  INSERT INTO reward_coupons (product_id, product_name, user_id, points_cost)
+    VALUES (v_product.product_id, v_product.name, v_user_id, v_product.points_cost)
+    RETURNING coupon_id INTO v_coupon_id;
+  RETURN jsonb_build_object('ok', true, 'coupon_id', v_coupon_id, 'existing', false);
+EXCEPTION WHEN unique_violation THEN
+  -- Dua ketukan cepat hanya menghasilkan satu kupon aktif per hadiah.
+  SELECT coupon_id INTO v_existing FROM reward_coupons
+    WHERE user_id = v_user_id AND product_id = p_product_id AND status = 'Menunggu';
+  IF v_existing IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', true, 'coupon_id', v_existing, 'existing', true);
+  END IF;
+  RAISE;
+END;
+$$;
+REVOKE ALL ON FUNCTION request_reward_coupon(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION request_reward_coupon(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION cancel_reward_coupon(p_coupon_id TEXT)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_coupon RECORD;
+BEGIN
+  SELECT coupon_id, user_id, status INTO v_coupon FROM reward_coupons
+    WHERE coupon_id = p_coupon_id FOR UPDATE;
+  IF v_coupon.coupon_id IS NULL OR v_coupon.user_id IS DISTINCT FROM auth_user_id() THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'not_found');
+  END IF;
+  IF v_coupon.status <> 'Menunggu' THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'used');
+  END IF;
+  UPDATE reward_coupons SET status = 'Dibatalkan', cancelled_at = now()
+    WHERE coupon_id = p_coupon_id;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION cancel_reward_coupon(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION cancel_reward_coupon(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION inspect_reward_coupon(p_coupon_id TEXT)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_coupon RECORD;
+BEGIN
+  IF NOT auth_admin_can('/admin/penukaran-hadiah') THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  SELECT c.coupon_id, c.status, c.product_name, c.points_cost,
+         u.name AS member_name, u.points AS balance, u.status AS member_status,
+         p.stock, p.stock_is_limited, p.product_id
+    INTO v_coupon
+    FROM reward_coupons c
+    JOIN users u ON u.user_id = c.user_id
+    LEFT JOIN redeemable_products p ON p.product_id = c.product_id
+    WHERE c.coupon_id = p_coupon_id;
+  IF v_coupon.coupon_id IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_found'); END IF;
+  RETURN jsonb_build_object('ok', true, 'status', v_coupon.status,
+    'member_name', v_coupon.member_name, 'product_name', v_coupon.product_name,
+    'cost', v_coupon.points_cost, 'balance', COALESCE(v_coupon.balance, 0),
+    'member_status', v_coupon.member_status, 'product_available', v_coupon.product_id IS NOT NULL,
+    'out_of_stock', COALESCE(v_coupon.stock_is_limited, COALESCE(v_coupon.stock, 0) > 0)
+      AND COALESCE(v_coupon.stock, 0) <= 0);
+END;
+$$;
+REVOKE ALL ON FUNCTION inspect_reward_coupon(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION inspect_reward_coupon(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION confirm_reward_coupon(p_coupon_id TEXT)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_coupon RECORD;
+  v_product RECORD;
+  v_user RECORD;
+BEGIN
+  IF NOT auth_admin_can('/admin/penukaran-hadiah') THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_coupon FROM reward_coupons
+    WHERE coupon_id = p_coupon_id FOR UPDATE;
+  IF v_coupon.coupon_id IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_found'); END IF;
+  IF v_coupon.status <> 'Menunggu' THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'used');
+  END IF;
+  SELECT product_id, stock, stock_is_limited INTO v_product FROM redeemable_products
+    WHERE product_id = v_coupon.product_id FOR UPDATE;
+  IF v_product.product_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'product_missing');
+  END IF;
+  SELECT status, points INTO v_user FROM users
+    WHERE user_id = v_coupon.user_id FOR UPDATE;
+  IF v_user.status IS DISTINCT FROM 'Aktif' THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'inactive');
+  END IF;
+  IF COALESCE(v_user.points, 0) < v_coupon.points_cost THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'insufficient',
+      'needed', v_coupon.points_cost, 'balance', COALESCE(v_user.points, 0));
+  END IF;
+  IF COALESCE(v_product.stock_is_limited, COALESCE(v_product.stock, 0) > 0) THEN
+    IF COALESCE(v_product.stock, 0) <= 0 THEN
+      RETURN jsonb_build_object('ok', false, 'reason', 'out_of_stock');
+    END IF;
+    UPDATE redeemable_products SET stock = stock - 1, stock_is_limited = true
+      WHERE product_id = v_product.product_id;
+  END IF;
+  PERFORM apply_points(v_coupon.user_id, -v_coupon.points_cost,
+    'Tukar poin: ' || v_coupon.product_name);
+  UPDATE reward_coupons SET status = 'Digunakan', confirmed_at = now(),
+    confirmed_by = auth_user_id() WHERE coupon_id = p_coupon_id;
+  RETURN jsonb_build_object('ok', true, 'member_name',
+    (SELECT name FROM users WHERE user_id = v_coupon.user_id),
+    'product_name', v_coupon.product_name, 'cost', v_coupon.points_cost,
+    'balance', COALESCE(v_user.points, 0) - v_coupon.points_cost);
+END;
+$$;
+REVOKE ALL ON FUNCTION confirm_reward_coupon(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION confirm_reward_coupon(TEXT) TO authenticated;
+
+COMMIT;
+
+-- ── Migrasi v120: Potong poin saat kupon dibuat, scan mencatat penyerahan ──
+-- TEMUAN (2026-10-21): v119 sempat dijalankan saat fungsi masih memotong poin
+-- pada pemindaian. Saat koreksi ini disiapkan, production belum memiliki kupon.
+-- KEPUTUSAN OPERATOR (2026-10-21): poin terpotong ketika jemaat memilih hadiah.
+-- Kupon yang dibatalkan sebelum penyerahan mengembalikan poin dan stok.
+-- Policy katalog/tiket dan policy baca kupon v119 telah diverifikasi di
+-- production sebelum diganti. Izin scan Admin wajib diberikan eksplisit.
+BEGIN;
+
+-- Simpan fakta reservasi agar pengembalian stok tidak bergantung pada pengaturan
+-- katalog yang mungkin diubah setelah kupon dibuat.
+ALTER TABLE reward_coupons
+  ADD COLUMN IF NOT EXISTS stock_reserved BOOLEAN NOT NULL DEFAULT false;
+
+DROP POLICY IF EXISTS products_admin_write ON redeemable_products;
+CREATE POLICY products_admin_write ON redeemable_products FOR ALL
+  USING (auth_user_role() = 'Super Admin')
+  WITH CHECK (auth_user_role() = 'Super Admin');
+DROP POLICY IF EXISTS tickets_admin_all ON redemption_tickets;
+CREATE POLICY tickets_admin_all ON redemption_tickets FOR ALL
+  USING (auth_user_role() = 'Super Admin')
+  WITH CHECK (auth_user_role() = 'Super Admin');
+
+CREATE OR REPLACE FUNCTION auth_reward_scanner_can()
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT auth_user_role() = 'Super Admin' OR (
+    auth_user_role() = 'Admin'
+    AND auth_admin_can('/admin/penukaran-hadiah')
+    AND EXISTS (
+      SELECT 1 FROM admin_user_permissions
+      WHERE user_id = auth_user_id()
+        AND '/admin/penukaran-hadiah' = ANY(allowed_pages)
+    )
+  )
+$$;
+REVOKE ALL ON FUNCTION auth_reward_scanner_can() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION auth_reward_scanner_can() TO authenticated;
+
+DROP POLICY IF EXISTS reward_coupons_select_v118 ON reward_coupons;
+CREATE POLICY reward_coupons_select_v118 ON reward_coupons
+  FOR SELECT TO authenticated
+  USING (user_id = auth_user_id() OR auth_reward_scanner_can());
+
+CREATE OR REPLACE FUNCTION request_reward_coupon(p_product_id TEXT)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user_id TEXT := auth_user_id();
+  v_user RECORD;
+  v_product RECORD;
+  v_existing TEXT;
+  v_coupon_id TEXT;
+BEGIN
+  IF v_user_id IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'no_user'); END IF;
+  IF p_product_id IS NULL OR length(p_product_id) > 80 THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'not_found');
+  END IF;
+  SELECT product_id, name, points_cost, stock, stock_is_limited INTO v_product
+    FROM redeemable_products WHERE product_id = p_product_id FOR UPDATE;
+  IF v_product.product_id IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_found'); END IF;
+  -- Produk dikunci sebelum akun secara konsisten pada setiap permintaan.
+  SELECT status, points INTO v_user FROM users WHERE user_id = v_user_id FOR UPDATE;
+  IF v_user.status IS DISTINCT FROM 'Aktif' THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'inactive');
+  END IF;
+  SELECT coupon_id INTO v_existing FROM reward_coupons
+    WHERE user_id = v_user_id AND product_id = p_product_id AND status = 'Menunggu';
+  IF v_existing IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', true, 'coupon_id', v_existing, 'existing', true);
+  END IF;
+  IF COALESCE(v_user.points, 0) < v_product.points_cost THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'insufficient',
+      'needed', v_product.points_cost, 'balance', COALESCE(v_user.points, 0));
+  END IF;
+  IF COALESCE(v_product.stock_is_limited, COALESCE(v_product.stock, 0) > 0)
+     AND COALESCE(v_product.stock, 0) <= 0 THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'out_of_stock');
+  END IF;
+  INSERT INTO reward_coupons (product_id, product_name, user_id, points_cost, stock_reserved)
+    VALUES (v_product.product_id, v_product.name, v_user_id, v_product.points_cost,
+      COALESCE(v_product.stock_is_limited, COALESCE(v_product.stock, 0) > 0))
+    RETURNING coupon_id INTO v_coupon_id;
+  IF COALESCE(v_product.stock_is_limited, COALESCE(v_product.stock, 0) > 0) THEN
+    UPDATE redeemable_products SET stock = stock - 1, stock_is_limited = true
+      WHERE product_id = v_product.product_id;
+  END IF;
+  PERFORM apply_points(v_user_id, -v_product.points_cost, 'Tukar poin: ' || v_product.name);
+  RETURN jsonb_build_object('ok', true, 'coupon_id', v_coupon_id, 'existing', false);
+EXCEPTION WHEN unique_violation THEN
+  -- Percobaan yang kalah dalam dua permintaan serentak dibatalkan atomik.
+  SELECT coupon_id INTO v_existing FROM reward_coupons
+    WHERE user_id = v_user_id AND product_id = p_product_id AND status = 'Menunggu';
+  IF v_existing IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', true, 'coupon_id', v_existing, 'existing', true);
+  END IF;
+  RAISE;
+END;
+$$;
+REVOKE ALL ON FUNCTION request_reward_coupon(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION request_reward_coupon(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION cancel_reward_coupon(p_coupon_id TEXT)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_coupon RECORD;
+  v_product RECORD;
+BEGIN
+  SELECT * INTO v_coupon FROM reward_coupons
+    WHERE coupon_id = p_coupon_id FOR UPDATE;
+  IF v_coupon.coupon_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'not_found');
+  END IF;
+  IF v_coupon.user_id IS DISTINCT FROM auth_user_id()
+     AND auth_user_role() IS DISTINCT FROM 'Super Admin' THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF v_coupon.status <> 'Menunggu' THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'used');
+  END IF;
+  SELECT product_id, stock, stock_is_limited INTO v_product
+    FROM redeemable_products WHERE product_id = v_coupon.product_id FOR UPDATE;
+  IF v_product.product_id IS NOT NULL AND v_coupon.stock_reserved THEN
+    UPDATE redeemable_products SET stock = COALESCE(stock, 0) + 1,
+      stock_is_limited = true WHERE product_id = v_product.product_id;
+  END IF;
+  PERFORM apply_points(v_coupon.user_id, v_coupon.points_cost,
+    'Pembatalan tukar poin: ' || v_coupon.product_name);
+  UPDATE reward_coupons SET status = 'Dibatalkan', cancelled_at = now()
+    WHERE coupon_id = p_coupon_id;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION cancel_reward_coupon(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION cancel_reward_coupon(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION inspect_reward_coupon(p_coupon_id TEXT)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_coupon RECORD;
+BEGIN
+  IF NOT auth_reward_scanner_can() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  SELECT c.coupon_id, c.status, c.product_name, c.points_cost,
+         c.created_at, u.name AS member_name
+    INTO v_coupon FROM reward_coupons c
+    JOIN users u ON u.user_id = c.user_id
+    WHERE c.coupon_id = p_coupon_id;
+  IF v_coupon.coupon_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'not_found');
+  END IF;
+  RETURN jsonb_build_object('ok', true, 'status', v_coupon.status,
+    'member_name', v_coupon.member_name, 'product_name', v_coupon.product_name,
+    'cost', v_coupon.points_cost, 'created_at', v_coupon.created_at);
+END;
+$$;
+REVOKE ALL ON FUNCTION inspect_reward_coupon(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION inspect_reward_coupon(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION confirm_reward_coupon(p_coupon_id TEXT)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_coupon RECORD;
+BEGIN
+  IF NOT auth_reward_scanner_can() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_coupon FROM reward_coupons
+    WHERE coupon_id = p_coupon_id FOR UPDATE;
+  IF v_coupon.coupon_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'not_found');
+  END IF;
+  IF v_coupon.status <> 'Menunggu' THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'used');
+  END IF;
+  UPDATE reward_coupons SET status = 'Digunakan', confirmed_at = now(),
+    confirmed_by = auth_user_id() WHERE coupon_id = p_coupon_id;
+  RETURN jsonb_build_object('ok', true, 'member_name',
+    (SELECT name FROM users WHERE user_id = v_coupon.user_id),
+    'product_name', v_coupon.product_name, 'cost', v_coupon.points_cost);
+END;
+$$;
+REVOKE ALL ON FUNCTION confirm_reward_coupon(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION confirm_reward_coupon(TEXT) TO authenticated;
+
+COMMIT;

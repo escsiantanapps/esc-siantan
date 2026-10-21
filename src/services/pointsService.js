@@ -120,6 +120,40 @@ export const pointsService = {
     return data
   },
 
+  // Kupon baru dimiliki jemaat. Poin dan stok dipotong atomik saat permintaan;
+  // pemindaian Admin hanya mencatat penyerahan, bukan menagih ulang.
+  async getMyRewardCoupons(userId) {
+    const { data, error } = await supabase.from('reward_coupons')
+      .select('coupon_id, product_id, product_name, points_cost, status, created_at, confirmed_at')
+      .eq('user_id', userId).order('created_at', { ascending: false })
+    if (error) throw error
+    return data || []
+  },
+
+  async requestRewardCoupon(productId) {
+    const { data, error } = await supabase.rpc('request_reward_coupon', { p_product_id: productId })
+    if (error) throw error
+    return data
+  },
+
+  async cancelRewardCoupon(couponId) {
+    const { data, error } = await supabase.rpc('cancel_reward_coupon', { p_coupon_id: couponId })
+    if (error) throw error
+    return data
+  },
+
+  async inspectRewardCoupon(couponId) {
+    const { data, error } = await supabase.rpc('inspect_reward_coupon', { p_coupon_id: couponId })
+    if (error) throw error
+    return data
+  },
+
+  async confirmRewardCoupon(couponId) {
+    const { data, error } = await supabase.rpc('confirm_reward_coupon', { p_coupon_id: couponId })
+    if (error) throw error
+    return data
+  },
+
   // ── Katalog produk (baca semua user; kelola Admin) ──
   async getProducts() {
     const { data, error } = await supabase

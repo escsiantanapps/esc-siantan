@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sparkles, Trophy, Gift, History, ScanLine, Crown, Medal, Award, TrendingUp, TrendingDown } from 'lucide-react'
+import QRCode from 'qrcode'
+import { Sparkles, Trophy, Gift, History, QrCode, X, Crown, Medal, Award, TrendingUp, TrendingDown } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
+import { useToast } from '@/hooks/useToast'
+import { useBackClose } from '@/hooks/useBackClose'
 import { pointsService } from '@/services/pointsService'
-import { Card, Spinner, GradientHeader, EmptyState, Avatar, Button } from '@/components/ui'
+import { Card, Spinner, GradientHeader, EmptyState, Avatar, Button, StatusBadge } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
 
 const LEADERBOARD_LIMIT = 10
@@ -18,6 +21,7 @@ const RANK_STYLES = {
 
 const TABS = [
   { key: 'katalog', label: 'Tukar Poin', icon: Gift },
+  { key: 'kupon', labelKey: 'points.couponsTab', icon: QrCode },
   { key: 'peringkat', label: 'Peringkat', icon: Trophy },
   { key: 'riwayat', label: 'Riwayat', icon: History },
 ]
@@ -45,23 +49,120 @@ function RankBadge({ rank, label }) {
 export default function PointsPage() {
   const { profile } = useAuth()
   const { t } = useLang()
+  const { toast, confirm } = useToast()
   const navigate = useNavigate()
   const [tab, setTab] = useState('katalog')
   const [points, setPoints] = useState(profile?.points ?? 0)
   const [products, setProducts] = useState([])
+  const [coupons, setCoupons] = useState([])
+  const [activeCoupon, setActiveCoupon] = useState(null)
+  const [couponQr, setCouponQr] = useState('')
+  const [submittingProduct, setSubmittingProduct] = useState(null)
+  const [cancellingCoupon, setCancellingCoupon] = useState(null)
   const [rankingRows, setRankingRows] = useState([])
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
+  useBackClose(!!activeCoupon, () => setActiveCoupon(null))
+
+  const refreshRewards = useCallback(async () => {
+    if (!profile?.user_id) return
+    const [balance, catalog, myCoupons] = await Promise.all([
+      pointsService.getMyPoints(profile.user_id),
+      pointsService.getProducts(),
+      pointsService.getMyRewardCoupons(profile.user_id),
+    ])
+    setPoints(balance)
+    setProducts(catalog)
+    setCoupons(myCoupons)
+    return myCoupons
+  }, [profile?.user_id])
 
   useEffect(() => {
     if (!profile?.user_id) return
     Promise.all([
-      pointsService.getMyPoints(profile.user_id).then(setPoints).catch(() => {}),
-      pointsService.getProducts().then(setProducts).catch(() => {}),
+      refreshRewards().catch(() => {}),
       pointsService.getLeaderboardWithMe(LEADERBOARD_LIMIT).then(setRankingRows).catch(() => {}),
       pointsService.getMyTransactions(profile.user_id).then(setTransactions).catch(() => {}),
     ]).finally(() => setLoading(false))
-  }, [profile?.user_id])
+  }, [profile?.user_id, refreshRewards])
+
+  useEffect(() => {
+    function onFocus() {
+      refreshRewards().then(rows => {
+        setActiveCoupon(previous => previous
+          ? rows.find(row => row.coupon_id === previous.coupon_id && row.status === 'Menunggu') || null
+          : null)
+      }).catch(() => {})
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refreshRewards])
+
+  useEffect(() => {
+    if (!activeCoupon || activeCoupon.status !== 'Menunggu') { setCouponQr(''); return }
+    let cancelled = false
+    QRCode.toDataURL(`ESC-REWARD:${activeCoupon.coupon_id}`, {
+      width: 360, margin: 2, color: { dark: '#111827', light: '#FFFFFF' },
+    }).then(url => { if (!cancelled) setCouponQr(url) }).catch(() => { if (!cancelled) setCouponQr('') })
+    return () => { cancelled = true }
+  }, [activeCoupon])
+
+  async function requestCoupon(product) {
+    const ok = await confirm({
+      title: t('points.redeemConfirmTitle'),
+      message: t('points.redeemConfirmMessage', { name: product.name, cost: product.points_cost }),
+      confirmText: t('points.redeemAction'),
+    })
+    if (!ok) return
+    setSubmittingProduct(product.product_id)
+    try {
+      const result = await pointsService.requestRewardCoupon(product.product_id)
+      if (!result?.ok) {
+        toast.error(t(`points.error.${result?.reason || 'unknown'}`))
+        return
+      }
+      setTab('kupon')
+      toast.success(t(result.existing ? 'points.couponExisting' : 'points.couponCreated'))
+      try {
+        const latest = await refreshRewards()
+        const coupon = latest?.find(row => row.coupon_id === result.coupon_id)
+        if (coupon) setActiveCoupon(coupon)
+        const [history, ranking] = await Promise.all([
+          pointsService.getMyTransactions(profile.user_id),
+          pointsService.getLeaderboardWithMe(LEADERBOARD_LIMIT),
+        ])
+        setTransactions(history)
+        setRankingRows(ranking)
+      } catch {
+        toast.error(t('points.refreshFailed'))
+      }
+    } catch (error) {
+      toast.error(error.message || t('points.error.unknown'))
+    } finally { setSubmittingProduct(null) }
+  }
+
+  async function cancelCoupon(coupon) {
+    const ok = await confirm({
+      title: t('points.cancelTitle'),
+      message: t('points.cancelMessage', { name: coupon.product_name, cost: coupon.points_cost }),
+      confirmText: t('points.cancelAction'), danger: true,
+    })
+    if (!ok) return
+    setCancellingCoupon(coupon.coupon_id)
+    try {
+      const result = await pointsService.cancelRewardCoupon(coupon.coupon_id)
+      if (!result?.ok) { toast.error(t(`points.error.${result?.reason || 'unknown'}`)); return }
+      setActiveCoupon(null)
+      toast.success(t('points.cancelled'))
+      try {
+        await refreshRewards()
+        setTransactions(await pointsService.getMyTransactions(profile.user_id))
+      } catch {
+        toast.error(t('points.refreshFailed'))
+      }
+    } catch (error) { toast.error(error.message || t('points.error.unknown')) }
+    finally { setCancellingCoupon(null) }
+  }
 
   const topLeaderboard = useMemo(
     () => rankingRows.filter(u => Number(u.rank_number) <= LEADERBOARD_LIMIT),
@@ -95,12 +196,12 @@ export default function PointsPage() {
       <div className="px-4 -mt-2 pt-4">
         {/* Tab */}
         <div className="flex gap-1 p-1 bg-control rounded-xl mb-4">
-          {TABS.map(({ key, label, icon: Icon }) => (
+          {TABS.map(({ key, label, labelKey, icon: Icon }) => (
             <button
               key={key} onClick={() => setTab(key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${tab === key ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}
+              className={`flex-1 min-h-11 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${tab === key ? 'bg-surface text-brand-600 shadow-sm' : 'text-gray-500'}`}
             >
-              <Icon size={14} /> {label}
+              <Icon size={14} /> {labelKey ? t(labelKey) : label}
             </button>
           ))}
         </div>
@@ -117,9 +218,8 @@ export default function PointsPage() {
             </div>
 
             <Card className="p-3.5 mb-4 flex items-center gap-3 bg-brand-50 border-brand-100">
-              <ScanLine size={18} className="text-brand-500 shrink-0" />
-              <p className="text-xs text-brand-700 flex-1">Tunjukkan tiket QR dari admin, lalu pindai lewat tombol Scan untuk menukar poin.</p>
-              <Button size="sm" variant="outline" onClick={() => navigate('/scan')}>Scan</Button>
+              <QrCode size={18} className="text-brand-500 shrink-0" />
+              <p className="text-xs text-brand-700 flex-1">{t('points.redeemHint')}</p>
             </Card>
             {products.length === 0 ? (
               <EmptyState icon={Gift} title="Belum ada hadiah" description="Katalog penukaran poin akan muncul di sini." />
@@ -127,6 +227,9 @@ export default function PointsPage() {
               <div className="grid grid-cols-2 gap-3">
                 {products.map(p => {
                   const affordable = points >= p.points_cost
+                  const pending = coupons.find(c => c.product_id === p.product_id && c.status === 'Menunggu')
+                  const limited = p.stock_is_limited ?? (Number(p.stock) > 0)
+                  const soldOut = limited && Number(p.stock) <= 0
                   return (
                     <Card key={p.product_id} className="p-0 overflow-hidden">
                       <div className="aspect-square bg-gray-100">
@@ -140,8 +243,14 @@ export default function PointsPage() {
                         <div className="flex items-center gap-1 mt-1.5">
                           <Sparkles size={13} className={affordable ? 'text-brand-500' : 'text-gray-300'} />
                           <span className={`text-sm font-bold ${affordable ? 'text-brand-600' : 'text-gray-400'}`}>{p.points_cost}</span>
-                          {typeof p.stock === 'number' && p.stock > 0 && <span className="text-[10px] text-gray-400 ml-auto">stok {p.stock}</span>}
+                          {limited && <span className="text-[10px] text-gray-400 ml-auto">{soldOut ? t('points.soldOut') : t('points.stock', { count: p.stock })}</span>}
                         </div>
+                        <Button size="sm" className="w-full min-h-11 mt-3" variant={pending ? 'outline' : 'primary'}
+                          loading={submittingProduct === p.product_id}
+                          disabled={!pending && (!affordable || soldOut || !!submittingProduct)}
+                          onClick={() => pending ? setActiveCoupon(pending) : requestCoupon(p)}>
+                          {pending ? t('points.showCoupon') : soldOut ? t('points.soldOut') : affordable ? t('points.redeemAction') : t('points.notEnough')}
+                        </Button>
                       </div>
                     </Card>
                   )
@@ -149,6 +258,35 @@ export default function PointsPage() {
               </div>
             )}
           </>
+        )}
+
+        {!loading && tab === 'kupon' && (
+          coupons.length === 0 ? (
+            <EmptyState icon={QrCode} title={t('points.noCoupons')} description={t('points.noCouponsHint')}
+              action={<Button onClick={() => setTab('katalog')}>{t('points.browseRewards')}</Button>} />
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500">{t('points.couponsHint')}</p>
+              {coupons.map(coupon => (
+                <Card key={coupon.coupon_id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{coupon.product_name}</p>
+                      <p className="text-xs text-gray-500 mt-1">{coupon.points_cost} {t('home.points.unit')} · {formatDate(coupon.created_at, 'd MMM yyyy, HH:mm')}</p>
+                    </div>
+                    <StatusBadge status={coupon.status} />
+                  </div>
+                  {coupon.status === 'Menunggu' && (
+                    <div className="flex gap-2 mt-4">
+                      <Button className="flex-1 min-h-11" onClick={() => setActiveCoupon(coupon)}><QrCode size={16} />{t('points.showCoupon')}</Button>
+                      <Button variant="outline" className="min-h-11" loading={cancellingCoupon === coupon.coupon_id}
+                        onClick={() => cancelCoupon(coupon)}>{t('points.cancelAction')}</Button>
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )
         )}
 
         {/* Leaderboard */}
@@ -248,6 +386,24 @@ export default function PointsPage() {
           )
         )}
       </div>
+
+      {activeCoupon && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={t('points.couponTitle')}>
+          <Card className="w-full max-w-sm p-5 text-center">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-semibold text-gray-900">{t('points.couponTitle')}</h2>
+              <button type="button" aria-label={t('common.cancel')} onClick={() => setActiveCoupon(null)}
+                className="min-w-11 min-h-11 flex items-center justify-center text-gray-500 hover:text-gray-900"><X size={20} /></button>
+            </div>
+            <p className="text-lg font-semibold text-gray-900 mt-3">{activeCoupon.product_name}</p>
+            <p className="text-sm text-gray-500">{activeCoupon.points_cost} {t('home.points.unit')}</p>
+            {couponQr ? <img src={couponQr} alt={t('points.couponQrAlt')} className="w-full max-w-64 mx-auto my-5 rounded-xl bg-white p-2" />
+              : <div className="flex justify-center py-12"><Spinner /></div>}
+            <p className="text-sm text-gray-600">{t('points.couponShowAdmin')}</p>
+            <p className="text-xs text-gray-400 mt-2 break-all">{activeCoupon.coupon_id}</p>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
