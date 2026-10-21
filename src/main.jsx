@@ -39,8 +39,8 @@ if (document.readyState === 'loading') {
 // Juga jalankan ulang setelah 300ms (setelah Capacitor siap)
 setTimeout(applyStatusBarHeight, 300)
 
-// Periksa versi baru saat app aktif kembali, tetapi service worker baru menunggu
-// tab lama ditutup. Isian formulir tidak boleh hilang karena reload otomatis.
+// Periksa versi baru saat app aktif kembali dan berkala saat tetap terbuka.
+// Aktivasi tetap menunggu tombol Perbarui agar isian formulir tidak hilang.
 if ('serviceWorker' in navigator) {
   let lastUpdateCheck = 0
 
@@ -61,6 +61,7 @@ if ('serviceWorker' in navigator) {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') checkForAppUpdate()
   })
+  window.setInterval(checkForAppUpdate, 2 * 60_000)
   checkForAppUpdate()
 
 }

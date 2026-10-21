@@ -795,6 +795,23 @@ test('Admin terbatas: panel jadwal terbuka hanya bila halaman itu diizinkan', as
   })
 })
 
+test('Admin: pemeriksaan profil berkala tidak memuat ulang Draft yang sedang diedit', async () => {
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...monthlyManagementFixture() }, async f => {
+    await f.page.clock.install()
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    const monthReads = () => f.requests.filter(row => row.path.endsWith('/service_schedule_months')).length
+    const before = monthReads()
+    const profileRefresh = f.page.waitForResponse(response => response.url().includes('/rest/v1/users?')
+      && response.url().includes('auth_id=eq.'), { timeout: 5000 })
+    await f.page.clock.fastForward(16_000)
+    await profileRefresh
+    await new Promise(resolve => setTimeout(resolve, 350))
+    assert.equal(monthReads(), before)
+    assert.equal(await f.page.getByRole('button', { name: 'Terbitkan Bulan', exact: true }).isVisible(), true)
+  })
+})
+
 test('Admin dengan persetujuan per Ministry tetap melihat menu kelola jadwal', async () => {
   await scenario({
     role: 'Admin', allowedPages: [], ...monthlyManagementFixture(true),

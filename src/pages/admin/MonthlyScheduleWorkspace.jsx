@@ -93,6 +93,11 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   const catalogRequest = useRef(0)
   const monthsRequest = useRef(0)
   const initialMonthChecked = useRef(Boolean(initialMonth))
+  // Auth menyegarkan objek profil Admin setiap 15 detik; hanya perubahan hak yang perlu memuat ulang katalog.
+  const accessProfile = useMemo(() => ({
+    user_id: profile?.user_id, role: profile?.role,
+    role_secondary: profile?.role_secondary, status: profile?.status,
+  }), [profile?.user_id, profile?.role, profile?.role_secondary, profile?.status])
   const canManageAll = grants?.some(item => item.manager_role === 'Admin') || false
   const managedMinistryIds = useMemo(() => grants?.map(item => item.ministry_id) || [], [grants])
   const isDraft = schedule?.month.status === 'Draft'
@@ -122,7 +127,7 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     const request = ++catalogRequest.current
     setLoadError('')
     try {
-      const access = await api.listManagedMinistries(profile)
+      const access = await api.listManagedMinistries(accessProfile)
       if (request !== catalogRequest.current) return
       setGrants(access)
       if (!access.length) return
@@ -133,7 +138,7 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
       setPositions(positionRows); setMinistries(ministryRows)
       setEvents(eventRows); setClasses(classRows)
     } catch (error) { if (request === catalogRequest.current) setLoadError(errorKey(error)) }
-  }, [api, profile])
+  }, [api, accessProfile])
 
   useEffect(() => {
     setGrants(null); setSchedule(null); setMonthId('')

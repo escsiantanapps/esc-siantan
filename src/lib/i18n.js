@@ -327,6 +327,10 @@ export const translations = {
 
     // Popup ajakan pasang app (PWA via Chrome)
     'install.title': 'Pasang Aplikasi ESC Siantan',
+    'appUpdate.title': 'Versi baru tersedia',
+    'appUpdate.description': 'Selesaikan pekerjaan Anda, lalu perbarui aplikasi saat siap.',
+    'appUpdate.apply': 'Perbarui',
+    'appUpdate.later': 'Nanti',
     'install.desc': 'Pasang langsung dari Chrome — lebih cepat, layar penuh, dan notifikasi tetap masuk.',
     'install.install': 'Pasang Aplikasi',
     'install.manualAndroid': 'Buka menu Chrome (⋮) di kanan atas, lalu pilih "Tambahkan ke Layar Utama" atau "Instal aplikasi".',
@@ -2752,6 +2756,10 @@ export const translations = {
 
     // Install prompt (PWA via Chrome)
     'install.title': 'Install the ESC Siantan App',
+    'appUpdate.title': 'A new version is available',
+    'appUpdate.description': 'Finish what you are doing, then update the app when ready.',
+    'appUpdate.apply': 'Update',
+    'appUpdate.later': 'Later',
     'install.desc': 'Install straight from Chrome — faster, full screen, and notifications keep working.',
     'install.install': 'Install App',
     'install.manualAndroid': 'Open the Chrome menu (⋮) in the top right, then choose "Add to Home Screen" or "Install app".',

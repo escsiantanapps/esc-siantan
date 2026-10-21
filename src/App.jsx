@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import OfflineBanner from '@/components/OfflineBanner'
 import InstallPrompt from '@/components/InstallPrompt'
+import AppUpdatePrompt from '@/components/AppUpdatePrompt'
 import SheepLoader from '@/components/SheepLoader'
 
 // Onboarding
@@ -181,6 +182,7 @@ export default function App() {
         <ToastProvider>
         <OfflineBanner />
         <InstallPrompt />
+        <AppUpdatePrompt />
         <Suspense fallback={<SheepLoader fullScreen size="xl" />}>
         <Routes>
           <Route path="/onboarding"      element={<OnboardingPage />} />
