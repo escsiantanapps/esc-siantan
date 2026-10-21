@@ -1,4 +1,5 @@
 import { createContext, useCallback, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { CheckCircle2, XCircle, Info, AlertTriangle, X } from 'lucide-react'
 import { useBackClose } from '@/hooks/useBackClose'
 
@@ -14,6 +15,7 @@ let idCounter = 0
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
+  const [toastHost, setToastHost] = useState(null)
   const [confirmState, setConfirmState] = useState(null)
   const confirmResolve = useRef(null)
 
@@ -33,6 +35,11 @@ export function ToastProvider({ children }) {
     error:   (msg, duration) => push('error', msg, duration),
     info:    (msg, duration) => push('info', msg, duration),
   }).current
+
+  const registerToastHost = useCallback((dialog) => {
+    setToastHost(dialog)
+    return () => setToastHost(current => current === dialog ? null : current)
+  }, [])
 
   // confirm() -> Promise<boolean>
   const confirm = useCallback((opts = {}) => {
@@ -59,34 +66,38 @@ export function ToastProvider({ children }) {
   // Tombol back menutup dialog konfirmasi (dianggap "Batal").
   useBackClose(!!confirmState, () => closeConfirm(false))
 
+  const toastContainer = <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-sm px-4 flex flex-col items-center gap-2 pointer-events-none">
+    {toasts.map(t => {
+      const { icon: Icon, ring, bar } = TOAST_STYLES[t.type] || TOAST_STYLES.info
+      return (
+        <div
+          key={t.id}
+          role={t.type === 'error' ? 'alert' : 'status'}
+          aria-atomic="true"
+          className="animate-toast-in pointer-events-auto w-full bg-surface border border-gray-100 rounded-xl shadow-lg shadow-black/10 pl-5 pr-4 py-3 flex items-center gap-3 relative overflow-hidden"
+        >
+          {/* Bar aksen warna sesuai jenis toast */}
+          <span aria-hidden="true" className={`absolute left-0 top-0 bottom-0 w-1.5 ${bar}`} />
+          <Icon size={20} className={`shrink-0 ${ring}`} />
+          <p className="flex-1 text-sm text-gray-800 font-medium">{t.message}</p>
+          <button
+            onClick={() => remove(t.id)}
+            aria-label="Tutup"
+            className="shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )
+    })}
+  </div>
+
   return (
-    <ToastContext.Provider value={{ toast, confirm }}>
+    <ToastContext.Provider value={{ toast, confirm, registerToastHost }}>
       {children}
 
-      {/* Toast container */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-sm px-4 flex flex-col items-center gap-2 pointer-events-none">
-        {toasts.map(t => {
-          const { icon: Icon, ring, bar } = TOAST_STYLES[t.type] || TOAST_STYLES.info
-          return (
-            <div
-              key={t.id}
-              className="animate-toast-in pointer-events-auto w-full bg-surface border border-gray-100 rounded-xl shadow-lg shadow-black/10 pl-5 pr-4 py-3 flex items-center gap-3 relative overflow-hidden"
-            >
-              {/* Bar aksen warna sesuai jenis toast */}
-              <span aria-hidden="true" className={`absolute left-0 top-0 bottom-0 w-1.5 ${bar}`} />
-              <Icon size={20} className={`shrink-0 ${ring}`} />
-              <p className="flex-1 text-sm text-gray-800 font-medium">{t.message}</p>
-              <button
-                onClick={() => remove(t.id)}
-                aria-label="Tutup"
-                className="shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          )
-        })}
-      </div>
+      {/* Dialog modal masuk top layer browser; toast harus menjadi anak dialog itu. */}
+      {toastHost ? createPortal(toastContainer, toastHost) : toastContainer}
 
       {/* Confirm dialog */}
       {confirmState && (

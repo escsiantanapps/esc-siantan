@@ -570,6 +570,37 @@ test('Admin mengganti Fernandes dengan Veri pada slot penuh tanpa mengirim catat
   })
 })
 
+test('Pesan gagal dan berhasil menyimpan penugasan tampil di depan dialog pada HP', async () => {
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...monthlyManagementFixture() }, async f => {
+    let fail = true
+    await f.page.route('**/rest/v1/rpc/set_service_schedule_position_v111', route => fail
+      ? route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ code: '22023', message: 'Simulasi gagal menyimpan' }) })
+      : route.fallback())
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    await f.page.getByRole('button', { name: /^Atur Worship Leader untuk Ibadah Gabungan,/ }).click()
+    const dialog = f.page.getByRole('dialog', { name: 'Pilih pelayan' })
+    const save = dialog.getByRole('button', { name: 'Simpan Penugasan' })
+    const isOnTop = node => {
+      const rect = node.getBoundingClientRect()
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      return node === hit || node.contains(hit)
+    }
+    await save.click()
+    const failure = f.page.locator('[role="alert"]').filter({ hasText: 'Perubahan jadwal gagal disimpan.' })
+    await failure.waitFor()
+    assert.equal(await dialog.isVisible(), true)
+    assert.equal(await failure.evaluate(isOnTop), true, 'Pesan gagal harus berada di depan dialog')
+    await failure.getByRole('button', { name: 'Tutup' }).click()
+    fail = false
+    await save.click()
+    await dialog.waitFor({ state: 'hidden' })
+    const success = f.page.locator('[role="status"]').filter({ hasText: 'Penugasan berhasil disimpan.' })
+    await success.waitFor()
+    assert.equal(await success.evaluate(isOnTop), true, 'Pesan berhasil harus berada di depan halaman')
+  })
+})
+
 test('Akses & Posisi menampilkan lebih dari enam posisi dan hanya Ministry calon yang dapat dipilih', async () => {
   const data = monthlyManagementFixture()
   for (let index = 2; index <= 8; index += 1) data.servicePositions.push({

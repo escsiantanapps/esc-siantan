@@ -51,12 +51,14 @@ const errorKey = error => {
 
 function Modal({ title, onClose, children, busy = false }) {
   const { t } = useLang()
+  const { registerToastHost } = useToast()
   const ref = useRef(null)
   useEffect(() => {
     const dialog = ref.current
     dialog.showModal()
-    return () => { if (dialog.open) dialog.close() }
-  }, [])
+    const unregisterToastHost = registerToastHost(dialog)
+    return () => { unregisterToastHost(); if (dialog.open) dialog.close() }
+  }, [registerToastHost])
   return <dialog ref={ref} className="monthly-dialog" onCancel={event => { event.preventDefault(); if (!busy) onClose() }} aria-labelledby="monthly-dialog-title">
     <header className="monthly-dialog-header"><h2 id="monthly-dialog-title">{title}</h2><Button variant="ghost" disabled={busy} onClick={onClose} aria-label={t('common.close')} title={t('common.close')}><X size={18} /></Button></header>
     {children}
