@@ -527,8 +527,10 @@ function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, 
         for (const item of rows) findings.push({ ...item, memberName: names.get(userId) || '-' })
       }
       if (findings.length) { setConflicts(findings); return }
+      // Catatan personel lama tidak boleh ikut saat satu slot diisi pengganti.
+      const selectedNotes = Object.fromEntries(selected.map(id => [id, notes[id] || '']))
       await onSave({ rosterId: roster.roster_id, positionId: position.position_id, userIds: selected,
-        expectedUserIds: slots.filter(slot => slot.user_id).map(slot => slot.user_id), notes })
+        expectedUserIds: slots.filter(slot => slot.user_id).map(slot => slot.user_id), notes: selectedNotes })
     } catch (err) { setError(errorKey(err)) }
     finally { setChecking(false) }
   }
@@ -538,7 +540,7 @@ function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, 
       <p className="monthly-muted">{t('schedMonth.selectedCount', { count: selected.length, capacity: slots.length })}</p>
       {!!selected.length && <div className="monthly-date-picks">{selected.map(id => <Button type="button" key={id} variant="outline" disabled={busy || checking} onClick={() => { setSelected(current => current.filter(item => item !== id)); setConflicts([]) }} aria-label={t('schedMonth.removeMember', { name: names.get(id) || '-' })}>{names.get(id) || '-'}<X size={14} /></Button>)}</div>}
       {!!selected.length && <div className="monthly-person-notes">{selected.map(id => <Input key={id} label={t('schedMonth.personNoteFor', { name: names.get(id) || '-' })} placeholder={t('schedMonth.personNoteExample')} maxLength={100} value={notes[id] || ''} disabled={busy || checking} onChange={event => setNotes(current => ({ ...current, [id]: event.target.value }))} />)}</div>}
-      <div className="monthly-member-list">{loading ? <Spinner size="sm" /> : !members.length ? <p>{t('sched.noMembers')}</p> : members.map(member => <Checkbox key={member.user_id} label={member.name} checked={selected.includes(member.user_id)} disabled={busy || checking || (!selected.includes(member.user_id) && selected.length >= slots.length)} onChange={event => { setSelected(current => event.target.checked ? [...current, member.user_id] : current.filter(id => id !== member.user_id)); setConflicts([]) }} />)}</div>
+      <div className="monthly-member-list">{loading ? <Spinner size="sm" /> : !members.length ? <p>{t('sched.noMembers')}</p> : members.map(member => <Checkbox key={member.user_id} label={member.name} checked={selected.includes(member.user_id)} disabled={busy || checking || (slots.length !== 1 && !selected.includes(member.user_id) && selected.length >= slots.length)} onChange={event => { setSelected(current => event.target.checked ? (slots.length === 1 ? [member.user_id] : [...current, member.user_id]) : current.filter(id => id !== member.user_id)); setConflicts([]) }} />)}</div>
       {conflicts.length > 0 && <div className="monthly-error" role="alert"><strong>{t('schedMonth.conflictBlocked')}</strong>{conflicts.map((item, index) => <p key={index}>{t('schedMonth.conflictItem', { name: item.memberName, title: item.title, date: item.service_date, time: timeLabel(item), position: item.position_names, ministry: item.ministry_name })}</p>)}</div>}
       {error && <p className="monthly-error" role="alert">{t(error)}</p>}
     </div><footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy || checking} onClick={onClose}>{t('common.cancel')}</Button><Button type="submit" loading={busy || checking}><Save size={16} />{t('schedMonth.saveAssignments')}</Button></footer>

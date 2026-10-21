@@ -543,6 +543,33 @@ async function assertMonthlyManagementLoaded(f) {
   assert.ok(f.requests.some(row => row.path.endsWith('/service_schedule_months') && new URLSearchParams(row.search).get('month_date') === expectedMonth), 'Snapshot harus dimuat untuk bulan yang sedang ditampilkan')
 }
 
+test('Admin mengganti Fernandes dengan Veri pada slot penuh tanpa mengirim catatan Fernandes', async () => {
+  const data = monthlyManagementFixture()
+  data.monthlySchedules[0].rosters[0].service_roster_slots[0].users.name = 'Fernandes Lay'
+  const member = (userId, name) => ({ user_id: userId, ministry_id: 'QA-MIN',
+    users: { user_id: userId, name, status: 'Aktif' } })
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...data,
+    ministryMembers: [member('QA-USER', 'Fernandes Lay'), member('QA-VERI', 'Veri Fernando')],
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    await f.page.getByRole('button', { name: /^Atur Worship Leader untuk Ibadah Gabungan,/ }).click()
+    const dialog = f.page.getByRole('dialog', { name: 'Pilih pelayan' })
+    const replacement = dialog.getByRole('checkbox', { name: 'Veri Fernando' })
+    await replacement.waitFor()
+    assert.equal(await replacement.isEnabled(), true, 'Slot tunggal yang penuh harus dapat langsung diganti')
+    await replacement.check()
+    assert.equal(await dialog.getByRole('checkbox', { name: 'Fernandes Lay' }).isChecked(), false)
+    await dialog.getByRole('button', { name: 'Simpan Penugasan' }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    const request = f.requests.find(row => row.path.endsWith('/set_service_schedule_position_v111'))
+    assert.deepEqual(request?.body, {
+      p_roster_id: 'QA-ROSTER-QA-MIN', p_position_id: 'QA-POS',
+      p_user_ids: ['QA-VERI'], p_expected_user_ids: ['QA-USER'], p_notes: { 'QA-VERI': '' },
+    })
+  })
+})
+
 test('Akses & Posisi menampilkan lebih dari enam posisi dan hanya Ministry calon yang dapat dipilih', async () => {
   const data = monthlyManagementFixture()
   for (let index = 2; index <= 8; index += 1) data.servicePositions.push({
