@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit } from './_lib/rate-limit.js'
 import { cleanBibleVerses } from './_lib/bible-text.js'
+import { bibleVersions } from '../src/data/bibleVersions.js'
 
 export const config = { runtime: 'nodejs' }
 
@@ -10,8 +11,12 @@ export default async function handler(req, res) {
 
   const book = Number(req.body?.book)
   const chapter = Number(req.body?.chapter)
+  const translation = req.body?.translation || 'tb'
   if (!Number.isInteger(book) || book < 1 || book > 66 || !Number.isInteger(chapter) || chapter < 1 || chapter > 150) {
     return res.status(400).json({ error: 'Kitab atau pasal tidak valid.' })
+  }
+  if (!Object.hasOwn(bibleVersions, translation) || !bibleVersions[translation].books.includes(book)) {
+    return res.status(400).json({ error: 'Versi atau kitab tidak tersedia.' })
   }
 
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
@@ -32,7 +37,7 @@ export default async function handler(req, res) {
     if (profileError) throw profileError
     if (profile?.status !== 'Aktif') return res.status(403).json({ error: 'Akun belum aktif.' })
 
-    const { data: file, error: storageError } = await admin.storage.from('bible-tb').download(`${book}/${chapter}.json`)
+    const { data: file, error: storageError } = await admin.storage.from(bibleVersions[translation].bucket).download(`${book}/${chapter}.json`)
     if (storageError || !file) return res.status(503).json({ error: 'Bacaan belum tersedia.' })
     const verses = JSON.parse(await file.text())
     if (!Array.isArray(verses)) throw new Error('Invalid Bible chapter')

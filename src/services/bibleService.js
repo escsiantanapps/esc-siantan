@@ -36,9 +36,9 @@ function saveChapter(key, verses) {
 }
 
 export const bibleService = {
-  async getChapter(book, chapter) {
+  async getChapter(book, chapter, translation = 'tb') {
     clearOldCache()
-    const key = `${book}:${chapter}`
+    const key = translation === 'tb' ? `${book}:${chapter}` : `${translation}:${book}:${chapter}`
     if (cache.has(key)) return cache.get(key)
     const saved = loadSavedChapter(key)
     if (saved) { cache.set(key, saved); return saved }
@@ -51,7 +51,7 @@ export const bibleService = {
     const response = await request('/api/bible-chapter', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ book, chapter }),
+      body: JSON.stringify({ book, chapter, translation }),
     })
     const result = await response.json().catch(() => ({}))
     if (!response.ok || !Array.isArray(result.verses)) throw new Error(result.error || 'BIBLE_CHAPTER_UNAVAILABLE')
