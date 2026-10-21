@@ -9934,3 +9934,141 @@ REVOKE ALL ON FUNCTION confirm_reward_coupon(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION confirm_reward_coupon(TEXT) TO authenticated;
 
 COMMIT;
+
+-- ── Migrasi v121: Tarik jadwal terbit untuk revisi tanpa membuat bulan baru ──
+-- TEMUAN: pembatalan v98 mengunci seluruh bulan sebagai Dibatalkan; Admin
+-- tidak dapat memperbaiki penugasan dan harus membuat jadwal baru.
+-- KEPUTUSAN OPERATOR: penarikan Terbit kembali ke Draft, pelayan baru
+-- melihatnya lagi setelah diterbitkan ulang. Bulan lama yang sudah
+-- Dibatalkan dapat dipulihkan bila belum ada pengganti aktif.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION return_service_schedule_month_to_draft_v121(p_month_id TEXT)
+RETURNS TEXT[] LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  month_row service_schedule_months%ROWTYPE;
+  roster_ids TEXT[];
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO month_row FROM service_schedule_months WHERE month_id = p_month_id FOR UPDATE;
+  IF NOT FOUND OR month_row.status NOT IN ('Terbit', 'Dibatalkan') OR month_row.published_at IS NULL THEN
+    RAISE EXCEPTION 'Hanya jadwal yang pernah diterbitkan dapat dikembalikan ke Draft.' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (SELECT 1 FROM service_schedule_months
+    WHERE month_date = month_row.month_date AND month_id <> p_month_id AND status <> 'Dibatalkan') THEN
+    RAISE EXCEPTION 'Bulan ini sudah memiliki jadwal aktif.' USING ERRCODE = '23505';
+  END IF;
+  IF EXISTS (SELECT 1 FROM ministry_attendance attendance
+    JOIN ministry_schedules session ON session.schedule_id = attendance.schedule_id
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = session.source_occurrence_id
+    WHERE occurrence.month_id = p_month_id) THEN
+    RAISE EXCEPTION 'Jadwal dengan kehadiran tercatat tidak dapat ditarik ke Draft.' USING ERRCODE = '22023';
+  END IF;
+  SELECT array_agg(part.roster_id ORDER BY part.roster_id) INTO roster_ids
+    FROM service_schedule_parts part
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id
+    WHERE occurrence.month_id = p_month_id;
+  IF roster_ids IS NULL THEN
+    RAISE EXCEPTION 'Bagian jadwal tidak ditemukan.' USING ERRCODE = '22023';
+  END IF;
+  PERFORM 1 FROM service_rosters WHERE roster_id = ANY(roster_ids) ORDER BY roster_id FOR UPDATE;
+  IF EXISTS (SELECT 1 FROM service_rosters WHERE roster_id = ANY(roster_ids) AND status <> month_row.status) THEN
+    RAISE EXCEPTION 'Status bagian jadwal tidak sesuai.' USING ERRCODE = '22023';
+  END IF;
+  PERFORM set_config('app.allow_roster_transition', '1', true);
+  PERFORM set_config('app.service_schedule_transition', p_month_id, true);
+  UPDATE service_rosters SET status = 'Draft', version = version + 1,
+    published_at = NULL, published_by = NULL WHERE roster_id = ANY(roster_ids);
+  UPDATE service_schedule_months SET status = 'Draft', version = version + 1,
+    updated_at = now() WHERE month_id = p_month_id;
+  PERFORM set_config('app.allow_roster_transition', '', true);
+  PERFORM set_config('app.service_schedule_transition', '', true);
+  IF month_row.status = 'Terbit' THEN
+    PERFORM set_config('app.auto_ministry_schedule_sync_v111', '1', true);
+    UPDATE ministry_schedules SET source_status = 'Dibatalkan'
+      WHERE source_occurrence_id IN
+        (SELECT occurrence_id FROM service_schedule_occurrences WHERE month_id = p_month_id);
+    PERFORM set_config('app.auto_ministry_schedule_sync_v111', '', true);
+  END IF;
+  RETURN roster_ids;
+END $$;
+REVOKE ALL ON FUNCTION return_service_schedule_month_to_draft_v121(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION return_service_schedule_month_to_draft_v121(TEXT) TO authenticated;
+
+-- Penugasan Absen Pelayanan dari publikasi sebelumnya harus mengikuti revisi.
+CREATE OR REPLACE FUNCTION sync_auto_ministry_attendance_v111(p_month_id TEXT) RETURNS VOID
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE occurrence RECORD; linked_schedule TEXT;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM service_schedule_months WHERE month_id=p_month_id AND status='Terbit') THEN
+    RAISE EXCEPTION 'Hanya jadwal Terbit yang dapat disinkronkan.' USING ERRCODE='22023';
+  END IF;
+  PERFORM set_config('app.auto_ministry_schedule_sync_v111','1',true);
+  FOR occurrence IN SELECT * FROM service_schedule_occurrences
+    WHERE month_id=p_month_id AND service_date >= (now() AT TIME ZONE 'Asia/Jakarta')::DATE
+    ORDER BY occurrence_id LOOP
+    INSERT INTO ministry_schedules (source_occurrence_id,source_status,label,ministry_id,service_date,start_time,created_by)
+      VALUES (occurrence.occurrence_id,'Terbit',occurrence.title,NULL,occurrence.service_date,occurrence.start_time,auth_user_id())
+      ON CONFLICT (source_occurrence_id) DO UPDATE SET source_status='Terbit',
+        label=EXCLUDED.label, service_date=EXCLUDED.service_date, start_time=EXCLUDED.start_time
+      RETURNING schedule_id INTO linked_schedule;
+    DELETE FROM ministry_schedule_assignments assignment
+      WHERE assignment.schedule_id=linked_schedule
+        AND NOT EXISTS (SELECT 1 FROM service_schedule_parts part
+          JOIN service_roster_slots slot ON slot.roster_id=part.roster_id
+          WHERE part.occurrence_id=occurrence.occurrence_id AND slot.user_id=assignment.user_id)
+        AND NOT EXISTS (SELECT 1 FROM ministry_attendance attendance
+          WHERE attendance.schedule_id=linked_schedule AND attendance.user_id=assignment.user_id);
+    INSERT INTO ministry_schedule_assignments(schedule_id,user_id)
+      SELECT DISTINCT linked_schedule,slot.user_id
+      FROM service_schedule_parts part JOIN service_roster_slots slot ON slot.roster_id=part.roster_id
+      WHERE part.occurrence_id=occurrence.occurrence_id AND slot.user_id IS NOT NULL
+      ON CONFLICT (schedule_id,user_id) DO NOTHING;
+  END LOOP;
+  PERFORM set_config('app.auto_ministry_schedule_sync_v111','',true);
+END $$;
+REVOKE ALL ON FUNCTION sync_auto_ministry_attendance_v111(TEXT) FROM PUBLIC, anon, authenticated;
+
+-- Notifikasi penarikan memakai jenis Dibatalkan yang sudah tercatat pada
+-- log; Draft baru belum pernah terbit tidak dapat menyamar sebagai penarikan.
+CREATE OR REPLACE FUNCTION claim_service_roster_notification(
+  p_roster_id TEXT, p_user_id TEXT, p_kind TEXT, p_roster_version INTEGER
+) RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE new_token TEXT := gen_random_uuid()::TEXT; claimed_token TEXT;
+BEGIN
+  IF p_kind NOT IN ('Terbit', 'Dibatalkan', 'Pengingat H-1', 'Manual') THEN
+    RAISE EXCEPTION 'Jenis notifikasi tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM service_rosters sr
+    JOIN service_roster_slots slot ON slot.roster_id = sr.roster_id
+    JOIN users u ON u.user_id = slot.user_id
+    WHERE sr.roster_id = p_roster_id AND sr.version = p_roster_version
+      AND slot.user_id = p_user_id AND u.status = 'Aktif'
+      AND (
+        (p_kind = 'Dibatalkan' AND (sr.status = 'Dibatalkan' OR
+          (sr.status = 'Draft' AND EXISTS (
+            SELECT 1 FROM service_schedule_parts part
+            JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id=part.occurrence_id
+            JOIN service_schedule_months month ON month.month_id=occurrence.month_id
+            WHERE part.roster_id=sr.roster_id AND month.status='Draft' AND month.published_at IS NOT NULL))))
+        OR (p_kind <> 'Dibatalkan' AND sr.status = 'Terbit')
+      )
+  ) THEN RETURN NULL; END IF;
+  INSERT INTO service_roster_notification_logs (
+    roster_id, user_id, kind, roster_version, delivery_status, claim_token, claimed_at
+  ) VALUES (p_roster_id, p_user_id, p_kind, p_roster_version, 'pending', new_token, now())
+  ON CONFLICT (roster_id, user_id, kind, roster_version)
+  DO UPDATE SET delivery_status='pending', claim_token=EXCLUDED.claim_token, claimed_at=EXCLUDED.claimed_at
+  WHERE service_roster_notification_logs.delivery_status='failed'
+    OR (service_roster_notification_logs.delivery_status='pending'
+      AND service_roster_notification_logs.claimed_at < now() - INTERVAL '10 minutes')
+  RETURNING claim_token INTO claimed_token;
+  RETURN claimed_token;
+END $$;
+REVOKE ALL ON FUNCTION claim_service_roster_notification(TEXT,TEXT,TEXT,INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION claim_service_roster_notification(TEXT,TEXT,TEXT,INTEGER) TO service_role;
+
+COMMIT;

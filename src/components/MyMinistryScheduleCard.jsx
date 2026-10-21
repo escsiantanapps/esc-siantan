@@ -19,7 +19,7 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-export default function MyMinistryScheduleCard() {
+export default function MyMinistryScheduleCard({ showEmptyState = false }) {
   const { profile } = useAuth()
   const { t } = useLang()
   const [schedules, setSchedules] = useState([])
@@ -61,7 +61,7 @@ export default function MyMinistryScheduleCard() {
     s => s.attendance?.status === 'Terlambat' && (s.service_date || '').slice(0, 7) === ym
   ).length
 
-  if (!loaded) return null
+  if (!loaded || (!showEmptyState && !rosters.length && !schedules.length && !loadFailed)) return null
 
   return (
     <div className="mb-5 animate-fade-in-up">
@@ -91,7 +91,7 @@ export default function MyMinistryScheduleCard() {
             {upcomingRosters.map(roster => {
               const own = (roster.service_roster_slots || []).filter(slot => slot.user_id === profile.user_id)
               return (
-                <Link key={roster.roster_id} to="/jadwal-pelayanan" className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-100 px-3 py-2.5 hover:bg-control">
+                <Link key={roster.roster_id} to={`/jadwal-pelayanan?rosterId=${encodeURIComponent(roster.roster_id)}`} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-100 px-3 py-2.5 hover:bg-control">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-gray-900">{roster.title}</p>
                     <p className="mt-0.5 truncate text-xs text-gray-400">

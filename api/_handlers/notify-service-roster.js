@@ -9,10 +9,11 @@ const MONTH_PAGE_SIZE = 24
 
 async function notifyMonth({ admin, webpush, monthId, kind, offset }) {
   const { data: month, error: monthError } = await admin.from('service_schedule_months')
-    .select('month_id, status').eq('month_id', monthId).maybeSingle()
+    .select('month_id, status, published_at').eq('month_id', monthId).maybeSingle()
   if (monthError) throw monthError
   if (!month) return { status: 404, body: { error: 'Jadwal tidak ditemukan.' } }
-  const expectedStatus = kind === 'Dibatalkan' ? 'Dibatalkan' : 'Terbit'
+  const retracted = kind === 'Dibatalkan' && month.status === 'Draft' && !!month.published_at
+  const expectedStatus = retracted ? 'Draft' : kind === 'Dibatalkan' ? 'Dibatalkan' : 'Terbit'
   if (month.status !== expectedStatus) return { status: 409, body: { error: 'Status jadwal tidak sesuai.' } }
 
   // Batasi beban tiap invokasi; ID roster ditentukan server, bukan kiriman klien.

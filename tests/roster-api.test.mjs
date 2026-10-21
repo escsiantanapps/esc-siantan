@@ -331,6 +331,19 @@ test('API jadwal bulanan: halaman akhir mengakhiri antrean dan pembatalan memaka
   })
 })
 
+test('API jadwal bulanan: penarikan Draft hanya dapat dikirim setelah pernah terbit', async () => {
+  await endpointFixture({ caller: { role: 'Super Admin' }, month: { status: 'Draft' },
+    parts: monthlyParts(1, 'Draft'), body: { monthId: 'QA-MONTH', kind: 'Dibatalkan' } }, ({ response, calls }) => {
+    assert.equal(response.statusCode, 409)
+    assert.equal(queried(calls, 'service_schedule_parts'), false)
+  })
+  await endpointFixture({ caller: { role: 'Super Admin' }, month: { status: 'Draft', published_at: '2026-10-20T00:00:00Z' },
+    parts: monthlyParts(1, 'Draft'), body: { monthId: 'QA-MONTH', kind: 'Dibatalkan' } }, ({ response }) => {
+    assert.equal(response.statusCode, 200)
+    assert.equal(response.body.rosterCount, 1)
+  })
+})
+
 test('API jadwal bulanan: roster belum final menahan seluruh halaman sebelum pengiriman', async () => {
   const parts = monthlyParts(2)
   parts[1].service_rosters.status = 'Draft'

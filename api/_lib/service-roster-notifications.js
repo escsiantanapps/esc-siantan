@@ -3,7 +3,10 @@ function notificationCopy(roster, kind) {
     timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric',
   }).format(new Date(`${roster.service_date}T00:00:00+07:00`))
   const time = String(roster.start_time || '').slice(0, 5)
-  if (kind === 'Dibatalkan') return {
+  if (kind === 'Dibatalkan') return roster.status === 'Draft' ? {
+    title: 'Jadwal Pelayanan Ditarik untuk Revisi',
+    body: `${roster.title} pada ${date} sementara ditarik dan akan terbit kembali setelah revisi.`,
+  } : {
     title: 'Jadwal Pelayanan Dibatalkan',
     body: `${roster.title} pada ${date} telah dibatalkan.`,
   }
@@ -49,7 +52,8 @@ export async function sendRosterNotifications({ admin, webpush, roster, userIds,
   const tokensByUser = groupByUser(tokens)
 
   const copy = notificationCopy(roster, kind)
-  const url = `/jadwal-pelayanan?rosterId=${encodeURIComponent(roster.roster_id)}`
+  const url = kind === 'Dibatalkan' && roster.status === 'Draft'
+    ? '/jadwal-pelayanan' : `/jadwal-pelayanan?rosterId=${encodeURIComponent(roster.roster_id)}`
   const payload = JSON.stringify({ ...copy, url })
   const attempts = await Promise.allSettled(recipients.map(async userId => {
     const userSubscriptions = subscriptionsByUser.get(userId) || []

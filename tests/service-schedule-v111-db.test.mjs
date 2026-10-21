@@ -167,5 +167,29 @@ test('v111-v112: jadwal kosong, catatan nama, absensi, dan akses Admin per Minis
     await db.exec('ROLLBACK TO SAVEPOINT expected_ungranted_ministry; RELEASE SAVEPOINT expected_ungranted_ministry')
     await db.query(`DELETE FROM user_ministries WHERE user_id='ADMIN-KIDS' AND ministry_id='OTHER'`)
     assert.equal((await db.query(`SELECT auth_admin_mh_monthly_ministry_v111('OTHER') AS permitted`)).rows[0].permitted, false)
+
+    await db.exec(migration(121))
+    await db.exec(migration(121))
+    await db.exec('BEGIN')
+    await db.query("SELECT set_config('test.caller_id','ADMIN',true),set_config('test.caller_role','Admin',true),set_config('test.restricted','0',true)")
+    await db.query(`INSERT INTO users(user_id,name,role) VALUES ('VOL3','Pelayan Pengganti','Volunteer')`)
+    await db.query(`INSERT INTO user_ministries(user_id,ministry_id) VALUES ('VOL3','MUSIC')`)
+    await db.query('SELECT return_service_schedule_month_to_draft_v121($1)', [monthWithPeople])
+    assert.equal((await db.query('SELECT status FROM service_schedule_months WHERE month_id=$1', [monthWithPeople])).rows[0].status, 'Draft')
+    assert.equal((await db.query('SELECT status FROM service_rosters WHERE roster_id=$1', [musicRoster])).rows[0].status, 'Draft')
+    assert.equal((await db.query(`SELECT source_status FROM ministry_schedules
+      WHERE source_occurrence_id IN (SELECT occurrence_id FROM service_schedule_occurrences WHERE month_id=$1)`, [monthWithPeople])).rows[0].source_status, 'Dibatalkan')
+    await db.query(`SELECT set_service_schedule_position_v111($1,'P-NEW',ARRAY['VOL3']::TEXT[],ARRAY['VOL']::TEXT[],'{}'::JSONB)`, [musicRoster])
+    await db.query('SELECT publish_service_schedule_month_v111($1)', [monthWithPeople])
+    const republished = await db.query(`SELECT assignment.user_id, session.source_status FROM ministry_schedule_assignments assignment
+      JOIN ministry_schedules session ON session.schedule_id=assignment.schedule_id
+      JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id=session.source_occurrence_id
+      WHERE occurrence.month_id=$1 ORDER BY assignment.user_id`, [monthWithPeople])
+    assert.deepEqual(republished.rows, [{ user_id: 'VOL3', source_status: 'Terbit' }])
+    await db.query('SELECT return_service_schedule_month_to_draft_v121($1)', [monthWithPeople])
+    assert.equal((await db.query('SELECT status FROM service_schedule_months WHERE month_id=$1', [monthWithPeople])).rows[0].status, 'Draft')
+    await db.exec('SAVEPOINT already_draft')
+    await assert.rejects(db.query('SELECT return_service_schedule_month_to_draft_v121($1)', [monthWithPeople]), /pernah diterbitkan/)
+    await db.exec('ROLLBACK TO SAVEPOINT already_draft; RELEASE SAVEPOINT already_draft')
   } finally { await db.close() }
 })

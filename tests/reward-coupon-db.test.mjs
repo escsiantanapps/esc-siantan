@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite'
 
 const schema = await readFile(new URL('../supabase/schema.sql', import.meta.url), 'utf8')
 const v119 = schema.slice(schema.indexOf('-- ── Migrasi v119:'), schema.indexOf('-- ── Migrasi v120:'))
-const v120 = schema.slice(schema.indexOf('-- ── Migrasi v120:'))
+const v120 = schema.slice(schema.indexOf('-- ── Migrasi v120:'), schema.indexOf('-- ── Migrasi v121:'))
 assert.ok(v119.startsWith('-- ── Migrasi v119:'))
 assert.ok(v120.startsWith('-- ── Migrasi v120:'))
 

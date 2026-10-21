@@ -72,6 +72,12 @@ export const monthlyScheduleService = {
     if (error) throw error
     return data || []
   },
+  async findNextMonth(month) {
+    const { data, error } = await supabase.from('service_schedule_months').select('month_date')
+      .gt('month_date', `${month.slice(0, 7)}-01`).order('month_date').limit(1)
+    if (error) throw error
+    return data?.[0]?.month_date?.slice(0, 7) || null
+  },
   async resolveRosterMonth(rosterId) {
     const { data, error } = await supabase.from('service_schedule_parts')
       .select('service_schedule_occurrences!occurrence_id(month_id, service_schedule_months!month_id(month_date))')
@@ -103,6 +109,7 @@ export const monthlyScheduleService = {
   }),
   publishMonth: monthId => rpc('publish_service_schedule_month_v111', { p_month_id: monthId }),
   cancelMonth: monthId => rpc('cancel_service_schedule_month', { p_month_id: monthId }),
+  returnMonthToDraft: monthId => rpc('return_service_schedule_month_to_draft_v121', { p_month_id: monthId }),
   syncDraftPositions: (monthId, expectedVersion, expectedCatalog) => rpc('sync_service_schedule_draft_positions', {
     p_month_id: monthId, p_expected_version: expectedVersion, p_expected_catalog: expectedCatalog,
   }),

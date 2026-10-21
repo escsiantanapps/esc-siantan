@@ -35,6 +35,9 @@ const timeLabel = item => `${String(item.start_time || '').slice(0, 5)} - ${Stri
 const statusColor = value => value === 'Terbit' ? 'green' : value === 'Dibatalkan' ? 'red' : 'amber'
 const errorKey = error => {
   const text = String(error?.message || '')
+  if (error?.code === 'PGRST202' && text.includes('return_service_schedule_month_to_draft_v121')) return 'schedMonth.returnMigrationRequired'
+  if (text.includes('Bulan ini sudah memiliki jadwal aktif')) return 'schedMonth.restoreBlocked'
+  if (text.includes('kehadiran tercatat')) return 'schedMonth.returnAttendanceBlocked'
   if (error?.code === 'PGRST202' && text.includes('reassign_and_sync_service_schedule_draft_positions_v111')) return 'schedMonth.migrationRequired'
   if (['PGRST200', 'PGRST202', 'PGRST205', '42P01', '42703'].includes(error?.code)) return 'schedMonth.migrationRequired'
   if (text.includes('schedule_position_assigned')) return 'schedMonth.syncBlocked'
@@ -89,6 +92,7 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   const [selectedDate, setSelectedDate] = useState('')
   const catalogRequest = useRef(0)
   const monthsRequest = useRef(0)
+  const initialMonthChecked = useRef(Boolean(initialMonth))
   const canManageAll = grants?.some(item => item.manager_role === 'Admin') || false
   const managedMinistryIds = useMemo(() => grants?.map(item => item.ministry_id) || [], [grants])
   const isDraft = schedule?.month.status === 'Draft'
@@ -144,6 +148,14 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     try {
       const rows = await api.listMonths(month)
       if (request !== monthsRequest.current) return
+      if (!initialMonthChecked.current) {
+        initialMonthChecked.current = true
+        if (!rows.length && api.findNextMonth) {
+          const nextMonth = await api.findNextMonth(month)
+          if (request !== monthsRequest.current) return
+          if (nextMonth) { setMonth(nextMonth); return }
+        }
+      }
       setMonths(rows)
       setMonthId(current => rows.some(row => row.month_id === current) ? current : rows[0]?.month_id || '')
     } catch (error) { if (request === monthsRequest.current) { setLoadError(errorKey(error)); setMonths([]); setMonthId('') } }
@@ -219,10 +231,18 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     } catch (error) { toast.error(t(errorKey(error))) }
     finally { setBusy(false) }
   }
-  async function cancelMonth() {
-    if (!await confirm({ title: t('schedMonth.cancelTitle'), message: t('schedMonth.cancelMessage'), confirmText: t('sched.cancelRoster'), danger: true })) return
+  async function returnMonthToDraft() {
+    const wasPublished = schedule?.month.status === 'Terbit'
+    if (!await confirm({ title: t(wasPublished ? 'schedMonth.cancelTitle' : 'schedMonth.restoreTitle'),
+      message: t(wasPublished ? 'schedMonth.cancelMessage' : 'schedMonth.restoreMessage'),
+      confirmText: t(wasPublished ? 'schedMonth.cancelMonth' : 'schedMonth.restoreMonth'), danger: wasPublished })) return
     setBusy(true)
-    try { const ids = await api.cancelMonth(monthId); await reloadSchedule(); await loadMonths(); toast.success(t('sched.cancelled')); await notify(ids || [], 'Dibatalkan') }
+    try {
+      const ids = await api.returnMonthToDraft(monthId)
+      await reloadSchedule(); await loadMonths()
+      toast.success(t(wasPublished ? 'schedMonth.retracted' : 'schedMonth.restored'))
+      if (wasPublished) await notify(ids || [], 'Dibatalkan')
+    }
     catch (error) { toast.error(t(errorKey(error))) }
     finally { setBusy(false) }
   }
@@ -297,7 +317,8 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
         {canManageAll && isDraft && <Button onClick={publishMonth} disabled={busy || loading} loading={busy}><Send size={16} />{t('schedMonth.publishMonth')}</Button>}
         {canManageAll && isDraft && <Button variant="danger" onClick={deleteMonthDraft} disabled={busy || loading}><Trash2 size={16} />{t('schedMonth.deleteDraft')}</Button>}
         {canManageAll && schedule?.month.status === 'Terbit' && <Button variant="outline" onClick={sendReminder} disabled={busy || loading} loading={busy}><BellRing size={16} />{t('sched.remind')}</Button>}
-        {canManageAll && schedule?.month.status === 'Terbit' && <Button variant="danger" onClick={cancelMonth} disabled={busy || loading} loading={busy}>{t('schedMonth.cancelMonth')}</Button>}
+        {canManageAll && schedule?.month.status === 'Terbit' && <Button variant="danger" onClick={returnMonthToDraft} disabled={busy || loading} loading={busy}>{t('schedMonth.cancelMonth')}</Button>}
+        {canManageAll && schedule?.month.status === 'Dibatalkan' && !months.some(item => item.month_id !== monthId && item.status !== 'Dibatalkan') && <Button variant="outline" onClick={returnMonthToDraft} disabled={busy || loading} loading={busy}>{t('schedMonth.restoreMonth')}</Button>}
       </div>
       {loading ? <div className="py-16 text-center"><Spinner /></div> : !schedule ? <EmptyState icon={CalendarDays} title={t('schedMonth.emptyMonth')} description={t(canManageAll ? 'schedMonth.emptyMonthAdmin' : 'schedMonth.emptyMonthManager')} /> : <>
         <div className="monthly-toolbar monthly-filters"><Select aria-label={t('schedMonth.filterActivity')} value={activityFilter} onChange={event => setActivityFilter(event.target.value)}><option value="">{t('schedMonth.allActivities')}</option>{schedule.sections.map(item => <option key={item.key} value={item.key}>{item.title}</option>)}</Select><Select aria-label={t('schedMonth.filterMinistry')} value={ministryFilter} onChange={event => setMinistryFilter(event.target.value)}><option value="">{t('schedMonth.allMinistries')}</option>{ministries.map(item => <option key={item.ministry_id} value={item.ministry_id}>{item.name}</option>)}</Select><Badge color={statusColor(schedule.month.status)}>{t(`sched.status.${schedule.month.status}`)}</Badge><span className="monthly-summary">{t('schedMonth.fillSummary', { assigned: matrix.stats.assigned, capacity: matrix.stats.capacity })}</span></div>

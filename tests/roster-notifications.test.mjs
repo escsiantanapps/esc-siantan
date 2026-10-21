@@ -213,6 +213,15 @@ test('Push jadwal: payload membuka roster spesifik dan klaim mengikat jenis sert
   assert.deepEqual(push.calls[0].subscription.keys, { p256dh: 'qa-public-key', auth: 'qa-auth' })
 })
 
+test('Push jadwal: penarikan Draft tidak menaut ke roster yang disembunyikan', async () => {
+  const fixture = databaseFixture()
+  const push = pushFixture()
+  const result = await send(fixture, push, { kind: 'Dibatalkan', roster: { ...roster, status: 'Draft' } })
+  assert.equal(result.sent, 1)
+  assert.equal(push.calls[0].payload.url, '/jadwal-pelayanan')
+  assert.equal(push.calls[0].payload.title, 'Jadwal Pelayanan Ditarik untuk Revisi')
+})
+
 test('Push jadwal: subscription kedaluwarsa dibersihkan dan tidak ditandai terkirim', async () => {
   const fixture = databaseFixture()
   const push = pushFixture(async () => { throw Object.assign(new Error('Subscription hilang'), { statusCode: 410 }) })

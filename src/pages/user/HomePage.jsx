@@ -232,8 +232,8 @@ export default function HomePage() {
         </section>
         )}
 
-        {/* Ringkasan jadwal selalu terlihat bagi Volunteer, termasuk saat belum ditugaskan. */}
-        {isVolunteer && !isAdmin && <MyMinistryScheduleCard />}
+        {/* Anggota non-Volunteer yang ditugaskan juga perlu melihat jadwalnya. */}
+        <MyMinistryScheduleCard showEmptyState={isVolunteer && !isAdmin} />
 
 
         {/* Ringkasan kehadiran bulan ini */}
