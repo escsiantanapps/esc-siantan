@@ -12,8 +12,8 @@ const EMPTY = { outline: '', explanation: '', reflection: '' }
 export default function AdminBiblePage() {
   const { t } = useLang()
   const { toast } = useToast()
-  const [bookId, setBookId] = useState(14)
-  const [chapterNumber, setChapterNumber] = useState(30)
+  const [bookId, setBookId] = useState(1)
+  const [chapterNumber, setChapterNumber] = useState(1)
   const [form, setForm] = useState(EMPTY)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
