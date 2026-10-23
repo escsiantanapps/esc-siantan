@@ -24,15 +24,15 @@ export default function AppUpdatePrompt() {
     catch { setUpdating(false) }
   }
 
-  return <div className="fixed inset-x-3 top-[calc(var(--safe-top,0px)+0.75rem)] z-[70] mx-auto max-w-md rounded-2xl border border-gray-200 bg-card p-3 text-gray-900" role="status" aria-live="polite">
+  return <div className="fixed inset-x-3 top-[calc(var(--safe-top,0px)+0.75rem)] z-[70] mx-auto max-w-md rounded-2xl border border-gray-300 bg-gray-100 p-4 text-gray-900" role="status" aria-live="polite">
     <div className="flex items-start gap-3">
       <RefreshCw size={20} className="mt-0.5 shrink-0 text-brand-500" aria-hidden="true" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{t('appUpdate.title')}</p>
-        <p className="mt-1 text-xs text-gray-600">{t('appUpdate.description')}</p>
+        <p className="text-base font-semibold">{t('appUpdate.title')}</p>
+        <p className="mt-1 text-sm text-gray-600">{t('appUpdate.description')}</p>
         <div className="mt-3 flex items-center gap-2">
-          <Button size="sm" onClick={applyUpdate} loading={updating}>{t('appUpdate.apply')}</Button>
-          <Button size="sm" variant="ghost" onClick={() => setSnoozed(true)}>{t('appUpdate.later')}</Button>
+          <Button size="sm" className="min-h-11" onClick={applyUpdate} loading={updating}>{t('appUpdate.apply')}</Button>
+          <Button size="sm" className="min-h-11" variant="ghost" onClick={() => setSnoozed(true)}>{t('appUpdate.later')}</Button>
         </div>
       </div>
     </div>

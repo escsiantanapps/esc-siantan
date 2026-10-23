@@ -1,10 +1,11 @@
 // Impor penjelasan lengkap dari berkas operator tanpa menimpa edit Admin.
-// Pemakaian: node tools/import-ndc-complete-explanations.mjs "ndc-semua-kitab-penjelasan (1).json" "MALEAKHI.json" [--apply]
+// Pemakaian: node tools/import-ndc-complete-explanations.mjs "ndc-semua-kitab-penjelasan (1).json" "MALEAKHI.json" [--include-damaged] [--apply]
 import { readFile } from 'node:fs/promises'
 import { createClient } from '@supabase/supabase-js'
 
 const [mainPath, malachiPath] = process.argv.slice(2)
 if (!mainPath || !malachiPath) throw new Error('Berikan berkas gabungan NDC dan MALEAKHI.json.')
+const includeDamaged = process.argv.includes('--include-damaged')
 
 const [main, malachi, bibleBooks] = await Promise.all([
   readFile(mainPath, 'utf8').then(JSON.parse),
@@ -16,6 +17,7 @@ const sourceBooks = [...main.books.filter(book => book.book_name !== 'MALEAKHI')
 const sourceKeys = new Set()
 const rows = []
 const skipped = []
+const damaged = []
 const differingSections = []
 
 function clean(value) {
@@ -60,8 +62,11 @@ for (const sourceBook of sourceBooks) {
     const missing = [!outline && 'outline', !explanation && 'penjelasan', !reflection && 'refleksi'].filter(Boolean)
     if (missing.length) { skipped.push(`${book.name} ${number}: ${missing.join(', ')}`); continue }
     if ([outline, explanation, reflection].some(value => /[�Ãâ]/u.test(value))) {
-      skipped.push(`${book.name} ${number}: teks sumber rusak`)
-      continue
+      damaged.push(`${book.name} ${number}`)
+      if (!includeDamaged) {
+        skipped.push(`${book.name} ${number}: teks sumber rusak`)
+        continue
+      }
     }
     rows.push({ book_id: book.id, chapter_number: number, introduction: outline, explanation, reflection })
   }
@@ -69,6 +74,7 @@ for (const sourceBook of sourceBooks) {
 rows.sort((a, b) => a.book_id - b.book_id || a.chapter_number - b.chapter_number)
 if (rows.length + skipped.length !== 1166 || sourceKeys.size !== 1166) throw new Error(`Jumlah sumber tidak sesuai: ${rows.length}/${sourceKeys.size}.`)
 console.log(`Siap: ${rows.length} pasal lengkap; ${differingSections.length} memakai teks penjelasan penuh; ${skipped.length} pasal perlu perbaikan.`)
+if (includeDamaged) console.log(`Teks rusak disertakan untuk diperbaiki Admin: ${damaged.join(', ')}.`)
 if (skipped.length) console.log(`Perlu perbaikan sumber:\n${skipped.join('\n')}`)
 console.log('Tidak tersedia dalam berkas: Mazmur 128–150.')
 
