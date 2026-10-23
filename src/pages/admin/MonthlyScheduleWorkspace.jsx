@@ -49,7 +49,7 @@ const errorKey = error => {
   return 'sched.saveFailed'
 }
 
-function Modal({ title, onClose, children, busy = false }) {
+function Modal({ title, onClose, children, busy = false, className = '' }) {
   const { t } = useLang()
   const { registerToastHost } = useToast()
   const ref = useRef(null)
@@ -59,7 +59,7 @@ function Modal({ title, onClose, children, busy = false }) {
     const unregisterToastHost = registerToastHost(dialog)
     return () => { unregisterToastHost(); if (dialog.open) dialog.close() }
   }, [registerToastHost])
-  return <dialog ref={ref} className="monthly-dialog" onCancel={event => { event.preventDefault(); if (!busy) onClose() }} aria-labelledby="monthly-dialog-title">
+  return <dialog ref={ref} className={`monthly-dialog ${className}`.trim()} onCancel={event => { event.preventDefault(); if (!busy) onClose() }} aria-labelledby="monthly-dialog-title">
     <header className="monthly-dialog-header"><h2 id="monthly-dialog-title">{title}</h2><Button variant="ghost" disabled={busy} onClick={onClose} aria-label={t('common.close')} title={t('common.close')}><X size={18} /></Button></header>
     {children}
   </dialog>
@@ -536,7 +536,7 @@ function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, 
     } catch (err) { setError(errorKey(err)) }
     finally { setChecking(false) }
   }
-  return <Modal title={t('sched.chooseMember')} onClose={onClose} busy={busy || checking}><form onSubmit={submit}>
+  return <Modal title={t('sched.chooseMember')} onClose={onClose} busy={busy || checking} className="monthly-member-dialog"><form onSubmit={submit}>
     <div className="monthly-dialog-body"><div className="monthly-context"><strong>{position.name} / {occurrence.title}</strong><span>{occurrence.service_date} / {timeLabel(occurrence)} / {position.ministry_name}</span></div>
       <Input icon={Search} aria-label={t('sched.searchMember')} placeholder={t('sched.searchMember')} value={query} disabled={busy || checking} onChange={event => setQuery(event.target.value)} />
       <p className="monthly-muted">{t('schedMonth.selectedCount', { count: selected.length, capacity: slots.length })}</p>

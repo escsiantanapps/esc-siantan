@@ -601,6 +601,38 @@ test('Pesan gagal dan berhasil menyimpan penugasan tampil di depan dialog pada H
   })
 })
 
+test('Formulir pemilihan pelayan tetap di tengah dan berjarak dari tepi HP', async () => {
+  const member = (index) => ({ user_id: `QA-MEMBER-${index}`, ministry_id: 'QA-MIN',
+    users: { user_id: `QA-MEMBER-${index}`, name: `Pelayan QA ${index}`, status: 'Aktif' } })
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...monthlyManagementFixture(),
+    ministryMembers: Array.from({ length: 15 }, (_, index) => member(index)),
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    await f.page.getByRole('button', { name: /^Atur Worship Leader untuk Ibadah Gabungan,/ }).click()
+    const dialog = f.page.getByRole('dialog', { name: 'Pilih pelayan' })
+    await dialog.getByRole('checkbox', { name: 'Pelayan QA 14' }).waitFor()
+    for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }, { width: 320, height: 568 }]) {
+      await f.page.setViewportSize(viewport)
+      const bounds = await dialog.evaluate(node => {
+        const rect = node.getBoundingClientRect()
+        return {
+          left: rect.left, right: innerWidth - rect.right,
+          top: rect.top, bottom: innerHeight - rect.bottom,
+          horizontalOverflow: node.scrollWidth > node.clientWidth + 1,
+        }
+      })
+      assert.ok(bounds.left >= 18 && bounds.right >= 18, `Dialog harus berjarak dari sisi layar ${viewport.width}px`)
+      assert.ok(bounds.top >= 24 && bounds.bottom >= 24, `Dialog harus berjarak dari atas/bawah layar ${viewport.height}px`)
+      assert.ok(Math.abs(bounds.left - bounds.right) <= 2 && Math.abs(bounds.top - bounds.bottom) <= 2, 'Dialog harus terpusat')
+      assert.equal(bounds.horizontalOverflow, false)
+    }
+    const save = dialog.getByRole('button', { name: 'Simpan Penugasan' })
+    await save.click()
+    await dialog.waitFor({ state: 'hidden' })
+  })
+})
+
 test('Akses & Posisi menampilkan lebih dari enam posisi dan hanya Ministry calon yang dapat dipilih', async () => {
   const data = monthlyManagementFixture()
   for (let index = 2; index <= 8; index += 1) data.servicePositions.push({
