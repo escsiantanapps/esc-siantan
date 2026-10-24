@@ -85,20 +85,22 @@ export default function UserLayout() {
   // Panel PKS tampil layar penuh tanpa navbar jemaat — sama seperti panel
   // admin. Kembali ke app jemaat lewat tombol back di header panel.
   const inPanel = location.pathname.startsWith('/pks')
+  const inExplanation = location.pathname === '/alkitab/penjelasan'
+  const hideBottomNav = inPanel || inExplanation
 
   if (roadmapChecking) {
     return <SheepLoader fullScreen size="xl" />
   }
 
   return (
-    <div className="app-glass-shell min-h-screen flex flex-col max-w-md mx-auto relative">
+    <div className={`app-glass-shell min-h-screen flex flex-col max-w-md mx-auto relative ${inExplanation ? 'h-dvh overflow-hidden' : ''}`}>
       {/* Main content */}
-      <main className={`flex-1 overflow-y-auto ${inPanel ? 'pb-6' : 'pb-[calc(7.5rem+env(safe-area-inset-bottom))]'}`}>
+      <main className={`min-h-0 flex-1 overflow-y-auto ${hideBottomNav ? 'pb-6' : 'pb-[calc(7.5rem+env(safe-area-inset-bottom))]'}`}>
         <Outlet />
       </main>
 
       {/* Bottom navigation — bar mengambang dengan tombol Scan menonjol (FAB) */}
-      {!inPanel && (
+      {!hideBottomNav && (
       <nav className="user-bottom-nav fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[26rem] rounded-[1.75rem] border z-50">
         <div className="flex items-end px-2">
           {LEFT_ITEMS.map(item => <NavItem key={item.to} {...item} />)}

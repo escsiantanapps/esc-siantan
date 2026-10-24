@@ -75,7 +75,12 @@ export default function BiblePage() {
         <div className="px-4 pb-3 flex items-end gap-2">
           <div className="flex-1 min-w-0">
             <Select label={t('bible.book')} value={reading.book} onChange={event => saveReading({ ...reading, book: Number(event.target.value), chapter: 1 })} className="bible-control border-gray-200 text-gray-900 font-semibold min-h-11">
-              {availableBooks.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              <optgroup label={t('bible.oldTestament')}>
+                {availableBooks.filter(item => item.id <= 39).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </optgroup>
+              <optgroup label={t('bible.newTestament')}>
+                {availableBooks.filter(item => item.id >= 40).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </optgroup>
             </Select>
           </div>
           <div className="w-20 shrink-0">

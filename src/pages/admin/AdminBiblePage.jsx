@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { BookOpenText, Save } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
@@ -12,8 +12,13 @@ const EMPTY = { outline: '', explanation: '', reflection: '' }
 export default function AdminBiblePage() {
   const { t } = useLang()
   const { toast } = useToast()
-  const [bookId, setBookId] = useState(1)
-  const [chapterNumber, setChapterNumber] = useState(1)
+  const location = useLocation()
+  const returnReading = location.state?.reading
+  const [bookId, setBookId] = useState(() => bibleBooks.some(item => item.id === returnReading?.book) ? returnReading.book : 1)
+  const [chapterNumber, setChapterNumber] = useState(() => {
+    const book = bibleBooks.find(item => item.id === returnReading?.book)
+    return book && Number.isInteger(returnReading.chapter) && returnReading.chapter >= 1 && returnReading.chapter <= book.chapters ? returnReading.chapter : 1
+  })
   const [form, setForm] = useState(EMPTY)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -80,7 +85,12 @@ export default function AdminBiblePage() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
           <Select label={t('bible.book')} value={bookId} onChange={event => selectBook(event.target.value)} disabled={saving}>
-            {bibleBooks.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            <optgroup label={t('bible.oldTestament')}>
+              {bibleBooks.filter(item => item.id <= 39).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </optgroup>
+            <optgroup label={t('bible.newTestament')}>
+              {bibleBooks.filter(item => item.id >= 40).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </optgroup>
           </Select>
           <Select label={t('bible.chapter')} value={chapterNumber} onChange={event => selectChapter(event.target.value)} disabled={saving}>
             {Array.from({ length: book.chapters }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
@@ -94,7 +104,7 @@ export default function AdminBiblePage() {
             {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
             <div className="flex flex-wrap items-center gap-3">
               <Button type="submit" disabled={saving}><Save size={17} />{saving ? t('bible.admin.saving') : t('bible.admin.save')}</Button>
-              <Link to="/alkitab/penjelasan" state={{ reading: { book: bookId, chapter: chapterNumber } }} className="text-sm font-semibold text-brand-700 hover:underline">{t('bible.admin.preview')}</Link>
+              <Link to="/alkitab/penjelasan" state={{ reading: { book: bookId, chapter: chapterNumber }, returnTo: '/admin/alkitab' }} className="text-sm font-semibold text-brand-700 hover:underline">{t('bible.admin.preview')}</Link>
             </div>
           </form>
         )}
