@@ -109,6 +109,47 @@ export async function fixture(harness, options = {}) {
         if (!schedule) return reply({ message: 'Simulasi bulan tidak ditemukan', code: '22023' }, 400)
         return reply(schedule)
       }
+      if (table === 'copy_service_schedule_month_v122') {
+        const payload = request.postDataJSON() || {}
+        const source = state.monthlySchedules?.find(item => item.month.month_id === payload.p_source_month_id)
+        if (!source) return reply({ message: 'Sumber tidak ditemukan', code: '22023' }, 400)
+        const monthId = 'QA-COPIED-MONTH'
+        const copied = structuredClone(source)
+        const occurrenceIds = new Map(source.occurrences.map((item, index) => [item.occurrence_id, `QA-COPIED-OCC-${index}`]))
+        const rosterIds = new Map(source.rosters.map((item, index) => [item.roster_id, `QA-COPIED-ROSTER-${index}`]))
+        copied.month = { ...copied.month, month_id: monthId, month_date: payload.p_target_month,
+          status: 'Draft', version: 0,
+          definition: { ...copied.month.definition, copied_from_month_id: payload.p_source_month_id } }
+        copied.occurrences = copied.occurrences.map(item => ({ ...item, month_id: monthId,
+          occurrence_id: occurrenceIds.get(item.occurrence_id), service_date: payload.p_date_map[item.service_date] }))
+        copied.parts = copied.parts.map(item => ({ ...item, occurrence_id: occurrenceIds.get(item.occurrence_id),
+          roster_id: rosterIds.get(item.roster_id) }))
+        copied.rosters = copied.rosters.map(item => ({ ...item, roster_id: rosterIds.get(item.roster_id),
+          occurrence_id: occurrenceIds.get(item.occurrence_id),
+          service_date: payload.p_date_map[item.service_date],
+          service_roster_slots: item.service_roster_slots.map(slot => ({ ...slot,
+            user_id: payload.p_copy_assignments ? slot.user_id : null,
+            users: payload.p_copy_assignments ? slot.users : null,
+          })) }))
+        state.monthlySchedules = [...(state.monthlySchedules || []), copied]
+        return reply(monthId)
+      }
+      if (table === 'clear_service_schedule_assignments_v122') {
+        const payload = request.postDataJSON() || {}
+        const schedule = state.monthlySchedules?.find(item => item.month.month_id === payload.p_month_id)
+        const assigned = schedule?.rosters.reduce((count, roster) => count
+          + roster.service_roster_slots.filter(slot => slot.user_id).length, 0)
+        if (!schedule || schedule.month.status !== 'Draft' || !schedule.month.definition?.copied_from_month_id
+          || schedule.month.version !== payload.p_expected_version
+          || assigned !== payload.p_expected_assigned || payload.p_confirmation !== 'KOSONGKAN') {
+          return reply({ message: 'Jadwal berubah atau verifikasi salah', code: '40001' }, 400)
+        }
+        for (const roster of schedule.rosters) for (const slot of roster.service_roster_slots) {
+          slot.user_id = null; slot.users = null; slot.assignment_note = null
+        }
+        schedule.month.version += 1
+        return reply(assigned)
+      }
       if (table === 'reassign_and_sync_service_schedule_draft_positions_v111') return reply(1)
       if (table === 'delete_service_schedule_month_draft') {
         const { p_month_id: monthId, p_expected_assigned: expectedAssigned } = request.postDataJSON() || {}
@@ -158,10 +199,15 @@ export async function fixture(harness, options = {}) {
         return reply(monthId)
       }
       if (table === 'service_schedule_templates') return rows(state.monthlyTemplates || [])
+      if (table === 'service_schedule_ministry_order') return rows(state.ministryOrders || [])
       if (table === 'service_schedule_months') {
         const monthDate = url.searchParams.get('month_date')
         let data = (state.monthlySchedules || []).map(item => item.month)
         if (monthDate?.startsWith('eq.')) data = data.filter(row => row.month_date === monthDate.slice(3))
+        if (monthDate?.startsWith('gt.')) data = data.filter(row => row.month_date > monthDate.slice(3))
+        if (monthDate?.startsWith('lt.')) data = data.filter(row => row.month_date < monthDate.slice(3))
+        const limit = Number(url.searchParams.get('limit'))
+        if (limit > 0) data = data.slice(0, limit)
         return rows(data)
       }
       if (table === 'service_schedule_parts') {

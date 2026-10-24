@@ -3,21 +3,24 @@ import { serviceRosterService } from '@/services/serviceRosterService'
 import { eventsService, classesService } from '@/services/contentService'
 
 export function normalizeMonthlySchedule(data, positions = [], ministries = []) {
-  const names = new Map(ministries.map(item => [item.ministry_id, item.name]))
+  const ministryCatalog = new Map(ministries.map(item => [item.ministry_id, item]))
   const catalog = new Map(positions.map(item => [item.position_id, item]))
   const sections = (data.sections || data.month?.definition?.sections || []).map(section => ({
     ...section,
     key: section.section_id || section.key,
-    positions: section.positions || (section.parts || []).flatMap(part => (part.positions || []).map(item => {
+    positions: (section.positions || (section.parts || []).flatMap(part => (part.positions || [])
+      .map(item => ({ ...item, ministry_id: part.ministry_id, slots: item.capacity })))).map(item => {
       const position = catalog.get(item.position_id)
-      return { ...item, ministry_id: part.ministry_id, name: position?.name || item.name || '-',
-        ministry_name: names.get(part.ministry_id) || position?.ministries?.name || '-',
-        slots: item.capacity, sort_order: position?.sort_order || 0 }
-    })),
+      const ministry = ministryCatalog.get(item.ministry_id)
+      return { ...item, name: item.name || position?.name || '-',
+        ministry_name: item.ministry_name || ministry?.name || position?.ministries?.name || '-',
+        sort_order: position?.sort_order ?? item.sort_order ?? 0,
+        ministry_sort_order: ministry?.schedule_order ?? null }
+    }),
   }))
   return { ...data, sections, month: { ...data.month, month: data.month?.month_date },
     occurrences: (data.occurrences || []).map(item => ({ ...item, section_key: item.section_id || item.section_key })),
-    parts: (data.parts || []).map(item => ({ ...item, ministry_name: names.get(item.ministry_id) || '-' })),
+    parts: (data.parts || []).map(item => ({ ...item, ministry_name: ministryCatalog.get(item.ministry_id)?.name || '-' })),
     rosters: data.rosters || [] }
 }
 
@@ -36,6 +39,12 @@ export const monthlyScheduleService = {
   listManagerCandidates: () => serviceRosterService.listManagerCandidates(),
   savePosition: payload => serviceRosterService.savePosition(payload),
   removePosition: positionId => serviceRosterService.removePosition(positionId),
+  reorderPositions: (ministryId, positionIds) => rpc('reorder_service_schedule_positions_v122', {
+    p_ministry_id: ministryId, p_position_ids: positionIds,
+  }),
+  reorderMinistries: ministryIds => rpc('reorder_service_schedule_ministries_v122', {
+    p_ministry_ids: ministryIds,
+  }),
   listEvents: () => eventsService.getAll(),
   listClasses: () => classesService.getAll(),
   notify: (rosterId, kind) => serviceRosterService.notify(rosterId, kind),
@@ -50,9 +59,19 @@ export const monthlyScheduleService = {
       // Sebelum v99, jadwal Admin tetap dapat dibuka tanpa menampilkan sumber MH.
       const fallback = await supabase.from('ministries').select('ministry_id, name').order('name')
       if (fallback.error) throw fallback.error
-      return fallback.data || []
+      return this.withScheduleOrder(fallback.data || [])
     }
-    return data || []
+    return this.withScheduleOrder(data || [])
+  },
+  async withScheduleOrder(ministries) {
+    const { data, error } = await supabase.from('service_schedule_ministry_order')
+      .select('ministry_id, sort_order')
+    // Klien lama tetap dapat membuka jadwal sebelum Migrasi v122 dijalankan.
+    if (error && !['42P01', 'PGRST205'].includes(error.code)) throw error
+    const orders = new Map((data || []).map(item => [item.ministry_id, item.sort_order]))
+    return ministries.map(item => ({ ...item, schedule_order: orders.get(item.ministry_id) ?? null }))
+      .sort((a, b) => (a.schedule_order ?? Number.MAX_SAFE_INTEGER)
+        - (b.schedule_order ?? Number.MAX_SAFE_INTEGER))
   },
   async listPositions() {
     const { data, error } = await supabase.from('ministry_service_positions').select('*, ministries(name)').order('sort_order').order('name')
@@ -69,6 +88,13 @@ export const monthlyScheduleService = {
   }),
   async listMonths(month) {
     const { data, error } = await supabase.from('service_schedule_months').select('*').eq('month_date', `${month.slice(0, 7)}-01`).order('created_at', { ascending: false })
+    if (error) throw error
+    return data || []
+  },
+  async listCopySources() {
+    const { data, error } = await supabase.from('service_schedule_months')
+      .select('month_id, month_date, name, status, created_at')
+      .order('month_date', { ascending: false }).order('created_at', { ascending: false }).limit(36)
     if (error) throw error
     return data || []
   },
@@ -98,6 +124,14 @@ export const monthlyScheduleService = {
   }),
   createMonthDirect: ({ month, entries }) => rpc('create_service_schedule_month_direct', {
     p_month: `${month.slice(0, 7)}-01`, p_entries: entries,
+  }),
+  copyMonth: ({ sourceMonthId, targetMonth, dateMap, sourceLinks, copyAssignments }) => rpc('copy_service_schedule_month_v122', {
+    p_source_month_id: sourceMonthId, p_target_month: `${targetMonth.slice(0, 7)}-01`,
+    p_date_map: dateMap, p_source_links: sourceLinks, p_copy_assignments: copyAssignments,
+  }),
+  clearMonthAssignments: (monthId, expectedVersion, expectedAssigned, confirmation) => rpc('clear_service_schedule_assignments_v122', {
+    p_month_id: monthId, p_expected_version: expectedVersion,
+    p_expected_assigned: expectedAssigned, p_confirmation: confirmation,
   }),
   setPosition: ({ rosterId, positionId, userIds, expectedUserIds, notes }) => rpc('set_service_schedule_position_v111', {
     p_roster_id: rosterId, p_position_id: positionId, p_user_ids: userIds, p_expected_user_ids: expectedUserIds,

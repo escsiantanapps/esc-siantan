@@ -6,8 +6,9 @@ import { useToast } from '@/hooks/useToast'
 import { Badge, Button, Checkbox, EmptyState, Input, Select, Spinner, Textarea } from '@/components/ui'
 import MonthlyScheduleMatrix from '@/components/serviceSchedule/MonthlyScheduleMatrix'
 import ScheduleAccessPositions from '@/components/serviceSchedule/ScheduleAccessPositions'
-import { buildScheduleMatrix, formatScheduleDate, getMonthDates, printMonthlySchedule, shiftScheduleMonth } from '@/lib/serviceScheduleMatrix'
+import { buildScheduleMatrix, formatScheduleDate, formatScheduleMonth, getMonthDates, printMonthlySchedule, shiftScheduleMonth } from '@/lib/serviceScheduleMatrix'
 import { buildDraftPositionSync } from '@/lib/monthlyPositionSync'
+import { defaultMonthCopyDateMap, validateMonthCopyDateMap } from '@/lib/monthlyScheduleCopy'
 import './monthlyScheduleWorkspace.css'
 
 const currentMonth = () => {
@@ -35,7 +36,13 @@ const timeLabel = item => `${String(item.start_time || '').slice(0, 5)} - ${Stri
 const statusColor = value => value === 'Terbit' ? 'green' : value === 'Dibatalkan' ? 'red' : 'amber'
 const errorKey = error => {
   const text = String(error?.message || '')
+  if (error?.code === 'PGRST202' && text.includes('_v122')) return 'schedMonth.copyMigrationRequired'
   if (error?.code === 'PGRST202' && text.includes('return_service_schedule_month_to_draft_v121')) return 'schedMonth.returnMigrationRequired'
+  if (text.includes('Pelayan pada bulan sumber sudah tidak aktif')) return 'schedMonth.copyMemberInactive'
+  if (text.includes('Posisi pada bulan sumber sudah Nonaktif')) return 'schedMonth.copyPositionInactive'
+  if (text.includes('Pilih ulang Event') || text.includes('Pilih ulang Kelas')) return 'schedMonth.copySourceLinkRequired'
+  if (text.includes('Bulan tujuan sudah memiliki jadwal aktif')) return 'schedMonth.restoreBlocked'
+  if (text.includes('Pemetaan tanggal') || text.includes('Tanggal tujuan')) return 'schedMonth.copyDateInvalid'
   if (text.includes('Bulan ini sudah memiliki jadwal aktif')) return 'schedMonth.restoreBlocked'
   if (text.includes('kehadiran tercatat')) return 'schedMonth.returnAttendanceBlocked'
   if (error?.code === 'PGRST202' && text.includes('reassign_and_sync_service_schedule_draft_positions_v111')) return 'schedMonth.migrationRequired'
@@ -86,6 +93,8 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [clearOpen, setClearOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [positionEditor, setPositionEditor] = useState(null)
   const [occurrenceEditor, setOccurrenceEditor] = useState(null)
@@ -103,6 +112,8 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   const canManageAll = grants?.some(item => item.manager_role === 'Admin') || false
   const managedMinistryIds = useMemo(() => grants?.map(item => item.ministry_id) || [], [grants])
   const isDraft = schedule?.month.status === 'Draft'
+  const assignedCount = schedule?.rosters.reduce((count, roster) =>
+    count + (roster.service_roster_slots || []).filter(slot => slot.user_id).length, 0) || 0
   const matrix = useMemo(() => schedule ? buildScheduleMatrix(schedule, { ministryFilter, activityFilter }) : null, [schedule, ministryFilter, activityFilter])
 
   useEffect(() => {
@@ -291,6 +302,22 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
       } catch { /* Sesi lain mungkin sudah menghapus bulan ini. */ }
     } finally { setBusy(false) }
   }
+  async function clearAllAssignments(expectedVersion, expectedAssigned, confirmation) {
+    if (busy || loading || !canManageAll || !isDraft) return
+    setBusy(true)
+    try {
+      await api.clearMonthAssignments(monthId, expectedVersion, expectedAssigned, confirmation)
+      await reloadSchedule()
+      setClearOpen(false)
+      toast.success(t('schedMonth.assignmentsCleared', { assigned: expectedAssigned }))
+    } catch (error) {
+      toast.error(t(errorKey(error)))
+      if (error?.code === '40001') {
+        setClearOpen(false)
+        try { await reloadSchedule() } catch { /* Bulan mungkin telah berubah di sesi lain. */ }
+      }
+    } finally { setBusy(false) }
+  }
   function exportPdf() {
     if (!printMonthlySchedule(schedule, { t, locale: lang, ministryFilter, activityFilter, restricted: !canManageAll })) toast.error(t('schedMonth.popupBlocked'))
   }
@@ -319,10 +346,12 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
         <div className="monthly-month"><Button variant="outline" disabled={busy} aria-label={t('schedMonth.previousMonth')} title={t('schedMonth.previousMonth')} onClick={() => setMonth(shiftScheduleMonth(month, -1).slice(0, 7))}><ChevronLeft size={18} /></Button><Input type="month" aria-label={t('sched.month')} value={month} disabled={busy} onChange={event => event.target.value && setMonth(event.target.value)} /><Button variant="outline" disabled={busy} aria-label={t('sched.nextMonth')} title={t('sched.nextMonth')} onClick={() => setMonth(shiftScheduleMonth(month, 1).slice(0, 7))}><ChevronRight size={18} /></Button></div>
         {months.length > 1 && <Select aria-label={t('schedMonth.monthVersion')} disabled={busy} value={monthId} onChange={event => setMonthId(event.target.value)}>{months.map(item => <option key={item.month_id} value={item.month_id}>{item.name} / {t(`sched.status.${item.status}`)}</option>)}</Select>}
         {canManageAll && !months.some(item => item.status !== 'Dibatalkan') && <Button onClick={() => setCreateOpen(true)} disabled={busy}><Plus size={16} />{t('schedMonth.createMonth')}</Button>}
+        {canManageAll && !months.some(item => item.status !== 'Dibatalkan') && <Button variant="outline" onClick={() => setCopyOpen(true)} disabled={busy}><Copy size={16} />{t('schedMonth.copyMonth')}</Button>}
         {schedule && <Button variant="outline" onClick={exportPdf} disabled={busy}><Printer size={16} />{t('sched.pdf')}</Button>}
         {canManageAll && isDraft && <Button variant="outline" onClick={openEditSchedule} disabled={busy || loading}><Pencil size={16} />{t('schedMonth.editSchedule')}</Button>}
         {canManageAll && isDraft && <Button onClick={publishMonth} disabled={busy || loading} loading={busy}><Send size={16} />{t('schedMonth.publishMonth')}</Button>}
         {canManageAll && isDraft && <Button variant="danger" onClick={deleteMonthDraft} disabled={busy || loading}><Trash2 size={16} />{t('schedMonth.deleteDraft')}</Button>}
+        {canManageAll && isDraft && schedule?.month.definition?.copied_from_month_id && assignedCount > 0 && <Button variant="outline" onClick={() => setClearOpen(true)} disabled={busy || loading}><Trash2 size={16} />{t('schedMonth.clearAllAssignments')}</Button>}
         {canManageAll && schedule?.month.status === 'Terbit' && <Button variant="outline" onClick={sendReminder} disabled={busy || loading} loading={busy}><BellRing size={16} />{t('sched.remind')}</Button>}
         {canManageAll && schedule?.month.status === 'Terbit' && <Button variant="danger" onClick={returnMonthToDraft} disabled={busy || loading} loading={busy}>{t('schedMonth.cancelMonth')}</Button>}
         {canManageAll && schedule?.month.status === 'Dibatalkan' && !months.some(item => item.month_id !== monthId && item.status !== 'Dibatalkan') && <Button variant="outline" onClick={returnMonthToDraft} disabled={busy || loading} loading={busy}>{t('schedMonth.restoreMonth')}</Button>}
@@ -333,6 +362,8 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
       </>}
     </>}
     {createOpen && <MonthCreator profileId={profile?.user_id} month={month} ministries={ministries} positions={positions} events={events} classes={classes} busy={busy} onClose={() => setCreateOpen(false)} onSave={payload => save(async () => { const id = await api.createMonthDirect(payload); if (profile?.user_id) { try { window.localStorage.removeItem(monthDraftKey(profile.user_id, month)) } catch { /* Jadwal sudah dibuat di database. */ } } await loadMonths(); setMonthId(id) }, () => setCreateOpen(false), 'schedMonth.monthCreated', false)} />}
+    {copyOpen && <CopyMonthDialog api={api} month={month} events={events} classes={classes} busy={busy} onClose={() => setCopyOpen(false)} onSave={payload => save(async () => { const id = await api.copyMonth(payload); await loadMonths(); setMonthId(id) }, () => setCopyOpen(false), 'schedMonth.monthCopied', false)} />}
+    {clearOpen && schedule && isDraft && schedule.month.definition?.copied_from_month_id && <ClearAssignmentsDialog assigned={assignedCount} version={schedule.month.version} busy={busy} onClose={() => setClearOpen(false)} onSave={clearAllAssignments} />}
     {editOpen && schedule && <EditScheduleDialog schedule={schedule} positions={positions} busy={busy} onClose={() => setEditOpen(false)} onSave={(catalog, moves) => save(() => api.reassignAndSyncDraftPositions(monthId, schedule.month.version, catalog, moves), () => setEditOpen(false), 'schedMonth.positionsSynced')} />}
     {positionEditor && <PositionEditor context={positionEditor} api={api} canManageAll={canManageAll} isAdmin={profile?.role === 'Admin'} busy={busy} onClose={() => setPositionEditor(null)} onSave={payload => save(() => api.setPosition(payload), () => setPositionEditor(null), 'sched.assignmentSaved')} />}
     {occurrenceEditor && <OccurrenceEditor occurrence={occurrenceEditor} month={month} busy={busy} onClose={() => setOccurrenceEditor(null)} onSave={data => save(() => api.updateOccurrence(occurrenceEditor.occurrence_id, data), () => setOccurrenceEditor(null))} />}
@@ -437,6 +468,126 @@ function MonthCreator({ profileId, month, ministries, positions, events, classes
       {error && <p className="monthly-error" role="alert">{t(error)}</p>}
       <p className={saveFailed ? 'monthly-error' : 'monthly-muted'} role={saveFailed ? 'alert' : 'status'}>{t(saveFailed ? 'schedMonth.localDraftFailed' : 'schedMonth.localDraftSaved')}</p>
     </div><footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('sched.close')}</Button><Button type="submit" disabled={!entries.length} loading={busy}><CalendarDays size={16} />{t('schedMonth.createMonth')}</Button></footer>
+  </form></Modal>
+}
+
+function CopyMonthDialog({ api, month, events, classes, busy, onClose, onSave }) {
+  const { t, lang } = useLang()
+  const [sources, setSources] = useState([])
+  const [sourceMonthId, setSourceMonthId] = useState('')
+  const [source, setSource] = useState(null)
+  const [loadingSources, setLoadingSources] = useState(true)
+  const [loadingSource, setLoadingSource] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [dateMap, setDateMap] = useState({})
+  const [sourceLinks, setSourceLinks] = useState({})
+  const [copyAssignments, setCopyAssignments] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    api.listCopySources().then(rows => {
+      if (!active) return
+      const available = (rows || []).filter(item => item.month_id && item.month_date?.slice(0, 7) !== month)
+      setSources(available)
+      setSourceMonthId(available.find(item => item.month_date < `${month}-01`)?.month_id || available[0]?.month_id || '')
+    }).catch(() => { if (active) setLoadError('schedMonth.copySourcesFailed') })
+      .finally(() => { if (active) setLoadingSources(false) })
+    return () => { active = false }
+  }, [api, month])
+
+  useEffect(() => {
+    if (!sourceMonthId) { setSource(null); return undefined }
+    let active = true
+    setLoadingSource(true)
+    setSource(null)
+    setLoadError('')
+    setError('')
+    api.getMonth(sourceMonthId).then(data => {
+      if (!active) return
+      const dates = [...new Set((data.occurrences || []).map(item => item.service_date))].sort()
+      setSource(data)
+      setDateMap(defaultMonthCopyDateMap(dates, month))
+      setSourceLinks({})
+      setCopyAssignments(true)
+      setLoadError('')
+    }).catch(() => { if (active) setLoadError('schedMonth.copySourceFailed') })
+      .finally(() => { if (active) setLoadingSource(false) })
+    return () => { active = false }
+  }, [api, sourceMonthId, month])
+
+  const sourceDates = useMemo(() => [...new Set((source?.occurrences || []).map(item => item.service_date))].sort(), [source])
+  const sourceSections = useMemo(() => (source?.sections || []).filter(item => item.source_type === 'Event' || item.source_type === 'Kelas'), [source])
+  const assigned = useMemo(() => (source?.rosters || []).reduce((count, roster) =>
+    count + (roster.service_roster_slots || []).filter(slot => slot.user_id).length, 0), [source])
+  const [year, number] = month.split('-').map(Number)
+  const lastDate = new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10)
+
+  function submit(event) {
+    event.preventDefault()
+    const dateError = validateMonthCopyDateMap(sourceDates, month, dateMap)
+    if (dateError) { setError(dateError); return }
+    if (sourceSections.some(section => !(sourceLinks[section.section_id]?.[section.source_type === 'Event' ? 'event_id' : 'class_id']))) {
+      setError('schedMonth.copySourceLinkRequired')
+      return
+    }
+    setError('')
+    onSave({ sourceMonthId, targetMonth: month, dateMap, sourceLinks, copyAssignments })
+  }
+
+  return <Modal title={t('schedMonth.copyMonth')} onClose={onClose} busy={busy} className="monthly-member-dialog"><form onSubmit={submit}>
+    <div className="monthly-dialog-body">
+      <p className="monthly-muted">{t('schedMonth.copyMonthHint')}</p>
+      {loadingSources ? <div className="py-8 text-center"><Spinner /></div> : !sources.length && !loadError
+        ? <p className="monthly-muted">{t('schedMonth.copyNoSources')}</p>
+        : <Select label={t('schedMonth.copySourceMonth')} value={sourceMonthId} disabled={busy || loadingSource} onChange={event => setSourceMonthId(event.target.value)}>
+          {sources.map(item => <option key={item.month_id} value={item.month_id}>{item.name || formatScheduleMonth(item.month_date, lang)} / {t(`sched.status.${item.status}`)}</option>)}
+        </Select>}
+      {loadingSource && <div className="py-8 text-center"><Spinner /></div>}
+      {loadError && <p className="monthly-error" role="alert">{t(loadError)}</p>}
+      {source && <>
+        <p className="monthly-muted">{t('schedMonth.copyDateHint')}</p>
+        {sourceDates.map(date => <div className="monthly-editor-grid" key={date}>
+          <div>
+            <strong className="monthly-subheading">{formatScheduleDate(date, lang, { weekday: 'long', year: 'numeric' })}</strong>
+            <p className="monthly-muted">{source.occurrences.filter(item => item.service_date === date).map(item => item.title).join(' · ')}</p>
+          </div>
+          <Input type="date" aria-required="true" min={`${month}-01`} max={lastDate} label={t('schedMonth.copyTargetDate')} value={dateMap[date] || ''} disabled={busy}
+            onChange={event => { setDateMap(current => ({ ...current, [date]: event.target.value })); setError('') }} />
+        </div>)}
+        {sourceSections.map(section => {
+          const isEvent = section.source_type === 'Event'
+          const linkKey = isEvent ? 'event_id' : 'class_id'
+          const choices = isEvent ? events : classes
+          return <Select key={section.section_id} aria-required="true" label={t('schedMonth.copyTargetSource', { activity: section.title })}
+            value={sourceLinks[section.section_id]?.[linkKey] || ''} disabled={busy}
+            onChange={event => { setSourceLinks(current => ({ ...current, [section.section_id]: { [linkKey]: event.target.value } })); setError('') }}>
+            <option value="">{t(isEvent ? 'sched.chooseEvent' : 'sched.chooseClass')}</option>
+            {choices.map(item => <option key={isEvent ? item.event_id : item.class_id} value={isEvent ? item.event_id : item.class_id}>{item.name || item.title}</option>)}
+          </Select>
+        })}
+        <Checkbox checked={copyAssignments} disabled={busy} onChange={event => setCopyAssignments(event.target.checked)} label={t('schedMonth.copyAssignments', { assigned })} />
+        {error && <p className="monthly-error" role="alert">{t(error)}</p>}
+      </>}
+    </div>
+    <footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('sched.close')}</Button><Button type="submit" disabled={!source || loadingSource || busy} loading={busy}><Copy size={16} />{t('schedMonth.copyMonth')}</Button></footer>
+  </form></Modal>
+}
+
+function ClearAssignmentsDialog({ assigned, version, busy, onClose, onSave }) {
+  const { t } = useLang()
+  const [verification, setVerification] = useState('')
+  const expectedWord = 'KOSONGKAN'
+  return <Modal title={t('schedMonth.clearAllAssignments')} onClose={onClose} busy={busy} className="monthly-member-dialog"><form onSubmit={event => {
+    event.preventDefault()
+    if (verification.trim().toLocaleUpperCase('id-ID') === expectedWord) onSave(version, assigned, expectedWord)
+  }}>
+    <div className="monthly-dialog-body">
+      <p>{t('schedMonth.clearAllMessage', { assigned })}</p>
+      <Input label={t('schedMonth.clearVerificationLabel')} value={verification} disabled={busy} autoComplete="off" autoCapitalize="characters"
+        onChange={event => setVerification(event.target.value)} />
+    </div>
+    <footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('sched.close')}</Button><Button type="submit" variant="danger" disabled={busy || verification.trim().toLocaleUpperCase('id-ID') !== expectedWord} loading={busy}><Trash2 size={16} />{t('schedMonth.clearAllAssignments')}</Button></footer>
   </form></Modal>
 }
 

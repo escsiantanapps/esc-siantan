@@ -4,6 +4,8 @@ import { startHarness, fixture } from './harness.mjs'
 import { countLeaveCredits, getEvaluationResult } from '../src/lib/evaluationLeave.js'
 import { displayEmail, isSyntheticLoginEmail } from '../src/lib/utils.js'
 import { isAutoDeactivated, isReactivationPending } from '../src/lib/accountActivity.js'
+import { defaultMonthCopyDateMap, validateMonthCopyDateMap } from '../src/lib/monthlyScheduleCopy.js'
+import { buildScheduleMatrix } from '../src/lib/serviceScheduleMatrix.js'
 
 let harness
 before(async () => { harness = await startHarness() })
@@ -485,6 +487,48 @@ test('Tautan Draft ditolak pada tampilan anggota walaupun backend mengembalikan 
   })
 })
 
+test('Salin bulan memetakan pekan dan hari yang sama; pekan kelima perlu pilihan tanggal', () => {
+  const sourceDates = ['2026-08-02', '2026-08-09', '2026-08-16', '2026-08-23', '2026-08-30']
+  const dateMap = defaultMonthCopyDateMap(sourceDates, '2026-09')
+  assert.deepEqual(dateMap, {
+    '2026-08-02': '2026-09-06', '2026-08-09': '2026-09-13',
+    '2026-08-16': '2026-09-20', '2026-08-23': '2026-09-27',
+    '2026-08-30': '',
+  })
+  assert.equal(validateMonthCopyDateMap(sourceDates, '2026-09', dateMap), 'schedMonth.copyDateRequired')
+  assert.equal(validateMonthCopyDateMap(sourceDates, '2026-09', {
+    ...dateMap, '2026-08-30': '2026-09-27',
+  }), 'schedMonth.copyDateDuplicate')
+  assert.equal(validateMonthCopyDateMap(sourceDates, '2026-09', {
+    ...dateMap, '2026-08-30': '2026-10-04',
+  }), 'schedMonth.copyDateInvalid')
+  assert.equal(validateMonthCopyDateMap(sourceDates, '2026-09', {
+    ...dateMap, '2026-08-30': '2026-09-29',
+  }), '')
+})
+
+test('Matriks mengurutkan Ministry dan posisi secara terpisah dari angka posisi global', () => {
+  const positions = [
+    { position_id: 'MUA-WANITA', ministry_id: 'MUA', ministry_name: 'Make Up Artis', ministry_sort_order: 1, name: 'MUA Wanita', sort_order: 2 },
+    { position_id: 'MUSIC-DRUM', ministry_id: 'MUSIC', ministry_name: 'Music', ministry_sort_order: 0, name: 'Drum', sort_order: 9 },
+    { position_id: 'MUA-COWOK', ministry_id: 'MUA', ministry_name: 'Make Up Artis', ministry_sort_order: 1, name: 'MUA Cowok', sort_order: 1 },
+    { position_id: 'MUSIC-BASS', ministry_id: 'MUSIC', ministry_name: 'Music', ministry_sort_order: 0, name: 'Bass', sort_order: 3 },
+  ]
+  const schedule = {
+    month: { month_date: '2026-11-01', status: 'Draft' },
+    sections: [{ section_id: 'SEC-1', title: 'Ibadah Pagi', positions }],
+    occurrences: [{ occurrence_id: 'OCC-1', section_id: 'SEC-1', service_date: '2026-11-15' }],
+    parts: [], rosters: [],
+  }
+  const section = buildScheduleMatrix(schedule).sections[0]
+  assert.deepEqual(section.ministries.map(item => item.ministry_id), ['MUSIC', 'MUA'])
+  assert.deepEqual(section.ministries[0].positions.map(item => item.position_id), ['MUSIC-BASS', 'MUSIC-DRUM'])
+  assert.deepEqual(section.ministries[1].positions.map(item => item.position_id), ['MUA-COWOK', 'MUA-WANITA'])
+  assert.deepEqual(positions.map(item => item.position_id), [
+    'MUA-WANITA', 'MUSIC-DRUM', 'MUA-COWOK', 'MUSIC-BASS',
+  ], 'Pengurutan tampilan tidak mengubah data jadwal sumber')
+})
+
 function monthlyManagementFixture(managerOnly = false, monthOffset = 0) {
   const today = new Date()
   const month = new Date(Date.UTC(today.getFullYear(), today.getMonth() + monthOffset, 1)).toISOString().slice(0, 7)
@@ -696,6 +740,54 @@ test('Admin membuat Draft langsung per tanggal dengan Ministry berbeda tanpa Tem
     assert.deepEqual(entries[1].ministry_ids, ['QA-MEDIA'])
     assert.equal(entries[0].start_time, '08:00')
     assert.equal(f.requests.some(row => row.path.endsWith('/service_schedule_templates')), false)
+  })
+})
+
+test('Admin menyalin jadwal bulan lain ke Draft dan mengosongkan penugasan setelah verifikasi', async () => {
+  const data = monthlyManagementFixture(false, -1)
+  const source = data.monthlySchedules[0]
+  const sourceDate = source.occurrences[0].service_date
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...data }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await f.page.getByRole('heading', { name: 'Jadwal Pelayanan Bulanan', exact: true }).waitFor()
+    const targetMonth = await f.page.getByLabel('Bulan', { exact: true }).inputValue()
+    const expectedDate = defaultMonthCopyDateMap([sourceDate], targetMonth)[sourceDate]
+    await f.page.getByRole('button', { name: 'Salin Jadwal Bulan Lain' }).click()
+    const copyDialog = f.page.getByRole('dialog', { name: 'Salin Jadwal Bulan Lain' })
+    assert.equal(await copyDialog.getByLabel('Bulan sumber').inputValue(), source.month.month_id)
+    assert.equal(await copyDialog.getByLabel('Tanggal di bulan tujuan').inputValue(), expectedDate)
+    assert.equal(await copyDialog.getByRole('checkbox', { name: 'Salin 2 nama pelayan dan keterangannya' }).isChecked(), true)
+    await copyDialog.getByRole('button', { name: 'Salin Jadwal Bulan Lain' }).click()
+    await copyDialog.waitFor({ state: 'hidden' })
+    await f.page.getByRole('table', { name: /^Jadwal pelayanan / }).waitFor()
+    const copyRequest = f.requests.find(row => row.path.endsWith('/copy_service_schedule_month_v122'))
+    assert.deepEqual(copyRequest?.body, {
+      p_source_month_id: source.month.month_id,
+      p_target_month: `${targetMonth}-01`,
+      p_date_map: { [sourceDate]: expectedDate },
+      p_source_links: {}, p_copy_assignments: true,
+    })
+    const copied = f.state.monthlySchedules.find(item => item.month.month_id === 'QA-COPIED-MONTH')
+    assert.equal(copied.month.status, 'Draft')
+    assert.equal(copied.occurrences[0].service_date, expectedDate)
+    assert.equal(copied.rosters.flatMap(item => item.service_roster_slots).filter(item => item.user_id).length, 2)
+
+    await f.page.getByRole('button', { name: 'Kosongkan Semua Penugasan' }).click()
+    const clearDialog = f.page.getByRole('dialog', { name: 'Kosongkan Semua Penugasan' })
+    const clearButton = clearDialog.getByRole('button', { name: 'Kosongkan Semua Penugasan' })
+    assert.equal(await clearButton.isDisabled(), true, 'Pengosongan belum boleh dilakukan tanpa verifikasi')
+    assert.equal(f.requests.some(row => row.path.endsWith('/clear_service_schedule_assignments_v122')), false)
+    await clearDialog.getByLabel('Ketik KOSONGKAN').fill('KOSONGKAN')
+    assert.equal(await clearButton.isEnabled(), true)
+    await clearButton.click()
+    await clearDialog.waitFor({ state: 'hidden' })
+    const clearRequest = f.requests.find(row => row.path.endsWith('/clear_service_schedule_assignments_v122'))
+    assert.deepEqual(clearRequest?.body, {
+      p_month_id: 'QA-COPIED-MONTH', p_expected_version: 0,
+      p_expected_assigned: 2, p_confirmation: 'KOSONGKAN',
+    })
+    assert.equal(copied.rosters.flatMap(item => item.service_roster_slots).filter(item => item.user_id).length, 0)
+    assert.equal(copied.occurrences[0].service_date, expectedDate, 'Mengosongkan nama tidak menghapus kegiatan')
   })
 })
 

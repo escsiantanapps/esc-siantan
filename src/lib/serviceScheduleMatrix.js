@@ -109,7 +109,18 @@ export function buildScheduleMatrix(schedule = {}, { ministryFilter = '', activi
     .map(section => {
       const positions = (section.positions || [])
         .filter(position => !ministryFilter || position.ministry_id === ministryFilter)
-        .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+        .sort((a, b) => {
+          const ministryOrder = (a.ministry_sort_order ?? Number.MAX_SAFE_INTEGER)
+            - (b.ministry_sort_order ?? Number.MAX_SAFE_INTEGER)
+          if (ministryOrder) return ministryOrder
+          const ministryName = String(a.ministry_name || '').localeCompare(String(b.ministry_name || ''))
+          if (ministryName) return ministryName
+          const ministryId = String(a.ministry_id || '').localeCompare(String(b.ministry_id || ''))
+          if (ministryId) return ministryId
+          return Number(a.sort_order || 0) - Number(b.sort_order || 0)
+            || String(a.name || '').localeCompare(String(b.name || ''))
+            || String(a.position_id || '').localeCompare(String(b.position_id || ''))
+        })
       const ministries = []
       for (const position of positions) {
         let ministry = ministries.find(item => item.ministry_id === position.ministry_id)

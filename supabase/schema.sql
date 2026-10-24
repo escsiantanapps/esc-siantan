@@ -10072,3 +10072,365 @@ REVOKE ALL ON FUNCTION claim_service_roster_notification(TEXT,TEXT,TEXT,INTEGER)
 GRANT EXECUTE ON FUNCTION claim_service_roster_notification(TEXT,TEXT,TEXT,INTEGER) TO service_role;
 
 COMMIT;
+
+-- ── Migrasi v122: Urutan jadwal tetap, salin bulan, kosongkan penugasan ──
+-- TEMUAN (2026-10-24): urutan grup Ministry mengikuti angka posisi pertama;
+-- penyalinan bulan belum atomik dan pengosongan nama massal belum tersedia.
+-- KEPUTUSAN OPERATOR: Admin mengatur urutan Ministry/posisi pada jadwal;
+-- salinan bulan selalu Draft, Event/Kelas harus dipilih ulang, dan pengosongan
+-- seluruh nama memerlukan konfirmasi tambahan. Struktur bulan sumber utuh.
+BEGIN;
+
+DO $v122_preflight$ BEGIN
+  IF to_regprocedure('public.auth_service_schedule_admin()') IS NULL
+    OR to_regprocedure('public.auth_admin_mh_scoped_v111()') IS NULL
+    OR to_regprocedure('public.get_service_schedule_month_v111(text)') IS NULL
+    OR to_regclass('public.service_schedule_parts') IS NULL
+    OR to_regclass('public.service_roster_slots') IS NULL THEN
+    RAISE EXCEPTION 'Prasyarat jadwal v111 tidak lengkap; hentikan Migrasi v122.' USING ERRCODE = '55000';
+  END IF;
+END $v122_preflight$;
+
+-- Urutan ini khusus jadwal; organization_order tetap milik bagan organisasi.
+CREATE TABLE IF NOT EXISTS service_schedule_ministry_order (
+  ministry_id TEXT PRIMARY KEY REFERENCES ministries(ministry_id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL CHECK (sort_order >= 0)
+);
+ALTER TABLE service_schedule_ministry_order ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON service_schedule_ministry_order FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON service_schedule_ministry_order TO authenticated;
+DROP POLICY IF EXISTS service_schedule_ministry_order_read_v122 ON service_schedule_ministry_order;
+CREATE POLICY service_schedule_ministry_order_read_v122 ON service_schedule_ministry_order
+  FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
+
+CREATE OR REPLACE FUNCTION reorder_service_schedule_ministries_v122(p_ministry_ids TEXT[])
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE total_ministries INTEGER;
+BEGIN
+  IF NOT auth_service_schedule_admin() OR auth_admin_mh_scoped_v111() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF p_ministry_ids IS NULL OR cardinality(p_ministry_ids) NOT BETWEEN 1 AND 200
+    OR EXISTS (SELECT 1 FROM unnest(p_ministry_ids) item WHERE item IS NULL OR btrim(item) = '')
+    OR cardinality(p_ministry_ids) <> (SELECT count(DISTINCT item) FROM unnest(p_ministry_ids) item) THEN
+    RAISE EXCEPTION 'Urutan Ministry tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  -- Penyimpanan satu daftar lengkap mencegah dua Admin menimpa sebagian urutan.
+  LOCK TABLE service_schedule_ministry_order IN SHARE ROW EXCLUSIVE MODE;
+  LOCK TABLE ministries IN SHARE MODE;
+  SELECT count(*) INTO total_ministries FROM ministries;
+  IF total_ministries <> cardinality(p_ministry_ids)
+    OR EXISTS (SELECT 1 FROM unnest(p_ministry_ids) item
+      WHERE NOT EXISTS (SELECT 1 FROM ministries m WHERE m.ministry_id = item)) THEN
+    RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+  END IF;
+  INSERT INTO service_schedule_ministry_order(ministry_id, sort_order)
+  SELECT item, (ordinal - 1)::INTEGER FROM unnest(p_ministry_ids) WITH ORDINALITY AS selected(item, ordinal)
+  ON CONFLICT (ministry_id) DO UPDATE SET sort_order = EXCLUDED.sort_order;
+END $$;
+REVOKE ALL ON FUNCTION reorder_service_schedule_ministries_v122(TEXT[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION reorder_service_schedule_ministries_v122(TEXT[]) TO authenticated;
+
+CREATE OR REPLACE FUNCTION reorder_service_schedule_positions_v122(
+  p_ministry_id TEXT, p_position_ids TEXT[]
+) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE total_positions INTEGER;
+BEGIN
+  IF NOT auth_service_schedule_admin() OR auth_admin_mh_scoped_v111() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF p_ministry_id IS NULL OR p_position_ids IS NULL
+    OR cardinality(p_position_ids) NOT BETWEEN 1 AND 30
+    OR EXISTS (SELECT 1 FROM unnest(p_position_ids) item WHERE item IS NULL OR btrim(item) = '')
+    OR cardinality(p_position_ids) <> (SELECT count(DISTINCT item) FROM unnest(p_position_ids) item) THEN
+    RAISE EXCEPTION 'Urutan posisi tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  LOCK TABLE ministry_service_positions IN SHARE ROW EXCLUSIVE MODE;
+  SELECT count(*) INTO total_positions FROM ministry_service_positions
+    WHERE ministry_id = p_ministry_id AND is_active;
+  IF total_positions <> cardinality(p_position_ids)
+    OR EXISTS (SELECT 1 FROM unnest(p_position_ids) item WHERE NOT EXISTS (
+      SELECT 1 FROM ministry_service_positions p
+      WHERE p.position_id = item AND p.ministry_id = p_ministry_id AND p.is_active)) THEN
+    RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+  END IF;
+  UPDATE ministry_service_positions p SET sort_order = (selected.ordinal - 1)::INTEGER
+  FROM unnest(p_position_ids) WITH ORDINALITY AS selected(item, ordinal)
+  WHERE p.position_id = selected.item AND p.ministry_id = p_ministry_id AND p.is_active;
+END $$;
+REVOKE ALL ON FUNCTION reorder_service_schedule_positions_v122(TEXT,TEXT[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION reorder_service_schedule_positions_v122(TEXT,TEXT[]) TO authenticated;
+
+CREATE OR REPLACE FUNCTION copy_service_schedule_month_v122(
+  p_source_month_id TEXT, p_target_month DATE, p_date_map JSONB,
+  p_source_links JSONB, p_copy_assignments BOOLEAN DEFAULT true
+) RETURNS TEXT LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  source_month service_schedule_months%ROWTYPE;
+  source_occurrence service_schedule_occurrences%ROWTYPE;
+  source_part service_schedule_parts%ROWTYPE;
+  source_roster service_rosters%ROWTYPE;
+  source_slot service_roster_slots%ROWTYPE;
+  source_section JSONB;
+  new_section JSONB;
+  new_sections JSONB := '[]'::JSONB;
+  new_participation JSONB;
+  participation_occurrence RECORD;
+  participant_ministries JSONB;
+  source_day RECORD;
+  target_day DATE;
+  target_text TEXT;
+  target_event TEXT;
+  target_class TEXT;
+  source_section_id TEXT;
+  source_kind TEXT;
+  new_month_id TEXT;
+  new_occurrence_id TEXT;
+  new_roster_id TEXT;
+  source_date_count INTEGER;
+  occurrence_count INTEGER;
+  slot_count INTEGER;
+BEGIN
+  IF NOT auth_service_schedule_admin() OR auth_admin_mh_scoped_v111() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF p_target_month IS NULL OR extract(day FROM p_target_month) <> 1
+    OR jsonb_typeof(p_date_map) IS DISTINCT FROM 'object'
+    OR jsonb_typeof(p_source_links) IS DISTINCT FROM 'object'
+    OR p_copy_assignments IS NULL
+    OR octet_length(p_date_map::TEXT) > 5000
+    OR octet_length(p_source_links::TEXT) > 5000 THEN
+    RAISE EXCEPTION 'Pilihan salin jadwal tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO source_month FROM service_schedule_months
+    WHERE month_id = p_source_month_id FOR SHARE;
+  IF NOT FOUND OR source_month.month_date = p_target_month THEN
+    RAISE EXCEPTION 'Bulan sumber tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (SELECT 1 FROM service_schedule_months
+    WHERE month_date = p_target_month AND status <> 'Dibatalkan') THEN
+    RAISE EXCEPTION 'Bulan tujuan sudah memiliki jadwal aktif.' USING ERRCODE = '23505';
+  END IF;
+  SELECT count(DISTINCT service_date), count(*) INTO source_date_count, occurrence_count
+  FROM service_schedule_occurrences WHERE month_id = p_source_month_id;
+  IF source_date_count NOT BETWEEN 1 AND 31 OR occurrence_count NOT BETWEEN 1 AND 124
+    OR source_date_count <> (SELECT count(*) FROM jsonb_object_keys(p_date_map))
+    OR EXISTS (SELECT 1 FROM jsonb_object_keys(p_date_map) key
+      WHERE NOT EXISTS (SELECT 1 FROM service_schedule_occurrences occurrence
+        WHERE occurrence.month_id = p_source_month_id AND occurrence.service_date::TEXT = key))
+    OR source_date_count <> (SELECT count(DISTINCT value) FROM jsonb_each_text(p_date_map)) THEN
+    RAISE EXCEPTION 'Pemetaan tanggal tidak lengkap atau berulang.' USING ERRCODE = '22023';
+  END IF;
+  FOR source_day IN SELECT DISTINCT service_date FROM service_schedule_occurrences
+    WHERE month_id = p_source_month_id ORDER BY service_date LOOP
+    target_text := p_date_map->>source_day.service_date::TEXT;
+    IF COALESCE(target_text, '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN
+      RAISE EXCEPTION 'Tanggal tujuan tidak valid.' USING ERRCODE = '22023';
+    END IF;
+    target_day := target_text::DATE;
+    IF date_trunc('month', target_day)::DATE <> p_target_month THEN
+      RAISE EXCEPTION 'Tanggal tujuan harus berada pada bulan baru.' USING ERRCODE = '22023';
+    END IF;
+  END LOOP;
+  SELECT count(*) INTO slot_count FROM service_roster_slots slot
+    JOIN service_schedule_parts part ON part.roster_id = slot.roster_id
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id
+    WHERE occurrence.month_id = p_source_month_id;
+  IF slot_count NOT BETWEEN 1 AND 2000 THEN
+    RAISE EXCEPTION 'Jumlah posisi salinan melewati batas.' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM service_roster_slots slot
+    JOIN service_schedule_parts part ON part.roster_id = slot.roster_id
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id
+    LEFT JOIN ministry_service_positions position ON position.position_id = slot.position_id
+    WHERE occurrence.month_id = p_source_month_id AND position.is_active IS DISTINCT FROM true
+  ) THEN
+    RAISE EXCEPTION 'Posisi pada bulan sumber sudah Nonaktif.' USING ERRCODE = '22023';
+  END IF;
+  IF p_copy_assignments AND EXISTS (
+    SELECT 1 FROM service_roster_slots slot
+    JOIN service_schedule_parts part ON part.roster_id = slot.roster_id
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id
+    LEFT JOIN users member ON member.user_id = slot.user_id
+    WHERE occurrence.month_id = p_source_month_id AND slot.user_id IS NOT NULL
+      AND member.status IS DISTINCT FROM 'Aktif') THEN
+    RAISE EXCEPTION 'Pelayan pada bulan sumber sudah tidak aktif.' USING ERRCODE = '22023';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM jsonb_object_keys(p_source_links) key WHERE NOT EXISTS (
+    SELECT 1 FROM jsonb_array_elements(source_month.definition->'sections') section
+    WHERE section->>'section_id' = key AND section->>'source_type' IN ('Event', 'Kelas'))) THEN
+    RAISE EXCEPTION 'Pilihan Event/Kelas tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  FOR source_section IN SELECT value FROM jsonb_array_elements(source_month.definition->'sections') LOOP
+    source_section_id := source_section->>'section_id';
+    source_kind := source_section->>'source_type';
+    target_event := NULL;
+    target_class := NULL;
+    IF source_kind = 'Event' THEN
+      target_event := NULLIF(p_source_links #>> ARRAY[source_section_id, 'event_id'], '');
+      IF jsonb_typeof(p_source_links->source_section_id) IS DISTINCT FROM 'object'
+        OR target_event IS NULL
+        OR (SELECT count(*) FROM jsonb_object_keys(p_source_links->source_section_id)) <> 1
+        OR NOT EXISTS (SELECT 1 FROM events WHERE event_id = target_event) THEN
+        RAISE EXCEPTION 'Pilih ulang Event untuk jadwal salinan.' USING ERRCODE = '22023';
+      END IF;
+    ELSIF source_kind = 'Kelas' THEN
+      target_class := NULLIF(p_source_links #>> ARRAY[source_section_id, 'class_id'], '');
+      IF jsonb_typeof(p_source_links->source_section_id) IS DISTINCT FROM 'object'
+        OR target_class IS NULL
+        OR (SELECT count(*) FROM jsonb_object_keys(p_source_links->source_section_id)) <> 1
+        OR NOT EXISTS (SELECT 1 FROM classes WHERE class_id = target_class) THEN
+        RAISE EXCEPTION 'Pilih ulang Kelas untuk jadwal salinan.' USING ERRCODE = '22023';
+      END IF;
+    ELSIF source_kind <> 'Ibadah' THEN
+      RAISE EXCEPTION 'Jenis kegiatan sumber tidak valid.' USING ERRCODE = '22023';
+    END IF;
+    new_section := source_section || jsonb_build_object('event_id', target_event, 'class_id', target_class);
+    -- Tanggal pada definition lama dapat berbeda dari occurrence setelah
+    -- kegiatan diedit. Bentuk ulang partisipasi dari bagian yang nyata.
+    new_participation := '{}'::JSONB;
+    FOR participation_occurrence IN SELECT occurrence_id, service_date
+      FROM service_schedule_occurrences
+      WHERE month_id = p_source_month_id AND section_id = source_section_id
+      ORDER BY service_date, occurrence_id LOOP
+      SELECT COALESCE(jsonb_agg(to_jsonb(part.ministry_id) ORDER BY part.ministry_id), '[]'::JSONB)
+        INTO participant_ministries
+      FROM service_schedule_parts part
+      WHERE part.occurrence_id = participation_occurrence.occurrence_id;
+      IF jsonb_array_length(participant_ministries) = 0 THEN
+        RAISE EXCEPTION 'Bagian kegiatan sumber tidak lengkap.' USING ERRCODE = '22023';
+      END IF;
+      target_text := p_date_map->>participation_occurrence.service_date::TEXT;
+      new_participation := new_participation || jsonb_build_object(target_text, participant_ministries);
+    END LOOP;
+    new_section := new_section || jsonb_build_object('participation', new_participation);
+    new_sections := new_sections || jsonb_build_array(new_section);
+  END LOOP;
+  PERFORM validate_service_schedule_definition(jsonb_build_object('sections', new_sections));
+
+  INSERT INTO service_schedule_months(template_id, month_date, name, definition, created_by)
+  VALUES (source_month.template_id, p_target_month, 'Jadwal ' || to_char(p_target_month, 'MM/YYYY'),
+    source_month.definition || jsonb_build_object('sections', new_sections,
+      'copied_from_month_id', p_source_month_id), auth_user_id())
+  RETURNING month_id INTO new_month_id;
+  PERFORM set_config('app.service_schedule_structure', new_month_id, true);
+  PERFORM set_config('app.allow_roster_slot_assignment', '1', true);
+  FOR source_occurrence IN SELECT * FROM service_schedule_occurrences
+    WHERE month_id = p_source_month_id ORDER BY service_date, start_time, occurrence_id LOOP
+    target_day := (p_date_map->>source_occurrence.service_date::TEXT)::DATE;
+    target_event := NULLIF(p_source_links #>> ARRAY[source_occurrence.section_id, 'event_id'], '');
+    target_class := NULLIF(p_source_links #>> ARRAY[source_occurrence.section_id, 'class_id'], '');
+    INSERT INTO service_schedule_occurrences(month_id, section_id, title, source_type,
+      event_id, class_id, class_session_no, service_date, start_time, end_time,
+      location, dress_code, pic, notes)
+    VALUES (new_month_id, source_occurrence.section_id, source_occurrence.title,
+      source_occurrence.source_type, target_event, target_class, source_occurrence.class_session_no,
+      target_day, source_occurrence.start_time, source_occurrence.end_time,
+      source_occurrence.location, source_occurrence.dress_code, source_occurrence.pic,
+      source_occurrence.notes)
+    RETURNING occurrence_id INTO new_occurrence_id;
+    FOR source_part IN SELECT * FROM service_schedule_parts
+      WHERE occurrence_id = source_occurrence.occurrence_id ORDER BY part_id LOOP
+      SELECT * INTO source_roster FROM service_rosters WHERE roster_id = source_part.roster_id;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'Roster bulan sumber tidak lengkap.' USING ERRCODE = '22023';
+      END IF;
+      INSERT INTO service_rosters(ministry_id, source_type, event_id, class_id, class_session_no,
+        title, service_date, start_time, end_time, location, dress_code, notes, created_by)
+      VALUES (source_part.ministry_id, source_roster.source_type, target_event, target_class,
+        source_roster.class_session_no, source_roster.title, target_day,
+        source_roster.start_time, source_roster.end_time, source_roster.location,
+        source_roster.dress_code, source_roster.notes, auth_user_id())
+      RETURNING roster_id INTO new_roster_id;
+      INSERT INTO service_schedule_parts(occurrence_id, ministry_id, roster_id,
+        team_name, material, notes)
+      VALUES (new_occurrence_id, source_part.ministry_id, new_roster_id,
+        source_part.team_name, source_part.material, source_part.notes);
+      FOR source_slot IN SELECT * FROM service_roster_slots
+        WHERE roster_id = source_part.roster_id ORDER BY position_id, slot_no LOOP
+        INSERT INTO service_roster_slots(roster_id, ministry_id, position_id, slot_no,
+          user_id, assignment_note)
+        VALUES (new_roster_id, source_slot.ministry_id, source_slot.position_id,
+          source_slot.slot_no, CASE WHEN p_copy_assignments THEN source_slot.user_id ELSE NULL END,
+          CASE WHEN p_copy_assignments THEN source_slot.assignment_note ELSE NULL END);
+      END LOOP;
+    END LOOP;
+  END LOOP;
+  PERFORM set_config('app.allow_roster_slot_assignment', '', true);
+  PERFORM set_config('app.service_schedule_structure', '', true);
+  RETURN new_month_id;
+END $$;
+REVOKE ALL ON FUNCTION copy_service_schedule_month_v122(TEXT,DATE,JSONB,JSONB,BOOLEAN) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION copy_service_schedule_month_v122(TEXT,DATE,JSONB,JSONB,BOOLEAN) TO authenticated;
+
+-- KEPUTUSAN OPERATOR: nama pelayan pada Draft salinan boleh dikosongkan,
+-- tetapi struktur kegiatan dan posisi tetap utuh. Frasa konfirmasi juga
+-- diperiksa di server agar UI lain tidak dapat melewati verifikasi ini.
+CREATE OR REPLACE FUNCTION clear_service_schedule_assignments_v122(
+  p_month_id TEXT, p_expected_version INTEGER, p_expected_assigned INTEGER,
+  p_confirmation TEXT
+) RETURNS INTEGER LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  draft_month RECORD;
+  roster_ids TEXT[] := ARRAY[]::TEXT[];
+  v_roster_id TEXT;
+  assigned_count INTEGER;
+BEGIN
+  IF NOT auth_service_schedule_admin() OR auth_admin_mh_scoped_v111() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF p_confirmation IS DISTINCT FROM 'KOSONGKAN'
+    OR p_expected_version IS NULL OR p_expected_version < 0
+    OR p_expected_assigned IS NULL OR p_expected_assigned < 1 THEN
+    RAISE EXCEPTION 'Konfirmasi pengosongan tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  -- Kunci bulan yang sama dipakai RPC pengisian dan publikasi.
+  SELECT status, version, definition INTO draft_month FROM service_schedule_months
+    WHERE month_id = p_month_id FOR UPDATE;
+  IF NOT FOUND OR draft_month.status <> 'Draft' THEN
+    RAISE EXCEPTION 'Hanya jadwal Draft yang dapat dikosongkan.' USING ERRCODE = '22023';
+  END IF;
+  IF NOT (draft_month.definition ? 'copied_from_month_id') THEN
+    RAISE EXCEPTION 'Hanya Draft hasil salin yang dapat dikosongkan seluruhnya.' USING ERRCODE = '22023';
+  END IF;
+  IF draft_month.version IS DISTINCT FROM p_expected_version THEN
+    RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+  END IF;
+  SELECT COALESCE(array_agg(part.roster_id ORDER BY part.roster_id), ARRAY[]::TEXT[])
+    INTO roster_ids
+  FROM service_schedule_parts part
+  JOIN service_schedule_occurrences occurrence
+    ON occurrence.occurrence_id = part.occurrence_id
+  WHERE occurrence.month_id = p_month_id;
+  PERFORM 1 FROM service_rosters roster WHERE roster.roster_id = ANY(roster_ids)
+    ORDER BY roster.roster_id FOR UPDATE;
+  IF cardinality(roster_ids) = 0 OR EXISTS (
+    SELECT 1 FROM service_rosters roster
+    WHERE roster.roster_id = ANY(roster_ids) AND roster.status <> 'Draft'
+  ) OR (SELECT count(*) FROM service_rosters roster
+    WHERE roster.roster_id = ANY(roster_ids)) <> cardinality(roster_ids) THEN
+    RAISE EXCEPTION 'Bagian jadwal tidak seluruhnya Draft.' USING ERRCODE = '22023';
+  END IF;
+  SELECT count(*) INTO assigned_count FROM service_roster_slots slot
+    WHERE slot.roster_id = ANY(roster_ids) AND slot.user_id IS NOT NULL;
+  IF assigned_count <> p_expected_assigned THEN
+    RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+  END IF;
+  PERFORM set_config('app.allow_roster_slot_assignment', '1', true);
+  FOREACH v_roster_id IN ARRAY roster_ids LOOP
+    PERFORM set_config('app.service_schedule_assignment', v_roster_id, true);
+    UPDATE service_roster_slots SET user_id = NULL, assignment_note = NULL
+      WHERE service_roster_slots.roster_id = v_roster_id AND user_id IS NOT NULL;
+  END LOOP;
+  PERFORM set_config('app.service_schedule_assignment', '', true);
+  PERFORM set_config('app.allow_roster_slot_assignment', '', true);
+  UPDATE service_schedule_months SET version = version + 1, updated_at = now()
+    WHERE month_id = p_month_id;
+  RETURN assigned_count;
+END $$;
+REVOKE ALL ON FUNCTION clear_service_schedule_assignments_v122(TEXT,INTEGER,INTEGER,TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION clear_service_schedule_assignments_v122(TEXT,INTEGER,INTEGER,TEXT) TO authenticated;
+
+COMMIT;

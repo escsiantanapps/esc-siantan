@@ -78,6 +78,11 @@
 .monthly-context { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--color-gray-500); }
 .monthly-context strong { font-size:15px; color:var(--color-gray-900); }
 .schedule-access-grant { display:flex; flex-direction:column; gap:10px; width:100%; padding:18px; border:1px solid var(--color-gray-200); border-radius:8px; background:var(--color-surface); }
+.schedule-ministry-order { margin-top:14px; padding:18px; border:1px solid var(--color-gray-200); border-radius:8px; background:var(--color-surface); }
+.schedule-ministry-order h2 { margin-bottom:6px; }
+.schedule-order-list { max-height:340px; overflow-y:auto; margin-top:10px; border-top:1px solid var(--color-gray-200); }
+.schedule-order-row > .schedule-order-actions,.schedule-position-actions > .schedule-order-actions { display:flex; flex-direction:row; align-items:center; gap:4px; flex:none; }
+.schedule-order-actions button { min-width:44px; min-height:44px; }
 .schedule-access-grant h2 { margin-bottom:0; }
 .schedule-access-candidates { display:flex; flex-direction:column; max-height:220px; overflow-y:auto; border:1px solid var(--color-gray-200); border-radius:6px; background:var(--color-control); }
 .schedule-access-candidate { min-height:44px; padding:10px 12px; text-align:left; border-bottom:1px solid var(--color-gray-200); }
@@ -110,8 +115,8 @@
 .monthly-dialog :focus-visible,.monthly-workspace :focus-visible { outline:2px solid var(--color-brand-500); outline-offset:2px; }
 @media(max-width:700px) {
   .schedule-access-grid { grid-template-columns:1fr; gap:28px; }
-  .schedule-position-row { grid-template-columns:minmax(0,1fr) auto; }
-  .schedule-access-row > .schedule-position-actions { gap:0; }
+  .schedule-position-row { grid-template-columns:1fr; }
+  .schedule-access-row > .schedule-position-actions { justify-content:flex-start; gap:4px; }
   .monthly-heading h1 { font-size:21px; }
   .monthly-tabs button { font-size:12px; padding:8px; }
   .monthly-month { width:100%; }
