@@ -1,13 +1,25 @@
 // Cron harian: kirim pengingat push untuk tugas yang dijadwalkan hari ini,
-// hanya ke jemaat yang BELUM memenuhi target pada periode berjalan.
+// hanya ke jemaat yang BELUM mengisi tugas itu hari ini dan belum memenuhi target.
 // Dipanggil Vercel Cron (lihat vercel.json). Dilindungi CRON_SECRET.
 export const config = { runtime: 'nodejs' }
 
-function startOfWeekMonday(d) {
-  const x = new Date(d); const day = (x.getUTCDay() + 6) % 7
-  x.setUTCDate(x.getUTCDate() - day); x.setUTCHours(0, 0, 0, 0); return x
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
+const RESPONSE_PAGE_SIZE = 500
+
+export function reminderPeriodStartsWib(now) {
+  // Tanggal lokal WIB dibaca sebagai UTC semu, lalu dikembalikan ke instan UTC.
+  const wib = new Date(now.getTime() + WIB_OFFSET_MS)
+  const midnightWibAsUtc = Date.UTC(wib.getUTCFullYear(), wib.getUTCMonth(), wib.getUTCDate())
+  const dayStart = new Date(midnightWibAsUtc - WIB_OFFSET_MS)
+  const mondayOffset = (wib.getUTCDay() + 6) % 7
+  return {
+    dayStart,
+    dayEnd: new Date(dayStart.getTime() + DAY_MS),
+    weekStart: new Date(dayStart.getTime() - mondayOffset * DAY_MS),
+    monthStart: new Date(Date.UTC(wib.getUTCFullYear(), wib.getUTCMonth(), 1) - WIB_OFFSET_MS),
+  }
 }
-function startOfMonth(d) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)) }
 const norm = s => String(s || '').trim().toLowerCase()
 
 export default async function handler(req, res) {
@@ -44,8 +56,10 @@ export default async function handler(req, res) {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 
-    // Nama hari ini (zona WIB), mis. "Senin".
-    const todayId = norm(new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' }).format(new Date()))
+    // Hari dan batas periode memakai satu waktu acuan di zona WIB.
+    const now = new Date()
+    const todayId = norm(new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' }).format(now))
+    const { dayStart, dayEnd, weekStart, monthStart } = reminderPeriodStartsWib(now)
 
     // Slot (pagi/siang/sore) berasal dari query string vercel.json cron.
     // Kosong = tes manual → cocokkan semua slot (backward-compat).
@@ -96,7 +110,7 @@ export default async function handler(req, res) {
     const report = []
     for (const tpl of due) {
       const goal = tpl.weekly_goal || 1
-      const periodStart = tpl.period === 'bulan' ? startOfMonth(new Date()) : startOfWeekMonday(new Date())
+      const periodStart = tpl.period === 'bulan' ? monthStart : weekStart
 
       // Eligible: bila tugas dibatasi ministry → anggota ministry tsb; jika tidak → semua user aktif.
       const { data: tms } = await admin.from('template_ministries').select('ministry_id').eq('form_id', tpl.form_id)
@@ -126,13 +140,28 @@ export default async function handler(req, res) {
         eligible = eligible.filter(id => ok.has(id))
       }
 
-      // Hitung yang sudah memenuhi target pada periode ini.
-      const { data: resp } = await admin
-        .from('form_responses').select('volunteer_id')
-        .eq('form_id', tpl.form_id).gte('submitted_at', periodStart.toISOString())
-      const count = {}
-      for (const r of resp || []) count[r.volunteer_id] = (count[r.volunteer_id] || 0) + 1
-      const targets = eligible.filter(uid => (count[uid] || 0) < goal)
+      // Baca seluruh respons periode secara bertahap; batas baris PostgREST
+      // tidak boleh membuat jawaban hari ini luput dari pengecualian pengingat.
+      const count = new Map()
+      const completedToday = new Set()
+      for (let offset = 0; ; offset += RESPONSE_PAGE_SIZE) {
+        const { data: resp, error } = await admin.from('form_responses')
+          .select('response_id, volunteer_id, submitted_at')
+          .eq('form_id', tpl.form_id).gte('submitted_at', periodStart.toISOString())
+          .order('response_id', { ascending: true })
+          .range(offset, offset + RESPONSE_PAGE_SIZE - 1)
+        if (error) throw error
+        for (const row of resp || []) {
+          count.set(row.volunteer_id, (count.get(row.volunteer_id) || 0) + 1)
+          const submittedAt = Date.parse(row.submitted_at)
+          if (submittedAt >= dayStart.getTime() && submittedAt < dayEnd.getTime()) {
+            completedToday.add(row.volunteer_id)
+          }
+        }
+        if ((resp || []).length < RESPONSE_PAGE_SIZE) break
+      }
+      const targets = eligible.filter(uid => !completedToday.has(uid) && (count.get(uid) || 0) < goal)
+      const skippedToday = eligible.filter(uid => completedToday.has(uid)).length
 
       const payload = JSON.stringify({
         title: 'Pengingat Tugas',
@@ -154,7 +183,7 @@ export default async function handler(req, res) {
         }
       })))
       totalSent += sent
-      report.push({ form: tpl.title, targets: targets.length, sent, errors })
+      report.push({ form: tpl.title, targets: targets.length, skippedToday, sent, errors })
     }
 
     return res.status(200).json({
