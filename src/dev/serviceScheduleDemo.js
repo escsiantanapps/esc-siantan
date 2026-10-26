@@ -214,6 +214,7 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       return copy(value)
     },
     async listMonths(month) { return copy(state.months.filter(item => (!month || item.month_date.startsWith(monthKey(month))) && (item.status !== 'Draft' || isAdmin() || managedIds().length))) },
+    async listOwnedScheduleFields() { return { fields: [], occurrences: [] } },
     async getMonth(monthId) {
       const month = demandMonth(monthId)
       if (month.status === 'Draft' && !isAdmin() && !managedIds().length) fail('Draft tidak tersedia untuk anggota.', '42501')

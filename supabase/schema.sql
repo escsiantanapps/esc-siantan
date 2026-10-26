@@ -11137,3 +11137,183 @@ REVOKE ALL ON FUNCTION public.update_service_schedule_month_draft_v124(TEXT,INTE
 GRANT EXECUTE ON FUNCTION public.update_service_schedule_month_draft_v124(TEXT,INTEGER,JSONB,JSONB,TEXT)
   TO authenticated;
 COMMIT;
+
+-- ── Migrasi v125: Penanggung jawab isian Ceremonial dan dress code ──
+-- TEMUAN: Ceremonial dan dress code milik kegiatan, sedangkan pengelola Ministry
+-- hanya dapat mengisi bagian penugasan. Memberi akses Admin membuka seluruh Draft.
+-- KEPUTUSAN OPERATOR: Ministry Ceremonial mengelola Ceremonial dan Ministry
+-- Worship mengelola dress code pada seluruh kegiatan Draft.
+BEGIN;
+
+DO $v125_preflight$
+BEGIN
+  IF to_regprocedure('public.update_service_schedule_month_draft_v124(text,integer,jsonb,jsonb,text)') IS NULL
+    OR to_regprocedure('public.auth_can_fill_schedule_ministry_v111(text)') IS NULL
+    OR to_regprocedure('public.service_schedule_roster_notes(text,text,text,text)') IS NULL
+    OR to_regprocedure('public.guard_service_schedule_linked_roster()') IS NULL THEN
+    RAISE EXCEPTION 'Prasyarat Jadwal Pelayanan belum lengkap; hentikan Migrasi v125.' USING ERRCODE = '55000';
+  END IF;
+END $v125_preflight$;
+
+CREATE TABLE IF NOT EXISTS public.service_schedule_field_owners (
+  field_name TEXT PRIMARY KEY CHECK (field_name IN ('pic', 'dress_code')),
+  ministry_id TEXT NOT NULL REFERENCES public.ministries(ministry_id) ON DELETE RESTRICT
+);
+ALTER TABLE public.service_schedule_field_owners ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.service_schedule_field_owners FROM anon, authenticated;
+GRANT SELECT ON public.service_schedule_field_owners TO authenticated;
+DROP POLICY IF EXISTS service_schedule_field_owners_read ON public.service_schedule_field_owners;
+CREATE POLICY service_schedule_field_owners_read ON public.service_schedule_field_owners
+  FOR SELECT TO authenticated USING (
+    auth_service_schedule_admin() OR auth_can_fill_schedule_ministry_v111(ministry_id)
+  );
+
+DO $v125$
+DECLARE v_count INTEGER; v_ministry_id TEXT; v_field TEXT; v_name TEXT;
+BEGIN
+  FOR v_field, v_name IN SELECT * FROM (VALUES
+    ('pic', 'Ceremonial'), ('dress_code', 'Worship')) mapping(field_name, ministry_name)
+  LOOP
+    IF EXISTS (SELECT 1 FROM public.service_schedule_field_owners WHERE field_name = v_field) THEN CONTINUE; END IF;
+    SELECT count(*), min(ministry_id) INTO v_count, v_ministry_id
+      FROM public.ministries WHERE lower(btrim(name)) = lower(v_name);
+    IF v_count <> 1 THEN
+      RAISE EXCEPTION 'Ministry % harus ditemukan tepat satu kali untuk isian % (ditemukan %).',
+        v_name, v_field, v_count USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO public.service_schedule_field_owners(field_name, ministry_id)
+      VALUES (v_field, v_ministry_id) ON CONFLICT (field_name) DO NOTHING;
+  END LOOP;
+END $v125$;
+
+CREATE OR REPLACE FUNCTION public.list_owned_service_schedule_fields_v125(p_month_date DATE)
+RETURNS JSONB LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_fields TEXT[]; v_occurrences JSONB;
+BEGIN
+  IF p_month_date IS NULL OR extract(day FROM p_month_date) <> 1 THEN
+    RAISE EXCEPTION 'Bulan tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  SELECT COALESCE(array_agg(field_name ORDER BY CASE field_name WHEN 'pic' THEN 0 ELSE 1 END), ARRAY[]::TEXT[])
+    INTO v_fields FROM public.service_schedule_field_owners
+    WHERE auth_can_fill_schedule_ministry_v111(ministry_id);
+  IF cardinality(v_fields) = 0 THEN
+    RETURN jsonb_build_object('fields', '[]'::JSONB, 'occurrences', '[]'::JSONB);
+  END IF;
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'occurrence_id', occurrence.occurrence_id,
+      'title', occurrence.title,
+      'service_date', occurrence.service_date,
+      'start_time', occurrence.start_time,
+      'pic', CASE WHEN 'pic' = ANY(v_fields) THEN occurrence.pic END,
+      'dress_code', CASE WHEN 'dress_code' = ANY(v_fields) THEN occurrence.dress_code END
+    ) ORDER BY occurrence.service_date, occurrence.start_time, occurrence.title), '[]'::JSONB)
+    INTO v_occurrences
+    FROM public.service_schedule_occurrences occurrence
+    JOIN public.service_schedule_months month ON month.month_id = occurrence.month_id
+    WHERE month.month_date = p_month_date AND month.status = 'Draft';
+  RETURN jsonb_build_object('fields', to_jsonb(v_fields), 'occurrences', v_occurrences);
+END $$;
+REVOKE ALL ON FUNCTION public.list_owned_service_schedule_fields_v125(DATE) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.list_owned_service_schedule_fields_v125(DATE) TO authenticated;
+
+-- Trigger production diverifikasi operator: hanya metadata Admin atau catatan
+-- milik Ministry yang boleh mengubah roster terkait. Jalur baru membatasi
+-- kolom, kegiatan, dan Ministry penanggung jawab secara bersamaan.
+CREATE OR REPLACE FUNCTION public.guard_service_schedule_linked_roster() RETURNS trigger
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE linked_month TEXT; linked_occurrence TEXT; owned_field TEXT; owner_ministry TEXT;
+BEGIN
+  SELECT occurrence.month_id, occurrence.occurrence_id
+    INTO linked_month, linked_occurrence
+    FROM service_schedule_parts part
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id = part.occurrence_id
+    WHERE part.roster_id = OLD.roster_id;
+  IF linked_month IS NULL THEN IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
+  -- Pembersihan FK backend masih diperiksa secara ketat oleh guard v97.
+  IF TG_OP = 'UPDATE' AND auth_user_role() IS NULL
+    AND (to_jsonb(NEW) - 'created_by' - 'published_by' - 'updated_at') =
+      (to_jsonb(OLD) - 'created_by' - 'published_by' - 'updated_at') THEN RETURN NEW; END IF;
+  IF TG_OP = 'DELETE' THEN
+    IF auth_user_role() IS NOT NULL THEN
+      RAISE EXCEPTION 'Bagian jadwal bulanan tidak dapat dihapus terpisah.' USING ERRCODE = '42501';
+    END IF;
+    RETURN OLD;
+  END IF;
+  IF TG_OP = 'UPDATE' AND split_part(COALESCE(current_setting('app.service_schedule_owned_field', true), ''), ':', 1) = linked_occurrence THEN
+    owned_field := split_part(current_setting('app.service_schedule_owned_field', true), ':', 2);
+    SELECT ministry_id INTO owner_ministry FROM service_schedule_field_owners WHERE field_name = owned_field;
+    IF owner_ministry IS NOT NULL AND auth_can_fill_schedule_ministry_v111(owner_ministry) THEN
+      IF owned_field = 'dress_code'
+        AND (to_jsonb(NEW) - 'dress_code' - 'updated_at') = (to_jsonb(OLD) - 'dress_code' - 'updated_at')
+        AND NEW.dress_code IS NOT DISTINCT FROM (
+          SELECT dress_code FROM service_schedule_occurrences WHERE occurrence_id = linked_occurrence)
+      THEN RETURN NEW; END IF;
+      IF owned_field = 'pic'
+        AND (to_jsonb(NEW) - 'notes' - 'updated_at') = (to_jsonb(OLD) - 'notes' - 'updated_at')
+        AND NEW.notes IS NOT DISTINCT FROM (
+          SELECT service_schedule_roster_notes(part.occurrence_id, part.team_name, part.material, part.notes)
+          FROM service_schedule_parts part WHERE part.roster_id = OLD.roster_id)
+      THEN RETURN NEW; END IF;
+    END IF;
+  END IF;
+  IF auth_manages_ministry(OLD.ministry_id)
+    AND COALESCE(current_setting('app.service_schedule_metadata', true), '') = linked_month
+    AND (to_jsonb(NEW) - 'notes' - 'updated_at') = (to_jsonb(OLD) - 'notes' - 'updated_at') THEN RETURN NEW; END IF;
+  IF NOT auth_service_schedule_admin() OR (
+    COALESCE(current_setting('app.service_schedule_metadata', true), '') <> linked_month
+    AND COALESCE(current_setting('app.service_schedule_transition', true), '') <> linked_month
+  ) THEN RAISE EXCEPTION 'Struktur dan publikasi harus melalui jadwal bulanan Admin.' USING ERRCODE = '42501'; END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.update_owned_service_schedule_field_v125(
+  p_occurrence_id TEXT, p_field TEXT, p_value TEXT, p_expected_value TEXT
+) RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_month_id TEXT; v_occurrence service_schedule_occurrences%ROWTYPE;
+  v_status TEXT; v_owner_ministry TEXT; v_value TEXT; v_current TEXT;
+BEGIN
+  IF p_field IS NULL OR p_field NOT IN ('pic', 'dress_code') OR p_occurrence_id IS NULL
+    OR p_value IS NULL OR length(btrim(p_value)) > 200 THEN
+    RAISE EXCEPTION 'Isian kegiatan tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  SELECT ministry_id INTO v_owner_ministry FROM service_schedule_field_owners WHERE field_name = p_field;
+  IF v_owner_ministry IS NULL OR NOT COALESCE(auth_can_fill_schedule_ministry_v111(v_owner_ministry), false) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  SELECT month_id INTO v_month_id FROM service_schedule_occurrences WHERE occurrence_id = p_occurrence_id;
+  IF v_month_id IS NULL THEN RAISE EXCEPTION 'Kegiatan tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+  SELECT status INTO v_status FROM service_schedule_months WHERE month_id = v_month_id FOR UPDATE;
+  IF v_status <> 'Draft' THEN RAISE EXCEPTION 'Hanya jadwal Draft yang dapat diedit.' USING ERRCODE = '22023'; END IF;
+  SELECT * INTO v_occurrence FROM service_schedule_occurrences WHERE occurrence_id = p_occurrence_id FOR UPDATE;
+  IF NOT FOUND OR v_occurrence.month_id IS DISTINCT FROM v_month_id THEN
+    RAISE EXCEPTION 'Kegiatan berubah.' USING ERRCODE = '40001';
+  END IF;
+  v_current := CASE WHEN p_field = 'pic' THEN v_occurrence.pic ELSE v_occurrence.dress_code END;
+  IF COALESCE(v_current, '') IS DISTINCT FROM COALESCE(p_expected_value, '') THEN
+    RAISE EXCEPTION 'schedule_stale' USING ERRCODE = '40001';
+  END IF;
+  v_value := NULLIF(btrim(p_value), '');
+  IF p_field = 'pic' THEN
+    UPDATE service_schedule_occurrences SET pic = v_value WHERE occurrence_id = p_occurrence_id;
+  ELSE
+    UPDATE service_schedule_occurrences SET dress_code = v_value WHERE occurrence_id = p_occurrence_id;
+  END IF;
+  PERFORM set_config('app.service_schedule_owned_field', p_occurrence_id || ':' || p_field, true);
+  IF p_field = 'pic' THEN
+    UPDATE service_rosters roster SET notes = service_schedule_roster_notes(
+      part.occurrence_id, part.team_name, part.material, part.notes)
+      FROM service_schedule_parts part
+      WHERE part.occurrence_id = p_occurrence_id AND part.roster_id = roster.roster_id;
+  ELSE
+    UPDATE service_rosters roster SET dress_code = v_value
+      FROM service_schedule_parts part
+      WHERE part.occurrence_id = p_occurrence_id AND part.roster_id = roster.roster_id;
+  END IF;
+  PERFORM set_config('app.service_schedule_owned_field', '', true);
+  UPDATE service_schedule_months SET version = version + 1, updated_at = now() WHERE month_id = v_month_id;
+  RETURN COALESCE(v_value, '');
+END $$;
+REVOKE ALL ON FUNCTION public.update_owned_service_schedule_field_v125(TEXT,TEXT,TEXT,TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.update_owned_service_schedule_field_v125(TEXT,TEXT,TEXT,TEXT) TO authenticated;
+
+COMMIT;

@@ -5,9 +5,9 @@ import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
 import { Badge, Button, Checkbox, EmptyState, Input, Select, Spinner, Textarea } from '@/components/ui'
 import MonthlyScheduleMatrix from '@/components/serviceSchedule/MonthlyScheduleMatrix'
+import ScheduleOwnedFields from '@/components/serviceSchedule/ScheduleOwnedFields'
 import ScheduleAccessPositions from '@/components/serviceSchedule/ScheduleAccessPositions'
 import { buildScheduleMatrix, formatScheduleDate, formatScheduleMonth, getMonthDates, printMonthlySchedule, shiftScheduleMonth } from '@/lib/serviceScheduleMatrix'
-import { buildDraftPositionSync } from '@/lib/monthlyPositionSync'
 import { defaultMonthCopyDateMap, validateMonthCopyDateMap } from '@/lib/monthlyScheduleCopy'
 import './monthlyScheduleWorkspace.css'
 
@@ -76,6 +76,7 @@ const statusColor = value => value === 'Terbit' ? 'green' : value === 'Dibatalka
 const errorKey = error => {
   const text = String(error?.message || '')
   if (error?.code === 'PGRST202' && text.includes('update_service_schedule_month_draft_v124')) return 'schedMonth.editDraftMigrationRequired'
+  if (error?.code === 'PGRST202' && text.includes('_v125')) return 'schedMonth.ownedFieldsMigrationRequired'
   if (error?.code === 'PGRST202' && text.includes('add_service_schedule_ministry_to_section_v123')) return 'schedMonth.addMinistryMigrationRequired'
   if (error?.code === 'PGRST202' && text.includes('_v122')) return 'schedMonth.copyMigrationRequired'
   if (error?.code === 'PGRST202' && text.includes('return_service_schedule_month_to_draft_v121')) return 'schedMonth.returnMigrationRequired'
@@ -132,13 +133,14 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   const [months, setMonths] = useState([])
   const [monthId, setMonthId] = useState('')
   const [schedule, setSchedule] = useState(null)
+  const [ownedFieldData, setOwnedFieldData] = useState({ fields: [], occurrences: [] })
+  const [ownedFieldsLoading, setOwnedFieldsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [copyOpen, setCopyOpen] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
   const [editDraftOpen, setEditDraftOpen] = useState(false)
   const [positionEditor, setPositionEditor] = useState(null)
   const [occurrenceEditor, setOccurrenceEditor] = useState(null)
@@ -226,6 +228,24 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
   }, [api, grants, month])
   useEffect(() => { loadMonths(); return () => { monthsRequest.current += 1 } }, [loadMonths])
   useEffect(() => {
+    if (!grants?.length || canManageAll) {
+      setOwnedFieldData({ fields: [], occurrences: [] })
+      return undefined
+    }
+    let active = true
+    setOwnedFieldsLoading(true)
+    api.listOwnedScheduleFields(month).then(data => {
+      if (active) setOwnedFieldData(data)
+    }).catch(error => {
+      if (active) { setOwnedFieldData({ fields: [], occurrences: [] }); setLoadError(errorKey(error)) }
+    }).finally(() => { if (active) setOwnedFieldsLoading(false) })
+    return () => { active = false }
+  }, [api, grants, canManageAll, month])
+  useEffect(() => {
+    if (!canManageAll && !loading && !ownedFieldsLoading && ownedFieldData.fields.length && !months.length)
+      setView(current => current === 'monthly' ? 'fields' : current)
+  }, [canManageAll, loading, ownedFieldsLoading, ownedFieldData.fields.length, months.length])
+  useEffect(() => {
     if (!monthId) { setSchedule(null); return undefined }
     let active = true
     setLoading(true); setSchedule(null)
@@ -239,7 +259,10 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     if (monthId) setSchedule(await api.getMonth(monthId))
   }
   async function reload() {
-    try { await loadCatalog(); await loadMonths(); await reloadSchedule() }
+    try {
+      await loadCatalog(); await loadMonths(); await reloadSchedule()
+      if (!canManageAll && grants?.length) setOwnedFieldData(await api.listOwnedScheduleFields(month))
+    }
     catch (error) { toast.error(t(errorKey(error))) }
   }
   async function save(action, done, successKey = 'schedMonth.saved', refreshSchedule = true) {
@@ -247,6 +270,22 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     setBusy(true)
     try { await action(); if (refreshSchedule) await reloadSchedule(); done?.(); toast.success(t(successKey)) }
     catch (error) { toast.error(t(errorKey(error))) }
+    finally { setBusy(false) }
+  }
+  async function saveOwnedField(occurrence, field, value) {
+    if (busy) return
+    setBusy(true)
+    try {
+      await api.updateOwnedScheduleField(occurrence.occurrence_id, field, value.trim(), occurrence[field] || '')
+      setOwnedFieldData(await api.listOwnedScheduleFields(month))
+      if (monthId) await reloadSchedule()
+      toast.success(t('schedMonth.ownedFieldSaved'))
+    } catch (error) {
+      if (error?.code === '40001') {
+        try { setOwnedFieldData(await api.listOwnedScheduleFields(month)) } catch { /* Daftar dapat dimuat lagi lewat tombol segarkan. */ }
+      }
+      toast.error(t(errorKey(error)))
+    }
     finally { setBusy(false) }
   }
   async function notify(rosterIds, kind) {
@@ -380,13 +419,13 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
       <span>{t(canManageAll ? 'schedMonth.accessAdminHint' : 'schedMonth.accessManagerHint')}</span>
     </div>
     <nav className="monthly-tabs" aria-label={t('schedMonth.views')}>
-      {[['monthly', 'schedMonth.monthly'], ...(canManageAll ? [['settings', 'sched.accessPositions']] : [])].map(([id, label]) => <button type="button" key={id} disabled={busy} aria-pressed={view === id} onClick={() => {
+      {[['monthly', 'schedMonth.monthly'], ...(!canManageAll && ownedFieldData.fields.length ? [['fields', 'schedMonth.ownedFields']] : []), ...(canManageAll ? [['settings', 'sched.accessPositions']] : [])].map(([id, label]) => <button type="button" key={id} disabled={busy} aria-pressed={view === id} onClick={() => {
         setView(id)
         if (rosterId) setParams(current => { const next = new URLSearchParams(current); next.delete('rosterId'); return next }, { replace: true })
       }}>{t(label)}</button>)}
     </nav>
     {loadError && <div className="monthly-error" role="alert">{t(loadError)}<Button variant="outline" onClick={reload}>{t('schedMonth.retry')}</Button></div>}
-    {view === 'settings' && canManageAll ? <ScheduleAccessPositions api={api} ministries={ministries} positions={positions} onChange={async () => { await loadCatalog(); await reloadSchedule() }} ministryHref={ministryHref} /> : view === 'legacy' && rosterId && renderLegacy ? renderLegacy(view) : <>
+    {view === 'settings' && canManageAll ? <ScheduleAccessPositions api={api} ministries={ministries} positions={positions} onChange={async () => { await loadCatalog(); await reloadSchedule() }} ministryHref={ministryHref} /> : view === 'fields' && !canManageAll && ownedFieldData.fields.length ? <ScheduleOwnedFields data={ownedFieldData} month={month} onMonthChange={setMonth} loading={ownedFieldsLoading} busy={busy} onSave={saveOwnedField} /> : view === 'legacy' && rosterId && renderLegacy ? renderLegacy(view) : <>
       <div className="monthly-toolbar">
         <div className="monthly-month"><Button variant="outline" disabled={busy} aria-label={t('schedMonth.previousMonth')} title={t('schedMonth.previousMonth')} onClick={() => setMonth(shiftScheduleMonth(month, -1).slice(0, 7))}><ChevronLeft size={18} /></Button><Input type="month" aria-label={t('sched.month')} value={month} disabled={busy} onChange={event => event.target.value && setMonth(event.target.value)} /><Button variant="outline" disabled={busy} aria-label={t('sched.nextMonth')} title={t('sched.nextMonth')} onClick={() => setMonth(shiftScheduleMonth(month, 1).slice(0, 7))}><ChevronRight size={18} /></Button></div>
         {months.length > 1 && <Select aria-label={t('schedMonth.monthVersion')} disabled={busy} value={monthId} onChange={event => setMonthId(event.target.value)}>{months.map(item => <option key={item.month_id} value={item.month_id}>{item.name} / {t(`sched.status.${item.status}`)}</option>)}</Select>}
@@ -394,7 +433,6 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
         {canManageAll && !months.some(item => item.status !== 'Dibatalkan') && <Button variant="outline" onClick={() => setCopyOpen(true)} disabled={busy}><Copy size={16} />{t('schedMonth.copyMonth')}</Button>}
         {schedule && <Button variant="outline" onClick={exportPdf} disabled={busy}><Printer size={16} />{t('sched.pdf')}</Button>}
         {canManageAll && isDraft && <Button variant="outline" onClick={() => openDraftEditor(setEditDraftOpen)} disabled={busy || loading}><Pencil size={16} />{t('schedMonth.editDraft')}</Button>}
-        {canManageAll && isDraft && <Button variant="outline" onClick={() => openDraftEditor(setEditOpen)} disabled={busy || loading}><Pencil size={16} />{t('schedMonth.editSchedule')}</Button>}
         {canManageAll && isDraft && <Button onClick={publishMonth} disabled={busy || loading} loading={busy}><Send size={16} />{t('schedMonth.publishMonth')}</Button>}
         {canManageAll && isDraft && <Button variant="danger" onClick={deleteMonthDraft} disabled={busy || loading}><Trash2 size={16} />{t('schedMonth.deleteDraft')}</Button>}
         {canManageAll && isDraft && schedule?.month.definition?.copied_from_month_id && assignedCount > 0 && <Button variant="outline" onClick={() => setClearOpen(true)} disabled={busy || loading}><Trash2 size={16} />{t('schedMonth.clearAllAssignments')}</Button>}
@@ -411,7 +449,6 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     {editDraftOpen && schedule && <MonthCreator schedule={schedule} month={month} ministries={ministries} positions={positions} events={events} classes={classes} busy={busy} onClose={() => setEditDraftOpen(false)} onSave={payload => save(() => api.updateMonthDraft(monthId, schedule.month.version, payload.entries, payload.expectedRemovedAssignments, payload.confirmation), () => setEditDraftOpen(false), 'schedMonth.draftUpdated')} />}
     {copyOpen && <CopyMonthDialog api={api} month={month} events={events} classes={classes} busy={busy} onClose={() => setCopyOpen(false)} onSave={payload => save(async () => { const id = await api.copyMonth(payload); await loadMonths(); setMonthId(id) }, () => setCopyOpen(false), 'schedMonth.monthCopied', false)} />}
     {clearOpen && schedule && isDraft && schedule.month.definition?.copied_from_month_id && <ClearAssignmentsDialog assigned={assignedCount} version={schedule.month.version} busy={busy} onClose={() => setClearOpen(false)} onSave={clearAllAssignments} />}
-    {editOpen && schedule && <EditScheduleDialog schedule={schedule} positions={positions} busy={busy} onClose={() => setEditOpen(false)} onSave={(catalog, moves) => save(() => api.reassignAndSyncDraftPositions(monthId, schedule.month.version, catalog, moves), () => setEditOpen(false), 'schedMonth.positionsSynced')} />}
     {positionEditor && <PositionEditor context={positionEditor} api={api} canManageAll={canManageAll} isAdmin={profile?.role === 'Admin'} busy={busy} onClose={() => setPositionEditor(null)} onSave={payload => save(() => api.setPosition(payload), () => setPositionEditor(null), 'sched.assignmentSaved')} />}
     {ministryAdder && schedule && <AddMinistryDialog context={ministryAdder} positions={positions} busy={busy} onClose={() => setMinistryAdder(null)} onSave={() => save(() => api.addMinistryToSection(monthId, ministryAdder.sectionId, ministryAdder.ministry.ministry_id, schedule.month.version), () => setMinistryAdder(null), 'schedMonth.ministryAdded')} />}
     {occurrenceEditor && <OccurrenceEditor occurrence={occurrenceEditor} month={month} busy={busy} onClose={() => setOccurrenceEditor(null)} onSave={data => save(() => api.updateOccurrence(occurrenceEditor.occurrence_id, data), () => setOccurrenceEditor(null))} />}
@@ -681,64 +718,6 @@ function ClearAssignmentsDialog({ assigned, version, busy, onClose, onSave }) {
     </div>
     <footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('sched.close')}</Button><Button type="submit" variant="danger" disabled={busy || verification.trim().toLocaleUpperCase('id-ID') !== expectedWord} loading={busy}><Trash2 size={16} />{t('schedMonth.clearAllAssignments')}</Button></footer>
   </form></Modal>
-}
-
-function EditScheduleDialog({ schedule, positions, busy, onClose, onSave }) {
-  const { t, lang } = useLang()
-  const preview = useMemo(() => buildDraftPositionSync(schedule, positions), [schedule, positions])
-  const [choices, setChoices] = useState({})
-  const affected = preview.changes.flatMap(item => item.affected)
-  const missingChoice = affected.some(item => !choices[item.slotId])
-  const capacityExceeded = useMemo(() => {
-    const counts = new Map()
-    const capacities = new Map(positions.filter(item => item.is_active)
-      .map(item => [item.position_id, Number(item.default_slots)]))
-    for (const roster of schedule.rosters || []) for (const slot of roster.service_roster_slots || []) {
-      if (!slot.user_id || !capacities.has(slot.position_id)
-        || Number(slot.slot_no) > capacities.get(slot.position_id)) continue
-      const key = `${roster.roster_id}:${slot.position_id}`
-      counts.set(key, (counts.get(key) || 0) + 1)
-    }
-    for (const item of affected) {
-      const positionId = choices[item.slotId]
-      if (!positionId) continue
-      const key = `${item.rosterId}:${positionId}`
-      counts.set(key, (counts.get(key) || 0) + 1)
-    }
-    return [...counts].some(([key, count]) => count > (capacities.get(key.slice(key.lastIndexOf(':') + 1)) || 0))
-  }, [affected, choices, positions, schedule.rosters])
-  return <Modal title={t('schedMonth.editSchedule')} onClose={onClose} busy={busy}>
-    <div className="monthly-dialog-body">
-      <p className="monthly-muted">{t('schedMonth.editScheduleHint')}</p>
-      {!preview.changes.length && <p className="monthly-muted">{t('schedMonth.syncNoChanges')}</p>}
-      {preview.changes.map(item => <section className="monthly-sync-row" key={item.sectionId + ':' + item.ministryId}>
-        <h3>{item.sectionTitle} · {item.ministryName}</h3>
-        <div className="monthly-sync-columns">
-          <div><h4>{t('schedMonth.syncBefore')}</h4><div className="monthly-sync-jobs">{item.before.map((name, index) => <span key={index}>{name}</span>)}</div></div>
-          <div><h4>{t('schedMonth.syncAfter')}</h4><div className="monthly-sync-jobs is-new">{item.after.map((name, index) => <span key={index}>{name}</span>)}</div></div>
-        </div>
-        {!!item.affected.length && <div className="monthly-sync-affected">
-          <h4>{t('schedMonth.syncAffectedTitle')}</h4>
-          <p>{t('schedMonth.syncAffectedHint')}</p>
-          {item.affected.map(person => <Select key={person.slotId}
-            label={t('schedMonth.syncChooseJobFor', { name: person.userName,
-              date: formatScheduleDate(person.serviceDate, lang), job: person.oldPositionName })}
-            value={choices[person.slotId] || ''} disabled={busy}
-            onChange={event => setChoices(current => ({ ...current, [person.slotId]: event.target.value }))}>
-            <option value="">{t('schedMonth.syncChooseJob')}</option>
-            {positions.filter(position => position.is_active && position.ministry_id === item.ministryId)
-              .map(position => <option key={position.position_id} value={position.position_id}>
-                {position.name} ({position.default_slots})</option>)}
-          </Select>)}
-        </div>}
-      </section>)}
-      {!!preview.missingJobsCount && <p className="monthly-error" role="alert">{t('schedMonth.syncNoJobs')}</p>}
-      {!!affected.length && missingChoice && <p className="monthly-error" role="status">{t('schedMonth.syncNeedAssignment')}</p>}
-      {capacityExceeded && <p className="monthly-error" role="alert">{t('schedMonth.syncCapacityExceeded')}</p>}
-    </div>
-    <footer className="monthly-dialog-footer"><Button variant="outline" disabled={busy} onClick={onClose}>{t('common.cancel')}</Button><Button loading={busy} disabled={!preview.changes.length || preview.missingJobsCount > 0 || missingChoice || capacityExceeded} onClick={() => onSave(preview.catalog,
-      affected.map(item => ({ slot_id: item.slotId, user_id: item.userId, position_id: choices[item.slotId] })))}><Save size={16} />{t('common.save')}</Button></footer>
-  </Modal>
 }
 
 function AddMinistryDialog({ context, positions, busy, onClose, onSave }) {

@@ -51,6 +51,10 @@ export const monthlyScheduleService = {
   notifyMonth: (monthId, kind) => serviceRosterService.notifyMonth(monthId, kind),
   findConflicts: (userId, rosterId, slotId) => serviceRosterService.findConflicts(userId, rosterId, slotId),
   listMembers: (ministryId, query, canManageAll) => serviceRosterService.listMinistryMembers(ministryId, query, canManageAll),
+  listOwnedScheduleFields: month => rpc('list_owned_service_schedule_fields_v125', { p_month_date: `${month}-01` }),
+  updateOwnedScheduleField: (occurrenceId, field, value, expectedValue) => rpc('update_owned_service_schedule_field_v125', {
+    p_occurrence_id: occurrenceId, p_field: field, p_value: value, p_expected_value: expectedValue,
+  }),
   async listMinistries() {
     const { data, error } = await supabase.from('ministries')
       .select('ministry_id, name, head_user_id, head:users!head_user_id(user_id, name, photo_url, role, role_secondary, status)').order('name')
