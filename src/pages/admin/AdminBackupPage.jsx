@@ -166,6 +166,13 @@ export default function AdminBackupPage() {
   const [cleanupBusy, setCleanupBusy] = useState(false)
   const [cleanupData, setCleanupData] = useState(null)
   const [cleanupSelected, setCleanupSelected] = useState([])
+  const [activeSection, setActiveSection] = useState(() => {
+    const hash = window.location.hash
+    if (hash === '#backup-cold-archive' || hash === '#backup-export') return 'backup'
+    if (hash === '#backup-restore') return 'restore'
+    return 'storage'
+  })
+  const [storageBusy, setStorageBusy] = useState(false)
 
   // Arsip data dingin SOP: salin lokal dulu, hapus sumber pada aksi kedua.
   const [coldCutoff, setColdCutoff] = useState(latestResponseArchiveCutoff)
@@ -582,6 +589,14 @@ export default function AdminBackupPage() {
     return new Date(ms).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
   }
 
+  const sectionBusy = storageBusy || cleanupBusy || exporting || coldBusy || archiving || restoring
+
+  function chooseSection(section) {
+    if (sectionBusy && section !== activeSection) return
+    setActiveSection(section)
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
       <PageHeader
@@ -589,23 +604,26 @@ export default function AdminBackupPage() {
         subtitle={t('backup.subtitle')}
       />
 
-      <Card className="mb-4 p-4 sm:p-5">
-        <p className="text-sm font-semibold text-gray-900">{t('backup.quickTitle')}</p>
-        <p className="text-sm text-gray-600 mt-1">{t('backup.quickDesc')}</p>
-        <nav aria-label={t('backup.quickTitle')} className="grid grid-cols-2 gap-2 mt-4">
-          {[
-            ['#backup-response-files', t('backup.quickFiles')],
-            ['#backup-cold-archive', t('backup.quickCold')],
-            ['#backup-export', t('backup.quickExport')],
-            ['#backup-restore', t('backup.quickRestore')],
-          ].map(([href, label]) => <a key={href} href={href}
-            className="min-h-11 flex items-center justify-center rounded-xl bg-control hover:bg-control-hover px-2 py-2 text-center text-sm font-medium text-gray-700">
-            {label}
-          </a>)}
-        </nav>
-      </Card>
+      <div role="group" className="grid grid-cols-3 gap-1 rounded-2xl bg-control p-1 mb-4" aria-label={t('backup.sectionLabel')}>
+        {[
+          ['storage', t('backup.tabStorage')],
+          ['backup', t('backup.tabBackup')],
+          ['restore', t('backup.tabRestore')],
+        ].map(([section, label]) => <Button key={section} size="sm"
+          variant={activeSection === section ? 'primary' : 'secondary'}
+          aria-pressed={activeSection === section}
+          disabled={sectionBusy && section !== activeSection}
+          onClick={() => chooseSection(section)}
+          className="w-full min-h-11 px-1 text-xs sm:text-sm">
+          {label}
+        </Button>)}
+      </div>
 
-      <ResponseStorageManager />
+      <section hidden={activeSection !== 'storage'} aria-label={t('backup.tabStorage')}>
+        <ResponseStorageManager onBusyChange={setStorageBusy} />
+      </section>
+
+      <section hidden={activeSection !== 'backup'} aria-label={t('backup.tabBackup')}>
 
       {/* Alur rinci dipadatkan agar aksi utama tetap terlihat pada layar ponsel. */}
       <Card className="mb-4 border-l-4 border-l-brand-500">
@@ -987,7 +1005,9 @@ export default function AdminBackupPage() {
           </div>
         </details>
       </Card>
+      </section>
 
+      <section hidden={activeSection !== 'storage'} aria-label={t('backup.cleanupTitle')}>
       <Card className="mb-4 p-4 space-y-3">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-lg bg-control flex items-center justify-center shrink-0">
@@ -1056,11 +1076,16 @@ export default function AdminBackupPage() {
           </>
         )}
         <p className="text-xs text-gray-600">{t('backup.cleanupWarning')}</p>
-        <a href="#backup-cold-archive" className="text-xs font-medium text-brand-600">
+        <Button variant="ghost" size="sm" className="px-0 text-brand-600" disabled={sectionBusy} onClick={() => {
+          chooseSection('backup')
+          window.setTimeout(() => document.getElementById('backup-cold-archive')?.scrollIntoView({ block: 'start', behavior: 'auto' }), 0)
+        }}>
           {t('backup.cleanupResponsesLink')}
-        </a>
+        </Button>
       </Card>
+      </section>
 
+      <section hidden={activeSection !== 'restore'} aria-label={t('backup.tabRestore')}>
       {/* Card restore */}
       <Card id="backup-restore" className="mb-4 scroll-mt-20">
         <details className="group">
@@ -1137,6 +1162,7 @@ export default function AdminBackupPage() {
           </div>
         </details>
       </Card>
+      </section>
     </div>
   )
 }

@@ -118,7 +118,7 @@ test('Penghapusan parsial dilaporkan dan tidak mengklaim ruang file yang gagal',
   assert.deepEqual(f.removed, ['news/one.pdf'])
 })
 
-function responseFixture({ failRemove = false, secondFile = false } = {}) {
+function responseFixture({ failRemove = false, secondFile = false, independentFile = false, delayedRemove = false } = {}) {
   const url = path => `https://example.test/storage/v1/object/public/task-files/${path}`
   const rows = {
     form_responses: [
@@ -126,22 +126,29 @@ function responseFixture({ failRemove = false, secondFile = false } = {}) {
         note: 'Jawaban tetap ada', photo: url('responses/u/large.jpg'),
         ...(secondFile ? { document: url('responses/u/second.jpg') } : {}),
       } },
-      { response_id: 'R2', volunteer_id: 'U1', form_id: 'F1', data_json: { photo: url('responses/u/shared.jpg') } },
+      { response_id: 'R2', volunteer_id: 'U1', form_id: 'F1', data_json: {
+        photo: url(independentFile ? 'responses/u/independent.jpg' : 'responses/u/shared.jpg'),
+      } },
       { response_id: 'R3', volunteer_id: 'U1', form_id: 'F1', data_json: { photo: url('responses/u/shared.jpg') } },
     ],
     registration_prerequisites: [{ id: 'P1', data_json: { photo: url('responses/u/prereq.jpg') } }],
   }
   const removed = []
   const audits = []
-  const files = ['large.jpg', 'shared.jpg', 'prereq.jpg', 'orphan.jpg', 'recent.jpg', ...(secondFile ? ['second.jpg'] : [])].map((name, i) => ({
+  const files = ['large.jpg', 'shared.jpg', 'prereq.jpg', 'orphan.jpg', 'recent.jpg', ...(secondFile ? ['second.jpg'] : []), ...(independentFile ? ['independent.jpg'] : [])].map((name, i) => ({
     id: name, name, created_at: name === 'recent.jpg' ? '2026-10-11T00:00:00Z' : OLD,
-    metadata: { size: name === 'second.jpg' ? 1000 : 5000 - i * 1000 },
+    metadata: { size: name === 'second.jpg' || name === 'independent.jpg' ? 1000 : 5000 - i * 1000 },
   }))
+  const concurrency = { active: 0, max: 0 }
   const admin = {
     storage: { from() { return {
       async list(folder) { return { data: folder === 'responses' ? [{ id: null, name: 'u' }]
         : folder === 'responses/u' ? files : [], error: null } },
       async remove(paths) {
+        concurrency.active++
+        concurrency.max = Math.max(concurrency.max, concurrency.active)
+        if (delayedRemove) await new Promise(resolve => setTimeout(resolve, 5))
+        concurrency.active--
         if (failRemove) return { error: new Error('gagal') }
         removed.push(...paths)
         return { error: null }
@@ -165,7 +172,7 @@ function responseFixture({ failRemove = false, secondFile = false } = {}) {
       return q
     },
   }
-  return { admin, rows, removed, audits }
+  return { admin, rows, removed, audits, concurrency }
 }
 
 test('Lampiran SOP dan yatim lama dipilih menurut ukuran; file prasyarat, bersama, dan yatim baru dikecualikan', async () => {
@@ -216,6 +223,26 @@ test('Dua lampiran pada respons yang sama dapat dihapus dalam satu batch tanpa m
   assert.deepEqual(f.rows.form_responses[0].data_json, {
     note: 'Jawaban tetap ada', photo: null, document: null,
   })
+})
+
+test('Batch memproses respons berbeda serentak dan mempertahankan urutan lampiran satu respons', async () => {
+  const f = responseFixture({ secondFile: true, independentFile: true, delayedRemove: true })
+  const paths = ['responses/u/large.jpg', 'responses/u/second.jpg', 'responses/u/independent.jpg']
+  const result = await deleteResponseFiles(f.admin, paths,
+    { user_id: 'A1', name: 'Admin', role: 'Super Admin' }, NOW)
+  assert.deepEqual(result.body.deleted, paths)
+  assert.deepEqual(result.body.failed, [])
+  assert.ok(f.concurrency.max >= 2)
+  assert.equal(f.rows.form_responses[0].data_json.note, 'Jawaban tetap ada')
+  assert.equal(f.rows.form_responses[0].data_json.photo, null)
+  assert.equal(f.rows.form_responses[0].data_json.document, null)
+  assert.equal(f.rows.form_responses[1].data_json.photo, null)
+})
+
+test('Batch penghapusan dibatasi 20 file per permintaan', async () => {
+  const result = await deleteResponseFiles({}, Array.from({ length: 21 }, (_, i) =>
+    `responses/u/file-${i}.jpg`), {}, NOW)
+  assert.equal(result.status, 400)
 })
 
 test('Filter bulan memakai tanggal unggah WIB dan persiapan massal mencakup lebih dari 200 hasil', () => {

@@ -7,7 +7,8 @@ const MAX_SCAN = 10000
 const MAX_DELETE = 20
 const MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const RESPONSE_FOLDER = 'responses'
-const RESPONSE_BATCH = 10
+const RESPONSE_BATCH = 20
+const RESPONSE_CONCURRENCY = 4
 const RESPONSE_MIN_SIZES = new Set([0, 1024 * 1024, 5 * 1024 * 1024])
 
 export function parseResponseFilter(raw) {
@@ -159,30 +160,33 @@ export async function deleteResponseFiles(admin, paths, caller, now = Date.now()
   if (paths.some(path => !byPath.has(path))) {
     return { status: 409, body: { error: 'Daftar lampiran berubah. Periksa ulang sebelum menghapus.' } }
   }
-  const deleted = []
-  const failed = []
-  const auditFailed = []
-  const restoreFailed = []
+  const outcomes = new Map()
+  const groups = new Map()
   for (const path of paths) {
+    // Perubahan JSONB pada respons yang sama harus tetap berurutan.
+    const key = references.get(path)?.[0]?.response_id || path
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(path)
+  }
+  async function processPath(path) {
     const row = references.get(path)?.[0]
     if (!row) {
       const { error: removeError } = await admin.storage.from(BUCKET).remove([path])
-      if (removeError) { failed.push(path); continue }
-      deleted.push(path)
+      if (removeError) return { failed: true }
       const { error: auditError } = await admin.from('audit_log').insert({
         actor_user_id: caller.user_id, actor_name: caller.name, actor_role: caller.role,
         action: 'DELETE', table_name: 'storage.objects', record_id: path,
         old_data: { attachment_path: path, attachment_bytes: byPath.get(path).size, orphan: true },
       })
-      if (auditError) { console.error('[storage-cleanup] gagal mencatat audit', auditError); auditFailed.push(path) }
-      continue
+      if (auditError) console.error('[storage-cleanup] gagal mencatat audit', auditError)
+      return { deleted: true, auditFailed: Boolean(auditError) }
     }
     const originalJson = row.data_json
     const nextJson = withoutPath(originalJson, path)
     const { data: updated, error: updateError } = await admin.from('form_responses')
       .update({ data_json: nextJson }).eq('response_id', row.response_id)
       .eq('data_json', JSON.stringify(originalJson)).select('response_id')
-    if (updateError || updated?.length !== 1) { failed.push(path); continue }
+    if (updateError || updated?.length !== 1) return { failed: true }
 
     const { error: removeError } = await admin.storage.from(BUCKET).remove([path])
     if (removeError) {
@@ -192,12 +196,10 @@ export async function deleteResponseFiles(admin, paths, caller, now = Date.now()
         .eq('data_json', JSON.stringify(nextJson)).select('response_id')
       if (restoreError || restored?.length !== 1) {
         console.error('[storage-cleanup] gagal memulihkan referensi', row.response_id, restoreError)
-        restoreFailed.push(path)
+        return { failed: true, restoreFailed: true }
       }
-      failed.push(path)
-      continue
+      return { failed: true }
     }
-    deleted.push(path)
     // Satu respons dapat punya beberapa lampiran dalam batch yang sama.
     // Perbarui snapshot agar filter kesetaraan JSONB pada file berikutnya cocok.
     row.data_json = nextJson
@@ -208,8 +210,30 @@ export async function deleteResponseFiles(admin, paths, caller, now = Date.now()
       old_data: { attachment_path: path, attachment_bytes: byPath.get(path).size },
       new_data: { attachment_removed: true },
     })
-    if (auditError) { console.error('[storage-cleanup] gagal mencatat audit', auditError); auditFailed.push(path) }
+    if (auditError) console.error('[storage-cleanup] gagal mencatat audit', auditError)
+    return { deleted: true, auditFailed: Boolean(auditError) }
   }
+  const queue = [...groups.values()]
+  let nextGroup = 0
+  await Promise.all(Array.from({ length: Math.min(RESPONSE_CONCURRENCY, queue.length) }, async () => {
+    while (nextGroup < queue.length) {
+      const group = queue[nextGroup++]
+      for (const path of group) {
+        const outcome = await processPath(path)
+        outcomes.set(path, outcome)
+        if (outcome.restoreFailed) {
+          // Jika pemulihan gagal, status respons ini belum pasti.
+          for (const remaining of group.slice(group.indexOf(path) + 1))
+            outcomes.set(remaining, { failed: true })
+          break
+        }
+      }
+    }
+  }))
+  const deleted = paths.filter(path => outcomes.get(path)?.deleted)
+  const failed = paths.filter(path => outcomes.get(path)?.failed)
+  const auditFailed = paths.filter(path => outcomes.get(path)?.auditFailed)
+  const restoreFailed = paths.filter(path => outcomes.get(path)?.restoreFailed)
   return { status: 200, body: { deleted, failed, auditFailed, restoreFailed,
     freedBytes: deleted.reduce((sum, path) => sum + byPath.get(path).size, 0) } }
 }

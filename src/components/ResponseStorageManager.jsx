@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { HardDrive, RefreshCw, Trash2, XCircle } from 'lucide-react'
+import { ChevronDown, HardDrive, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/useToast'
 import { useLang } from '@/hooks/useLang'
 import { Card, Button, Checkbox, Input, Select } from '@/components/ui'
 import { storageCleanupService } from '@/services/storageCleanupService'
 
-const BATCH_SIZE = 10
+const SELECTION_LIMIT = 10
+const BULK_BATCH_SIZE = 20
 const INITIAL_FILTER = { month: '', status: 'all', minBytes: 0, query: '' }
 
 function formatSize(bytes) {
@@ -22,7 +23,7 @@ function formatUploadedAt(value) {
   })
 }
 
-export default function ResponseStorageManager() {
+export default function ResponseStorageManager({ onBusyChange }) {
   const { t } = useLang()
   const { toast, confirm } = useToast()
   const [filter, setFilter] = useState(INITIAL_FILTER)
@@ -36,6 +37,7 @@ export default function ResponseStorageManager() {
     cancelled.current = false
     return () => { cancelled.current = true }
   }, [])
+  useEffect(() => { onBusyChange?.(busy) }, [busy, onBusyChange])
 
   function updateFilter(patch) {
     setFilter(current => ({ ...current, ...patch }))
@@ -60,7 +62,7 @@ export default function ResponseStorageManager() {
   function toggleFile(path) {
     setSelected(current => {
       if (current.includes(path)) return current.filter(item => item !== path)
-      if (current.length >= BATCH_SIZE) { toast.info(t('backup.responseFilesLimit')); return current }
+      if (current.length >= SELECTION_LIMIT) { toast.info(t('backup.responseFilesLimit')); return current }
       return [...current, path]
     })
   }
@@ -140,9 +142,9 @@ export default function ResponseStorageManager() {
       })
       if (!ok) return
       setBulk({ total: prepared.candidateCount, done: 0, deleted: 0, failed: 0, freedBytes: 0, waiting: 0, running: true })
-      for (let index = 0; index < prepared.paths.length; index += BATCH_SIZE) {
+      for (let index = 0; index < prepared.paths.length; index += BULK_BATCH_SIZE) {
         if (cancelled.current) { stopped = true; break }
-        const paths = prepared.paths.slice(index, index + BATCH_SIZE)
+        const paths = prepared.paths.slice(index, index + BULK_BATCH_SIZE)
         let result
         for (;;) {
           try { result = await storageCleanupService.deleteResponseFiles(paths, filter); break }
@@ -198,25 +200,34 @@ export default function ResponseStorageManager() {
     </div>
 
     <div className="p-4 sm:p-5 space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <Input label={t('backup.responseFilesMonth')} type="month" value={filter.month}
           onChange={e => updateFilter({ month: e.target.value })} disabled={busy} />
         <Select label={t('backup.responseFilesStatus')} value={filter.status}
           onChange={e => updateFilter({ status: e.target.value })} disabled={busy}>
           <option value="all">{t('backup.responseFilesAllStatus')}</option>
-          <option value="active">{t('backup.responseFilesActive')}</option>
-          <option value="orphan">{t('backup.responseFilesOrphan')}</option>
+          <option value="active">{t('backup.responseFilesActiveFilter')}</option>
+          <option value="orphan">{t('backup.responseFilesOrphanFilter')}</option>
         </Select>
-        <Select label={t('backup.responseFilesMinSize')} value={filter.minBytes}
-          onChange={e => updateFilter({ minBytes: Number(e.target.value) })} disabled={busy}>
-          <option value={0}>{t('backup.responseFilesAnySize')}</option>
-          <option value={1024 * 1024}>1 MB+</option>
-          <option value={5 * 1024 * 1024}>5 MB+</option>
-        </Select>
-        <Input label={t('backup.responseFilesSearch')} value={filter.query} maxLength={80}
-          placeholder={t('backup.responseFilesSearchPh')}
-          onChange={e => updateFilter({ query: e.target.value })} disabled={busy} />
       </div>
+      <details className="rounded-xl border border-gray-200 group">
+        <summary className="min-h-11 flex items-center px-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden text-sm font-medium text-gray-700">
+          {t('backup.responseFilesMoreFilters')}
+          {(filter.minBytes || filter.query) ? <span className="ml-2 text-brand-600">•</span> : null}
+          <ChevronDown size={16} className="ml-auto text-gray-500 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 border-t border-gray-100">
+          <Select label={t('backup.responseFilesMinSize')} value={filter.minBytes}
+            onChange={e => updateFilter({ minBytes: Number(e.target.value) })} disabled={busy}>
+            <option value={0}>{t('backup.responseFilesAnySize')}</option>
+            <option value={1024 * 1024}>1 MB+</option>
+            <option value={5 * 1024 * 1024}>5 MB+</option>
+          </Select>
+          <Input label={t('backup.responseFilesSearch')} value={filter.query} maxLength={80}
+            placeholder={t('backup.responseFilesSearchPh')}
+            onChange={e => updateFilter({ query: e.target.value })} disabled={busy} />
+        </div>
+      </details>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" onClick={() => scan()} loading={busy} disabled={busy}>
           <RefreshCw size={16} /> {t('backup.responseFilesScan')}
@@ -286,7 +297,13 @@ export default function ResponseStorageManager() {
         </Button>}
       </div>}
 
-      <p className="text-xs text-gray-600 border-t border-gray-100 pt-3">{t('backup.responseFilesWarning')}</p>
+      <details className="border-t border-gray-100 pt-2 group">
+        <summary className="min-h-11 flex items-center cursor-pointer list-none [&::-webkit-details-marker]:hidden text-xs font-medium text-gray-600">
+          {t('backup.responseFilesRules')}
+          <ChevronDown size={15} className="ml-auto transition-transform group-open:rotate-180" />
+        </summary>
+        <p className="pb-2 text-xs text-gray-600">{t('backup.responseFilesWarning')}</p>
+      </details>
     </div>
   </Card>
 }
