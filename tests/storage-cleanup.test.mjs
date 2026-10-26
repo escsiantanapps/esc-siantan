@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { deleteResponseFiles, deleteUnusedNews, isReferencedByNews, scanResponseFiles, scanUnusedNews } from '../api/_handlers/storage-cleanup.js'
+import { deleteResponseFiles, deleteUnusedNews, filterResponseCandidates, isReferencedByNews, parseResponseFilter, prepareResponseBulk, scanResponseFiles, scanUnusedNews } from '../api/_handlers/storage-cleanup.js'
 import { isAllowedResponseArchiveCutoff, latestResponseArchiveCutoff, responseSnapshotPayload } from '../src/lib/archiveRetention.js'
 
 const NOW = Date.parse('2026-10-12T00:00:00Z')
@@ -118,11 +118,14 @@ test('Penghapusan parsial dilaporkan dan tidak mengklaim ruang file yang gagal',
   assert.deepEqual(f.removed, ['news/one.pdf'])
 })
 
-function responseFixture({ failRemove = false } = {}) {
+function responseFixture({ failRemove = false, secondFile = false } = {}) {
   const url = path => `https://example.test/storage/v1/object/public/task-files/${path}`
   const rows = {
     form_responses: [
-      { response_id: 'R1', volunteer_id: 'U1', form_id: 'F1', data_json: { note: 'Jawaban tetap ada', photo: url('responses/u/large.jpg') } },
+      { response_id: 'R1', volunteer_id: 'U1', form_id: 'F1', data_json: {
+        note: 'Jawaban tetap ada', photo: url('responses/u/large.jpg'),
+        ...(secondFile ? { document: url('responses/u/second.jpg') } : {}),
+      } },
       { response_id: 'R2', volunteer_id: 'U1', form_id: 'F1', data_json: { photo: url('responses/u/shared.jpg') } },
       { response_id: 'R3', volunteer_id: 'U1', form_id: 'F1', data_json: { photo: url('responses/u/shared.jpg') } },
     ],
@@ -130,9 +133,9 @@ function responseFixture({ failRemove = false } = {}) {
   }
   const removed = []
   const audits = []
-  const files = ['large.jpg', 'shared.jpg', 'prereq.jpg', 'orphan.jpg', 'recent.jpg'].map((name, i) => ({
+  const files = ['large.jpg', 'shared.jpg', 'prereq.jpg', 'orphan.jpg', 'recent.jpg', ...(secondFile ? ['second.jpg'] : [])].map((name, i) => ({
     id: name, name, created_at: name === 'recent.jpg' ? '2026-10-11T00:00:00Z' : OLD,
-    metadata: { size: 5000 - i * 1000 },
+    metadata: { size: name === 'second.jpg' ? 1000 : 5000 - i * 1000 },
   }))
   const admin = {
     storage: { from() { return {
@@ -201,4 +204,43 @@ test('File yatim lama bisa dihapus dan diaudit tanpa mengubah respons', async ()
   assert.equal(JSON.stringify(f.rows.form_responses), before)
   assert.equal(f.audits[0].table_name, 'storage.objects')
   assert.equal(f.audits[0].old_data.orphan, true)
+})
+
+test('Dua lampiran pada respons yang sama dapat dihapus dalam satu batch tanpa menghapus teks', async () => {
+  const f = responseFixture({ secondFile: true })
+  const result = await deleteResponseFiles(f.admin,
+    ['responses/u/large.jpg', 'responses/u/second.jpg'],
+    { user_id: 'A1', name: 'Admin', role: 'Super Admin' }, NOW)
+  assert.deepEqual(result.body.failed, [])
+  assert.deepEqual(result.body.deleted, ['responses/u/large.jpg', 'responses/u/second.jpg'])
+  assert.deepEqual(f.rows.form_responses[0].data_json, {
+    note: 'Jawaban tetap ada', photo: null, document: null,
+  })
+})
+
+test('Filter bulan memakai tanggal unggah WIB dan persiapan massal mencakup lebih dari 200 hasil', () => {
+  const files = Array.from({ length: 250 }, (_, index) => ({
+    path: `responses/u/photo-${index}.jpg`, size: 2 * 1024 * 1024,
+    createdAt: index === 0 ? '2026-08-31T18:00:00Z' : '2026-09-15T00:00:00Z',
+    orphan: index % 2 === 0, formId: 'F1',
+  }))
+  const filter = parseResponseFilter({ month: '2026-09', status: 'orphan', minBytes: 1024 * 1024, query: 'photo' })
+  assert.equal(filterResponseCandidates(files, filter).length, 125)
+  const all = prepareResponseBulk(files, parseResponseFilter({ month: '2026-09' }))
+  assert.equal(all.candidateCount, 250)
+  assert.equal(all.paths.length, 250)
+  assert.equal(all.candidateBytes, 250 * 2 * 1024 * 1024)
+  assert.equal(parseResponseFilter({ month: '2026-13' }), null)
+  assert.equal(parseResponseFilter({ status: 'unknown' }), null)
+  assert.equal(parseResponseFilter({ minBytes: -1 }), null)
+})
+
+test('Penghapusan menolak file yang tidak lagi cocok dengan jenis pada filter', async () => {
+  const f = responseFixture()
+  const caller = { user_id: 'A1', name: 'Admin', role: 'Super Admin' }
+  const result = await deleteResponseFiles(f.admin, ['responses/u/large.jpg'], caller, NOW,
+    { status: 'orphan' })
+  assert.equal(result.status, 409)
+  assert.deepEqual(f.removed, [])
+  assert.equal(f.rows.form_responses[0].data_json.note, 'Jawaban tetap ada')
 })

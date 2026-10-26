@@ -8,6 +8,44 @@ const MAX_DELETE = 20
 const MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const RESPONSE_FOLDER = 'responses'
 const RESPONSE_BATCH = 10
+const RESPONSE_MIN_SIZES = new Set([0, 1024 * 1024, 5 * 1024 * 1024])
+
+export function parseResponseFilter(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const month = raw.month || ''
+  const status = raw.status || 'all'
+  const minBytes = raw.minBytes ?? 0
+  const query = raw.query || ''
+  if (typeof month !== 'string' || (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+    || !['all', 'active', 'orphan'].includes(status)
+    || !RESPONSE_MIN_SIZES.has(minBytes)
+    || typeof query !== 'string' || query.length > 80) return null
+  return { month, status, minBytes, query: query.trim().toLocaleLowerCase('id-ID') }
+}
+
+export function filterResponseCandidates(candidates, filter) {
+  return candidates.filter(file => {
+    if (filter.status === 'active' && file.orphan) return false
+    if (filter.status === 'orphan' && !file.orphan) return false
+    if (file.size < filter.minBytes) return false
+    if (filter.query && !`${file.path} ${file.formId || ''}`.toLocaleLowerCase('id-ID').includes(filter.query)) return false
+    if (filter.month) {
+      const uploaded = Date.parse(file.createdAt || '')
+      if (!Number.isFinite(uploaded)
+        || new Date(uploaded + 7 * 60 * 60 * 1000).toISOString().slice(0, 7) !== filter.month) return false
+    }
+    return true
+  })
+}
+
+export function prepareResponseBulk(candidates, filter) {
+  const matching = filterResponseCandidates(candidates, filter)
+  return {
+    paths: matching.map(file => file.path),
+    candidateCount: matching.length,
+    candidateBytes: matching.reduce((sum, file) => sum + file.size, 0),
+  }
+}
 
 async function listFiles(admin, root) {
   const files = []
@@ -107,15 +145,17 @@ export async function scanResponseFiles(admin, now = Date.now()) {
   return { candidates, scannedFiles: files.length, references }
 }
 
-export async function deleteResponseFiles(admin, paths, caller, now = Date.now()) {
+export async function deleteResponseFiles(admin, paths, caller, now = Date.now(), rawFilter = {}) {
   if (!Array.isArray(paths) || paths.length < 1 || paths.length > RESPONSE_BATCH
     || new Set(paths).size !== paths.length
     || paths.some(path => typeof path !== 'string' || path.length > 500
       || !/^responses\/[^/.]+\/[^/]+$/.test(path))) {
     return { status: 400, body: { error: 'Daftar lampiran tidak valid.' } }
   }
+  const filter = parseResponseFilter(rawFilter)
+  if (!filter) return { status: 400, body: { error: 'Filter lampiran tidak valid.' } }
   const { candidates, references } = await scanResponseFiles(admin, now)
-  const byPath = new Map(candidates.map(file => [file.path, file]))
+  const byPath = new Map(filterResponseCandidates(candidates, filter).map(file => [file.path, file]))
   if (paths.some(path => !byPath.has(path))) {
     return { status: 409, body: { error: 'Daftar lampiran berubah. Periksa ulang sebelum menghapus.' } }
   }
@@ -158,6 +198,9 @@ export async function deleteResponseFiles(admin, paths, caller, now = Date.now()
       continue
     }
     deleted.push(path)
+    // Satu respons dapat punya beberapa lampiran dalam batch yang sama.
+    // Perbarui snapshot agar filter kesetaraan JSONB pada file berikutnya cocok.
+    row.data_json = nextJson
     const { error: auditError } = await admin.from('audit_log').insert({
       actor_user_id: caller.user_id, actor_name: caller.name, actor_role: caller.role,
       action: 'UPDATE', table_name: 'form_responses', record_id: row.response_id,
@@ -261,16 +304,25 @@ export default async function handler(req, res) {
       return res.status(result.status).json(result.body)
     }
     if (body.action === 'scan-responses') {
+      const filter = parseResponseFilter(body.filter || {})
+      if (!filter) return res.status(400).json({ error: 'Filter lampiran tidak valid.' })
       const result = await scanResponseFiles(admin)
+      const candidates = filterResponseCandidates(result.candidates, filter)
       return res.status(200).json({
-        files: result.candidates.slice(0, 200),
-        candidateCount: result.candidates.length,
-        candidateBytes: result.candidates.reduce((sum, file) => sum + file.size, 0),
+        files: candidates.slice(0, 200),
+        candidateCount: candidates.length,
+        candidateBytes: candidates.reduce((sum, file) => sum + file.size, 0),
         scannedFiles: result.scannedFiles,
       })
     }
+    if (body.action === 'prepare-response-bulk') {
+      const filter = parseResponseFilter(body.filter || {})
+      if (!filter) return res.status(400).json({ error: 'Filter lampiran tidak valid.' })
+      const result = await scanResponseFiles(admin)
+      return res.status(200).json(prepareResponseBulk(result.candidates, filter))
+    }
     if (body.action === 'delete-response-files') {
-      const result = await deleteResponseFiles(admin, body.paths, caller)
+      const result = await deleteResponseFiles(admin, body.paths, caller, Date.now(), body.filter || {})
       return res.status(result.status).json(result.body)
     }
     return res.status(400).json({ error: 'Aksi tidak valid.' })
