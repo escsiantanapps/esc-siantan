@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
+import { useMaintenance } from '@/hooks/useMaintenance'
 import { UserRound, LockKeyhole, Eye, EyeOff, ArrowRight } from 'lucide-react'
 import { Button, Input, Checkbox } from '@/components/ui'
 import AuthScene from './AuthScene'
@@ -11,6 +12,7 @@ const REMEMBER_KEY = 'esc-remember-email'
 export default function LoginPage() {
   const { login } = useAuth()
   const { t } = useLang()
+  const { enabled: maintenanceEnabled } = useMaintenance()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: localStorage.getItem(REMEMBER_KEY) || '', password: '' })
   const [remember, setRemember] = useState(!!localStorage.getItem(REMEMBER_KEY))
@@ -45,6 +47,12 @@ export default function LoginPage() {
       </div>
 
       {error && <div id="login-error" role="alert" className="auth-error">{error}</div>}
+
+      {maintenanceEnabled && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" role="status">
+          {t('maintenance.loginNotice')}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4" aria-describedby={error ? 'login-error' : undefined}>
         <Input

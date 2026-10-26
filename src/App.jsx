@@ -4,12 +4,14 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { LanguageProvider } from '@/contexts/LanguageContext'
 import { ToastProvider } from '@/contexts/ToastContext'
+import { MaintenanceProvider } from '@/contexts/MaintenanceContext'
 import { useAuth } from '@/hooks/useAuth'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import OfflineBanner from '@/components/OfflineBanner'
 import InstallPrompt from '@/components/InstallPrompt'
 import AppUpdatePrompt from '@/components/AppUpdatePrompt'
 import SheepLoader from '@/components/SheepLoader'
+import MaintenanceGate from '@/components/MaintenanceGate'
 
 // Onboarding
 import OnboardingPage from '@/pages/OnboardingPage'
@@ -81,6 +83,7 @@ const AdminLeavesPage = lazy(() => import('@/pages/admin/AdminLeavesPage'))
 const AdminPermissionsPage = lazy(() => import('@/pages/admin/AdminPermissionsPage'))
 const AdminBackupPage = lazy(() => import('@/pages/admin/AdminBackupPage'))
 const AdminAuditPage = lazy(() => import('@/pages/admin/AdminAuditPage'))
+const AdminMaintenancePage = lazy(() => import('@/pages/admin/AdminMaintenancePage'))
 const AdminRoadmapPage = lazy(() => import('@/pages/admin/AdminRoadmapPage'))
 const AdminRedeemPage = lazy(() => import('@/pages/admin/AdminRedeemPage'))
 const AdminRewardScanPage = lazy(() => import('@/pages/admin/AdminRewardScanPage'))
@@ -180,6 +183,8 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
+        <MaintenanceProvider>
+        <MaintenanceGate>
         <OfflineBanner />
         <InstallPrompt />
         <AppUpdatePrompt />
@@ -269,6 +274,7 @@ export default function App() {
             <Route path="hak-akses"            element={<AdminPermissionsPage />} />
             <Route path="backup"               element={<AdminBackupPage />} />
             <Route path="audit"                element={<AdminAuditPage />} />
+            <Route path="maintenance"          element={<AdminMaintenancePage />} />
           </Route>
 
           <Route path="/admin/jadwal-pelayanan" element={<ScheduleManagementRoute />} />
@@ -276,6 +282,8 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
+        </MaintenanceGate>
+        </MaintenanceProvider>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
