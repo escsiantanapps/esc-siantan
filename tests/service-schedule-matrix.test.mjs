@@ -6,8 +6,8 @@ import {
   prepareMonthlySchedulePrint, scheduleMonthDate, shiftScheduleMonth,
 } from '../src/lib/serviceScheduleMatrix.js'
 
-const musicPosition = { position_id: 'P-DRUM', name: 'Drum', ministry_id: 'M-MUSIC', ministry_name: 'Musik', slots: 2, sort_order: 1 }
-const mediaPosition = { position_id: 'P-SOUND', name: 'Sound', ministry_id: 'M-MEDIA', ministry_name: 'Multimedia', slots: 1, sort_order: 2 }
+const musicPosition = { position_id: 'P-DRUM', name: 'Drum', ministry_id: 'M-MUSIC', ministry_name: 'Musik', slots: 2, sort_order: 1, ministry_sort_order: 1 }
+const mediaPosition = { position_id: 'P-SOUND', name: 'Sound', ministry_id: 'M-MEDIA', ministry_name: 'Multimedia', slots: 1, sort_order: 2, ministry_sort_order: 2 }
 function fixture() {
   return {
     month: { month_id: 'MONTH', month_date: '2026-10-01', status: 'Draft' },

@@ -51,6 +51,9 @@ async function setup(db) {
       SELECT COALESCE(NULLIF(current_setting('test.caller_role', true), '') IN ('Admin', 'Super Admin'), false)
         AND COALESCE(NULLIF(current_setting('test.restricted', true), ''), '0') <> '1'
     $$;
+    CREATE FUNCTION auth_admin_mh_scoped_v111() RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER AS $$
+      SELECT COALESCE(current_setting('test.scoped', true), '') = '1'
+    $$;
     CREATE FUNCTION record_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
     GRANT USAGE ON SCHEMA public, auth TO authenticated, anon;
   `)
@@ -61,7 +64,17 @@ async function setup(db) {
   await db.exec(migration(107))
   await db.exec(migration(108))
   await db.exec(migration(108))
+  await db.exec(migration(123))
+  await db.exec(migration(123))
+  await db.exec(migration(124))
+  await db.exec(migration(124))
   await db.exec(`
+    CREATE TABLE ministry_schedules(schedule_id TEXT PRIMARY KEY, label TEXT,
+      source_occurrence_id TEXT REFERENCES service_schedule_occurrences(occurrence_id));
+    CREATE TABLE ministry_schedule_assignments(schedule_id TEXT REFERENCES ministry_schedules(schedule_id) ON DELETE CASCADE,
+      user_id TEXT REFERENCES users(user_id), PRIMARY KEY(schedule_id,user_id));
+    CREATE TABLE ministry_attendance(attendance_id TEXT PRIMARY KEY,
+      schedule_id TEXT REFERENCES ministry_schedules(schedule_id));
     INSERT INTO auth.users(id) VALUES ('00000000-0000-4000-8000-000000000001');
     INSERT INTO users(user_id,name,role,auth_id) VALUES
       ('ADMIN','Admin QA','Admin','00000000-0000-4000-8000-000000000001'),
@@ -389,6 +402,213 @@ test('PostgreSQL: draft langsung menghormati per-tanggal, akses dan guard lama',
       finally { await db.exec('ROLLBACK TO SAVEPOINT unauthorized_move; RELEASE SAVEPOINT unauthorized_move') }
       await db.exec('RESET ROLE')
       await caller(db)
+    })
+    await t.test('v123 menambahkan Ministry ke semua tanggal Draft tanpa mengubah penugasan lama', async () => {
+      await caller(db)
+      await db.exec("INSERT INTO ministries VALUES ('M-PARK','Parking')")
+      await db.exec("INSERT INTO ministry_service_positions(position_id,ministry_id,name,default_slots) VALUES ('P-PARK','M-PARK','Parkir',2)")
+      await db.exec("INSERT INTO user_ministries(user_id,ministry_id) VALUES ('H1','M-PARK')")
+      const sectionId = 'park-v123'
+      const days = ['2027-03-07', '2027-03-14', '2027-03-21']
+      const data = days.map((service_date, index) => ({
+        section_id: sectionId, service_date, title: 'Ibadah Pagi',
+        source_type: 'Ibadah', start_time: '09:00', end_time: '11:00',
+        ministry_ids: index === 0 ? ['M-HOST', 'M-PARK'] : ['M-HOST'],
+      }))
+      const id = await create(db, data, '2027-03-01')
+      const first = (await db.query('SELECT get_service_schedule_month($1) AS data', [id])).rows[0].data
+      const parkRoster = first.rosters.find(row => row.ministry_id === 'M-PARK')
+      assert.ok(parkRoster)
+      assert.equal(first.parts.filter(row => row.ministry_id === 'M-PARK').length, 1)
+      await db.query('SELECT set_service_schedule_position($1,$2,$3::TEXT[],$4::TEXT[])',
+        [parkRoster.roster_id, 'P-PARK', ['H1'], []])
+
+      const call = expected => db.query(
+        'SELECT add_service_schedule_ministry_to_section_v123($1,$2,$3,$4) AS added',
+        [id, sectionId, 'M-PARK', expected],
+      )
+      const reject = async (operation, pattern) => {
+        await db.exec('SAVEPOINT expected_v123_rejection')
+        try { await assert.rejects(operation(), pattern) }
+        finally { await db.exec('ROLLBACK TO SAVEPOINT expected_v123_rejection; RELEASE SAVEPOINT expected_v123_rejection') }
+      }
+
+      assert.equal((await db.query("SELECT has_function_privilege('anon','add_service_schedule_ministry_to_section_v123(text,text,text,integer)','EXECUTE') AS allowed")).rows[0].allowed, false)
+      await caller(db, 'VOL', 'Volunteer')
+      await db.exec('SET ROLE authenticated')
+      await reject(() => call(0), /not_authorized/)
+      await db.exec('RESET ROLE')
+      await caller(db)
+      await db.query("SELECT set_config('test.scoped','1',true)")
+      await db.exec('SET ROLE authenticated')
+      await reject(() => call(0), /not_authorized/)
+      await db.exec('RESET ROLE')
+      await db.query("SELECT set_config('test.scoped','',true)")
+
+      await db.exec('SET ROLE authenticated')
+      assert.equal((await call(0)).rows[0].added, 2)
+      await db.exec('RESET ROLE')
+      const after = (await db.query('SELECT get_service_schedule_month($1) AS data', [id])).rows[0].data
+      assert.equal(after.month.version, 1)
+      assert.equal(after.parts.filter(row => row.ministry_id === 'M-PARK').length, 3)
+      assert.equal(after.rosters.find(row => row.service_date === days[0]
+        && row.ministry_id === 'M-PARK').roster_id, parkRoster.roster_id)
+      assert.equal(after.rosters.find(row => row.roster_id === parkRoster.roster_id)
+        .service_roster_slots.filter(slot => slot.user_id === 'H1').length, 1)
+      for (const day of days) {
+        assert.ok(after.sections[0].participation[day].includes('M-PARK'))
+        const roster = after.rosters.find(row => row.ministry_id === 'M-PARK' && row.service_date === day)
+        assert.equal(roster.service_roster_slots.length, 2)
+      }
+      await db.exec('SET ROLE authenticated')
+      assert.equal((await call(1)).rows[0].added, 0)
+      await reject(() => call(0), /Versi jadwal berubah/)
+      await db.exec('RESET ROLE')
+      assert.equal((await db.query('SELECT version FROM service_schedule_months WHERE month_id=$1', [id])).rows[0].version, 1)
+      await reject(() => db.query('SELECT add_service_schedule_ministry_to_section_v123($1,$2,$3,$4)',
+        [publishedMonthId, 'pagi', 'M-PARK', 1]), /Hanya jadwal Draft/)
+    })
+    await t.test('v124 memperbarui Draft yang sama dan menjaga penugasan pada bagian tetap', async () => {
+      await caller(db)
+      const original = [
+        { section_id:'pagi-v124', service_date:'2027-04-04', title:'Ibadah Pagi', source_type:'Ibadah',
+          start_time:'08:00', end_time:'09:30', ministry_ids:['M-HOST'] },
+        { section_id:'pagi-v124', service_date:'2027-04-11', title:'Ibadah Pagi', source_type:'Ibadah',
+          start_time:'08:00', end_time:'09:30', ministry_ids:['M-HOST'] },
+      ]
+      const id = await create(db, original, '2027-04-01')
+      const before = (await db.query('SELECT get_service_schedule_month($1) AS data',[id])).rows[0].data
+      const kept = before.occurrences.find(item => item.service_date === '2027-04-04')
+      const removed = before.occurrences.find(item => item.service_date === '2027-04-11')
+      const keptRoster = before.parts.find(item => item.occurrence_id === kept.occurrence_id).roster_id
+      const removedRoster = before.parts.find(item => item.occurrence_id === removed.occurrence_id).roster_id
+      await db.query('SELECT set_service_schedule_position($1,$2,$3::TEXT[],$4::TEXT[])',
+        [keptRoster,'P-HOST',['H1'],[]])
+      await db.query('SELECT set_service_schedule_position($1,$2,$3::TEXT[],$4::TEXT[])',
+        [removedRoster,'P-HOST',['H2'],[]])
+      const removedSlots = (await db.query('SELECT slot_id,user_id FROM service_roster_slots WHERE roster_id=$1 AND user_id IS NOT NULL ORDER BY slot_id',
+        [removedRoster])).rows
+      await db.query('INSERT INTO ministry_schedules(schedule_id,source_occurrence_id) VALUES ($1,$2)',
+        ['S-V124-REMOVED',removed.occurrence_id])
+      await db.query('INSERT INTO ministry_schedule_assignments(schedule_id,user_id) VALUES ($1,$2)',
+        ['S-V124-REMOVED','H2'])
+      const desired = [
+        { ...original[0], occurrence_id:kept.occurrence_id, title:'Ibadah Pagi Baru',
+          location:'Ruang Utama', ministry_ids:['M-HOST','M-MUSIC'] },
+        { ...original[1], service_date:'2027-04-18', title:'Ibadah Pagi Baru',
+          ministry_ids:['M-HOST','M-MUSIC'] },
+      ]
+      const call = (version, snapshot, confirmation) => db.query(
+        'SELECT update_service_schedule_month_draft_v124($1,$2,$3::JSONB,$4::JSONB,$5) AS version',
+        [id,version,JSON.stringify(desired),JSON.stringify(snapshot),confirmation])
+      const reject = async (operation, pattern) => {
+        await db.exec('SAVEPOINT expected_v124_rejection')
+        try { await assert.rejects(operation(), pattern) }
+        finally { await db.exec('ROLLBACK TO SAVEPOINT expected_v124_rejection; RELEASE SAVEPOINT expected_v124_rejection') }
+      }
+      assert.equal((await db.query("SELECT has_function_privilege('anon','update_service_schedule_month_draft_v124(text,integer,jsonb,jsonb,text)','EXECUTE') AS allowed")).rows[0].allowed,false)
+      await caller(db,'VOL','Volunteer')
+      await db.exec('SET ROLE authenticated')
+      await reject(() => call(0,[],null), /not_authorized/)
+      await db.exec('RESET ROLE')
+      await caller(db)
+      const snapshot = removedSlots
+      await db.exec('SET ROLE authenticated')
+      await reject(() => call(0,[], 'HAPUS PENUGASAN'), /schedule_stale/)
+      await reject(() => call(0,snapshot,null), /HAPUS PENUGASAN/)
+      assert.equal((await call(0,snapshot,'HAPUS PENUGASAN')).rows[0].version,1)
+      await reject(() => call(0,snapshot,'HAPUS PENUGASAN'), /schedule_stale/)
+      await db.exec('RESET ROLE')
+      const after = (await db.query('SELECT get_service_schedule_month($1) AS data',[id])).rows[0].data
+      assert.equal(after.month.month_id,id)
+      assert.equal(after.month.version,1)
+      assert.equal(after.occurrences.length,2)
+      assert.ok(after.occurrences.some(item => item.occurrence_id === kept.occurrence_id))
+      assert.ok(!after.occurrences.some(item => item.occurrence_id === removed.occurrence_id))
+      assert.equal(after.parts.find(item => item.occurrence_id === kept.occurrence_id
+        && item.ministry_id === 'M-HOST').roster_id,keptRoster)
+      assert.equal((await db.query('SELECT count(*)::INT AS n FROM service_roster_slots WHERE roster_id=$1 AND user_id=$2',
+        [keptRoster,'H1'])).rows[0].n,1)
+      assert.equal(after.parts.length,4)
+      assert.equal(after.sections[0].participation['2027-04-18'].length,2)
+      assert.equal((await db.query('SELECT count(*)::INT AS n FROM ministry_schedules WHERE schedule_id=$1',
+        ['S-V124-REMOVED'])).rows[0].n,0)
+      assert.equal((await db.query('SELECT count(*)::INT AS n FROM ministry_schedule_assignments WHERE schedule_id=$1',
+        ['S-V124-REMOVED'])).rows[0].n,0)
+      await db.query('UPDATE service_schedule_months SET published_at=now() WHERE month_id=$1',[id])
+      const publishedEdit = after.occurrences.map(item => ({
+        occurrence_id:item.occurrence_id, section_id:item.section_id,
+        service_date:item.service_date, title:item.title, source_type:item.source_type,
+        start_time:item.occurrence_id === kept.occurrence_id ? '08:00' : '09:00',
+        end_time:'09:30', ministry_ids:['M-HOST','M-MUSIC'],
+      }))
+      await reject(() => db.query(
+        'SELECT update_service_schedule_month_draft_v124($1,$2,$3::JSONB,$4::JSONB,$5)',
+        [id,1,JSON.stringify(publishedEdit),'[]',null]), /pernah terbit tidak dapat diganti/)
+
+      const retractedMonth = await create(db, [{ ...original[0], service_date:'2027-06-06',
+        ministry_ids:['M-HOST','M-MUSIC'] }], '2027-06-01')
+      const retracted = (await db.query('SELECT get_service_schedule_month($1) AS data',
+        [retractedMonth])).rows[0].data
+      const retractedOccurrence = retracted.occurrences[0]
+      const retractedRoster = retracted.parts.find(item => item.ministry_id === 'M-HOST').roster_id
+      await db.query('SELECT set_service_schedule_position($1,$2,$3::TEXT[],$4::TEXT[])',
+        [retractedRoster,'P-HOST',['H1'],[]])
+      const retractedSlot = (await db.query('SELECT slot_id FROM service_roster_slots WHERE roster_id=$1 AND user_id=$2',
+        [retractedRoster,'H1'])).rows[0].slot_id
+      await db.query('INSERT INTO ministry_schedules(schedule_id,label,source_occurrence_id) VALUES ($1,$2,$3)',
+        ['S-V124-RETRACTED','Ibadah Pagi',retractedOccurrence.occurrence_id])
+      await db.query('INSERT INTO ministry_schedule_assignments(schedule_id,user_id) VALUES ($1,$2)',
+        ['S-V124-RETRACTED','H1'])
+      await db.query('UPDATE service_schedule_months SET published_at=now() WHERE month_id=$1',
+        [retractedMonth])
+      const retractedEdit = [{ ...original[0], service_date:'2027-06-06',
+        occurrence_id:retractedOccurrence.occurrence_id, title:'Ibadah Pagi Revisi',
+        ministry_ids:['M-MUSIC'] }]
+      assert.equal((await db.query(
+        'SELECT update_service_schedule_month_draft_v124($1,$2,$3::JSONB,$4::JSONB,$5) AS version',
+        [retractedMonth,0,JSON.stringify(retractedEdit),
+          JSON.stringify([{ slot_id:retractedSlot,user_id:'H1' }]),'HAPUS PENUGASAN'])).rows[0].version,1)
+      assert.deepEqual((await db.query('SELECT label FROM ministry_schedules WHERE schedule_id=$1',
+        ['S-V124-RETRACTED'])).rows[0],{ label:'Ibadah Pagi Revisi' })
+      assert.equal((await db.query('SELECT count(*)::INT AS n FROM ministry_schedule_assignments WHERE schedule_id=$1',
+        ['S-V124-RETRACTED'])).rows[0].n,0)
+
+      const attendanceMonth = await create(db, [
+        { ...original[0], service_date:'2027-05-02' },
+        { ...original[1], service_date:'2027-05-09' },
+      ], '2027-05-01')
+      const attendanceSchedule = (await db.query('SELECT get_service_schedule_month($1) AS data',
+        [attendanceMonth])).rows[0].data
+      const toRemove = attendanceSchedule.occurrences.find(item => item.service_date === '2027-05-09')
+      await db.query('INSERT INTO ministry_schedules(schedule_id,source_occurrence_id) VALUES ($1,$2)',
+        ['S-V124-ATTENDANCE',toRemove.occurrence_id])
+      await db.query('INSERT INTO ministry_attendance(attendance_id,schedule_id) VALUES ($1,$2)',
+        ['A-V124','S-V124-ATTENDANCE'])
+      const retained = attendanceSchedule.occurrences.find(item => item.service_date === '2027-05-02')
+      await reject(() => db.query(
+        'SELECT update_service_schedule_month_draft_v124($1,$2,$3::JSONB,$4::JSONB,$5)',
+        [attendanceMonth,0,JSON.stringify([{ ...original[0], service_date:'2027-05-02',
+          occurrence_id:retained.occurrence_id }]),'[]',null]), /kehadiran tercatat/)
+      assert.equal((await db.query('SELECT count(*)::INT AS n FROM service_schedule_occurrences WHERE month_id=$1',
+        [attendanceMonth])).rows[0].n,2)
+
+      const swapMonth = await create(db, [
+        { ...original[0], service_date:'2027-07-04' },
+        { ...original[1], service_date:'2027-07-11' },
+      ], '2027-07-01')
+      const swapBefore = (await db.query('SELECT get_service_schedule_month($1) AS data',
+        [swapMonth])).rows[0].data
+      const swapped = swapBefore.occurrences.map(item => ({ ...original[0],
+        occurrence_id:item.occurrence_id,
+        service_date:item.service_date === '2027-07-04' ? '2027-07-11' : '2027-07-04' }))
+      assert.equal((await db.query(
+        'SELECT update_service_schedule_month_draft_v124($1,$2,$3::JSONB,$4::JSONB,$5) AS version',
+        [swapMonth,0,JSON.stringify(swapped),'[]',null])).rows[0].version,1)
+      const swapAfter = (await db.query('SELECT get_service_schedule_month($1) AS data',
+        [swapMonth])).rows[0].data
+      assert.equal(swapAfter.occurrences.find(item => item.occurrence_id === swapBefore.occurrences[0].occurrence_id).service_date,
+        swapBefore.occurrences[0].service_date === '2027-07-04' ? '2027-07-11' : '2027-07-04')
     })
     await db.exec('ROLLBACK')
   } finally { await db.close() }

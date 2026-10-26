@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MapPin, Pencil } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, LockKeyhole, MapPin, Pencil, Plus } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { useLang } from '@/hooks/useLang'
 import { buildScheduleMatrix, formatScheduleDate, formatScheduleMonth, formatScheduleTime } from '@/lib/serviceScheduleMatrix'
@@ -10,7 +10,7 @@ function DateCell({ date, currentDate, children, ...props }) {
 }
 
 export default function MonthlyScheduleMatrix({
-  schedule, managedMinistryIds = [], canManageAll = false, onEditPosition, onEditOccurrence,
+  schedule, managedMinistryIds = [], canManageAll = false, onEditPosition, onEditOccurrence, onAddMinistry,
   ministryFilter = '', activityFilter = '', selectedDate, onDateChange, readonly = false,
 }) {
   const { t, lang } = useLang()
@@ -61,7 +61,11 @@ export default function MonthlyScheduleMatrix({
               const occurrence = section.occurrencesByDate.get(date)
               const participating = matrix.isParticipating(occurrence, ministry.ministry_id)
               const hidden = participating && matrix.getCell(occurrence, ministry.positions[0]).hidden
-              return <DateCell key={date} date={date} currentDate={currentDate}>{!participating ? <span className="sched-matrix-not-scheduled" aria-label={t('schedMonth.notScheduled')}>-</span> : hidden ? lockedContent : <span className="sched-matrix-group-cell" />}</DateCell>
+              return <DateCell key={date} date={date} currentDate={currentDate}>{!participating
+                ? occurrence && !readonly && draft && canManageAll && onAddMinistry
+                  ? <Button type="button" variant="ghost" className="sched-matrix-cell sched-matrix-add-ministry" onClick={() => onAddMinistry({ ministry, sectionId: section.key, sectionTitle: section.title })} title={t('schedMonth.addMinistryForSection', { ministry: ministry.ministry_name, activity: section.title })} aria-label={t('schedMonth.addMinistryForSection', { ministry: ministry.ministry_name, activity: section.title })}><Plus size={14} aria-hidden="true" />{t('schedMonth.addMinistryAllDates')}</Button>
+                  : <span className="sched-matrix-not-scheduled" aria-label={t('schedMonth.notScheduled')}>-</span>
+                : hidden ? lockedContent : <span className="sched-matrix-group-cell" />}</DateCell>
             })}</tr>
             {ministry.positions.map(position => <tr key={position.position_id} className="sched-matrix-position"><th scope="row" className="sched-matrix-label">{position.name}<small>{t('schedMonth.capacity', { count: position.slots || position.capacity || 1 })}</small></th>{matrix.dates.map(date => {
               const cell = matrix.getCell(section.occurrencesByDate.get(date), position)

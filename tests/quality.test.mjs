@@ -587,6 +587,106 @@ async function assertMonthlyManagementLoaded(f) {
   assert.ok(f.requests.some(row => row.path.endsWith('/service_schedule_months') && new URLSearchParams(row.search).get('month_date') === expectedMonth), 'Snapshot harus dimuat untuk bulan yang sedang ditampilkan')
 }
 
+function monthlyParkingGapFixture(managerOnly = false) {
+  const data = monthlyManagementFixture(managerOnly)
+  const schedule = data.monthlySchedules[0]
+  const first = schedule.occurrences[0]
+  const secondDate = first.service_date.slice(0, 8) + '14'
+  const secondOccurrence = { ...first, occurrence_id: 'QA-OCCURRENCE-2', service_date: secondDate }
+  schedule.occurrences.push(secondOccurrence)
+  const worshipPart = schedule.parts.find(part => part.ministry_id === 'QA-MIN')
+  const worshipRoster = schedule.rosters.find(roster => roster.ministry_id === 'QA-MIN')
+  schedule.parts.push({ ...worshipPart, part_id: 'QA-PART-WORSHIP-2',
+    occurrence_id: secondOccurrence.occurrence_id, roster_id: 'QA-ROSTER-WORSHIP-2' })
+  schedule.rosters.push({ ...structuredClone(worshipRoster), roster_id: 'QA-ROSTER-WORSHIP-2',
+    occurrence_id: secondOccurrence.occurrence_id, service_date: secondDate,
+    service_roster_slots: worshipRoster.service_roster_slots.map(slot => ({ ...slot,
+      slot_id: 'QA-SLOT-WORSHIP-2', user_id: null, users: null })) })
+  data.ministries[1].name = 'Parking'
+  data.servicePositions[1].name = 'Parkir'
+  data.servicePositions[1].ministries.name = 'Parking'
+  schedule.sections[0].parts[1].ministry_name = 'Parking'
+  schedule.sections[0].parts[1].positions[0].name = 'Parkir'
+  schedule.sections[0].participation = {
+    [first.service_date]: ['QA-MIN', 'QA-MEDIA'],
+    [secondDate]: ['QA-MIN'],
+  }
+  return { data, secondDate }
+}
+
+test('Admin menambah Parking ke semua tanggal Draft; MH tanpa izin struktur tidak melihat tombol', async () => {
+  const { data, secondDate } = monthlyParkingGapFixture()
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...data }, async f => {
+    let payload
+    await f.page.route('**/rest/v1/rpc/add_service_schedule_ministry_to_section_v123', route => {
+      payload = route.request().postDataJSON()
+      const schedule = f.state.monthlySchedules[0]
+      schedule.month.version += 1
+      schedule.sections[0].participation[secondDate].push('QA-MEDIA')
+      schedule.parts.push({ part_id: 'QA-PART-PARKING-2', occurrence_id: 'QA-OCCURRENCE-2',
+        ministry_id: 'QA-MEDIA', roster_id: 'QA-ROSTER-PARKING-2' })
+      schedule.rosters.push({ roster_id: 'QA-ROSTER-PARKING-2', occurrence_id: 'QA-OCCURRENCE-2',
+        ministry_id: 'QA-MEDIA', status: 'Draft', title: 'Ibadah Gabungan', service_date: secondDate,
+        service_roster_slots: [{ slot_id: 'QA-SLOT-PARKING-2', position_id: 'QA-MEDIA-POS',
+          ministry_id: 'QA-MEDIA', slot_no: 1, user_id: null }] })
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '1' })
+    })
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    await f.page.locator('.sched-matrix-date-option').nth(1).click()
+    const add = f.page.getByRole('button', { name: 'Tambahkan Parking pada semua tanggal kegiatan Ibadah Gabungan' })
+    assert.equal(await add.count(), 1)
+    await add.click()
+    const dialog = f.page.getByRole('dialog', { name: 'Tambah ke semua tanggal' })
+    await dialog.getByText(/Penugasan yang sudah ada tetap tersimpan/).waitFor()
+    await dialog.getByRole('button', { name: 'Tambah ke semua tanggal' }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    assert.deepEqual(payload, { p_month_id: 'QA-MONTH', p_section_id: 'QA-SECTION',
+      p_ministry_id: 'QA-MEDIA', p_expected_version: 0 })
+    assert.equal(await add.count(), 0)
+    assert.equal(await f.page.getByRole('button', { name: /^Atur Parkir untuk Ibadah Gabungan,/ }).count(), 1)
+  })
+
+  const scoped = monthlyParkingGapFixture(true).data
+  await scenario({ role: 'Volunteer', ...scoped,
+    managerGrants: [{ manager_role: 'Ministry Head', ministries: { ministry_id: 'QA-MEDIA', name: 'Parking', head_user_id: 'QA-USER' } }],
+    ministryMembers: [{ user_id: 'QA-USER', ministry_id: 'QA-MEDIA' }],
+  }, async f => {
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    assert.equal(await f.page.getByRole('button', { name: /Tambahkan Parking pada semua tanggal/ }).count(), 0)
+  })
+})
+
+test('Admin membuka Draft tersimpan dan mengonfirmasi penugasan yang ikut dihapus', async () => {
+  const data = monthlyManagementFixture()
+  await scenario({ role: 'Admin', allowedPages: ['/admin/jadwal-pelayanan'], ...data }, async f => {
+    let payload
+    await f.page.route('**/rest/v1/rpc/update_service_schedule_month_draft_v124', route => {
+      payload = route.request().postDataJSON()
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '1' })
+    })
+    await f.goto('/admin/jadwal-pelayanan')
+    await assertMonthlyManagementLoaded(f)
+    await f.page.getByRole('button', { name: 'Edit Draft', exact: true }).click()
+    const dialog = f.page.getByRole('dialog', { name: 'Edit Draft' })
+    await dialog.getByLabel('Judul jadwal').waitFor()
+    assert.equal(await dialog.getByLabel('Judul jadwal').inputValue(), 'Ibadah Gabungan')
+    await dialog.getByRole('checkbox', { name: /Multimedia/ }).uncheck()
+    await dialog.getByRole('button', { name: 'Simpan Draft' }).click()
+    await dialog.getByText(/1 penugasan akan dihapus/).waitFor()
+    assert.equal(payload, undefined, 'Klik pertama hanya menampilkan konfirmasi')
+    await dialog.getByRole('button', { name: /Hapus 1 penugasan dan simpan/ }).click()
+    assert.equal(payload.p_month_id, 'QA-MONTH')
+    assert.equal(payload.p_expected_version, 0)
+    assert.deepEqual(payload.p_expected_removed_assignments,
+      [{ slot_id: 'QA-SLOT-QA-MEDIA-POS', user_id: 'QA-MEDIA-USER' }])
+    assert.equal(payload.p_confirmation, 'HAPUS PENUGASAN')
+    assert.equal(payload.p_entries[0].occurrence_id, 'QA-OCCURRENCE')
+    assert.deepEqual(payload.p_entries[0].ministry_ids, ['QA-MIN'])
+  })
+})
+
 test('Admin mengganti Fernandes dengan Veri pada slot penuh tanpa mengirim catatan Fernandes', async () => {
   const data = monthlyManagementFixture()
   data.monthlySchedules[0].rosters[0].service_roster_slots[0].users.name = 'Fernandes Lay'

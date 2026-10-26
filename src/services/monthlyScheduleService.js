@@ -125,6 +125,10 @@ export const monthlyScheduleService = {
   createMonthDirect: ({ month, entries }) => rpc('create_service_schedule_month_direct', {
     p_month: `${month.slice(0, 7)}-01`, p_entries: entries,
   }),
+  updateMonthDraft: (monthId, expectedVersion, entries, expectedRemovedAssignments, confirmation) => rpc('update_service_schedule_month_draft_v124', {
+    p_month_id: monthId, p_expected_version: expectedVersion, p_entries: entries,
+    p_expected_removed_assignments: expectedRemovedAssignments, p_confirmation: confirmation,
+  }),
   copyMonth: ({ sourceMonthId, targetMonth, dateMap, sourceLinks, copyAssignments }) => rpc('copy_service_schedule_month_v122', {
     p_source_month_id: sourceMonthId, p_target_month: `${targetMonth.slice(0, 7)}-01`,
     p_date_map: dateMap, p_source_links: sourceLinks, p_copy_assignments: copyAssignments,
@@ -136,6 +140,9 @@ export const monthlyScheduleService = {
   setPosition: ({ rosterId, positionId, userIds, expectedUserIds, notes }) => rpc('set_service_schedule_position_v111', {
     p_roster_id: rosterId, p_position_id: positionId, p_user_ids: userIds, p_expected_user_ids: expectedUserIds,
     p_notes: notes,
+  }),
+  addMinistryToSection: (monthId, sectionId, ministryId, expectedVersion) => rpc('add_service_schedule_ministry_to_section_v123', {
+    p_month_id: monthId, p_section_id: sectionId, p_ministry_id: ministryId, p_expected_version: expectedVersion,
   }),
   updateOccurrence: (occurrenceId, data) => rpc('update_service_schedule_occurrence', { p_occurrence_id: occurrenceId, p_data: data }),
   updatePart: (rosterId, data) => rpc('update_service_schedule_part', {

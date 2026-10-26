@@ -45,6 +45,110 @@ test('Draft langsung menampilkan kegiatan dan Ministry hanya pada tanggal yang d
   assert.equal(schedule.rosters[0].service_roster_slots.length, 3, 'Posisi aktif dan kapasitas Ministry diambil otomatis')
 })
 
+test('Admin menambahkan Ministry yang sudah ada ke seluruh tanggal Draft tanpa menghapus pelayan', async () => {
+  const api = createServiceScheduleDemo({ seed: false })
+  const days = ['2026-10-04', '2026-10-11', '2026-10-18']
+  const monthId = await api.createMonthDirect({ month: '2026-10', entries: days.map((service_date, index) => ({
+    section_id: 'pagi', service_date, title: 'Ibadah Pagi', source_type: 'Ibadah',
+    start_time: '09:00', end_time: '11:00',
+    ministry_ids: index === 0 ? ['DEMO-M1', 'DEMO-M4'] : ['DEMO-M1'],
+  })) })
+  const before = await api.getMonth(monthId)
+  const existing = before.rosters.find(roster => roster.service_date === days[1] && roster.ministry_id === 'DEMO-M1')
+  await api.setPosition({ rosterId: existing.roster_id, positionId: 'DEMO-POS-DRUM',
+    userIds: ['DEMO-BIMA'], expectedUserIds: [] })
+  api.setProfile(demoProfiles.mh)
+  await assert.rejects(api.addMinistryToSection(monthId, 'pagi', 'DEMO-M4', 0),
+    error => error.code === '42501')
+  api.setProfile(demoProfiles.admin)
+  assert.equal(await api.addMinistryToSection(monthId, 'pagi', 'DEMO-M4', 0), 2)
+  const after = await api.getMonth(monthId)
+  assert.equal(after.month.version, 1)
+  assert.equal(after.parts.filter(item => item.ministry_id === 'DEMO-M4').length, 3)
+  assert.equal(after.rosters.find(roster => roster.roster_id === existing.roster_id)
+    .service_roster_slots.some(slot => slot.user_id === 'DEMO-BIMA'), true)
+  for (const day of days) assert.deepEqual(after.sections[0].participation[day], ['DEMO-M1', 'DEMO-M4'])
+  assert.equal(await api.addMinistryToSection(monthId, 'pagi', 'DEMO-M4', 1), 0)
+  await assert.rejects(api.addMinistryToSection(monthId, 'pagi', 'DEMO-M4', 0),
+    error => error.code === '40001')
+  await api.publishMonth(monthId)
+  await assert.rejects(api.addMinistryToSection(monthId, 'pagi', 'DEMO-M4', 2), /tidak dapat diedit/)
+})
+
+test('Edit Draft lokal membuka isi lama, menambah bagian, dan menjaga penugasan tetap', async () => {
+  const api = createServiceScheduleDemo({ seed: false })
+  const make = (service_date, ministry_ids, title = 'Ibadah Pagi') => ({
+    section_id: 'pagi', service_date, title, source_type: 'Ibadah',
+    start_time: '09:00', end_time: '11:00', ministry_ids,
+  })
+  const first = make('2026-10-04', ['DEMO-M1'])
+  const second = make('2026-10-11', ['DEMO-M1'])
+  const monthId = await api.createMonthDirect({ month: '2026-10', entries: [first, second] })
+  const before = await api.getMonth(monthId)
+  const firstRoster = before.rosters.find(roster => roster.service_date === first.service_date)
+  const secondRoster = before.rosters.find(roster => roster.service_date === second.service_date)
+  await api.setPosition({ rosterId: firstRoster.roster_id, positionId: 'DEMO-POS-DRUM',
+    userIds: ['DEMO-BIMA'], expectedUserIds: [] })
+
+  const updated = [{ ...make(first.service_date, ['DEMO-M1'], 'Ibadah Umum'),
+    occurrence_id: before.occurrences.find(item => item.service_date === first.service_date).occurrence_id },
+    { ...make(second.service_date, ['DEMO-M1', 'DEMO-M4'], 'Ibadah Umum'),
+      occurrence_id: before.occurrences.find(item => item.service_date === second.service_date).occurrence_id },
+    make('2026-10-18', ['DEMO-M4'], 'Ibadah Umum')]
+  api.setProfile(demoProfiles.mh)
+  await assert.rejects(api.updateMonthDraft(monthId, 0, updated, [], ''),
+    error => error.code === '42501')
+  api.setProfile(demoProfiles.admin)
+  assert.equal(await api.updateMonthDraft(monthId, 0, updated, [], ''), 1)
+  const after = await api.getMonth(monthId)
+  assert.equal(after.month.month_id, monthId)
+  assert.equal(after.occurrences.length, 3)
+  assert.equal(after.parts.length, 4)
+  assert.equal(after.rosters.find(roster => roster.service_date === first.service_date
+    && roster.ministry_id === 'DEMO-M1').roster_id, firstRoster.roster_id)
+  assert.equal(after.rosters.find(roster => roster.service_date === second.service_date
+    && roster.ministry_id === 'DEMO-M1').roster_id, secondRoster.roster_id)
+  assert.equal(after.rosters.find(roster => roster.roster_id === firstRoster.roster_id)
+    .service_roster_slots.some(slot => slot.user_id === 'DEMO-BIMA'), true)
+  assert.deepEqual(after.sections[0].participation['2026-10-11'], ['DEMO-M1', 'DEMO-M4'])
+  await assert.rejects(api.updateMonthDraft(monthId, 0, updated, [], ''),
+    error => error.code === '40001')
+  await assert.rejects(api.updateMonthDraft(monthId, 1,
+    updated.map(entry => entry.service_date === first.service_date ? { ...entry, start_time: '08:00' } : entry), [], ''),
+  /Kosongkan pelayan kegiatan/)
+  assert.equal((await api.getMonth(monthId)).month.version, 1)
+})
+
+test('Edit Draft lokal meminta hitungan dan frasa sebelum menghapus penugasan', async () => {
+  const api = createServiceScheduleDemo({ seed: false })
+  const entry = service_date => ({ section_id: 'pagi', service_date, title: 'Ibadah Pagi',
+    source_type: 'Ibadah', start_time: '09:00', end_time: '11:00', ministry_ids: ['DEMO-M1'] })
+  const monthId = await api.createMonthDirect({ month: '2026-10', entries: [entry('2026-10-04'), entry('2026-10-11')] })
+  const before = await api.getMonth(monthId)
+  const first = before.rosters.find(roster => roster.service_date === '2026-10-04')
+  await api.setPosition({ rosterId: first.roster_id, positionId: 'DEMO-POS-DRUM',
+    userIds: ['DEMO-BIMA'], expectedUserIds: [] })
+  const assigned = (await api.getMonth(monthId)).rosters.find(roster => roster.roster_id === first.roster_id)
+    .service_roster_slots.find(slot => slot.user_id === 'DEMO-BIMA')
+  const removed = [{ slot_id: assigned.slot_id, user_id: assigned.user_id }]
+  const remaining = [{ ...entry('2026-10-11'), occurrence_id:before.occurrences.find(item => item.service_date === '2026-10-11').occurrence_id }]
+  await assert.rejects(api.updateMonthDraft(monthId, 0, remaining, [], 'HAPUS PENUGASAN'),
+    error => error.code === '40001')
+  await assert.rejects(api.updateMonthDraft(monthId, 0, remaining,
+    [{ slot_id: assigned.slot_id, user_id: 'DEMO-RAKA' }], 'HAPUS PENUGASAN'),
+  error => error.code === '40001')
+  await assert.rejects(api.updateMonthDraft(monthId, 0, remaining, removed, 'HAPUS'),
+    /Konfirmasi penghapusan/)
+  assert.equal((await api.getMonth(monthId)).rosters.length, 2)
+  assert.equal(await api.updateMonthDraft(monthId, 0, remaining, removed, 'HAPUS PENUGASAN'), 1)
+  const after = await api.getMonth(monthId)
+  assert.equal(after.occurrences.length, 1)
+  assert.equal(after.rosters.length, 1)
+  assert.equal(after.rosters.some(roster => roster.roster_id === first.roster_id), false)
+  await api.publishMonth(monthId)
+  await assert.rejects(api.updateMonthDraft(monthId, 2, remaining, [], ''), /tidak dapat diedit/)
+})
+
 test('Draft langsung menolak MH sebagai pembuat struktur dan Ministry tanpa posisi aktif', async () => {
   const api = createServiceScheduleDemo({ seed: false })
   const entries = [{

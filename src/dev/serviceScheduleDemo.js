@@ -119,9 +119,10 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
     }
     return monthId
   }
-  function buildDirectMonth(month, entries) {
+  function directDefinition(month, entries, previousDefinition = null) {
     const key = monthKey(month)
     if (!Array.isArray(entries) || !entries.length || entries.length > 124) fail('Daftar kegiatan tidak valid.')
+    const previousSections = new Map((previousDefinition?.sections || []).map(section => [section.section_id, section]))
     const sectionsById = new Map()
     for (const entry of entries) {
       if (!validDate(entry.service_date) || !entry.service_date.startsWith(key + '-') || !validTime(entry.start_time, entry.end_time)) fail('Tanggal atau jam kegiatan tidak valid.')
@@ -130,7 +131,8 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       if (!Array.isArray(entry.ministry_ids) || !entry.ministry_ids.length || entry.ministry_ids.length > 20 || new Set(entry.ministry_ids).size !== entry.ministry_ids.length) fail('Pilih Ministry yang melayani.')
       let section = sectionsById.get(entry.section_id)
       if (!section) {
-        section = { section_id: entry.section_id, title: entry.title.trim(), source_type: entry.source_type,
+        section = { ...(copy(previousSections.get(entry.section_id) || {})),
+          section_id: entry.section_id, title: entry.title.trim(), source_type: entry.source_type,
           event_id: entry.event_id || null, class_id: entry.class_id || null, class_session_no: entry.class_session_no || null,
           start_time: entry.start_time, end_time: entry.end_time, location: entry.location || '', dress_code: entry.dress_code || '',
           pic: entry.pic || '', notes: entry.notes || '', parts: [], participation: {}, occurrence_details: {} }
@@ -148,16 +150,33 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       }
       for (const ministryId of entry.ministry_ids) {
         demandMinistry(ministryId)
-        const available = state.positions.filter(position => position.is_active && position.ministry_id === ministryId)
-        if (!available.length) fail('Ministry yang dipilih belum memiliki posisi aktif.')
-        if (!section.parts.some(item => item.ministry_id === ministryId)) section.parts.push({
-          ministry_id: ministryId,
-          positions: available.map(position => ({ position_id: position.position_id, capacity: position.default_slots || 1 })),
-        })
+        if (!section.parts.some(item => item.ministry_id === ministryId)) {
+          const previousPart = previousSections.get(entry.section_id)?.parts?.find(item => item.ministry_id === ministryId)
+          if (previousPart) section.parts.push(copy(previousPart))
+          else {
+            const available = state.positions.filter(position => position.is_active && position.ministry_id === ministryId)
+            if (!available.length) fail('Ministry yang dipilih belum memiliki posisi aktif.')
+            section.parts.push({ ministry_id: ministryId,
+              ministry_name: state.ministries.find(item => item.ministry_id === ministryId)?.name,
+              positions: available.map(position => ({ position_id: position.position_id,
+                capacity: position.default_slots || 1, name: position.name, sort_order: position.sort_order })) })
+          }
+        }
       }
     }
     if (sectionsById.size > 12) fail('Terlalu banyak jenis kegiatan.')
-    const definition = { sections: [...sectionsById.values()] }
+    const definition = { ...(previousDefinition || {}), sections: [...sectionsById.values()] }
+    const capacity = entries.reduce((sum, entry) => sum + entry.ministry_ids.reduce((partSum, ministryId) => {
+      const section = sectionsById.get(entry.section_id)
+      return partSum + section.parts.find(item => item.ministry_id === ministryId).positions
+        .reduce((slotSum, position) => slotSum + position.capacity, 0)
+    }, 0), 0)
+    if (capacity > 2000) fail('Jadwal bulanan melebihi 2000 slot.')
+    return definition
+  }
+  function buildDirectMonth(month, entries) {
+    const key = monthKey(month)
+    const definition = directDefinition(month, entries)
     return buildMonth({ template_id: 'SSTPL-DIRECT-V102', name: 'Jadwal ' + key.slice(5, 7) + '/' + key.slice(0, 4), definition },
       key, uniqueSorted(entries.map(entry => entry.service_date)))
   }
@@ -213,6 +232,181 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       demandAdmin()
       if (state.months.some(item => item.month_date.startsWith(monthKey(month)) && item.status !== 'Dibatalkan')) fail('Lembar bulan ini sudah ada.')
       return buildDirectMonth(month, entries)
+    },
+    async updateMonthDraft(monthId, expectedVersion, entries, expectedRemovedAssignments, confirmation) {
+      demandAdmin()
+      const month = demandDraft(monthId)
+      if (month.version !== expectedVersion) fail('schedule_stale', '40001')
+      const definition = directDefinition(month.month_date, entries, month.definition)
+      const byId = new Map(entries.filter(entry => entry.occurrence_id)
+        .map(entry => [entry.occurrence_id, entry]))
+      const oldOccurrences = state.occurrences.filter(item => item.month_id === monthId)
+      const removals = new Set()
+      const partRemovals = new Set()
+      const removedAssignments = []
+
+      // Rencana perubahan diperiksa seluruhnya sebelum menyentuh data demo.
+      for (const occurrence of oldOccurrences) {
+        const next = byId.get(occurrence.occurrence_id)
+        const parts = state.parts.filter(item => item.occurrence_id === occurrence.occurrence_id)
+        const rosters = parts.map(item => state.rosters.find(roster => roster.roster_id === item.roster_id))
+        if (!next) {
+          removedAssignments.push(...rosters.flatMap(roster => roster.service_roster_slots
+            .filter(slot => slot.user_id).map(slot => ({ slot_id: slot.slot_id, user_id: slot.user_id }))))
+          removals.add(occurrence.occurrence_id)
+          continue
+        }
+        const sourceChanged = next.source_type !== occurrence.source_type
+          || (next.event_id || null) !== (occurrence.event_id || null)
+          || (next.class_id || null) !== (occurrence.class_id || null)
+          || (next.class_session_no || null) !== (occurrence.class_session_no || null)
+        const timeChanged = next.start_time !== occurrence.start_time || next.end_time !== occurrence.end_time
+        const dateChanged = next.service_date !== occurrence.service_date
+        const assigned = rosters.some(roster => roster?.service_roster_slots.some(slot => slot.user_id))
+        if (assigned && (sourceChanged || timeChanged || dateChanged))
+          fail('Kosongkan pelayan kegiatan sebelum mengubah tanggal, jam, atau sumber.')
+        if (month.published_at && (sourceChanged || timeChanged || dateChanged))
+          fail('Tanggal, jam, atau sumber kegiatan yang pernah terbit tidak dapat diganti.')
+        for (const part of parts) {
+          if (next.ministry_ids.includes(part.ministry_id)) continue
+          const roster = state.rosters.find(item => item.roster_id === part.roster_id)
+          removedAssignments.push(...roster.service_roster_slots.filter(slot => slot.user_id)
+            .map(slot => ({ slot_id: slot.slot_id, user_id: slot.user_id })))
+          partRemovals.add(part.part_id)
+        }
+      }
+      const ordered = values => [...values].sort((a, b) => a.slot_id.localeCompare(b.slot_id)
+        || a.user_id.localeCompare(b.user_id))
+      if (!Array.isArray(expectedRemovedAssignments)
+        || expectedRemovedAssignments.some(item => typeof item?.slot_id !== 'string' || typeof item?.user_id !== 'string')
+        || JSON.stringify(ordered(expectedRemovedAssignments)) !== JSON.stringify(ordered(removedAssignments)))
+        fail('schedule_stale', '40001')
+      if (removedAssignments.length > 0 && confirmation !== 'HAPUS PENUGASAN')
+        fail('Konfirmasi penghapusan penugasan tidak valid.')
+
+      const snapshot = copy(state)
+      const previousSerial = serial
+      try {
+        const removedParts = state.parts.filter(part => removals.has(part.occurrence_id) || partRemovals.has(part.part_id))
+        const removedRosterIds = new Set(removedParts.map(part => part.roster_id))
+        state.parts = state.parts.filter(part => !removedRosterIds.has(part.roster_id))
+        state.rosters = state.rosters.filter(roster => !removedRosterIds.has(roster.roster_id))
+        state.occurrences = state.occurrences.filter(occurrence => !removals.has(occurrence.occurrence_id))
+
+        for (const entry of entries) {
+          let occurrence = entry.occurrence_id && state.occurrences.find(item => item.month_id === monthId
+            && item.occurrence_id === entry.occurrence_id)
+          if (!occurrence) {
+            occurrence = { occurrence_id: id('OCC'), month_id: monthId, section_id: entry.section_id,
+              section_key: entry.section_id, service_date: entry.service_date }
+            state.occurrences.push(occurrence)
+          }
+          for (const field of ['title', 'source_type', 'event_id', 'class_id', 'class_session_no',
+            'start_time', 'end_time', 'location', 'dress_code', 'pic', 'notes'])
+            occurrence[field] = entry[field] || (['event_id', 'class_id', 'class_session_no'].includes(field) ? null : '')
+
+          const sectionPart = ministryId => definition.sections.find(section => section.section_id === entry.section_id)
+            .parts.find(part => part.ministry_id === ministryId)
+          for (const ministryId of entry.ministry_ids) {
+            let part = state.parts.find(item => item.occurrence_id === occurrence.occurrence_id && item.ministry_id === ministryId)
+            let roster = part && state.rosters.find(item => item.roster_id === part.roster_id)
+            if (!part) {
+              const positions = sectionPart(ministryId).positions
+              if (positions.some(position => !state.positions.some(catalog => catalog.position_id === position.position_id
+                && catalog.ministry_id === ministryId && catalog.is_active)))
+                fail('Posisi Ministry tidak aktif atau kapasitasnya tidak valid.')
+              const rosterId = id('ROSTER')
+              part = { part_id: id('PART'), occurrence_id: occurrence.occurrence_id,
+                ministry_id: ministryId, roster_id: rosterId, team_name: '', material: '', notes: '' }
+              state.parts.push(part)
+              const slots = positions.flatMap(position => Array.from({ length: position.capacity }, (_, index) => {
+                const catalog = state.positions.find(item => item.position_id === position.position_id)
+                return { slot_id: id('SLOT'), ministry_id: ministryId, position_id: position.position_id,
+                  slot_no: index + 1, user_id: null, users: null,
+                  ministry_service_positions: { name: catalog.name, sort_order: catalog.sort_order } }
+              }))
+              roster = { roster_id: rosterId, month_id: monthId, occurrence_id: occurrence.occurrence_id,
+                ministry_id: ministryId, ministries: { name: demandMinistry(ministryId).name },
+                status: 'Draft', version: 0, service_roster_slots: slots }
+              state.rosters.push(roster)
+            }
+            for (const field of ['title', 'source_type', 'event_id', 'class_id', 'class_session_no',
+              'service_date', 'start_time', 'end_time', 'location', 'dress_code', 'notes'])
+              roster[field] = occurrence[field]
+          }
+        }
+        month.definition = definition
+        month.version += 1
+        return month.version
+      } catch (error) {
+        state = snapshot
+        serial = previousSerial
+        throw error
+      }
+    },
+    async addMinistryToSection(monthId, sectionId, ministryId, expectedVersion) {
+      demandAdmin()
+      const month = demandDraft(monthId)
+      if (month.version !== expectedVersion) fail('schedule_stale', '40001')
+      demandMinistry(ministryId)
+      const section = month.definition.sections.find(item => item.section_id === sectionId)
+      const sectionPart = section?.parts?.find(item => item.ministry_id === ministryId)
+      if (!sectionPart) fail('Ministry belum ada dalam bagian jadwal ini.')
+      const sectionOccurrences = state.occurrences.filter(item => item.month_id === monthId && item.section_id === sectionId)
+      if (!sectionOccurrences.length) fail('Bagian jadwal belum memiliki kegiatan.')
+      if (!sectionPart.positions?.length || sectionPart.positions.some(entry => {
+        const catalog = state.positions.find(item => item.position_id === entry.position_id)
+        return !catalog?.is_active || catalog.ministry_id !== ministryId
+          || !Number.isInteger(entry.capacity) || entry.capacity < 1 || entry.capacity > 20
+      })) fail('Posisi Ministry tidak aktif atau kapasitasnya tidak valid.')
+      const participation = section.participation || {}
+      if (typeof participation !== 'object' || Array.isArray(participation)) fail('Data partisipasi bagian jadwal tidak valid.')
+      const newSlots = sectionPart.positions.reduce((sum, entry) => sum + entry.capacity, 0)
+      const currentSlots = state.rosters.filter(item => item.month_id === monthId)
+        .reduce((sum, item) => sum + item.service_roster_slots.length, 0)
+      let additionalSlots = 0
+      const plan = sectionOccurrences.map(occurrence => {
+        const ids = participation[occurrence.service_date] || []
+        if (!Array.isArray(ids)) fail('Daftar Ministry pada tanggal kegiatan tidak valid.')
+        const existing = state.parts.find(item => item.occurrence_id === occurrence.occurrence_id && item.ministry_id === ministryId)
+        if ((!ids.includes(ministryId) && ids.length >= 20)
+          || (!existing && state.parts.filter(item => item.occurrence_id === occurrence.occurrence_id).length >= 20))
+          fail('Maksimal 20 Ministry per kegiatan.')
+        if (!existing) additionalSlots += newSlots
+        return { occurrence, ids, existing }
+      })
+      if (currentSlots + additionalSlots > 2000) fail('Jadwal bulanan melebihi 2000 slot.')
+      let added = 0
+      let changed = false
+      section.participation = participation
+      for (const { occurrence, ids, existing } of plan) {
+        if (!ids.includes(ministryId)) {
+          participation[occurrence.service_date] = [...ids, ministryId]
+          changed = true
+        }
+        if (existing) continue
+        const rosterId = id('ROSTER')
+        state.parts.push({ part_id: id('PART'), occurrence_id: occurrence.occurrence_id,
+          ministry_id: ministryId, roster_id: rosterId, team_name: '', material: '', notes: '' })
+        const slots = sectionPart.positions.flatMap(entry => {
+          const position = state.positions.find(item => item.position_id === entry.position_id)
+          return Array.from({ length: entry.capacity }, (_, index) => ({
+            slot_id: id('SLOT'), ministry_id: ministryId, position_id: entry.position_id,
+            slot_no: index + 1, user_id: null, users: null,
+            ministry_service_positions: { name: position.name, sort_order: position.sort_order },
+          }))
+        })
+        state.rosters.push({ roster_id: rosterId, month_id: monthId, occurrence_id: occurrence.occurrence_id,
+          ministry_id: ministryId, ministries: { name: state.ministries.find(item => item.ministry_id === ministryId).name },
+          source_type: occurrence.source_type, title: occurrence.title, service_date: occurrence.service_date,
+          start_time: occurrence.start_time, end_time: occurrence.end_time,
+          location: occurrence.location, dress_code: occurrence.dress_code,
+          notes: occurrence.notes, status: 'Draft', version: 0, service_roster_slots: slots })
+        added += 1
+        changed = true
+      }
+      if (changed) month.version += 1
+      return added
     },
     async syncDraftPositions(monthId, expectedVersion, expectedCatalog) {
       demandAdmin()
