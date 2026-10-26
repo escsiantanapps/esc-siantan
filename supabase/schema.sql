@@ -11317,3 +11317,83 @@ REVOKE ALL ON FUNCTION public.update_owned_service_schedule_field_v125(TEXT,TEXT
 GRANT EXECUTE ON FUNCTION public.update_owned_service_schedule_field_v125(TEXT,TEXT,TEXT,TEXT) TO authenticated;
 
 COMMIT;
+
+-- ── Migrasi v126: Pengingat jadwal Minggu pada H-3 ──
+-- TEMUAN: Cron H-1 memakai jenis log yang dibatasi CHECK dan fungsi klaim;
+-- mengganti teks cron saja akan membuat klaim H-3 ditolak database.
+-- KEPUTUSAN OPERATOR: notifikasi Terbit tetap ada; pengingat H-1 diganti
+-- H-3 setiap Kamis pukul 09.00 WIB khusus roster Terbit hari Minggu.
+-- Jenis H-1 tetap valid agar baris log historis dan klien lama tidak rusak.
+BEGIN;
+
+ALTER TABLE public.service_roster_notification_logs
+  DROP CONSTRAINT IF EXISTS service_roster_notification_logs_kind_check;
+ALTER TABLE public.service_roster_notification_logs
+  ADD CONSTRAINT service_roster_notification_logs_kind_check
+  CHECK (kind IN ('Terbit', 'Perubahan', 'Dibatalkan', 'Pengingat H-1', 'Pengingat H-3', 'Manual'));
+
+CREATE OR REPLACE FUNCTION public.claim_service_roster_notification(
+  p_roster_id TEXT, p_user_id TEXT, p_kind TEXT, p_roster_version INTEGER
+) RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE new_token TEXT := gen_random_uuid()::TEXT; claimed_token TEXT;
+BEGIN
+  IF p_kind NOT IN ('Terbit', 'Dibatalkan', 'Pengingat H-1', 'Pengingat H-3', 'Manual') THEN
+    RAISE EXCEPTION 'Jenis notifikasi tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM service_rosters sr
+    JOIN service_roster_slots slot ON slot.roster_id = sr.roster_id
+    JOIN users u ON u.user_id = slot.user_id
+    WHERE sr.roster_id = p_roster_id AND sr.version = p_roster_version
+      AND slot.user_id = p_user_id AND u.status = 'Aktif'
+      AND (
+        (p_kind = 'Dibatalkan' AND (sr.status = 'Dibatalkan' OR
+          (sr.status = 'Draft' AND EXISTS (
+            SELECT 1 FROM service_schedule_parts part
+            JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id=part.occurrence_id
+            JOIN service_schedule_months month ON month.month_id=occurrence.month_id
+            WHERE part.roster_id=sr.roster_id AND month.status='Draft' AND month.published_at IS NOT NULL))))
+        OR (p_kind <> 'Dibatalkan' AND sr.status = 'Terbit')
+      )
+  ) THEN RETURN NULL; END IF;
+  INSERT INTO service_roster_notification_logs (
+    roster_id, user_id, kind, roster_version, delivery_status, claim_token, claimed_at
+  ) VALUES (p_roster_id, p_user_id, p_kind, p_roster_version, 'pending', new_token, now())
+  ON CONFLICT (roster_id, user_id, kind, roster_version)
+  DO UPDATE SET delivery_status='pending', claim_token=EXCLUDED.claim_token, claimed_at=EXCLUDED.claimed_at
+  WHERE service_roster_notification_logs.delivery_status='failed'
+    OR (service_roster_notification_logs.delivery_status='pending'
+      AND service_roster_notification_logs.claimed_at < now() - INTERVAL '10 minutes')
+  RETURNING claim_token INTO claimed_token;
+  RETURN claimed_token;
+END $$;
+REVOKE ALL ON FUNCTION public.claim_service_roster_notification(TEXT,TEXT,TEXT,INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_service_roster_notification(TEXT,TEXT,TEXT,INTEGER) TO service_role;
+
+COMMIT;
+
+-- ── Migrasi v127: Hentikan pembuatan sesi Absen Pelayanan manual ──
+-- TEMUAN: Menyembunyikan tombol Buka Sesi saja masih membiarkan Admin membuat
+-- sesi manual lewat PostgREST, sehingga ada dua sumber daftar pelayan.
+-- KEPUTUSAN OPERATOR (2026-10-26): semua sesi baru berasal dari Jadwal
+-- Pelayanan Terbit. Sesi manual historis dan catatan kehadirannya dipertahankan.
+-- Sinkronisasi jadwal tetap boleh INSERT sesi bertaut; service role/SQL Editor
+-- tetap dapat menangani pemulihan data bila diperlukan.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.guard_manual_ministry_schedule_v127() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  IF NEW.source_occurrence_id IS NULL AND auth_user_role() IS NOT NULL THEN
+    RAISE EXCEPTION 'Sesi Absen Pelayanan baru harus berasal dari Jadwal Pelayanan Terbit.'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_manual_ministry_schedule_v127 ON public.ministry_schedules;
+CREATE TRIGGER trg_guard_manual_ministry_schedule_v127
+  BEFORE INSERT ON public.ministry_schedules
+  FOR EACH ROW EXECUTE FUNCTION public.guard_manual_ministry_schedule_v127();
+
+COMMIT;

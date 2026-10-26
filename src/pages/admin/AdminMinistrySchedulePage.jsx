@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import {
-  CalendarClock, CalendarRange, ClipboardCheck, Download, FileSpreadsheet, Plus, Trash2, ArrowLeft, Users, UserCheck,
+  CalendarClock, CalendarRange, ClipboardCheck, Download, FileSpreadsheet, Trash2, ArrowLeft, Users, UserCheck,
   UserX, AlertTriangle, Search, Clock3, RefreshCw,
 } from 'lucide-react'
 import { useToast } from '@/hooks/useToast'
@@ -40,11 +40,6 @@ export default function AdminMinistrySchedulePage() {
   const [monthlyRecap, setMonthlyRecap] = useState(null)
   const [monthlyLoading, setMonthlyLoading] = useState(true)
   const [monthlyError, setMonthlyError] = useState(false)
-
-  // Form buka sesi baru.
-  const [newLabel, setNewLabel] = useState('')
-  const [newTime, setNewTime] = useState('09:00')
-  const [creating, setCreating] = useState(false)
 
   // Panel detail satu sesi.
   const [selected, setSelected] = useState(null) // schedule object
@@ -104,29 +99,6 @@ export default function AdminMinistrySchedulePage() {
     }, 250)
     return () => clearTimeout(id)
   }, [memberQuery, selected])
-
-  async function handleCreate() {
-    const label = newLabel.trim()
-    if (!label) { toast.error(t('apel.labelRequired')); return }
-    setCreating(true)
-    try {
-      const sched = await ministryScheduleService.create({
-        label,
-        serviceDate: date,
-        startTime: newTime || '09:00',
-        createdBy: profile.user_id,
-      })
-      toast.success(t('apel.created'))
-      setNewLabel('')
-      loadList()
-      await Promise.all([loadDateRecap(), loadMonthlyRecap()])
-      openSchedule(sched)
-    } catch (err) {
-      toast.error(err.message || t('apel.createFailed'))
-    } finally {
-      setCreating(false)
-    }
-  }
 
   async function openSchedule(sched) {
     setSelected(sched)
@@ -610,18 +582,6 @@ export default function AdminMinistrySchedulePage() {
             <div className="max-w-xs mb-4">
               <Input label={t('apel.date')} type="date" value={date} onChange={e => setDate(e.target.value)} />
             </div>
-            {/* Buka sesi baru: label bebas (mis. "Minggu 1") + jam mulai. */}
-            {!isGembala && !schedules.some(item => item.source_occurrence_id && item.source_status === 'Terbit') && (
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Input label={t('apel.labelField')} placeholder={t('apel.labelPlaceholder')} value={newLabel} onChange={e => setNewLabel(e.target.value)} />
-                </div>
-                <div className="w-28">
-                  <Input label={t('apel.startTime')} type="time" value={newTime} onChange={e => setNewTime(e.target.value)} />
-                </div>
-                <Button loading={creating} onClick={handleCreate}><Plus size={15} /> {t('apel.openSession')}</Button>
-              </div>
-            )}
           </Card>
 
           {loading ? (

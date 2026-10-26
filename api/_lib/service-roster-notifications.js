@@ -14,6 +14,10 @@ function notificationCopy(roster, kind) {
     title: 'Pengingat Pelayanan Besok',
     body: `${roster.title}, pukul ${time}${roster.location ? ` di ${roster.location}` : ''}.`,
   }
+  if (kind === 'Pengingat H-3') return {
+    title: 'Pengingat Pelayanan Hari Minggu',
+    body: `${roster.title}, ${date} pukul ${time}${roster.location ? ` di ${roster.location}` : ''}.`,
+  }
   return {
     title: kind === 'Manual' ? 'Pengingat Pelayanan' : 'Jadwal Pelayanan Baru',
     body: `${roster.title}, ${date} pukul ${time}.`,

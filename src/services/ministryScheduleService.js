@@ -45,18 +45,6 @@ export const ministryScheduleService = {
     return data
   },
 
-  // Buka sesi pelayanan berlabel (mis. "Minggu 1"). Sejak v58 lepas dari
-  // ministry — ministry_id sengaja NULL, unit organisasi = label + tanggal.
-  async create({ label, serviceDate, startTime, createdBy }) {
-    const { data, error } = await supabase
-      .from('ministry_schedules')
-      .insert({ label, ministry_id: null, service_date: serviceDate, start_time: startTime, created_by: createdBy })
-      .select('*')
-      .single()
-    if (error) throw error
-    return data
-  },
-
   async updateStartTime(scheduleId, startTime) {
     const { data, error } = await supabase
       .from('ministry_schedules')

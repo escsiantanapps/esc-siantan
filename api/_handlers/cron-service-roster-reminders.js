@@ -2,6 +2,16 @@ export const config = { runtime: 'nodejs' }
 
 import { sendRosterNotifications } from '../_lib/service-roster-notifications.js'
 
+export function targetSundayDateWib(now = new Date()) {
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', weekday: 'long' }).format(now)
+  if (weekday !== 'Thursday') return null
+  const sunday = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(sunday).map(part => [part.type, part.value]))
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
 export default async function handler(req, res) {
   try {
     if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' })
@@ -23,8 +33,8 @@ export default async function handler(req, res) {
     if (!/^(mailto:|https?:\/\/)/i.test(vapidSubject)) vapidSubject = `mailto:${vapidSubject}`
     if (!url || !serviceKey || !vapidPublic || !vapidPrivate) return res.status(500).json({ error: 'Environment variable belum lengkap.' })
 
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
-    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(tomorrow)
+    const date = targetSundayDateWib()
+    if (!date) return res.status(200).json({ ok: true, skipped: 'outside_h3_thursday' })
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } })
     const { data: rosters, error } = await admin.from('service_rosters').select('*').eq('status', 'Terbit').eq('service_date', date)
     if (error) throw error
@@ -35,7 +45,7 @@ export default async function handler(req, res) {
     for (const roster of rosters || []) {
       const { data: slots, error: slotsError } = await admin.from('service_roster_slots').select('user_id').eq('roster_id', roster.roster_id).not('user_id', 'is', null)
       if (slotsError) throw slotsError
-      const result = await sendRosterNotifications({ admin, webpush, roster, userIds: (slots || []).map(row => row.user_id), kind: 'Pengingat H-1' })
+      const result = await sendRosterNotifications({ admin, webpush, roster, userIds: (slots || []).map(row => row.user_id), kind: 'Pengingat H-3' })
       targets += result.targetCount || 0
       sent += (result.sent || 0) + (result.fcm?.sent || 0)
       failedRecipients += result.failedRecipients || 0

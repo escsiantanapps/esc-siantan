@@ -171,7 +171,7 @@ Draft -> Terbit
 |---|---|---|
 | Roster diterbitkan | Pelayan yang ditugaskan | Segera |
 | Kegiatan dibatalkan | Semua pelayan terjadwal | Segera |
-| Pengingat | Semua pelayan terjadwal | H-1 pukul 18.00 WIB |
+| Pengingat | Pelayan yang terjadwal pada hari Minggu | H-3, Kamis pukul 09.00 WIB |
 
 Setiap pengiriman memakai klaim atomik per jadwal, pengguna, jenis notifikasi, dan versi roster. Percobaan gagal dapat diulang; klaim macet kedaluwarsa setelah 10 menit. Tombol `Kirim Pengingat` tersedia di panel pengelola dengan konfirmasi dan rate limit, untuk satu pengingat tambahan yang berhasil per versi roster. Akun nonaktif dan penerima tanpa subscription tidak dicatat sebagai terkirim.
 
@@ -403,7 +403,7 @@ Ekspor PDF detail roster dan rekap bulanan hanya tersedia pada panel pengelola. 
 ### Notifikasi dan keamanan
 
 - Penerbitan dan pembatalan menghasilkan notifikasi.
-- Pengingat H-1 tidak terkirim dua kali walau cron dijalankan ulang.
+- Pengingat H-3 tidak terkirim dua kali walau cron dijalankan ulang.
 - Ketukan notifikasi membuka detail yang tepat.
 - PostgREST langsung tidak dapat dipakai Head/Wakil untuk menulis ministry lain.
 - Perubahan pelayan pada slot wajib melalui RPC penugasan; update PostgREST langsung ditolak trigger.
@@ -433,7 +433,8 @@ Ekspor PDF detail roster dan rekap bulanan hanya tersedia pada panel pengelola. 
    Diputuskan: Head/Wakil hanya memilih anggota aktif ministry; Admin/Super Admin dapat memilih pengguna aktif lain.
 
 4. **Waktu pengingat**
-   Diputuskan: saat Terbit dan H-1 pukul 18.00 WIB. H-2 jam ditunda agar notifikasi tidak berlebihan.
+   Keputusan awal: saat Terbit dan H-1 pukul 18.00 WIB. Pada 26 Oktober 2026,
+   operator mengganti H-1 dengan H-3 setiap Kamis pukul 09.00 WIB, khusus jadwal Minggu.
 
 5. **Konfirmasi kesediaan**
    Diputuskan: ditunda. Versi pertama fokus pada penyusunan, pengecekan, dan pengingat.
@@ -502,4 +503,4 @@ Tes manual setelah migrasi dan deploy:
 - Penugasan pukul 07.00-09.00 dan 10.00-12.00 tidak bentrok; pukul 08.30-10.00 memberi peringatan dengan kegiatan dan posisi yang tepat; pukul 09.00-11.00 tidak bentrok dengan jadwal yang selesai 09.00.
 - Ubah role pemilik grant menjadi Admin terbatas: grant tidak boleh melewati Hak Akses pada RPC/endpoint langsung.
 - PDF detail dan bulanan memuat posisi, nama, tanggal, jam, serta status yang tepat. Ekspor memakai dialog cetak browser.
-- Terbit, pembatalan, pengingat tambahan, dan H-1 pukul 18.00 WIB diuji pada PWA dengan izin push aktif. Run bersamaan melewati klaim atomik; pengiriman gagal tidak dicatat sukses. Cron mengembalikan 503 bila ada penerima yang seluruh perangkatnya gagal; belum ada jadwal retry otomatis khusus.
+- Terbit, pembatalan, pengingat tambahan, dan H-3 Kamis pukul 09.00 WIB perlu diuji pada PWA dengan izin push aktif. Run bersamaan melewati klaim atomik; pengiriman gagal tidak dicatat sukses. Cron mengembalikan 503 bila ada penerima yang seluruh perangkatnya gagal; belum ada jadwal retry otomatis khusus.

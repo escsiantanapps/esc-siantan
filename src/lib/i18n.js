@@ -1618,7 +1618,7 @@ export const translations = {
 
     // ── Admin: Absen Pelayanan Minggu (jadwal volunteer) ──
     'apel.title': 'Absen Pelayanan Minggu',
-    'apel.subtitle': 'Buka sesi & catat kehadiran yang bertugas melayani',
+    'apel.subtitle': 'Sesi dibuat otomatis dari Jadwal Pelayanan yang diterbitkan',
     'apel.date': 'Tanggal',
     'apel.create': 'Buat',
     'apel.open': 'Buka',
@@ -1627,7 +1627,7 @@ export const translations = {
     'apel.labelPlaceholder': 'mis. Minggu 1',
     'apel.labelRequired': 'Nama sesi wajib diisi (mis. "Minggu 1").',
     'apel.noSessions': 'Belum ada sesi',
-    'apel.noSessionsDesc': 'Buka sesi pelayanan untuk tanggal ini, lalu masukkan siapa saja yang bertugas.',
+    'apel.noSessionsDesc': 'Sesi absen untuk tanggal mendatang dibuat otomatis saat Jadwal Pelayanan diterbitkan.',
     'apel.searchAssignee': 'Cari nama yang bertugas...',
     'apel.created': 'Sesi dibuka.',
     'apel.createFailed': 'Gagal membuka sesi.',
@@ -4107,7 +4107,7 @@ export const translations = {
 
     // ── Admin: Service Attendance (volunteer schedule) ──
     'apel.title': 'Service Attendance',
-    'apel.subtitle': 'Open sessions & record attendance of those on duty',
+    'apel.subtitle': 'Sessions are created automatically from published Service Schedules',
     'apel.date': 'Date',
     'apel.create': 'Create',
     'apel.open': 'Open',
@@ -4116,7 +4116,7 @@ export const translations = {
     'apel.labelPlaceholder': 'e.g. Week 1',
     'apel.labelRequired': 'Session name is required (e.g. "Week 1").',
     'apel.noSessions': 'No sessions yet',
-    'apel.noSessionsDesc': 'Open a service session for this date, then add whoever is on duty.',
+    'apel.noSessionsDesc': 'Attendance sessions for future dates are created automatically when the Service Schedule is published.',
     'apel.searchAssignee': 'Search people on duty...',
     'apel.created': 'Session opened.',
     'apel.createFailed': 'Failed to open session.',
