@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { deleteUnusedNews, isReferencedByNews, scanUnusedNews } from '../api/_handlers/storage-cleanup.js'
+import { deleteResponseFiles, deleteUnusedNews, isReferencedByNews, scanResponseFiles, scanUnusedNews } from '../api/_handlers/storage-cleanup.js'
 import { isAllowedResponseArchiveCutoff, latestResponseArchiveCutoff, responseSnapshotPayload } from '../src/lib/archiveRetention.js'
 
 const NOW = Date.parse('2026-10-12T00:00:00Z')
@@ -116,4 +116,89 @@ test('Penghapusan parsial dilaporkan dan tidak mengklaim ruang file yang gagal',
   assert.deepEqual(result.body.failed, ['news/two.pdf'])
   assert.equal(result.body.freedBytes, 100)
   assert.deepEqual(f.removed, ['news/one.pdf'])
+})
+
+function responseFixture({ failRemove = false } = {}) {
+  const url = path => `https://example.test/storage/v1/object/public/task-files/${path}`
+  const rows = {
+    form_responses: [
+      { response_id: 'R1', volunteer_id: 'U1', form_id: 'F1', data_json: { note: 'Jawaban tetap ada', photo: url('responses/u/large.jpg') } },
+      { response_id: 'R2', volunteer_id: 'U1', form_id: 'F1', data_json: { photo: url('responses/u/shared.jpg') } },
+      { response_id: 'R3', volunteer_id: 'U1', form_id: 'F1', data_json: { photo: url('responses/u/shared.jpg') } },
+    ],
+    registration_prerequisites: [{ id: 'P1', data_json: { photo: url('responses/u/prereq.jpg') } }],
+  }
+  const removed = []
+  const audits = []
+  const files = ['large.jpg', 'shared.jpg', 'prereq.jpg', 'orphan.jpg', 'recent.jpg'].map((name, i) => ({
+    id: name, name, created_at: name === 'recent.jpg' ? '2026-10-11T00:00:00Z' : OLD,
+    metadata: { size: 5000 - i * 1000 },
+  }))
+  const admin = {
+    storage: { from() { return {
+      async list(folder) { return { data: folder === 'responses' ? [{ id: null, name: 'u' }]
+        : folder === 'responses/u' ? files : [], error: null } },
+      async remove(paths) {
+        if (failRemove) return { error: new Error('gagal') }
+        removed.push(...paths)
+        return { error: null }
+      },
+    } } },
+    from(table) {
+      const q = {
+        action: null, filters: [], payload: null,
+        select() { return this }, order() { return this },
+        range(from, to) { return Promise.resolve({ data: rows[table].slice(from, to + 1), error: null }) },
+        update(payload) { this.action = 'update'; this.payload = payload; return this },
+        eq(column, value) { this.filters.push([column, value]); return this },
+        insert(payload) { audits.push(payload); return Promise.resolve({ error: null }) },
+        then(resolve) {
+          const row = rows[table].find(item => this.filters.every(([column, value]) =>
+            column === 'data_json' ? JSON.stringify(item[column]) === value : item[column] === value))
+          if (row) Object.assign(row, this.payload)
+          resolve({ data: row ? [row] : [], error: null })
+        },
+      }
+      return q
+    },
+  }
+  return { admin, rows, removed, audits }
+}
+
+test('Lampiran SOP dan yatim lama dipilih menurut ukuran; file prasyarat, bersama, dan yatim baru dikecualikan', async () => {
+  const f = responseFixture()
+  const result = await scanResponseFiles(f.admin, NOW)
+  assert.equal(result.scannedFiles, 5)
+  assert.deepEqual(result.candidates.map(file => file.path), ['responses/u/large.jpg', 'responses/u/orphan.jpg'])
+  assert.equal(result.candidates[1].orphan, true)
+})
+
+test('Hapus lampiran menjaga jawaban teks dan mencatat audit; kegagalan Storage memulihkan tautan', async () => {
+  const path = 'responses/u/large.jpg'
+  const caller = { user_id: 'A1', name: 'Admin', role: 'Super Admin' }
+  const success = responseFixture()
+  const result = await deleteResponseFiles(success.admin, [path], caller, NOW)
+  assert.deepEqual(result.body.deleted, [path])
+  assert.equal(result.body.freedBytes, 5000)
+  assert.deepEqual(success.rows.form_responses[0].data_json, { note: 'Jawaban tetap ada', photo: null })
+  assert.deepEqual(success.removed, [path])
+  assert.equal(success.audits[0].record_id, 'R1')
+
+  const failed = responseFixture({ failRemove: true })
+  const retry = await deleteResponseFiles(failed.admin, [path], caller, NOW)
+  assert.deepEqual(retry.body.failed, [path])
+  assert.equal(failed.rows.form_responses[0].data_json.photo.includes(path), true)
+  assert.equal(failed.audits.length, 0)
+})
+
+test('File yatim lama bisa dihapus dan diaudit tanpa mengubah respons', async () => {
+  const f = responseFixture()
+  const before = JSON.stringify(f.rows.form_responses)
+  const result = await deleteResponseFiles(f.admin, ['responses/u/orphan.jpg'],
+    { user_id: 'A1', name: 'Admin', role: 'Super Admin' }, NOW)
+  assert.deepEqual(result.body.deleted, ['responses/u/orphan.jpg'])
+  assert.equal(result.body.freedBytes, 2000)
+  assert.equal(JSON.stringify(f.rows.form_responses), before)
+  assert.equal(f.audits[0].table_name, 'storage.objects')
+  assert.equal(f.audits[0].old_data.orphan, true)
 })

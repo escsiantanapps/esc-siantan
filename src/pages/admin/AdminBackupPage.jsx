@@ -165,6 +165,9 @@ export default function AdminBackupPage() {
   const [cleanupBusy, setCleanupBusy] = useState(false)
   const [cleanupData, setCleanupData] = useState(null)
   const [cleanupSelected, setCleanupSelected] = useState([])
+  const [responseFilesBusy, setResponseFilesBusy] = useState(false)
+  const [responseFilesData, setResponseFilesData] = useState(null)
+  const [responseFilesSelected, setResponseFilesSelected] = useState([])
 
   // Arsip data dingin SOP: salin lokal dulu, hapus sumber pada aksi kedua.
   const [coldCutoff, setColdCutoff] = useState(latestResponseArchiveCutoff)
@@ -421,6 +424,57 @@ export default function AdminBackupPage() {
       setCleanupData(null)
     } finally {
       setCleanupBusy(false)
+    }
+  }
+
+  async function scanResponseFiles() {
+    setResponseFilesBusy(true)
+    setResponseFilesSelected([])
+    try {
+      setResponseFilesData(await storageCleanupService.scanResponses())
+    } catch (err) {
+      setResponseFilesData(null)
+      toast.error(t('backup.responseFilesError', { msg: err.message }))
+    } finally {
+      setResponseFilesBusy(false)
+    }
+  }
+
+  function toggleResponseFile(path) {
+    setResponseFilesSelected(current => {
+      if (current.includes(path)) return current.filter(item => item !== path)
+      if (current.length >= 10) { toast.info(t('backup.responseFilesLimit')); return current }
+      return [...current, path]
+    })
+  }
+
+  async function deleteResponseFiles() {
+    const selected = responseFilesData?.files?.filter(file => responseFilesSelected.includes(file.path)) || []
+    if (!selected.length) return
+    const bytes = selected.reduce((sum, file) => sum + file.size, 0)
+    const ok = await confirm({
+      title: t('backup.responseFilesConfirmTitle'),
+      message: t('backup.responseFilesConfirm', { count: selected.length, size: formatSize(bytes) }),
+      confirmText: t('backup.responseFilesDelete'), danger: true,
+    })
+    if (!ok) return
+    setResponseFilesBusy(true)
+    try {
+      const result = await storageCleanupService.deleteResponseFiles(responseFilesSelected)
+      if (result.deleted.length) toast.success(t('backup.responseFilesDeleted', {
+        count: result.deleted.length, size: formatSize(result.freedBytes),
+      }))
+      if (result.failed.length) toast.error(t('backup.responseFilesFailed', { count: result.failed.length }))
+      if (result.auditFailed?.length) toast.error(t('backup.responseFilesAuditFailed', { count: result.auditFailed.length }))
+      if (result.restoreFailed?.length) toast.error(t('backup.responseFilesRestoreFailed', { count: result.restoreFailed.length }))
+      setResponseFilesSelected([])
+      setResponseFilesData(await storageCleanupService.scanResponses())
+    } catch (err) {
+      setResponseFilesSelected([])
+      setResponseFilesData(null)
+      toast.error(t('backup.responseFilesError', { msg: err.message }))
+    } finally {
+      setResponseFilesBusy(false)
     }
   }
 
@@ -967,6 +1021,51 @@ export default function AdminBackupPage() {
           </Button>
           </div>
         </details>
+      </Card>
+
+      <Card id="backup-response-files" className="mb-4 p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-control flex items-center justify-center shrink-0">
+            <HardDrive size={19} className="text-brand-600" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-gray-900">{t('backup.responseFilesTitle')}</h2>
+            <p className="text-xs text-gray-500 mt-1">{t('backup.responseFilesDesc')}</p>
+          </div>
+        </div>
+        <Button variant="outline" onClick={scanResponseFiles} loading={responseFilesBusy} disabled={responseFilesBusy}>
+          <RefreshCw size={16} /> {t('backup.responseFilesScan')}
+        </Button>
+        {import.meta.env.DEV && <p className="text-xs text-gray-500">{t('backup.cleanupLocalPreview')}</p>}
+        {responseFilesData && <>
+          <p className="text-xs text-gray-600" aria-live="polite">{t('backup.responseFilesSummary', {
+            count: responseFilesData.candidateCount,
+            size: formatSize(responseFilesData.candidateBytes),
+            scanned: responseFilesData.scannedFiles,
+          })}</p>
+          {responseFilesData.files.length > 0 && <>
+            <p className="text-xs text-gray-500">{t('backup.responseFilesShowing', { count: responseFilesData.files.length })}</p>
+            <div className="max-h-80 overflow-y-auto border-y border-gray-100 divide-y divide-gray-100">
+              {responseFilesData.files.map(file => <div key={file.path} className="flex items-center gap-2 py-2.5">
+                <Checkbox checked={responseFilesSelected.includes(file.path)}
+                  onChange={() => toggleResponseFile(file.path)} disabled={responseFilesBusy}
+                  className="min-w-0 flex-1" label={<span className="min-w-0">
+                    <span className="block text-xs font-medium text-gray-800 break-all">{file.path}</span>
+                    <span className="block text-xs text-gray-500">{formatSize(file.size)} · {formatDate(file.createdAt)} · {file.orphan ? t('backup.responseFilesOrphan') : `${t('backup.responseFilesForm')} ${file.formId || '—'}`}</span>
+                  </span>} />
+                <a href={supabase.storage.from('task-files').getPublicUrl(file.path).data.publicUrl}
+                  target="_blank" rel="noopener noreferrer" className="text-xs text-brand-600 shrink-0">
+                  {t('backup.cleanupOpen')}
+                </a>
+              </div>)}
+            </div>
+            <Button variant="danger" className="w-full" onClick={deleteResponseFiles} loading={responseFilesBusy}
+              disabled={import.meta.env.DEV || responseFilesBusy || responseFilesSelected.length === 0}>
+              <Trash2 size={16} /> {t('backup.responseFilesDeleteSelected', { count: responseFilesSelected.length })}
+            </Button>
+          </>}
+        </>}
+        <p className="text-xs text-gray-600">{t('backup.responseFilesWarning')}</p>
       </Card>
 
       <Card className="mb-4 p-4 space-y-3">

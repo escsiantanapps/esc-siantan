@@ -18,4 +18,6 @@ async function call(action, paths) {
 export const storageCleanupService = {
   scan() { return call('scan') },
   delete(paths) { return call('delete', paths) },
+  scanResponses() { return call('scan-responses') },
+  deleteResponseFiles(paths) { return call('delete-response-files', paths) },
 }
