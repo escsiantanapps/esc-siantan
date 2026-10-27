@@ -30,7 +30,7 @@
 .sched-matrix-table .sched-matrix-ministry > * { background: var(--color-control); }
 .sched-matrix-table .sched-matrix-ministry .sched-matrix-label { background: var(--color-control); color: var(--color-gray-700); padding: 3px 10px; }
 .sched-matrix-ministry .sched-matrix-scope { display:flex; align-items:center; gap:4px; width:fit-content; margin-top:2px; font-size:10px; font-weight:500; }
-.sched-matrix-ministry.is-restricted .sched-matrix-label { border-left:3px solid var(--color-gray-400); }
+.sched-matrix-ministry.is-readonly .sched-matrix-label { border-left:3px solid var(--color-gray-400); }
 .sched-matrix-position .sched-matrix-label { border-left:3px solid transparent; }
 .sched-matrix-ministry .sched-matrix-group-cell,
 .sched-matrix-ministry .sched-matrix-not-scheduled { min-height: 24px; }

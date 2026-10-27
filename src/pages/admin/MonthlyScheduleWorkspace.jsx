@@ -744,6 +744,7 @@ function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, 
   const [names, setNames] = useState(() => new Map(slots.filter(slot => slot.user_id).map(slot => [slot.user_id, slot.users?.name || t('schedMonth.unavailableMember')])))
   const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState(false)
+  const [previewChecking, setPreviewChecking] = useState(false)
   const [error, setError] = useState('')
   const [conflicts, setConflicts] = useState([])
   useEffect(() => {
@@ -755,14 +756,30 @@ function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, 
       .finally(() => { if (active) setLoading(false) }), 200)
     return () => { active = false; clearTimeout(timer) }
   }, [api, canManageAll, isAdmin, position.ministry_id, query])
+  useEffect(() => {
+    let active = true
+    if (!selected.length) { setConflicts([]); setPreviewChecking(false); return undefined }
+    setConflicts([])
+    setPreviewChecking(true)
+    const timer = setTimeout(() => {
+      Promise.all(selected.map(async userId => {
+        const ownSlot = slots.find(slot => slot.user_id === userId)
+        const rows = await api.findConflicts(userId, roster.roster_id, ownSlot?.slot_id)
+        return rows.map(item => ({ ...item, memberId: userId }))
+      })).then(rows => { if (active) setConflicts(rows.flat()) })
+        .catch(() => { if (active) setError('schedMonth.conflictsFailed') })
+        .finally(() => { if (active) setPreviewChecking(false) })
+    }, 180)
+    return () => { active = false; clearTimeout(timer) }
+  }, [api, selected, roster.roster_id, slots])
   async function submit(event) {
     event.preventDefault(); setChecking(true); setError(''); setConflicts([])
     try {
       const findings = []
-      for (const userId of isAdmin && !canManageAll ? [] : selected) {
+      for (const userId of selected) {
         const ownSlot = slots.find(slot => slot.user_id === userId)
         const rows = await api.findConflicts(userId, roster.roster_id, ownSlot?.slot_id)
-        for (const item of rows) findings.push({ ...item, memberName: names.get(userId) || '-' })
+        for (const item of rows) findings.push({ ...item, memberId: userId })
       }
       if (findings.length) { setConflicts(findings); return }
       // Catatan personel lama tidak boleh ikut saat satu slot diisi pengganti.
@@ -779,9 +796,10 @@ function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, 
       {!!selected.length && <div className="monthly-date-picks">{selected.map(id => <Button type="button" key={id} variant="outline" disabled={busy || checking} onClick={() => { setSelected(current => current.filter(item => item !== id)); setConflicts([]) }} aria-label={t('schedMonth.removeMember', { name: names.get(id) || '-' })}>{names.get(id) || '-'}<X size={14} /></Button>)}</div>}
       {!!selected.length && <div className="monthly-person-notes">{selected.map(id => <Input key={id} label={t('schedMonth.personNoteFor', { name: names.get(id) || '-' })} placeholder={t('schedMonth.personNoteExample')} maxLength={100} value={notes[id] || ''} disabled={busy || checking} onChange={event => setNotes(current => ({ ...current, [id]: event.target.value }))} />)}</div>}
       <div className="monthly-member-list">{loading ? <Spinner size="sm" /> : !members.length ? <p>{t('sched.noMembers')}</p> : members.map(member => <Checkbox key={member.user_id} label={member.name} checked={selected.includes(member.user_id)} disabled={busy || checking || (slots.length !== 1 && !selected.includes(member.user_id) && selected.length >= slots.length)} onChange={event => { setSelected(current => event.target.checked ? (slots.length === 1 ? [member.user_id] : [...current, member.user_id]) : current.filter(id => id !== member.user_id)); setConflicts([]) }} />)}</div>
-      {conflicts.length > 0 && <div className="monthly-error" role="alert"><strong>{t('schedMonth.conflictBlocked')}</strong>{conflicts.map((item, index) => <p key={index}>{t('schedMonth.conflictItem', { name: item.memberName, title: item.title, date: item.service_date, time: timeLabel(item), position: item.position_names, ministry: item.ministry_name })}</p>)}</div>}
+      {previewChecking && <p className="monthly-muted" role="status">{t('schedMonth.checkingConflicts')}</p>}
+      {conflicts.length > 0 && <div className="monthly-error" role="alert"><strong>{t('schedMonth.conflictWarning')}</strong>{conflicts.map((item, index) => <p key={index}>{t('schedMonth.conflictItem', { name: names.get(item.memberId) || '-', title: item.title, date: item.service_date, time: timeLabel(item), position: item.position_names, ministry: item.ministry_name })}</p>)}</div>}
       {error && <p className="monthly-error" role="alert">{t(error)}</p>}
-    </div><footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy || checking} onClick={onClose}>{t('common.cancel')}</Button><Button type="submit" loading={busy || checking}><Save size={16} />{t('schedMonth.saveAssignments')}</Button></footer>
+    </div><footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy || checking} onClick={onClose}>{t('common.cancel')}</Button><Button type="submit" disabled={previewChecking || conflicts.length > 0} loading={busy || checking}><Save size={16} />{t('schedMonth.saveAssignments')}</Button></footer>
   </form></Modal>
 }
 

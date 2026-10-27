@@ -11397,3 +11397,85 @@ CREATE TRIGGER trg_guard_manual_ministry_schedule_v127
   FOR EACH ROW EXECUTE FUNCTION public.guard_manual_ministry_schedule_v127();
 
 COMMIT;
+
+-- ── Migrasi v128: Baca Draft lintas Ministry dan cek bentrok Admin MH ──
+-- KEPUTUSAN OPERATOR (2026-10-27): pengelola boleh melihat nama anggota dan
+-- posisi semua Ministry pada Draft, tetapi hanya mengisi Ministry yang diberi
+-- akses. Policy production sudah diperiksa; policy dan jalur tulis tidak diubah.
+-- TEMUAN: RPC bentrok lama menolak Admin MH dengan grant Ministry terbatas.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.get_service_schedule_month_v128(p_month_id TEXT)
+  RETURNS JSONB LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_result JSONB;
+BEGIN
+  -- Gerbang baca v111 menentukan siapa yang boleh membuka bulan ini.
+  v_result := get_service_schedule_month_v111(p_month_id);
+  IF v_result IS NULL OR v_result->'month'->>'status' <> 'Draft' THEN RETURN v_result; END IF;
+  -- Data Ministry lain dibatasi pada relasi bagian dan nama pengisi slot.
+  RETURN jsonb_set(jsonb_set(v_result, '{parts}', COALESCE(v_result->'parts', '[]'::JSONB) ||
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'occurrence_id', p.occurrence_id, 'ministry_id', p.ministry_id, 'roster_id', p.roster_id)
+      ORDER BY p.occurrence_id, p.ministry_id), '[]'::JSONB)
+     FROM service_schedule_parts p
+     JOIN service_schedule_occurrences o ON o.occurrence_id = p.occurrence_id
+     WHERE o.month_id = p_month_id AND NOT COALESCE(auth_can_fill_schedule_ministry_v111(p.ministry_id), false))),
+    '{rosters}', COALESCE(v_result->'rosters', '[]'::JSONB) ||
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'roster_id', p.roster_id, 'occurrence_id', p.occurrence_id,
+      'ministry_id', p.ministry_id, 'service_roster_slots',
+        (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'slot_no', s.slot_no, 'position_id', s.position_id, 'user_id', s.user_id,
+          'users', CASE WHEN u.user_id IS NULL THEN NULL
+            ELSE jsonb_build_object('name', u.name) END) ORDER BY s.slot_no), '[]'::JSONB)
+         FROM service_roster_slots s LEFT JOIN users u ON u.user_id = s.user_id
+         WHERE s.roster_id = p.roster_id)) ORDER BY p.occurrence_id, p.ministry_id), '[]'::JSONB)
+     FROM service_schedule_parts p
+     JOIN service_schedule_occurrences o ON o.occurrence_id = p.occurrence_id
+     WHERE o.month_id = p_month_id AND NOT COALESCE(auth_can_fill_schedule_ministry_v111(p.ministry_id), false)));
+END $$;
+REVOKE ALL ON FUNCTION public.get_service_schedule_month_v128(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_service_schedule_month_v128(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_service_roster_conflicts_v128(
+  p_user_id TEXT, p_roster_id TEXT, p_slot_id TEXT DEFAULT NULL
+) RETURNS TABLE (title TEXT, service_date DATE, start_time TIME, end_time TIME,
+  ministry_name TEXT, position_names TEXT)
+  LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_roster service_rosters%ROWTYPE;
+BEGIN
+  SELECT * INTO v_roster FROM service_rosters r WHERE r.roster_id = p_roster_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Roster tidak ditemukan.' USING ERRCODE = '22023'; END IF;
+  IF NOT COALESCE(auth_can_fill_schedule_ministry_v111(v_roster.ministry_id), false) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = p_user_id AND u.status = 'Aktif') THEN
+    RAISE EXCEPTION 'Pelayan yang diperiksa harus berstatus Aktif.' USING ERRCODE = '22023';
+  END IF;
+  -- Pengelola terbatas hanya boleh memeriksa anggota Ministry target.
+  IF (auth_admin_mh_scoped_v111() OR NOT auth_service_schedule_admin())
+    AND NOT EXISTS (SELECT 1 FROM user_ministries um
+      WHERE um.ministry_id = v_roster.ministry_id AND um.user_id = p_user_id) THEN
+    RAISE EXCEPTION 'Hanya anggota Ministry ini yang dapat diperiksa.' USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY
+  SELECT CASE WHEN r.source_type = 'Kelas' AND r.class_session_no IS NOT NULL
+      THEN r.title || ' #' || r.class_session_no::TEXT ELSE r.title END,
+    r.service_date, r.start_time, r.end_time, m.name,
+    string_agg(DISTINCT pos.name, ', ' ORDER BY pos.name)
+  FROM service_roster_slots s
+  JOIN service_rosters r ON r.roster_id = s.roster_id
+  JOIN ministries m ON m.ministry_id = r.ministry_id
+  JOIN ministry_service_positions pos ON pos.position_id = s.position_id
+  WHERE s.user_id = p_user_id AND (p_slot_id IS NULL OR s.slot_id <> p_slot_id)
+    AND r.status <> 'Dibatalkan' AND r.service_date = v_roster.service_date
+    AND (r.roster_id = v_roster.roster_id OR r.end_time IS NULL OR v_roster.end_time IS NULL
+      OR (r.start_time < v_roster.end_time AND v_roster.start_time < r.end_time))
+  GROUP BY r.roster_id, r.title, r.class_session_no, r.service_date, r.start_time,
+    r.end_time, m.name
+  ORDER BY r.start_time, r.title;
+END $$;
+REVOKE ALL ON FUNCTION public.get_service_roster_conflicts_v128(TEXT,TEXT,TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_service_roster_conflicts_v128(TEXT,TEXT,TEXT) TO authenticated;
+
+COMMIT;

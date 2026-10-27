@@ -49,7 +49,9 @@ export const monthlyScheduleService = {
   listClasses: () => classesService.getAll(),
   notify: (rosterId, kind) => serviceRosterService.notify(rosterId, kind),
   notifyMonth: (monthId, kind) => serviceRosterService.notifyMonth(monthId, kind),
-  findConflicts: (userId, rosterId, slotId) => serviceRosterService.findConflicts(userId, rosterId, slotId),
+  findConflicts: (userId, rosterId, slotId) => rpc('get_service_roster_conflicts_v128', {
+    p_user_id: userId, p_roster_id: rosterId, p_slot_id: slotId,
+  }),
   listMembers: (ministryId, query, canManageAll) => serviceRosterService.listMinistryMembers(ministryId, query, canManageAll),
   listOwnedScheduleFields: month => rpc('list_owned_service_schedule_fields_v125', { p_month_date: `${month}-01` }),
   updateOwnedScheduleField: (occurrenceId, field, value, expectedValue) => rpc('update_owned_service_schedule_field_v125', {
@@ -119,7 +121,7 @@ export const monthlyScheduleService = {
   },
   async getMonth(monthId) {
     const [data, positions, ministries] = await Promise.all([
-      rpc('get_service_schedule_month_v111', { p_month_id: monthId }), this.listPositions(), this.listMinistries(),
+      rpc('get_service_schedule_month_v128', { p_month_id: monthId }), this.listPositions(), this.listMinistries(),
     ])
     return normalizeMonthlySchedule(data, positions, ministries)
   },
