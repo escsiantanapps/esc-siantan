@@ -8172,6 +8172,7 @@ END $v104_policies$;
 COMMIT;
 
 
+
 -- ── Migrasi v105: Hak tulis Ministry dan daftar anggota untuk jadwal ──
 -- TEMUAN (2026-10-15): policy ministries_admin_write production mengizinkan
 -- semua Admin menulis Ministry tanpa Hak Akses /admin/ministry.
@@ -11477,5 +11478,147 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.get_service_roster_conflicts_v128(TEXT,TEXT,TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_service_roster_conflicts_v128(TEXT,TEXT,TEXT) TO authenticated;
+
+COMMIT;
+
+-- ── Migrasi v129: Posisi baru otomatis masuk jadwal Draft ────────────
+-- KEPUTUSAN OPERATOR (2026-10-27): posisi baru langsung menjadi baris kosong
+-- pada semua Draft yang memakai Ministry tersebut. Jadwal Terbit tetap utuh.
+-- Penambahan katalog, snapshot Draft, dan slot dilakukan satu transaksi.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION sync_missing_service_schedule_position_v129(p_position_id TEXT)
+  RETURNS VOID
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  new_position ministry_service_positions%ROWTYPE;
+  draft service_schedule_months%ROWTYPE;
+  section JSONB; part JSONB;
+  sections_new JSONB; parts_new JSONB;
+  position_snapshot JSONB;
+  changed BOOLEAN;
+  roster_row RECORD;
+  slot_count INTEGER;
+BEGIN
+  SELECT * INTO new_position FROM ministry_service_positions
+  WHERE position_id = p_position_id AND is_active;
+  IF NOT FOUND THEN RETURN; END IF;
+  position_snapshot := jsonb_build_object(
+    'position_id', new_position.position_id, 'capacity', new_position.default_slots,
+    'name', new_position.name, 'sort_order', new_position.sort_order
+  );
+
+  FOR draft IN
+    SELECT m.* FROM service_schedule_months m
+    WHERE m.status = 'Draft' AND EXISTS (
+      SELECT 1 FROM jsonb_array_elements(m.definition->'sections') s,
+        jsonb_array_elements(s.value->'parts') p
+      WHERE p.value->>'ministry_id' = new_position.ministry_id
+    )
+    ORDER BY m.month_id FOR UPDATE
+  LOOP
+    sections_new := '[]'::JSONB;
+    changed := false;
+    PERFORM set_config('app.service_schedule_structure', draft.month_id, true);
+    FOR section IN SELECT value FROM jsonb_array_elements(draft.definition->'sections') LOOP
+      parts_new := '[]'::JSONB;
+      FOR part IN SELECT value FROM jsonb_array_elements(section->'parts') LOOP
+        IF part->>'ministry_id' = new_position.ministry_id AND NOT EXISTS (
+          SELECT 1 FROM jsonb_array_elements(part->'positions') pos
+          WHERE pos->>'position_id' = new_position.position_id
+        ) THEN
+          IF jsonb_array_length(part->'positions') >= 30 THEN
+            RAISE EXCEPTION 'Satu bagian jadwal tidak boleh melebihi 30 posisi.' USING ERRCODE = '22023';
+          END IF;
+          part := jsonb_set(part, '{positions}', (part->'positions') || jsonb_build_array(position_snapshot));
+          changed := true;
+          FOR roster_row IN
+            SELECT sp.roster_id FROM service_schedule_parts sp
+            JOIN service_schedule_occurrences o ON o.occurrence_id = sp.occurrence_id
+            JOIN service_rosters r ON r.roster_id = sp.roster_id
+            WHERE o.month_id = draft.month_id AND o.section_id = section->>'section_id'
+              AND sp.ministry_id = new_position.ministry_id
+            ORDER BY sp.roster_id FOR UPDATE OF r
+          LOOP
+            SELECT count(*) INTO slot_count FROM service_roster_slots slot
+            JOIN service_schedule_parts sp ON sp.roster_id = slot.roster_id
+            JOIN service_schedule_occurrences o ON o.occurrence_id = sp.occurrence_id
+            WHERE o.month_id = draft.month_id;
+            IF slot_count + new_position.default_slots > 2000 THEN
+              RAISE EXCEPTION 'Total slot satu bulan melebihi 2000.' USING ERRCODE = '22023';
+            END IF;
+            INSERT INTO service_roster_slots(roster_id, ministry_id, position_id, slot_no)
+            SELECT roster_row.roster_id, new_position.ministry_id, new_position.position_id, number
+            FROM generate_series(1, new_position.default_slots) number;
+          END LOOP;
+        END IF;
+        parts_new := parts_new || jsonb_build_array(part);
+      END LOOP;
+      sections_new := sections_new || jsonb_build_array(jsonb_set(section, '{parts}', parts_new));
+    END LOOP;
+    IF changed THEN
+      UPDATE service_schedule_months SET
+        definition = jsonb_set(draft.definition, '{sections}', sections_new),
+        version = version + 1, updated_at = now()
+      WHERE month_id = draft.month_id;
+    END IF;
+    PERFORM set_config('app.service_schedule_structure', '', true);
+  END LOOP;
+  RETURN;
+END $$;
+
+REVOKE ALL ON FUNCTION sync_missing_service_schedule_position_v129(TEXT) FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION add_service_schedule_position_v129(
+  p_ministry_id TEXT, p_name TEXT, p_default_slots INTEGER, p_sort_order INTEGER,
+  p_is_active BOOLEAN
+) RETURNS ministry_service_positions
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE new_position ministry_service_positions%ROWTYPE;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF p_ministry_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM ministries WHERE ministry_id = p_ministry_id
+  ) OR length(btrim(COALESCE(p_name, ''))) NOT BETWEEN 1 AND 120
+    OR p_default_slots IS NULL OR p_default_slots NOT BETWEEN 1 AND 20
+    OR p_sort_order IS NULL OR p_is_active IS NULL THEN
+    RAISE EXCEPTION 'Data posisi pelayanan tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  -- Dua Admin yang menambah posisi ke Ministry sama memproses Draft berurutan.
+  PERFORM pg_advisory_xact_lock(hashtextextended('schedule-position:' || p_ministry_id, 0));
+  INSERT INTO ministry_service_positions(ministry_id, name, default_slots, sort_order, is_active, created_by)
+  VALUES (p_ministry_id, btrim(p_name), p_default_slots, p_sort_order, p_is_active, auth_user_id())
+  RETURNING * INTO new_position;
+  PERFORM sync_missing_service_schedule_position_v129(new_position.position_id);
+  RETURN new_position;
+END $$;
+
+REVOKE ALL ON FUNCTION add_service_schedule_position_v129(TEXT,TEXT,INTEGER,INTEGER,BOOLEAN) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION add_service_schedule_position_v129(TEXT,TEXT,INTEGER,INTEGER,BOOLEAN) TO authenticated;
+
+-- Posisi aktif yang sudah telanjur dibuat (misalnya posisi keempat Kids)
+-- ditambahkan ke Draft tanpa mengubah penugasan atau jadwal Terbit.
+DO $v129$
+DECLARE position_row RECORD;
+BEGIN
+  FOR position_row IN
+    SELECT DISTINCT position_id FROM ministry_service_positions position
+    WHERE position.is_active AND EXISTS (
+      SELECT 1 FROM service_schedule_months m,
+        jsonb_array_elements(m.definition->'sections') s,
+        jsonb_array_elements(s.value->'parts') p
+      WHERE m.status = 'Draft' AND p.value->>'ministry_id' = position.ministry_id
+        AND NOT EXISTS (
+          SELECT 1 FROM jsonb_array_elements(p.value->'positions') snapshot
+          WHERE snapshot->>'position_id' = position.position_id
+        )
+    )
+    ORDER BY position_id
+  LOOP
+    PERFORM sync_missing_service_schedule_position_v129(position_row.position_id);
+  END LOOP;
+END $v129$;
 
 COMMIT;

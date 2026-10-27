@@ -276,10 +276,18 @@ export const serviceRosterService = {
       is_active: position.is_active !== false,
       created_by: position.created_by || null,
     }
-    const query = position.position_id
-      ? supabase.from('ministry_service_positions').update(payload).eq('position_id', position.position_id)
-      : supabase.from('ministry_service_positions').insert(payload)
-    const { data, error } = await query.select().single()
+    if (!position.position_id) {
+      // RPC menambah posisi dan slot semua Draft secara atomik, termasuk alur jadwal lama.
+      const { data, error } = await supabase.rpc('add_service_schedule_position_v129', {
+        p_ministry_id: payload.ministry_id, p_name: payload.name,
+        p_default_slots: payload.default_slots, p_sort_order: payload.sort_order,
+        p_is_active: payload.is_active,
+      })
+      if (error) throw error
+      return data
+    }
+    const { data, error } = await supabase.from('ministry_service_positions')
+      .update(payload).eq('position_id', position.position_id).select().single()
     if (error) throw error
     return data
   },

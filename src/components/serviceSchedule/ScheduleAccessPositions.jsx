@@ -87,7 +87,8 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
     setBusy(true)
     try { await action(); await load(); await onChange(); toast.success(t(success)); return true }
     catch (failure) {
-      const code = failure?.code === 'PGRST202' && String(failure?.message || '').includes('_v122')
+      const code = failure?.code === 'PGRST202' && String(failure?.message || '').includes('_v129')
+        ? 'schedMonth.positionMigrationRequired' : failure?.code === 'PGRST202' && String(failure?.message || '').includes('_v122')
         ? 'schedMonth.orderMigrationRequired' : String(failure?.message || '').includes('schedule_ministry_membership_required')
         ? 'schedMonth.membershipRequired' : ['PGRST200', 'PGRST202', 'PGRST205', '42703', '42P01'].includes(failure?.code)
           ? 'schedMonth.migrationRequired' : failure?.code === '42501' ? 'sched.noAccess' : 'sched.saveFailed'
@@ -179,6 +180,7 @@ export default function ScheduleAccessPositions({ api, ministries, positions, on
       </section>
       <section aria-labelledby="schedule-positions-title">
         <div className="schedule-position-heading"><h2 id="schedule-positions-title">{t('sched.positionsTitle')}</h2><span className="monthly-muted">{t('schedAccess.positionCount', { count: ministryPositions.length })}</span></div>
+        <p className="monthly-muted">{t('schedAccess.autoDraftPositionsHint')}</p>
         <div className="schedule-access-list schedule-position-list">{ministryPositions.map(item => {
           const orderIndex = activePositions.findIndex(positionItem => positionItem.position_id === item.position_id)
           return <div className="schedule-access-row schedule-position-row" key={item.position_id}><div><strong>{item.name}</strong><span className="monthly-muted">{t('schedAccess.slotCount', { count: item.default_slots })}</span></div><div className="schedule-position-actions">
