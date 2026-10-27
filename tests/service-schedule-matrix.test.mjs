@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   buildScheduleMatrix, buildMonthlySchedulePrintDocument, formatScheduleDate,
   formatScheduleMonth, formatScheduleTime, getMonthDates, getScheduleDates,
-  prepareMonthlySchedulePrint, scheduleMonthDate, shiftScheduleMonth,
+  scheduleMonthDate, shiftScheduleMonth,
 } from '../src/lib/serviceScheduleMatrix.js'
 
 const musicPosition = { position_id: 'P-DRUM', name: 'Drum', ministry_id: 'M-MUSIC', ministry_name: 'Musik', slots: 2, sort_order: 1, ministry_sort_order: 1 }
@@ -122,7 +122,7 @@ test('PDF bulanan merender bagian, metadata, jam, dan beberapa nama serta menand
   assert.match(html, /October 2026/)
   assert.match(html, /schedMonth.draft/)
   assert.match(html, /07:00 - 08:30/)
-  assert.match(html, /Bima<br>Nico/)
+  assert.match(html, /<span class="person">Bima<\/span><span class="person">Nico<\/span>/)
   assert.doesNotMatch(html, /Tim 1|Buah Roh|Latihan|schedMonth\.team|schedMonth\.material/)
   assert.match(html, /Batik/)
   assert.match(html, /schedMonth.restricted/)
@@ -157,10 +157,10 @@ test('PDF tidak mencetak slot kosong atau pembatasan pada Ministry yang tidak ik
   const html = buildMonthlySchedulePrintDocument(schedule, {
     t: (key, params) => key === 'schedMonth.emptyCount' ? `${params.count} kosong` : key,
   })
-  const mediaRow = html.match(/<tr><th scope="row">Sound<\/th>([\s\S]*?)<\/tr>/)?.[1]
-  const musicRow = html.match(/<tr><th scope="row">Drum<\/th>([\s\S]*?)<\/tr>/)?.[1]
-  assert.match(mediaRow, /^<td>-<\/td><td>schedMonth\.restricted<\/td>$/)
-  assert.match(musicRow, /^<td>Bima<br>Nico<\/td><td>-<\/td>$/)
+  const mediaRow = html.match(/<tr class="position"><th scope="row">Sound<\/th>([\s\S]*?)<\/tr>/)?.[1]
+  const musicRow = html.match(/<tr class="position"><th scope="row">Drum<\/th>([\s\S]*?)<\/tr>/)?.[1]
+  assert.match(mediaRow, /^<td class="muted">-<\/td><td class="muted">schedMonth\.restricted<\/td>$/)
+  assert.match(musicRow, /^<td><span class="person">Bima<\/span><span class="person">Nico<\/span><\/td><td class="muted">-<\/td>$/)
 })
 
 test('Setiap kegiatan PDF memiliki tanggal, konteks kegiatan dan lebar kolom yang sama', () => {
@@ -177,26 +177,4 @@ test('Setiap kegiatan PDF memiliki tanggal, konteks kegiatan dan lebar kolom yan
     assert.match(header, /4 Okt/)
     assert.match(header, /11 Okt/)
   }
-})
-
-test('Kegiatan lebih tinggi dari halaman boleh terpotong tanpa memaksa halaman judul kosong', () => {
-  const changes = []
-  const makeTable = height => ({
-    getBoundingClientRect: () => ({ height }),
-    classList: { toggle: (name, enabled) => changes.push({ name, enabled }) },
-  })
-  let removed = false
-  const body = { style: { width: '' }, appendChild: () => {} }
-  const document = {
-    body,
-    createElement: () => ({ style: {}, getBoundingClientRect: () => ({ height: 1047 }), remove: () => { removed = true } }),
-    querySelectorAll: () => [makeTable(550), makeTable(2400)],
-  }
-  prepareMonthlySchedulePrint(document)
-  assert.deepEqual(changes, [
-    { name: 'activity-group-long', enabled: false },
-    { name: 'activity-group-long', enabled: true },
-  ])
-  assert.equal(body.style.width, '')
-  assert.equal(removed, true)
 })

@@ -158,52 +158,64 @@ function escapeHtml(value) {
 export function buildMonthlySchedulePrintDocument(schedule, { t = key => key, locale = 'id', ministryFilter = '', activityFilter = '' } = {}) {
   const matrix = buildScheduleMatrix(schedule, { ministryFilter, activityFilter })
   const tr = (key, params) => escapeHtml(t(key, params))
-  const dateHeaders = matrix.dates.map(date => `<th>${escapeHtml(formatScheduleDate(date, locale, { weekday: 'short' }))}</th>`).join('')
-  const tables = matrix.sections.map(section => {
-    const sectionHeader = `<tr class="activity"><th scope="row">${escapeHtml(section.title)}</th>${matrix.dates.map(date => {
+  const dateHeaders = matrix.dates.map(date => `<th scope="col">${escapeHtml(formatScheduleDate(date, locale, { weekday: 'short' }))}</th>`).join('')
+  const tables = matrix.sections.map((section, index) => {
+    const sectionHeader = `<tr class="activity"><th colspan="${matrix.dates.length + 1}"><span class="activity-number">${String(index + 1).padStart(2, '0')}</span>${escapeHtml(section.title)}</th></tr>`
+    const scheduleRow = `<tr class="schedule-row"><th scope="row">${tr('schedMonth.serviceInfo')}</th>${matrix.dates.map(date => {
       const occurrence = section.occurrencesByDate.get(date)
-      if (!occurrence) return '<td>-</td>'
-      return `<td><strong>${escapeHtml(formatScheduleTime(occurrence.start_time, occurrence.end_time))}</strong>${occurrence.location ? `<br>${escapeHtml(occurrence.location)}` : ''}${occurrence.pic ? `<br>${tr('schedMonth.pic')}: ${escapeHtml(occurrence.pic)}` : ''}</td>`
+      if (!occurrence) return '<td class="muted">-</td>'
+      return `<td><strong>${escapeHtml(formatScheduleTime(occurrence.start_time, occurrence.end_time))}</strong>${occurrence.location ? `<span>${escapeHtml(occurrence.location)}</span>` : ''}${occurrence.pic ? `<span>${tr('schedMonth.pic')}: ${escapeHtml(occurrence.pic)}</span>` : ''}</td>`
     }).join('')}</tr>`
     const ministryRows = section.ministries.map(ministry => {
-      const divider = `<tr class="ministry"><th scope="row">${escapeHtml(ministry.ministry_name)}</th>${matrix.dates.map(date => {
-        const occurrence = section.occurrencesByDate.get(date)
-        if (!matrix.isParticipating(occurrence, ministry.ministry_id)) return '<td>-</td>'
-        if (matrix.getCell(occurrence, ministry.positions[0]).hidden) return `<td>${tr('schedMonth.restricted')}</td>`
-        return '<td></td>'
-      }).join('')}</tr>`
-      const positions = ministry.positions.map(position => `<tr><th scope="row">${escapeHtml(position.name)}</th>${matrix.dates.map(date => {
+      const divider = `<tr class="ministry"><th colspan="${matrix.dates.length + 1}">${escapeHtml(ministry.ministry_name)}</th></tr>`
+      const positions = ministry.positions.map(position => `<tr class="position"><th scope="row">${escapeHtml(position.name)}</th>${matrix.dates.map(date => {
         const cell = matrix.getCell(section.occurrencesByDate.get(date), position)
-        if (!cell.occurrence) return '<td>-</td>'
-        if (cell.hidden) return `<td>${tr('schedMonth.restricted')}</td>`
-        const names = cell.assigned.map(slot => `${escapeHtml(slot.users?.name || t('schedMonth.unavailableMember'))}${slot.assignment_note ? `<br><small>${escapeHtml(slot.assignment_note)}</small>` : ''}`).join('<br>')
+        if (!cell.occurrence) return '<td class="muted">-</td>'
+        if (cell.hidden) return `<td class="muted">${tr('schedMonth.restricted')}</td>`
+        const names = cell.assigned.map(slot => `<span class="person">${escapeHtml(slot.users?.name || t('schedMonth.unavailableMember'))}${slot.assignment_note ? `<small>${escapeHtml(slot.assignment_note)}</small>` : ''}</span>`).join('')
         const empty = Math.max(0, cell.capacity - cell.filled)
-        return `<td>${names}${empty ? `<small>${tr('schedMonth.emptyCount', { count: empty })}</small>` : ''}</td>`
+        return `<td>${names}${empty ? `<span class="empty">${tr('schedMonth.emptyCount', { count: empty })}</span>` : ''}</td>`
       }).join('')}</tr>`).join('')
       return divider + positions
     }).join('')
-    const dressCode = `<tr class="notes"><th scope="row">${tr('schedMonth.dressCode')}</th>${matrix.dates.map(date => `<td>${escapeHtml(section.occurrencesByDate.get(date)?.dress_code || '-')}</td>`).join('')}</tr>`
-    const activityNotes = `<tr class="notes"><th scope="row">${tr('schedMonth.activityNotes')}</th>${matrix.dates.map(date => `<td>${escapeHtml(section.occurrencesByDate.get(date)?.notes || '-')}</td>`).join('')}</tr>`
-    return `<table class="activity-group"><colgroup><col style="width: 16%">${matrix.dates.map(() => '<col>').join('')}</colgroup><thead><tr><th>${tr('schedMonth.position')}</th>${dateHeaders}</tr>${sectionHeader}</thead><tbody>${ministryRows}${dressCode}${activityNotes}</tbody></table>`
+    const noteRow = (field, label) => matrix.dates.some(date => section.occurrencesByDate.get(date)?.[field])
+      ? `<tr class="notes"><th scope="row">${tr(label)}</th>${matrix.dates.map(date => `<td>${escapeHtml(section.occurrencesByDate.get(date)?.[field] || '-')}</td>`).join('')}</tr>`
+      : ''
+    return `<table class="activity-group"><colgroup><col style="width: 20%">${matrix.dates.map(() => '<col>').join('')}</colgroup><thead>${sectionHeader}<tr class="dates"><th scope="col">${tr('schedMonth.position')}</th>${dateHeaders}</tr>${scheduleRow}</thead><tbody>${ministryRows}${noteRow('dress_code', 'schedMonth.dressCode')}${noteRow('notes', 'schedMonth.activityNotes')}</tbody></table>`
   }).join('')
   const title = `${t('schedMonth.title')} - ${formatScheduleMonth(schedule.month, locale)}`
   const statusKey = { Draft: 'schedMonth.draft', Terbit: 'schedMonth.published', Dibatalkan: 'schedMonth.cancelled' }[schedule.month?.status]
   return `<!doctype html><html lang="${locale === 'en' ? 'en' : 'id'}"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>
     @page { size: A3 landscape; margin: 10mm; }
-    * { box-sizing: border-box; }
-    body { margin: 20px; font-family: Arial, sans-serif; color: #20242a; }
-    h1 { font-size: 20px; margin: 0 0 5px; }
-    p { margin: 0 0 14px; font-size: 11px; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 10px; margin-bottom: 12px; }
-    .activity-group { break-inside: avoid-page; page-break-inside: avoid; }
-    .activity-group-long { break-inside: auto; page-break-inside: auto; }
-    th,td { border: 1px solid #d2d5d9; padding: 5px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-    thead th { background: #fff0cc; } thead { display: table-header-group; }
-    tr { break-inside: avoid; } th { font-weight: 600; }
-    .activity th,.activity td { background: #e6f3ef; } .ministry { background: #f3f4f6; }
-    .notes { color: #525861; } small { display: block; color: #8d3d22; margin-top: 3px; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { margin: 20px; font-family: Arial, sans-serif; color: #243041; }
+    .masthead { display: flex; align-items: end; justify-content: space-between; border-top: 5px solid #d84a2f; border-bottom: 1px solid #d8dee4; padding: 15px 0 16px; margin-bottom: 20px; }
+    .brand { color: #a7442c; font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+    h1 { font-size: 24px; line-height: 1.15; margin: 0; letter-spacing: -.35px; }
+    .status { border: 1px solid #e8b3a5; color: #a7442c; border-radius: 20px; padding: 6px 12px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 10px; margin-bottom: 18px; border: 1px solid #d8dee4; }
+    .activity-group { break-inside: auto; page-break-inside: auto; }
+    th, td { padding: 7px 9px; text-align: left; vertical-align: top; overflow-wrap: anywhere; border-right: 1px solid #e1e5e9; border-bottom: 1px solid #e1e5e9; line-height: 1.32; }
+    th:last-child, td:last-child { border-right: 0; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    .activity th { background: #26384b; color: #fff; font-size: 14px; padding: 9px 11px; letter-spacing: .1px; }
+    .activity-number { display: inline-block; color: #ffb88e; font-size: 11px; letter-spacing: 1px; margin-right: 12px; }
+    .dates th { background: #fff0e8; color: #90412e; font-size: 10px; font-weight: 700; }
+    .schedule-row th, .schedule-row td { background: #f5f8fa; color: #526171; font-size: 9px; }
+    .schedule-row strong { display: block; color: #243041; font-size: 10px; }
+    .schedule-row span { display: block; }
+    .ministry th { background: #e8eef2; color: #33475a; font-size: 9px; letter-spacing: .6px; text-transform: uppercase; padding: 6px 9px; border-top: 1px solid #bdcbd5; }
+    .position th { font-weight: 600; color: #344354; }
+    .person { display: block; margin-bottom: 2px; }
+    .person:last-child { margin-bottom: 0; }
+    .person small { display: block; color: #6c7b88; font-size: 9px; }
+    .empty { display: inline-block; margin-top: 2px; color: #a7442c; font-size: 9px; font-weight: 600; }
+    .muted { color: #8b98a3; }
+    .notes th, .notes td { background: #fffaf4; color: #685342; font-size: 9px; }
+    .notes th { font-weight: 700; }
     @media print { body { margin: 0; } }
-  </style></head><body><h1>${escapeHtml(title)}</h1><p>ESC Siantan | ${escapeHtml(statusKey ? t(statusKey) : '')}</p>${tables}</body></html>`
+  </style></head><body><header class="masthead"><div><div class="brand">ESC Siantan</div><h1>${escapeHtml(title)}</h1></div><span class="status">${escapeHtml(statusKey ? t(statusKey) : '')}</span></header>${tables}</body></html>`
 }
 
 export function printMonthlySchedule(schedule, options) {
@@ -211,25 +223,7 @@ export function printMonthlySchedule(schedule, options) {
   if (!popup) return false
   popup.document.write(buildMonthlySchedulePrintDocument(schedule, options))
   popup.document.close()
-  prepareMonthlySchedulePrint(popup.document)
   popup.focus()
   setTimeout(() => popup.print(), 350)
   return true
-}
-
-export function prepareMonthlySchedulePrint(document) {
-  const body = document.body
-  if (!body) return
-  const previousWidth = body.style.width
-  const probe = document.createElement('div')
-  probe.style.cssText = 'position:absolute;visibility:hidden;height:277mm;width:0;'
-  body.appendChild(probe)
-  // A3 landscape dikurangi margin 10 mm: ukur pada lebar cetak, bukan lebar popup.
-  body.style.width = '400mm'
-  const pageHeight = probe.getBoundingClientRect().height
-  for (const table of document.querySelectorAll('.activity-group')) {
-    table.classList.toggle('activity-group-long', table.getBoundingClientRect().height > pageHeight)
-  }
-  body.style.width = previousWidth
-  probe.remove()
 }
