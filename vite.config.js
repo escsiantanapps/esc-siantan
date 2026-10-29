@@ -15,7 +15,7 @@ export default defineConfig({
       // Pembaruan menunggu semua tab versi lama ditutup agar isian SOP tidak
       // hilang saat aplikasi kembali aktif di tengah pengisian.
       registerType: 'prompt',
-      includeAssets: ['church-icon.svg', 'apple-touch-icon.png', 'animations/bouncing-sheep.lottie'],
+      includeAssets: ['church-icon.svg', 'apple-touch-icon-nativity.png', 'animations/bouncing-sheep.lottie'],
       manifest: {
         id: '/',
         scope: '/',
@@ -34,10 +34,10 @@ export default defineConfig({
         theme_color: '#F4511E',
         orientation: 'portrait',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: '/icons/icon-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
-          { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icons/icon-nativity-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-nativity-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-nativity-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+          { src: '/icons/icon-nativity-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

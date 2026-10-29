@@ -58,7 +58,7 @@ export default function InstallPrompt() {
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-[2px] p-4 pb-8 animate-fade-in">
       <div className="w-full max-w-sm bg-surface rounded-3xl p-6 text-center ambient-shadow animate-fade-in-up">
         <img
-          src="/icons/icon-192.png"
+          src="/icons/icon-nativity-192.png"
           alt="ESC Siantan"
           className="w-20 h-20 mx-auto rounded-2xl shadow-[0_8px_24px_-8px_rgba(244,81,30,0.5)]"
         />

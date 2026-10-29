@@ -316,7 +316,7 @@ export default function AdminLayout({ children }) {
         {/* Logo */}
         <div className="admin-brand">
           <div className="flex items-center gap-3">
-            <img src="/icons/icon-192.png" alt="" className="admin-brand-mark" />
+            <img src="/icons/icon-nativity-192.png" alt="" className="admin-brand-mark" />
             <div className="flex-1 min-w-0">
               <p className="admin-brand-name">ESC Siantan</p>
               <p className="admin-brand-caption">{t('admin.panel')}</p>

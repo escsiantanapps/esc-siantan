@@ -14,7 +14,7 @@ self.addEventListener('push', function (event) {
       const title = data.title || 'ESC Siantan'
       const options = {
         body: data.body || '',
-        icon: '/icons/icon-192.png',
+        icon: '/icons/icon-nativity-192.png',
         badge: '/icons/badge-96.png',
         vibrate: [80, 40, 80],
         data: { url: data.url || '/' },
