@@ -44,22 +44,19 @@ export const serviceRosterService = {
     const link = await supabase.from('service_schedule_parts')
       .select('occurrence_id').eq('roster_id', rosterId).maybeSingle()
     if (link.error) throw link.error
-    if (!link.data?.occurrence_id) return { ceremonial: null, rosters: [] }
+    if (!link.data?.occurrence_id) return { rosters: [] }
 
     const occurrenceId = link.data.occurrence_id
-    const [occurrence, parts] = await Promise.all([
-      supabase.from('service_schedule_occurrences').select('pic').eq('occurrence_id', occurrenceId).single(),
-      supabase.from('service_schedule_parts').select('roster_id').eq('occurrence_id', occurrenceId),
-    ])
-    if (occurrence.error) throw occurrence.error
+    const parts = await supabase.from('service_schedule_parts')
+      .select('roster_id').eq('occurrence_id', occurrenceId)
     if (parts.error) throw parts.error
     const rosterIds = (parts.data || []).map(part => part.roster_id)
-    if (!rosterIds.length) return { ceremonial: occurrence.data?.pic || null, rosters: [] }
+    if (!rosterIds.length) return { rosters: [] }
     const { data, error } = await supabase.from('service_rosters').select(rosterSelect)
       .in('roster_id', rosterIds).in('status', ['Terbit', 'Dibatalkan'])
       .order('ministry_id')
     if (error) throw error
-    return { ceremonial: occurrence.data?.pic || null, rosters: (data || []).map(sortRoster) }
+    return { rosters: (data || []).map(sortRoster) }
   },
 
   async listManagedMinistries(profile) {
@@ -126,7 +123,7 @@ export const serviceRosterService = {
     const [start, end] = monthRange(month)
     const { data, error } = await supabase
       .from('service_rosters')
-      .select(rosterSelect)
+      .select(`${rosterSelect}, service_schedule_parts(occurrence_id)`)
       .in('status', ['Terbit', 'Dibatalkan'])
       .gte('service_date', start)
       .lt('service_date', end)
