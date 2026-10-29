@@ -1,4 +1,4 @@
-# GerejaKu App
+# ESC Siantan
 
 Aplikasi manajemen gereja berbasis web dengan React + Supabase.
 
