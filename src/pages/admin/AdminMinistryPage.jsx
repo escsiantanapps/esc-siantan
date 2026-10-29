@@ -16,6 +16,7 @@ export default function AdminMinistryPage() {
   const { profile } = useAuth()
   const isGembala = profile?.role === 'Gembala'
   const [ministries, setMinistries] = useState([])
+  const [ministrySearch, setMinistrySearch] = useState('')
   const [departments, setDepartments] = useState([])
   const [activeTab, setActiveTab] = useState('ministries')
   const [loading, setLoading] = useState(true)
@@ -334,6 +335,15 @@ export default function AdminMinistryPage() {
     ? availableMembers.filter(member => member.name?.toLocaleLowerCase().includes(normalizedAvailableSearch))
     : availableMembers
   const departmentsById = new Map(departments.map(department => [department.department_id, department]))
+  const normalizedMinistrySearch = ministrySearch.trim().toLocaleLowerCase()
+  const filteredMinistries = normalizedMinistrySearch
+    ? ministries.filter(ministry => [
+      ministry.name,
+      ministry.description,
+      ministry.head?.name,
+      departmentsById.get(ministry.department_id)?.name,
+    ].some(value => value?.toLocaleLowerCase().includes(normalizedMinistrySearch)))
+    : ministries
   const orphanMinistries = ministries
     .filter(ministry => !ministry.department_id)
     .sort((a, b) => (a.organization_order - b.organization_order) || a.name.localeCompare(b.name))
@@ -367,13 +377,30 @@ export default function AdminMinistryPage() {
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
+      {!loading && activeTab === 'ministries' && ministries.length > 0 && (
+        <div className="mb-4">
+          <Input
+            label={t('amin.searchMinistries')}
+            icon={Search}
+            type="search"
+            value={ministrySearch}
+            onChange={event => setMinistrySearch(event.target.value)}
+            placeholder={t('amin.searchMinistriesPlaceholder')}
+          />
+        </div>
+      )}
+
       {!loading && activeTab === 'ministries' && ministries.length === 0 && (
         <EmptyState icon={Church} title={t('amin.empty')} description={t('amin.emptyDesc')} />
       )}
 
-      {!loading && activeTab === 'ministries' && ministries.length > 0 && (
+      {!loading && activeTab === 'ministries' && ministries.length > 0 && filteredMinistries.length === 0 && (
+        <EmptyState icon={Search} title={t('amin.noMinistryResults')} description={t('amin.noMinistryResultsDesc')} />
+      )}
+
+      {!loading && activeTab === 'ministries' && filteredMinistries.length > 0 && (
         <Card className="divide-y divide-gray-100">
-          {ministries.map(item => (
+          {filteredMinistries.map(item => (
             <div key={item.ministry_id} className="flex items-center gap-3 p-3.5">
               <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
                 <Church size={20} className="text-purple-500" />

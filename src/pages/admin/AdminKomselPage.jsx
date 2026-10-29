@@ -17,6 +17,7 @@ export default function AdminKomselPage() {
   const { profile } = useAuth()
   const isGembala = profile?.role === 'Gembala'
   const [komsel, setKomsel] = useState([])
+  const [komselSearch, setKomselSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -264,9 +265,16 @@ export default function AdminKomselPage() {
     }
   }
 
-  const filteredKomsel = catFilter
-    ? komsel.filter(k => (catFilter === '__none' ? !k.category_id : k.category_id === catFilter))
-    : komsel
+  const normalizedKomselSearch = komselSearch.trim().toLocaleLowerCase()
+  const filteredKomsel = komsel.filter(k => {
+    const matchesCategory = !catFilter || (catFilter === '__none' ? !k.category_id : k.category_id === catFilter)
+    const matchesSearch = !normalizedKomselSearch || [
+      k.name,
+      k.komsel_categories?.name,
+      leaderMap[k.komsel_id]?.join(' '),
+    ].some(value => value?.toLocaleLowerCase().includes(normalizedKomselSearch))
+    return matchesCategory && matchesSearch
+  })
 
   async function viewMembers(item) {
     setMembersView(item)
@@ -427,6 +435,19 @@ export default function AdminKomselPage() {
         }
       />
 
+      {!loading && komsel.length > 0 && (
+        <div className="mb-4">
+          <Input
+            label={t('akom.searchKomsel')}
+            icon={Search}
+            type="search"
+            value={komselSearch}
+            onChange={event => setKomselSearch(event.target.value)}
+            placeholder={t('akom.searchKomselPlaceholder')}
+          />
+        </div>
+      )}
+
       {!loading && categories.length > 0 && (
         <div className="flex gap-2 mb-4 overflow-x-auto pb-1 -mx-1 px-1">
           <button
@@ -463,8 +484,12 @@ export default function AdminKomselPage() {
 
       {loading && <div className="flex justify-center py-12"><Spinner /></div>}
 
-      {!loading && filteredKomsel.length === 0 && (
+      {!loading && komsel.length === 0 && (
         <EmptyState icon={Users} title={t('akom.empty')} description={t('akom.emptyDesc')} />
+      )}
+
+      {!loading && komsel.length > 0 && filteredKomsel.length === 0 && (
+        <EmptyState icon={Search} title={t('akom.noKomselResults')} description={t('akom.noKomselResultsDesc')} />
       )}
 
       {!loading && filteredKomsel.length > 0 && (
