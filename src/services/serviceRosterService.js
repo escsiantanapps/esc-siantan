@@ -29,6 +29,26 @@ function sortRoster(roster) {
   return { ...roster, service_roster_slots: slots }
 }
 
+async function withPublishedMemberNames(rosters) {
+  const published = rosters.filter(roster => ['Terbit', 'Dibatalkan'].includes(roster.status))
+  if (!published.length) return rosters
+  const { data, error } = await supabase.rpc('get_published_roster_members_v132', {
+    p_roster_ids: published.map(roster => roster.roster_id),
+  })
+  // Selama migrasi belum dijalankan, daftar jadwal tetap dapat dibuka.
+  if (error && !['PGRST202', '42883'].includes(error.code)) throw error
+  if (error) return rosters
+  const members = new Map((data || []).map(row => [row.slot_id, {
+    name: row.member_name, photo_url: row.photo_url,
+  }]))
+  return rosters.map(roster => ({
+    ...roster,
+    service_roster_slots: (roster.service_roster_slots || []).map(slot => ({
+      ...slot, users: members.get(slot.slot_id) || slot.users,
+    })),
+  }))
+}
+
 export const serviceRosterService = {
   async getById(rosterId) {
     const { data, error } = await supabase
@@ -37,7 +57,7 @@ export const serviceRosterService = {
       .eq('roster_id', rosterId)
       .single()
     if (error) throw error
-    return sortRoster(data)
+    return (await withPublishedMemberNames([sortRoster(data)]))[0]
   },
 
   async getPublishedServiceContext(rosterId) {
@@ -56,7 +76,7 @@ export const serviceRosterService = {
       .in('roster_id', rosterIds).in('status', ['Terbit', 'Dibatalkan'])
       .order('ministry_id')
     if (error) throw error
-    return { rosters: (data || []).map(sortRoster) }
+    return { rosters: await withPublishedMemberNames((data || []).map(sortRoster)) }
   },
 
   async listManagedMinistries(profile) {
@@ -130,7 +150,7 @@ export const serviceRosterService = {
       .order('service_date')
       .order('start_time')
     if (error) throw error
-    return (data || []).map(sortRoster)
+    return withPublishedMemberNames((data || []).map(sortRoster))
   },
 
   async listMine(userId, month = null) {
@@ -157,10 +177,10 @@ export const serviceRosterService = {
       if (month && !String(roster.service_date || '').startsWith(month)) continue
       unique.set(roster.roster_id, sortRoster(roster))
     }
-    return [...unique.values()].sort((a, b) =>
+    return withPublishedMemberNames([...unique.values()].sort((a, b) =>
       String(a.service_date).localeCompare(String(b.service_date))
       || String(a.start_time).localeCompare(String(b.start_time))
-    )
+    ))
   },
 
   async listManaged(month, ministryId, { legacyOnly = false } = {}) {

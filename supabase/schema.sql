@@ -11878,3 +11878,35 @@ BEGIN
   RETURN roster_ids;
 END $$;
 COMMIT;
+
+-- ── Migrasi v132: Nama pelayan pada jadwal terbit untuk user ────────────
+-- TEMUAN: Slot jadwal dapat dibaca user, tetapi relasi users disaring RLS;
+-- kartu menampilkan 1/1 terisi sementara nama pelayan tidak muncul.
+-- KEPUTUSAN OPERATOR: User boleh melihat rekan yang melayani pada ibadah
+-- terbit. Kembalikan hanya nama dan foto pelayan, tanpa biodata lainnya.
+CREATE OR REPLACE FUNCTION public.get_published_roster_members_v132(p_roster_ids TEXT[])
+RETURNS TABLE(slot_id TEXT, member_name TEXT, photo_url TEXT)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+  IF p_roster_ids IS NULL OR cardinality(p_roster_ids) > 500 THEN
+    RAISE EXCEPTION 'Daftar roster tidak valid.' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+    SELECT s.slot_id, u.name, u.photo_url
+    FROM service_roster_slots s
+    JOIN service_rosters r ON r.roster_id = s.roster_id
+    JOIN users u ON u.user_id = s.user_id
+    WHERE s.roster_id = ANY(p_roster_ids)
+      AND r.status IN ('Terbit', 'Dibatalkan')
+      AND NOT EXISTS (
+        SELECT 1 FROM service_schedule_parts p
+        JOIN service_schedule_occurrences o ON o.occurrence_id = p.occurrence_id
+        JOIN service_schedule_months m ON m.month_id = o.month_id
+        WHERE p.roster_id = r.roster_id AND m.status = 'Draft'
+      );
+END $$;
+REVOKE ALL ON FUNCTION public.get_published_roster_members_v132(TEXT[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_published_roster_members_v132(TEXT[]) TO authenticated;
