@@ -11622,3 +11622,259 @@ BEGIN
 END $v129$;
 
 COMMIT;
+
+-- ── Migrasi v130: alasan Job kosong dan izin rangkap satu ibadah ──────
+-- TEMUAN (2026-10-29): posisi kosong dapat diterbitkan tanpa penjelasan;
+-- penjaga bentrok menolak volunteer yang harus mengisi dua Job satu ibadah.
+-- KEPUTUSAN OPERATOR: alasan wajib hanya bila seluruh slot Job kosong.
+-- Admin/Super Admin boleh mengizinkan rangkap dalam occurrence yang sama;
+-- kegiatan lain pada jam bertumpuk tetap ditolak. Definisi trigger slot dan
+-- fungsi penerbitan production dicocokkan pada 2026-10-29.
+BEGIN;
+
+ALTER TABLE service_roster_slots ADD COLUMN IF NOT EXISTS allow_same_service_overlap BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS service_schedule_empty_reasons (
+  roster_id TEXT NOT NULL REFERENCES service_rosters(roster_id) ON DELETE CASCADE,
+  position_id TEXT NOT NULL REFERENCES ministry_service_positions(position_id) ON DELETE CASCADE,
+  reason TEXT NOT NULL CHECK (length(btrim(reason)) BETWEEN 3 AND 300),
+  updated_by TEXT REFERENCES users(user_id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (roster_id, position_id)
+);
+ALTER TABLE service_schedule_empty_reasons ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON service_schedule_empty_reasons FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON service_schedule_empty_reasons TO authenticated;
+DO $v130_reason_policy$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public'
+    AND tablename='service_schedule_empty_reasons' AND policyname='service_schedule_empty_reasons_read_v130') THEN
+    CREATE POLICY service_schedule_empty_reasons_read_v130 ON service_schedule_empty_reasons
+      FOR SELECT TO authenticated USING (
+        EXISTS (SELECT 1 FROM service_schedule_parts p
+          JOIN service_schedule_occurrences o ON o.occurrence_id=p.occurrence_id
+          WHERE p.roster_id=service_schedule_empty_reasons.roster_id
+            AND auth_reads_service_schedule_month_v111(o.month_id))
+      );
+  END IF;
+END $v130_reason_policy$;
+DROP TRIGGER IF EXISTS audit_service_schedule_empty_reasons_v130 ON service_schedule_empty_reasons;
+CREATE TRIGGER audit_service_schedule_empty_reasons_v130
+  AFTER INSERT OR UPDATE OR DELETE ON service_schedule_empty_reasons
+  FOR EACH ROW EXECUTE FUNCTION record_audit();
+
+-- Penanda hanya dapat ditulis oleh RPC baru, dan gugur saat nama slot berubah.
+CREATE OR REPLACE FUNCTION guard_same_service_overlap_v130() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.allow_same_service_overlap THEN
+      RAISE EXCEPTION 'not_authorized' USING ERRCODE='42501';
+    END IF;
+  ELSIF NEW.user_id IS DISTINCT FROM OLD.user_id THEN
+    NEW.allow_same_service_overlap := false;
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.allow_same_service_overlap IS DISTINCT FROM OLD.allow_same_service_overlap
+    AND NEW.allow_same_service_overlap
+    AND (NEW.user_id IS NULL OR auth_user_role() NOT IN ('Admin','Super Admin')
+      OR NOT auth_admin_can('/admin/jadwal-pelayanan')
+      OR current_setting('app.same_service_overlap_slot', true) IS DISTINCT FROM NEW.slot_id) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE='42501';
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_guard_same_service_overlap_v130 ON service_roster_slots;
+CREATE TRIGGER trg_guard_same_service_overlap_v130 BEFORE INSERT OR UPDATE ON service_roster_slots
+  FOR EACH ROW EXECUTE FUNCTION guard_same_service_overlap_v130();
+
+-- Definisi production v98 dipertahankan, kecuali satu pengecualian yang
+-- memerlukan bukti occurrence sama dan penugasan Admin yang sedang berlangsung.
+CREATE OR REPLACE FUNCTION guard_service_schedule_linked_slot() RETURNS trigger
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=public AS $$
+DECLARE linked_month TEXT; target_id TEXT; target_roster service_rosters%ROWTYPE;
+  target_occurrence TEXT; conflict RECORD; permitted_override BOOLEAN;
+BEGIN
+  target_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.roster_id ELSE NEW.roster_id END;
+  SELECT occurrence.month_id, occurrence.occurrence_id INTO linked_month, target_occurrence
+  FROM service_schedule_parts part JOIN service_schedule_occurrences occurrence
+    ON occurrence.occurrence_id=part.occurrence_id WHERE part.roster_id=target_id;
+  IF TG_OP='UPDATE' AND auth_user_role() IS NULL AND OLD.user_id IS NOT NULL AND NEW.user_id IS NULL
+    AND (to_jsonb(NEW)-'user_id'-'allow_same_service_overlap')
+      =(to_jsonb(OLD)-'user_id'-'allow_same_service_overlap')
+    AND NOT EXISTS (SELECT 1 FROM users WHERE user_id=OLD.user_id) THEN RETURN NEW; END IF;
+  IF linked_month IS NOT NULL THEN
+    IF TG_OP IN ('INSERT','DELETE') THEN
+      IF COALESCE(current_setting('app.service_schedule_structure', true),'') <> linked_month AND auth_user_role() IS NOT NULL THEN
+        RAISE EXCEPTION 'Kapasitas posisi harus melalui struktur template Admin.' USING ERRCODE='42501';
+      END IF;
+    ELSIF NEW.user_id IS DISTINCT FROM OLD.user_id
+      AND COALESCE(current_setting('app.service_schedule_assignment', true),'') <> target_id THEN
+      RAISE EXCEPTION 'Penugasan jadwal bulanan wajib melalui pengisian posisi.' USING ERRCODE='42501';
+    END IF;
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  IF NEW.user_id IS NULL OR (TG_OP='UPDATE' AND NEW.user_id IS NOT DISTINCT FROM OLD.user_id) THEN RETURN NEW; END IF;
+  SELECT * INTO target_roster FROM service_rosters WHERE roster_id=target_id;
+  permitted_override := target_occurrence IS NOT NULL AND target_roster.source_type='Ibadah'
+    AND auth_user_role() IN ('Admin','Super Admin')
+    AND auth_admin_can('/admin/jadwal-pelayanan')
+    AND current_setting('app.service_schedule_assignment', true)=target_id
+    AND NEW.user_id=ANY(string_to_array(COALESCE(current_setting('app.same_service_override_users', true),''),','));
+  PERFORM pg_advisory_xact_lock(hashtextextended(NEW.user_id,0));
+  SELECT roster.roster_id, roster.title, roster.start_time, roster.end_time INTO conflict
+  FROM service_roster_slots slot JOIN service_rosters roster ON roster.roster_id=slot.roster_id
+  WHERE slot.user_id=NEW.user_id AND slot.slot_id<>NEW.slot_id AND roster.status<>'Dibatalkan'
+    AND roster.service_date=target_roster.service_date
+    AND (linked_month IS NOT NULL OR EXISTS (SELECT 1 FROM service_schedule_parts p WHERE p.roster_id=roster.roster_id))
+    AND (roster.end_time IS NULL OR target_roster.end_time IS NULL
+      OR (roster.start_time<target_roster.end_time AND target_roster.start_time<roster.end_time))
+    AND NOT (permitted_override AND EXISTS (
+      SELECT 1 FROM service_schedule_parts other_part
+      WHERE other_part.roster_id=slot.roster_id AND other_part.occurrence_id=target_occurrence))
+  ORDER BY roster.start_time, roster.roster_id LIMIT 1;
+  IF FOUND THEN RAISE EXCEPTION 'schedule_conflict' USING ERRCODE='P0001',
+    DETAIL=jsonb_build_object('title',conflict.title,'start_time',conflict.start_time,'end_time',conflict.end_time)::TEXT; END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION set_service_schedule_position_v130(
+  p_roster_id TEXT, p_position_id TEXT, p_user_ids TEXT[], p_expected_user_ids TEXT[],
+  p_notes JSONB DEFAULT '{}'::JSONB, p_empty_reason TEXT DEFAULT NULL,
+  p_override_user_ids TEXT[] DEFAULT ARRAY[]::TEXT[]
+) RETURNS JSONB LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=public AS $$
+DECLARE target_occurrence TEXT; result JSONB; slot RECORD;
+BEGIN
+  SELECT p.occurrence_id INTO target_occurrence FROM service_schedule_parts p WHERE p.roster_id=p_roster_id;
+  IF target_occurrence IS NULL THEN RAISE EXCEPTION 'Bagian jadwal tidak ditemukan.' USING ERRCODE='22023'; END IF;
+  IF p_override_user_ids IS NULL OR EXISTS (SELECT 1 FROM unnest(p_override_user_ids) id WHERE NOT id=ANY(p_user_ids))
+    OR cardinality(p_override_user_ids)<>(SELECT count(DISTINCT id) FROM unnest(p_override_user_ids) id) THEN
+    RAISE EXCEPTION 'Izin rangkap tidak valid.' USING ERRCODE='22023';
+  END IF;
+  IF cardinality(p_override_user_ids)>0 AND (auth_user_role() NOT IN ('Admin','Super Admin')
+    OR NOT auth_admin_can('/admin/jadwal-pelayanan')) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE='42501';
+  END IF;
+  IF p_empty_reason IS NOT NULL AND length(btrim(p_empty_reason)) NOT BETWEEN 3 AND 300 THEN
+    RAISE EXCEPTION 'Alasan kosong harus 3–300 karakter.' USING ERRCODE='22023';
+  END IF;
+  PERFORM set_config('app.same_service_override_users',array_to_string(p_override_user_ids,','),true);
+  result := set_service_schedule_position_v111(p_roster_id,p_position_id,p_user_ids,p_expected_user_ids,p_notes);
+  PERFORM set_config('app.same_service_override_users','',true);
+  FOR slot IN SELECT slot_id,user_id FROM service_roster_slots
+    WHERE roster_id=p_roster_id AND position_id=p_position_id AND user_id=ANY(p_override_user_ids) LOOP
+    PERFORM set_config('app.same_service_overlap_slot',slot.slot_id,true);
+    UPDATE service_roster_slots SET allow_same_service_overlap=true WHERE slot_id=slot.slot_id;
+  END LOOP;
+  PERFORM set_config('app.same_service_overlap_slot','',true);
+  IF cardinality(p_user_ids)=0 AND NULLIF(btrim(COALESCE(p_empty_reason,'')),'') IS NOT NULL THEN
+    INSERT INTO service_schedule_empty_reasons(roster_id,position_id,reason,updated_by)
+    VALUES (p_roster_id,p_position_id,btrim(p_empty_reason),auth_user_id())
+    ON CONFLICT (roster_id,position_id) DO UPDATE SET reason=EXCLUDED.reason,
+      updated_by=EXCLUDED.updated_by,updated_at=now();
+  ELSE
+    DELETE FROM service_schedule_empty_reasons WHERE roster_id=p_roster_id AND position_id=p_position_id;
+  END IF;
+  RETURN result;
+END $$;
+REVOKE ALL ON FUNCTION set_service_schedule_position_v130(TEXT,TEXT,TEXT[],TEXT[],JSONB,TEXT,TEXT[]) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION set_service_schedule_position_v130(TEXT,TEXT,TEXT[],TEXT[],JSONB,TEXT,TEXT[]) TO authenticated;
+
+CREATE OR REPLACE FUNCTION get_service_roster_conflicts_v130(
+  p_user_id TEXT, p_roster_id TEXT, p_slot_id TEXT DEFAULT NULL
+) RETURNS TABLE (title TEXT, service_date DATE, start_time TIME, end_time TIME,
+  ministry_name TEXT, position_names TEXT, same_service BOOLEAN)
+  LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_roster service_rosters%ROWTYPE; v_occurrence TEXT;
+BEGIN
+  SELECT * INTO v_roster FROM service_rosters WHERE roster_id=p_roster_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Roster tidak ditemukan.' USING ERRCODE='22023'; END IF;
+  IF NOT COALESCE(auth_can_fill_schedule_ministry_v111(v_roster.ministry_id),false) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE='42501'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM users WHERE user_id=p_user_id AND status='Aktif') THEN
+    RAISE EXCEPTION 'Pelayan yang diperiksa harus berstatus Aktif.' USING ERRCODE='22023'; END IF;
+  IF (auth_admin_mh_scoped_v111() OR NOT auth_service_schedule_admin())
+    AND NOT EXISTS (SELECT 1 FROM user_ministries WHERE ministry_id=v_roster.ministry_id AND user_id=p_user_id) THEN
+    RAISE EXCEPTION 'Hanya anggota Ministry ini yang dapat diperiksa.' USING ERRCODE='42501'; END IF;
+  SELECT occurrence_id INTO v_occurrence FROM service_schedule_parts WHERE roster_id=p_roster_id;
+  RETURN QUERY SELECT CASE WHEN r.source_type='Kelas' AND r.class_session_no IS NOT NULL
+      THEN r.title || ' #' || r.class_session_no::TEXT ELSE r.title END,
+    r.service_date,r.start_time,r.end_time,m.name,
+    string_agg(DISTINCT pos.name,', ' ORDER BY pos.name),
+    (v_occurrence IS NOT NULL AND v_roster.source_type='Ibadah' AND r.source_type='Ibadah'
+      AND EXISTS (SELECT 1 FROM service_schedule_parts part
+      WHERE part.roster_id=r.roster_id AND part.occurrence_id=v_occurrence))
+  FROM service_roster_slots s JOIN service_rosters r ON r.roster_id=s.roster_id
+  JOIN ministries m ON m.ministry_id=r.ministry_id
+  JOIN ministry_service_positions pos ON pos.position_id=s.position_id
+  WHERE s.user_id=p_user_id AND (p_slot_id IS NULL OR s.slot_id<>p_slot_id)
+    AND r.status<>'Dibatalkan' AND r.service_date=v_roster.service_date
+    AND (r.roster_id=v_roster.roster_id OR r.end_time IS NULL OR v_roster.end_time IS NULL
+      OR (r.start_time<v_roster.end_time AND v_roster.start_time<r.end_time))
+  GROUP BY r.roster_id,r.title,r.class_session_no,r.service_date,r.start_time,r.end_time,m.name
+  ORDER BY r.start_time,r.title;
+END $$;
+REVOKE ALL ON FUNCTION get_service_roster_conflicts_v130(TEXT,TEXT,TEXT) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION get_service_roster_conflicts_v130(TEXT,TEXT,TEXT) TO authenticated;
+
+-- Trigger baru mencegah RPC penerbitan lama melewati kewajiban alasan.
+CREATE OR REPLACE FUNCTION guard_empty_service_jobs_v130() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+BEGIN
+  IF NEW.status='Terbit' AND OLD.status IS DISTINCT FROM 'Terbit' AND EXISTS (
+    SELECT 1 FROM service_schedule_parts p
+    JOIN service_schedule_occurrences o ON o.occurrence_id=p.occurrence_id
+    JOIN service_roster_slots s ON s.roster_id=p.roster_id
+    WHERE o.month_id=NEW.month_id
+    GROUP BY p.roster_id,s.position_id
+    HAVING count(s.user_id)=0 AND NOT EXISTS (
+      SELECT 1 FROM service_schedule_empty_reasons reason
+      WHERE reason.roster_id=p.roster_id AND reason.position_id=s.position_id)
+  ) THEN RAISE EXCEPTION 'schedule_empty_reason_required' USING ERRCODE='22023'; END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_guard_empty_service_jobs_v130 ON service_schedule_months;
+CREATE TRIGGER trg_guard_empty_service_jobs_v130 BEFORE UPDATE OF status ON service_schedule_months
+  FOR EACH ROW EXECUTE FUNCTION guard_empty_service_jobs_v130();
+
+-- Definisi production v111 dicocokkan; pengecualian hanya untuk dua slot
+-- dalam occurrence yang sama bila salah satu penugasan diberi izin Admin.
+CREATE OR REPLACE FUNCTION publish_service_schedule_month_v111(p_month_id TEXT)
+  RETURNS TEXT[] LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=public AS $$
+DECLARE month_status TEXT; roster_ids TEXT[]; member TEXT;
+BEGIN
+  IF NOT auth_service_schedule_admin() THEN RAISE EXCEPTION 'not_authorized' USING ERRCODE='42501'; END IF;
+  SELECT status INTO month_status FROM service_schedule_months WHERE month_id=p_month_id FOR UPDATE;
+  IF NOT FOUND OR month_status<>'Draft' THEN RAISE EXCEPTION 'Hanya jadwal bulanan Draft yang dapat diterbitkan.' USING ERRCODE='22023'; END IF;
+  SELECT array_agg(part.roster_id ORDER BY part.roster_id) INTO roster_ids FROM service_schedule_parts part
+    JOIN service_schedule_occurrences occurrence ON occurrence.occurrence_id=part.occurrence_id WHERE occurrence.month_id=p_month_id;
+  PERFORM 1 FROM service_rosters WHERE roster_id=ANY(roster_ids) ORDER BY roster_id FOR UPDATE;
+  IF cardinality(roster_ids) IS NULL OR EXISTS (SELECT 1 FROM service_rosters
+    WHERE roster_id=ANY(roster_ids) AND (status<>'Draft' OR end_time IS NULL)) THEN
+    RAISE EXCEPTION 'Bagian jadwal tidak sesuai atau jam selesai belum diisi.' USING ERRCODE='22023'; END IF;
+  FOR member IN SELECT DISTINCT user_id FROM service_roster_slots WHERE roster_id=ANY(roster_ids)
+    AND user_id IS NOT NULL ORDER BY user_id LOOP PERFORM pg_advisory_xact_lock(hashtextextended(member,0)); END LOOP;
+  IF EXISTS (SELECT 1 FROM service_roster_slots a JOIN service_rosters ra ON ra.roster_id=a.roster_id
+    JOIN service_roster_slots b ON b.user_id=a.user_id AND b.slot_id<>a.slot_id
+    JOIN service_rosters rb ON rb.roster_id=b.roster_id
+    WHERE a.roster_id=ANY(roster_ids) AND a.user_id IS NOT NULL AND rb.status<>'Dibatalkan'
+      AND ra.service_date=rb.service_date
+      AND (rb.end_time IS NULL OR (ra.start_time<rb.end_time AND rb.start_time<ra.end_time))
+      AND NOT ((a.allow_same_service_overlap OR b.allow_same_service_overlap)
+        AND ra.source_type='Ibadah' AND rb.source_type='Ibadah' AND EXISTS (
+        SELECT 1 FROM service_schedule_parts pa JOIN service_schedule_parts pb
+          ON pb.occurrence_id=pa.occurrence_id
+        WHERE pa.roster_id=a.roster_id AND pb.roster_id=b.roster_id))) THEN
+    RAISE EXCEPTION 'schedule_conflict' USING ERRCODE='P0001'; END IF;
+  IF EXISTS (SELECT 1 FROM service_roster_slots slot JOIN users u ON u.user_id=slot.user_id
+    WHERE slot.roster_id=ANY(roster_ids) AND u.status<>'Aktif') THEN
+    RAISE EXCEPTION 'Pelayan nonaktif tidak dapat diterbitkan.' USING ERRCODE='22023'; END IF;
+  PERFORM set_config('app.allow_roster_transition','1',true);
+  PERFORM set_config('app.service_schedule_transition',p_month_id,true);
+  UPDATE service_rosters SET status='Terbit',version=version+1,published_at=now(),published_by=auth_user_id()
+    WHERE roster_id=ANY(roster_ids);
+  UPDATE service_schedule_months SET status='Terbit',version=version+1,published_at=now(),
+    published_by=auth_user_id(),updated_at=now() WHERE month_id=p_month_id;
+  PERFORM set_config('app.allow_roster_transition','',true);
+  PERFORM set_config('app.service_schedule_transition','',true);
+  RETURN roster_ids;
+END $$;
+COMMIT;

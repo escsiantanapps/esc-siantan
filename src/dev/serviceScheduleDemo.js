@@ -185,7 +185,7 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
   }
   function reset() {
     serial = 0
-    state = { ministries: ministries.map(ministry => ({ ...ministry, head_user_id: ministry.ministry_id === 'DEMO-M1' ? demoProfiles.mh.user_id : null })), positions: copy(positions), users: [...copy(members), copy(demoProfiles.mh), copy(demoProfiles.empty), copy(demoProfiles.admin)].map(user => ({ role_secondary: null, ...user })), managers: [{ ministry_id: 'DEMO-M1', user_id: demoProfiles.mh.user_id, manager_role: 'Ministry Head', is_active: true, approved_by: demoProfiles.admin.user_id }], templates: [{ template_id: 'DEMO-TEMPLATE', name: 'Template Pelayanan Mingguan', definition: { sections: copy(sections) }, is_active: true }], months: [], occurrences: [], parts: [], rosters: [], notifications: [] }
+    state = { ministries: ministries.map(ministry => ({ ...ministry, head_user_id: ministry.ministry_id === 'DEMO-M1' ? demoProfiles.mh.user_id : null })), positions: copy(positions), users: [...copy(members), copy(demoProfiles.mh), copy(demoProfiles.empty), copy(demoProfiles.admin)].map(user => ({ role_secondary: null, ...user })), managers: [{ ministry_id: 'DEMO-M1', user_id: demoProfiles.mh.user_id, manager_role: 'Ministry Head', is_active: true, approved_by: demoProfiles.admin.user_id }], templates: [{ template_id: 'DEMO-TEMPLATE', name: 'Template Pelayanan Mingguan', definition: { sections: copy(sections) }, is_active: true }], months: [], occurrences: [], parts: [], rosters: [], emptyReasons: [], notifications: [] }
     if (!seed) return
     const monthId = buildMonth(state.templates[0], '2026-10', ['2026-10-04', '2026-10-11', '2026-10-18', '2026-10-25'])
     for (const roster of state.rosters.filter(item => item.month_id === monthId)) {
@@ -220,7 +220,7 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       if (month.status === 'Draft' && !isAdmin() && !managedIds().length) fail('Draft tidak tersedia untuk anggota.', '42501')
       const rosters = state.rosters.filter(item => item.month_id === monthId && (month.status !== 'Draft' || canManage(item.ministry_id)))
       const ids = new Set(rosters.map(item => item.roster_id))
-      return copy({ month, sections: month.definition.sections.map(section => ({ ...section, key: section.section_id, positions: section.parts.flatMap(item => item.positions.map(entry => ({ ...state.positions.find(value => value.position_id === entry.position_id), ...entry, ministry_name: state.ministries.find(value => value.ministry_id === item.ministry_id).name, slots: entry.capacity }))) })), occurrences: state.occurrences.filter(item => item.month_id === monthId), parts: state.parts.filter(item => ids.has(item.roster_id)), rosters })
+      return copy({ month, sections: month.definition.sections.map(section => ({ ...section, key: section.section_id, positions: section.parts.flatMap(item => item.positions.map(entry => ({ ...state.positions.find(value => value.position_id === entry.position_id), ...entry, ministry_name: state.ministries.find(value => value.ministry_id === item.ministry_id).name, slots: entry.capacity }))) })), occurrences: state.occurrences.filter(item => item.month_id === monthId), parts: state.parts.filter(item => ids.has(item.roster_id)), rosters, emptyReasons: state.emptyReasons.filter(item => ids.has(item.roster_id)) })
     },
     async createMonth({ templateId, month, dates }) {
       demandAdmin()
@@ -517,7 +517,7 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       state.months = state.months.filter(item => item.month_id !== monthId)
       return assigned
     },
-    async setPosition({ rosterId, positionId, userIds, expectedUserIds, notes = {} }) {
+    async setPosition({ rosterId, positionId, userIds, expectedUserIds, notes = {}, emptyReason, overrideUserIds = [] }) {
       const roster = demandRoster(rosterId)
       const slots = roster.service_roster_slots.filter(slot => slot.position_id === positionId)
       if (!slots.length) fail('Posisi tidak ditemukan dalam bagian ini.')
@@ -529,16 +529,18 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
         if (!member) fail('Pelayan yang dipilih harus berstatus Aktif.')
         if (!member.ministry_ids?.includes(roster.ministry_id)) fail('schedule_ministry_membership_required', '23514')
         const clash = conflicts(userId, roster, positionId)[0]
-        if (clash) fail(`Jadwal bentrok: ${member.name}, ${clash.title}, ${clash.service_date}, ${clash.start_time}-${clash.end_time}.`, '23P01')
+        if (clash && !(isAdmin() && overrideUserIds.includes(userId) && roster.source_type === 'Ibadah' && clash.occurrence_id === roster.occurrence_id)) fail(`Jadwal bentrok: ${member.name}, ${clash.title}, ${clash.service_date}, ${clash.start_time}-${clash.end_time}.`, '23P01')
       }
       // Semua kandidat diperiksa dahulu agar penyimpanan beberapa nama bersifat atomik.
-      slots.forEach((slot, index) => { const member = findUser(userIds[index]); slot.user_id = member?.user_id || null; slot.assignment_note = member ? notes[member.user_id]?.trim() || null : null; slot.users = member ? { user_id: member.user_id, name: member.name, photo_url: member.photo_url } : null })
+      slots.forEach((slot, index) => { const member = findUser(userIds[index]); slot.user_id = member?.user_id || null; slot.assignment_note = member ? notes[member.user_id]?.trim() || null : null; slot.allow_same_service_overlap = !!member && overrideUserIds.includes(member.user_id); slot.users = member ? { user_id: member.user_id, name: member.name, photo_url: member.photo_url } : null })
+      state.emptyReasons = state.emptyReasons.filter(item => item.roster_id !== rosterId || item.position_id !== positionId)
+      if (!userIds.length && emptyReason?.trim()) state.emptyReasons.push({ roster_id: rosterId, position_id: positionId, reason: emptyReason.trim() })
       return copy(slots)
     },
     async findConflicts(userId, rosterId, slotId = null) {
       const target = state.rosters.find(item => item.roster_id === rosterId)
       if (!target || !canManage(target.ministry_id)) fail('Tidak memiliki akses untuk ministry ini.', '42501')
-      return copy(conflicts(userId, target, null).flatMap(roster => roster.service_roster_slots.filter(slot => slot.user_id === userId && slot.slot_id !== slotId).map(slot => ({ roster_id: roster.roster_id, slot_id: slot.slot_id, position_id: slot.position_id, title: roster.title, source_type: roster.source_type, ministry_name: roster.ministries.name, position_name: slot.ministry_service_positions.name, position_names: slot.ministry_service_positions.name, service_date: roster.service_date, start_time: roster.start_time, end_time: roster.end_time, status: roster.status, same_roster: roster.roster_id === rosterId }))))
+      return copy(conflicts(userId, target, null).flatMap(roster => roster.service_roster_slots.filter(slot => slot.user_id === userId && slot.slot_id !== slotId).map(slot => ({ roster_id: roster.roster_id, slot_id: slot.slot_id, position_id: slot.position_id, title: roster.title, source_type: roster.source_type, ministry_name: roster.ministries.name, position_name: slot.ministry_service_positions.name, position_names: slot.ministry_service_positions.name, service_date: roster.service_date, start_time: roster.start_time, end_time: roster.end_time, status: roster.status, same_roster: roster.roster_id === rosterId, same_service: target.source_type === 'Ibadah' && roster.source_type === 'Ibadah' && roster.occurrence_id === target.occurrence_id }))))
     },
     async updateOccurrence(occurrenceId, data) {
       demandAdmin()
@@ -558,9 +560,13 @@ export function createServiceScheduleDemo({ profile = demoProfiles.admin, seed =
       demandAdmin()
       const month = demandDraft(monthId)
       const rosters = state.rosters.filter(item => item.month_id === monthId)
+      for (const roster of rosters) for (const positionId of new Set(roster.service_roster_slots.map(slot => slot.position_id))) {
+        if (!roster.service_roster_slots.some(slot => slot.position_id === positionId && slot.user_id)
+          && !state.emptyReasons.some(item => item.roster_id === roster.roster_id && item.position_id === positionId)) fail('schedule_empty_reason_required', '22023')
+      }
       for (const roster of rosters) for (const slot of roster.service_roster_slots) {
         if (slot.user_id && !findUser(slot.user_id)?.ministry_ids?.includes(roster.ministry_id)) fail('schedule_ministry_membership_required', '23514')
-        if (slot.user_id && conflicts(slot.user_id, roster, slot.position_id).length) fail('Bulan tidak dapat diterbitkan karena jadwal bentrok.', '23P01')
+        if (slot.user_id && conflicts(slot.user_id, roster, slot.position_id).some(other => !(roster.source_type === 'Ibadah' && other.source_type === 'Ibadah' && other.occurrence_id === roster.occurrence_id && (slot.allow_same_service_overlap || other.service_roster_slots.some(peer => peer.user_id === slot.user_id && peer.allow_same_service_overlap))))) fail('Bulan tidak dapat diterbitkan karena jadwal bentrok.', '23P01')
       }
       month.status = 'Terbit'; month.version += 1; month.published_by = caller.user_id
       for (const roster of rosters) { roster.status = 'Terbit'; roster.version += 1 }

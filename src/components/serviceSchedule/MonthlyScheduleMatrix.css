@@ -19,6 +19,7 @@
 .sched-matrix-edit-mark { position: absolute; right: 6px; top: 9px; opacity: 0.55; }
 .sched-matrix-assigned { display: flex; flex-direction: column; gap: 3px; width: 100%; }
 .sched-matrix-vacancy { display: inline-block; border-left: 2px solid var(--color-brand-400); padding-left: 5px; font-size: 11px; color: var(--color-gray-600); }
+.sched-matrix-empty-reason { display: block; color: var(--color-gray-600); font-size: 11px; line-height: 1.4; }
 .sched-matrix-locked { min-height: 48px; display: flex; align-items: center; padding: 12px; gap: 5px; font-size: 11px; color: var(--color-gray-500); }
 .sched-matrix-not-scheduled { display: block; min-height: 49px; padding: 12px; color: var(--color-gray-400); }
 .sched-matrix-time { display: flex; gap: 5px; align-items: center; font-weight: 650; color: var(--color-gray-900); }

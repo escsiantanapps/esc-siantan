@@ -77,6 +77,7 @@ export function buildScheduleMatrix(schedule = {}, { ministryFilter = '', activi
   const sectionsByKey = new Map((schedule.sections || []).map(section => [sectionKey(section), section]))
   const parts = new Map((schedule.parts || []).map(part => [`${part.occurrence_id}:${part.ministry_id}`, part]))
   const rosters = new Map((schedule.rosters || []).map(roster => [roster.roster_id, roster]))
+  const emptyReasons = new Map((schedule.emptyReasons || []).map(item => [`${item.roster_id}:${item.position_id}`, item.reason]))
   const rostersByOccurrence = new Map((schedule.rosters || [])
     .filter(roster => roster.occurrence_id)
     .map(roster => [`${roster.occurrence_id}:${roster.ministry_id}`, roster]))
@@ -102,7 +103,8 @@ export function buildScheduleMatrix(schedule = {}, { ministryFilter = '', activi
       .sort((a, b) => Number(a.slot_no || 0) - Number(b.slot_no || 0))
     const assigned = slots.filter(slot => slot.user_id)
     const hidden = !!occurrence && !part && !roster && schedule.month?.status === 'Draft'
-    return { occurrence, position, part, roster, slots, assigned, hidden, capacity, filled: assigned.length }
+    return { occurrence, position, part, roster, slots, assigned, hidden, capacity, filled: assigned.length,
+      emptyReason: roster ? emptyReasons.get(`${roster.roster_id}:${position.position_id}`) || '' : '' }
   }
   const sections = (schedule.sections || [])
     .filter(section => !activityFilter || sectionKey(section) === activityFilter)
@@ -174,7 +176,7 @@ export function buildMonthlySchedulePrintDocument(schedule, { t = key => key, lo
         if (cell.hidden) return `<td class="muted">${tr('schedMonth.restricted')}</td>`
         const names = cell.assigned.map(slot => `<span class="person">${escapeHtml(slot.users?.name || t('schedMonth.unavailableMember'))}${slot.assignment_note ? `<small>${escapeHtml(slot.assignment_note)}</small>` : ''}</span>`).join('')
         const empty = Math.max(0, cell.capacity - cell.filled)
-        return `<td>${names}${empty ? `<span class="empty">${tr('schedMonth.emptyCount', { count: empty })}</span>` : ''}</td>`
+        return `<td>${names}${empty ? `<span class="empty">${tr('schedMonth.emptyCount', { count: empty })}</span>` : ''}${!cell.filled && (cell.emptyReason || schedule.month?.status === 'Draft') ? `<small class="empty-reason">${cell.emptyReason ? `${tr('schedMonth.emptyReasonDisplay')}: ${escapeHtml(cell.emptyReason)}` : tr('schedMonth.emptyReasonMissing')}</small>` : ''}</td>`
       }).join('')}</tr>`).join('')
       return divider + positions
     }).join('')
@@ -211,6 +213,7 @@ export function buildMonthlySchedulePrintDocument(schedule, { t = key => key, lo
     .person:last-child { margin-bottom: 0; }
     .person small { display: block; color: #6c7b88; font-size: 9px; }
     .empty { display: inline-block; margin-top: 2px; color: #a7442c; font-size: 9px; font-weight: 600; }
+    .empty-reason { display: block; margin-top: 2px; color: #6c7b88; font-size: 9px; }
     .muted { color: #8b98a3; }
     .notes th, .notes td { background: #fffaf4; color: #685342; font-size: 9px; }
     .notes th { font-weight: 700; }

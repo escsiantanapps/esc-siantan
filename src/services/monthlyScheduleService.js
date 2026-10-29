@@ -49,7 +49,7 @@ export const monthlyScheduleService = {
   listClasses: () => classesService.getAll(),
   notify: (rosterId, kind) => serviceRosterService.notify(rosterId, kind),
   notifyMonth: (monthId, kind) => serviceRosterService.notifyMonth(monthId, kind),
-  findConflicts: (userId, rosterId, slotId) => rpc('get_service_roster_conflicts_v128', {
+  findConflicts: (userId, rosterId, slotId) => rpc('get_service_roster_conflicts_v130', {
     p_user_id: userId, p_roster_id: rosterId, p_slot_id: slotId,
   }),
   listMembers: (ministryId, query, canManageAll) => serviceRosterService.listMinistryMembers(ministryId, query, canManageAll),
@@ -123,7 +123,12 @@ export const monthlyScheduleService = {
     const [data, positions, ministries] = await Promise.all([
       rpc('get_service_schedule_month_v128', { p_month_id: monthId }), this.listPositions(), this.listMinistries(),
     ])
-    return normalizeMonthlySchedule(data, positions, ministries)
+    const { data: emptyReasons, error } = await supabase.from('service_schedule_empty_reasons')
+      .select('roster_id, position_id, reason')
+      .in('roster_id', (data.rosters || []).map(item => item.roster_id).length
+        ? (data.rosters || []).map(item => item.roster_id) : [''])
+    if (error) throw error
+    return normalizeMonthlySchedule({ ...data, emptyReasons: emptyReasons || [] }, positions, ministries)
   },
   createMonth: ({ templateId, month, dates }) => rpc('create_service_schedule_month', {
     p_template_id: templateId, p_month: `${month.slice(0, 7)}-01`, p_dates: dates,
@@ -143,9 +148,9 @@ export const monthlyScheduleService = {
     p_month_id: monthId, p_expected_version: expectedVersion,
     p_expected_assigned: expectedAssigned, p_confirmation: confirmation,
   }),
-  setPosition: ({ rosterId, positionId, userIds, expectedUserIds, notes }) => rpc('set_service_schedule_position_v111', {
+  setPosition: ({ rosterId, positionId, userIds, expectedUserIds, notes, emptyReason, overrideUserIds }) => rpc('set_service_schedule_position_v130', {
     p_roster_id: rosterId, p_position_id: positionId, p_user_ids: userIds, p_expected_user_ids: expectedUserIds,
-    p_notes: notes,
+    p_notes: notes, p_empty_reason: emptyReason || null, p_override_user_ids: overrideUserIds || [],
   }),
   addMinistryToSection: (monthId, sectionId, ministryId, expectedVersion) => rpc('add_service_schedule_ministry_to_section_v123', {
     p_month_id: monthId, p_section_id: sectionId, p_ministry_id: ministryId, p_expected_version: expectedVersion,

@@ -77,6 +77,8 @@ const errorKey = error => {
   const text = String(error?.message || '')
   if (error?.code === 'PGRST202' && text.includes('update_service_schedule_month_draft_v124')) return 'schedMonth.editDraftMigrationRequired'
   if (error?.code === 'PGRST202' && text.includes('_v125')) return 'schedMonth.ownedFieldsMigrationRequired'
+  if (error?.code === 'PGRST202' && text.includes('_v130')) return 'schedMonth.migrationRequired'
+  if (text.includes('schedule_empty_reason_required')) return 'schedMonth.emptyReasonRequired'
   if (error?.code === 'PGRST202' && text.includes('add_service_schedule_ministry_to_section_v123')) return 'schedMonth.addMinistryMigrationRequired'
   if (error?.code === 'PGRST202' && text.includes('_v122')) return 'schedMonth.copyMigrationRequired'
   if (error?.code === 'PGRST202' && text.includes('return_service_schedule_month_to_draft_v121')) return 'schedMonth.returnMigrationRequired'
@@ -449,7 +451,7 @@ export function MonthlyScheduleWorkspace({ api, profile, initialMonth, renderLeg
     {editDraftOpen && schedule && <MonthCreator schedule={schedule} month={month} ministries={ministries} positions={positions} events={events} classes={classes} busy={busy} onClose={() => setEditDraftOpen(false)} onSave={payload => save(() => api.updateMonthDraft(monthId, schedule.month.version, payload.entries, payload.expectedRemovedAssignments, payload.confirmation), () => setEditDraftOpen(false), 'schedMonth.draftUpdated')} />}
     {copyOpen && <CopyMonthDialog api={api} month={month} events={events} classes={classes} busy={busy} onClose={() => setCopyOpen(false)} onSave={payload => save(async () => { const id = await api.copyMonth(payload); await loadMonths(); setMonthId(id) }, () => setCopyOpen(false), 'schedMonth.monthCopied', false)} />}
     {clearOpen && schedule && isDraft && schedule.month.definition?.copied_from_month_id && <ClearAssignmentsDialog assigned={assignedCount} version={schedule.month.version} busy={busy} onClose={() => setClearOpen(false)} onSave={clearAllAssignments} />}
-    {positionEditor && <PositionEditor context={positionEditor} api={api} canManageAll={canManageAll} isAdmin={profile?.role === 'Admin'} busy={busy} onClose={() => setPositionEditor(null)} onSave={payload => save(() => api.setPosition(payload), () => setPositionEditor(null), 'sched.assignmentSaved')} />}
+    {positionEditor && <PositionEditor context={positionEditor} api={api} canManageAll={canManageAll} isAdmin={profile?.role === 'Admin'} canOverride={['Admin', 'Super Admin'].includes(profile?.role)} busy={busy} onClose={() => setPositionEditor(null)} onSave={payload => save(() => api.setPosition(payload), () => setPositionEditor(null), 'sched.assignmentSaved')} />}
     {ministryAdder && schedule && <AddMinistryDialog context={ministryAdder} positions={positions} busy={busy} onClose={() => setMinistryAdder(null)} onSave={() => save(() => api.addMinistryToSection(monthId, ministryAdder.sectionId, ministryAdder.ministry.ministry_id, schedule.month.version), () => setMinistryAdder(null), 'schedMonth.ministryAdded')} />}
     {occurrenceEditor && <OccurrenceEditor occurrence={occurrenceEditor} month={month} busy={busy} onClose={() => setOccurrenceEditor(null)} onSave={data => save(() => api.updateOccurrence(occurrenceEditor.occurrence_id, data), () => setOccurrenceEditor(null))} />}
   </div>
@@ -734,11 +736,13 @@ function AddMinistryDialog({ context, positions, busy, onClose, onSave }) {
   </Modal>
 }
 
-function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, busy }) {
+function PositionEditor({ context, api, canManageAll, isAdmin, canOverride, onClose, onSave, busy }) {
   const { t } = useLang()
   const { occurrence, position, roster, slots } = context
   const [selected, setSelected] = useState(() => slots.filter(slot => slot.user_id).map(slot => slot.user_id))
   const [notes, setNotes] = useState(() => Object.fromEntries(slots.filter(slot => slot.user_id).map(slot => [slot.user_id, slot.assignment_note || ''])))
+  const [emptyReason, setEmptyReason] = useState(context.emptyReason || '')
+  const [overrideUserIds, setOverrideUserIds] = useState(() => slots.filter(slot => slot.allow_same_service_overlap && slot.user_id).map(slot => slot.user_id))
   const [query, setQuery] = useState('')
   const [members, setMembers] = useState([])
   const [names, setNames] = useState(() => new Map(slots.filter(slot => slot.user_id).map(slot => [slot.user_id, slot.users?.name || t('schedMonth.unavailableMember')])))
@@ -747,6 +751,8 @@ function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, 
   const [previewChecking, setPreviewChecking] = useState(false)
   const [error, setError] = useState('')
   const [conflicts, setConflicts] = useState([])
+  const blockingConflicts = conflicts.filter(item => !canOverride || !item.same_service || !overrideUserIds.includes(item.memberId))
+  const sameServiceMembers = [...new Set(conflicts.filter(item => item.same_service).map(item => item.memberId))]
   useEffect(() => {
     let active = true
     setLoading(true)
@@ -775,17 +781,20 @@ function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, 
   async function submit(event) {
     event.preventDefault(); setChecking(true); setError(''); setConflicts([])
     try {
+      if (!selected.length && emptyReason.trim().length < 3) { setError('schedMonth.emptyReasonRequired'); return }
       const findings = []
       for (const userId of selected) {
         const ownSlot = slots.find(slot => slot.user_id === userId)
         const rows = await api.findConflicts(userId, roster.roster_id, ownSlot?.slot_id)
         for (const item of rows) findings.push({ ...item, memberId: userId })
       }
-      if (findings.length) { setConflicts(findings); return }
+      if (findings.some(item => !canOverride || !item.same_service || !overrideUserIds.includes(item.memberId))) { setConflicts(findings); return }
       // Catatan personel lama tidak boleh ikut saat satu slot diisi pengganti.
       const selectedNotes = Object.fromEntries(selected.map(id => [id, notes[id] || '']))
       await onSave({ rosterId: roster.roster_id, positionId: position.position_id, userIds: selected,
-        expectedUserIds: slots.filter(slot => slot.user_id).map(slot => slot.user_id), notes: selectedNotes })
+        expectedUserIds: slots.filter(slot => slot.user_id).map(slot => slot.user_id), notes: selectedNotes,
+        emptyReason: selected.length ? null : emptyReason.trim(),
+        overrideUserIds: canOverride ? overrideUserIds.filter(id => selected.includes(id)) : [] })
     } catch (err) { setError(errorKey(err)) }
     finally { setChecking(false) }
   }
@@ -795,11 +804,14 @@ function PositionEditor({ context, api, canManageAll, isAdmin, onClose, onSave, 
       <p className="monthly-muted">{t('schedMonth.selectedCount', { count: selected.length, capacity: slots.length })}</p>
       {!!selected.length && <div className="monthly-date-picks">{selected.map(id => <Button type="button" key={id} variant="outline" disabled={busy || checking} onClick={() => { setSelected(current => current.filter(item => item !== id)); setConflicts([]) }} aria-label={t('schedMonth.removeMember', { name: names.get(id) || '-' })}>{names.get(id) || '-'}<X size={14} /></Button>)}</div>}
       {!!selected.length && <div className="monthly-person-notes">{selected.map(id => <Input key={id} label={t('schedMonth.personNoteFor', { name: names.get(id) || '-' })} placeholder={t('schedMonth.personNoteExample')} maxLength={100} value={notes[id] || ''} disabled={busy || checking} onChange={event => setNotes(current => ({ ...current, [id]: event.target.value }))} />)}</div>}
+      {!selected.length && <Textarea label={t('schedMonth.emptyReasonLabel')} required maxLength={300} value={emptyReason} disabled={busy || checking} onChange={event => setEmptyReason(event.target.value)} placeholder={t('schedMonth.emptyReasonPlaceholder')} />}
       <div className="monthly-member-list">{loading ? <Spinner size="sm" /> : !members.length ? <p>{t('sched.noMembers')}</p> : members.map(member => <Checkbox key={member.user_id} label={member.name} checked={selected.includes(member.user_id)} disabled={busy || checking || (slots.length !== 1 && !selected.includes(member.user_id) && selected.length >= slots.length)} onChange={event => { setSelected(current => event.target.checked ? (slots.length === 1 ? [member.user_id] : [...current, member.user_id]) : current.filter(id => id !== member.user_id)); setConflicts([]) }} />)}</div>
       {previewChecking && <p className="monthly-muted" role="status">{t('schedMonth.checkingConflicts')}</p>}
-      {conflicts.length > 0 && <div className="monthly-error" role="alert"><strong>{t('schedMonth.conflictWarning')}</strong>{conflicts.map((item, index) => <p key={index}>{t('schedMonth.conflictItem', { name: names.get(item.memberId) || '-', title: item.title, date: item.service_date, time: timeLabel(item), position: item.position_names, ministry: item.ministry_name })}</p>)}</div>}
+      {conflicts.length > 0 && <div className="monthly-error" role="alert"><strong>{t(canOverride ? 'schedMonth.conflictWarning' : 'schedMonth.conflictWarningManager')}</strong>{conflicts.map((item, index) => <p key={index}>{t('schedMonth.conflictItem', { name: names.get(item.memberId) || '-', title: item.title, date: item.service_date, time: timeLabel(item), position: item.position_names, ministry: item.ministry_name })}</p>)}</div>}
+      {canOverride && sameServiceMembers.map(id => <Checkbox key={id} label={t('schedMonth.allowSameServiceOverlap', { name: names.get(id) || '-' })} checked={overrideUserIds.includes(id)} disabled={busy || checking} onChange={event => setOverrideUserIds(current => event.target.checked ? [...current, id] : current.filter(item => item !== id))} />)}
+      {blockingConflicts.length > 0 && <p className="monthly-error" role="alert">{t('schedMonth.conflictBlocked')}</p>}
       {error && <p className="monthly-error" role="alert">{t(error)}</p>}
-    </div><footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy || checking} onClick={onClose}>{t('common.cancel')}</Button><Button type="submit" disabled={previewChecking || conflicts.length > 0} loading={busy || checking}><Save size={16} />{t('schedMonth.saveAssignments')}</Button></footer>
+    </div><footer className="monthly-dialog-footer"><Button type="button" variant="outline" disabled={busy || checking} onClick={onClose}>{t('common.cancel')}</Button><Button type="submit" disabled={previewChecking || blockingConflicts.length > 0} loading={busy || checking}><Save size={16} />{t('schedMonth.saveAssignments')}</Button></footer>
   </form></Modal>
 }
 
