@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bell, Calendar, CalendarClock, BookOpen, Droplets, Heart, Baby, HandCoins, WifiOff, RefreshCw, Star, CreditCard, UserRound } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -27,12 +27,15 @@ function greeting(t) {
 }
 
 export default function HomePage() {
-  const { profile, isVolunteer, isAdmin } = useAuth()
+  const { profile, isVolunteer } = useAuth()
   const { t } = useLang()
   const [news, setNews] = useState([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
   const [baptismOpen, setBaptismOpen] = useState(true)
+  const [compactQuick, setCompactQuick] = useState(false)
+  const dashboardMainRef = useRef(null)
+  const dashboardAsideRef = useRef(null)
 
   function loadData() {
     setLoading(true)
@@ -49,11 +52,34 @@ export default function HomePage() {
 
   useEffect(() => { loadData() }, [profile?.user_id])
 
+  useEffect(() => {
+    if (!isVolunteer || typeof ResizeObserver === 'undefined') return undefined
+    const main = dashboardMainRef.current
+    const aside = dashboardAsideRef.current
+    if (!main || !aside) return undefined
+
+    // Kartu jadwal/kehadiran berubah tinggi setelah data dimuat. Posisikan
+    // Menu Cepat di celah kiri hanya bila panel kanan memang lebih tinggi.
+    const update = () => {
+      const next = window.innerWidth >= 1024 && aside.offsetHeight > main.offsetHeight + 128
+      setCompactQuick(current => current === next ? current : next)
+    }
+    const observer = new ResizeObserver(update)
+    observer.observe(main)
+    observer.observe(aside)
+    window.addEventListener('resize', update)
+    update()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [isVolunteer])
+
   const quickLinks = [
     { to: '/persembahan',        icon: HandCoins,     label: t('home.q.offering'), color: 'bg-emerald-600/15 text-emerald-600' },
     { to: '/events',             icon: Calendar,      label: t('home.q.events'),   color: 'bg-red-600/15 text-red-600' },
     { to: '/kelas',              icon: BookOpen,      label: t('home.q.classes'),  color: 'bg-blue-600/15 text-blue-600' },
-    ...(isVolunteer && !isAdmin ? [{ to: '/jadwal-pelayanan', icon: CalendarClock, label: t('sched.mySchedule'), color: 'bg-brand-100 text-brand-700' }] : []),
+    ...(isVolunteer ? [{ to: '/jadwal-pelayanan', icon: CalendarClock, label: t('sched.title'), color: 'bg-brand-100 text-brand-700' }] : []),
     ...(baptismOpen ? [{ to: '/baptisan', icon: Droplets, label: t('home.q.baptism'), color: 'bg-teal-600/15 text-teal-600' }] : []),
     { to: '/pemberkatan-nikah',  icon: Heart,         label: t('home.q.wedding'),  color: 'bg-pink-600/15 text-pink-600' },
     { to: '/penyerahan-anak',    icon: Baby,          label: t('home.q.dedication'), color: 'bg-amber-600/15 text-amber-600' },
@@ -61,11 +87,33 @@ export default function HomePage() {
     { to: '/status-pendaftaran', icon: Bell,          label: t('home.q.status'),   color: 'bg-purple-600/15 text-purple-600' },
   ]
 
+  const quickMenu = !loading && (
+    <div className="home-order-quick">
+      <section className="mb-6">
+        <SectionHeader title={t('home.quickMenu')} />
+        <div className="grid grid-cols-3 gap-3 stagger-children">
+          {quickLinks.map(({ to, icon: Icon, label, color }) => (
+            <Link
+              key={to}
+              to={to}
+              className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-surface border border-gray-200 hover:bg-control active:bg-control-hover transition-colors"
+            >
+              <div className={`w-11 h-11 rounded-full ${color} flex items-center justify-center`}>
+                <Icon size={20} strokeWidth={1.5} />
+              </div>
+              <span className="text-xs text-gray-600 font-medium text-center">{label}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+
   return (
     <div className="pb-4">
       {/* Top AppBar ala Stitch */}
-      <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur-md border-b border-gray-100">
-        <div className="app-top-safe flex items-center justify-between px-4 pb-3 pt-3">
+      <header className="home-topbar sticky top-0 z-40 bg-surface/90 backdrop-blur-md border-b border-gray-100">
+        <div className="home-topbar-inner app-top-safe flex items-center justify-between px-4 pb-3 pt-3">
           <Link to="/profil" aria-label={t('nav.profile')} className="flex min-w-0 min-h-11 items-center gap-2.5 rounded-2xl active:scale-[0.98] transition-transform">
             <span className="w-11 h-11 rounded-full gradient-main flex items-center justify-center text-white overflow-hidden shrink-0 border-2 border-surface" style={{ boxShadow: '0 3px 12px rgba(244, 81, 30, 0.22)' }}>
               {profile?.photo_url
@@ -87,7 +135,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <div className="px-4 pt-4">
+      <div className="home-content px-4 pt-4">
         {/* Welcome */}
         <section className="mb-5 animate-fade-in-up">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-500/80 mb-1">
@@ -101,6 +149,9 @@ export default function HomePage() {
           </p>
         </section>
 
+        <div className={`home-dashboard-grid ${compactQuick ? 'home-dashboard-grid--compact-quick' : ''}`}>
+          <div ref={dashboardMainRef} className="home-dashboard-main">
+            <div className="home-order-messages">
         {/* Pesan/pengumuman broadcast dari Gembala, kalau ada yang belum ditutup */}
         <PastoralMessageCard />
 
@@ -111,25 +162,10 @@ export default function HomePage() {
 
         {/* Panduan akun baru: lengkapi data & aktifkan notifikasi */}
         <OnboardingPrompt />
-
-        {/* Akses poin ditempatkan dekat bagian atas agar tidak tertutup navbar
-            bawah pada layar iPhone yang pendek. */}
-        <PointsProgressCard />
-
-        {/* Pengingat ramah kalau ada SOP yang belum dituntaskan minggu ini */}
-        <SopNudgeCard />
-
-        {/* Status SP */}
-        {profile?.sp_level && profile.sp_level !== 'Aman' && (
-          <div
-            className={`rounded-2xl px-4 py-3 mb-5 text-sm font-medium animate-fade-in-up ${spColor(profile.sp_level)}`}
-            style={{ animationDelay: '60ms' }}
-          >
-            {t('home.spStatus', { level: profile.sp_level })}
-          </div>
-        )}
+            </div>
 
         {/* Skeleton berbentuk konten selama data dimuat */}
+        <div className="home-order-loading">
         {loading && (
           <div className="animate-fade-in">
             <div className="flex justify-center mb-2"><Spinner size="lg" /></div>
@@ -149,8 +185,10 @@ export default function HomePage() {
             </div>
           </div>
         )}
+        </div>
 
         {/* Peringatan gagal memuat (jaringan putus / error server) */}
+        <div className="home-order-error">
         {!loading && fetchError && (
           <div className="rounded-2xl bg-orange-50 border border-orange-100 px-4 py-3 mb-5 flex items-center gap-3 animate-fade-in">
             <WifiOff size={18} className="text-orange-400 flex-shrink-0" />
@@ -163,8 +201,10 @@ export default function HomePage() {
             </button>
           </div>
         )}
+        </div>
 
         {/* Isi info di beranda dipusatkan ke pengumuman terbaru */}
+        <div className="home-order-news">
         {news.length > 0 && (
           <section>
             <SectionHeader title={t('info.announcements')} to="/informasi" />
@@ -173,8 +213,8 @@ export default function HomePage() {
               getKey={item => item.news_id}
               renderItem={item => (
                 <Link to={`/informasi/${item.news_id}`} className="block">
-                  <div className="rounded-3xl overflow-hidden ambient-shadow bg-surface active:scale-[0.99] transition-transform">
-                    <div className="relative h-36">
+                  <div className="home-news-card rounded-3xl overflow-hidden ambient-shadow bg-surface active:scale-[0.99] transition-transform">
+                    <div className="home-news-media relative h-36">
                       {item.thumbnail_url
                         ? <img src={item.thumbnail_url} alt={item.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         : (
@@ -187,8 +227,8 @@ export default function HomePage() {
                         {t('info.announcementTag')}
                       </span>
                     </div>
-                    <div className="p-3.5">
-                      <p className="text-sm font-semibold text-gray-900 line-clamp-1">{item.title}</p>
+                    <div className="home-news-copy p-3.5">
+                      <p className="text-sm font-semibold text-gray-900 line-clamp-2">{item.title}</p>
                       {item.content && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{item.content}</p>}
                     </div>
                   </div>
@@ -210,34 +250,34 @@ export default function HomePage() {
             </div>
           </section>
         )}
+        </div>
 
-        {/* Quick actions */}
-        {!loading && (
-        <section className="mb-6">
-          <SectionHeader title={t('home.quickMenu')} />
-          <div className="grid grid-cols-3 gap-3 stagger-children">
-            {quickLinks.map(({ to, icon: Icon, label, color }) => (
-              <Link
-                key={to}
-                to={to}
-                className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-surface border border-gray-200 hover:bg-control active:bg-control-hover transition-colors"
-              >
-                <div className={`w-11 h-11 rounded-full ${color} flex items-center justify-center`}>
-                  <Icon size={20} strokeWidth={1.5} />
-                </div>
-                <span className="text-xs text-gray-600 font-medium text-center">{label}</span>
-              </Link>
-            ))}
           </div>
-        </section>
-        )}
+
+          <div ref={dashboardAsideRef} className="home-dashboard-aside">
+            {/* Pada HP kartu poin tetap dekat atas; desktop menaruhnya di kolom samping. */}
+            <div className="home-order-points"><PointsProgressCard /></div>
+            <div className="home-order-nudge"><SopNudgeCard /></div>
+            <div className="home-order-sp">
+              {profile?.sp_level && profile.sp_level !== 'Aman' && (
+                <div
+                  className={`rounded-2xl px-4 py-3 mb-5 text-sm font-medium animate-fade-in-up ${spColor(profile.sp_level)}`}
+                  style={{ animationDelay: '60ms' }}
+                >
+                  {t('home.spStatus', { level: profile.sp_level })}
+                </div>
+              )}
+            </div>
 
         {/* Anggota non-Volunteer yang ditugaskan juga perlu melihat jadwalnya. */}
-        <MyMinistryScheduleCard showEmptyState={isVolunteer && !isAdmin} />
+            <div className="home-order-schedule"><MyMinistryScheduleCard showEmptyState={isVolunteer} /></div>
 
 
         {/* Ringkasan kehadiran bulan ini */}
-        <AttendanceSummaryCard />
+            <div className="home-order-attendance"><AttendanceSummaryCard /></div>
+          </div>
+          {quickMenu}
+        </div>
       </div>
     </div>
   )

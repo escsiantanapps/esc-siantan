@@ -83,7 +83,7 @@ export default function TasksPage() {
     <div>
       <GradientHeader title={t('tasks.title')} subtitle={t('tasks.subtitle', { count: templates.length })} />
 
-      <div className="px-4 py-4 space-y-3">
+      <div className="tasks-desktop-grid px-4 py-4 space-y-3">
         {/* Pintasan ajukan izin/sakit — khusus Volunteer */}
         {isVolunteer && (
           <button
@@ -116,7 +116,9 @@ export default function TasksPage() {
             <div key={folder.key}>
               <button
                 onClick={() => toggleFolder(folder.key)}
-                className={`w-full glass-card rounded-2xl p-4 text-left transition-all active:scale-[0.99] ${open ? `border-2 ${theme.border}` : 'border border-transparent'}`}
+                className={`tasks-folder-toggle w-full glass-card rounded-2xl p-4 text-left transition-all active:scale-[0.99] ${open ? `border-2 ${theme.border}` : 'border border-transparent'}`}
+                aria-expanded={open}
+                aria-controls={`tasks-folder-${i}`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform ${theme.chip} ${open ? 'scale-105' : ''}`}>
@@ -142,9 +144,9 @@ export default function TasksPage() {
                 </div>
               </button>
 
-              <div className={`grid transition-all duration-300 ease-in-out ${open ? 'grid-rows-[1fr] opacity-100 mt-2.5' : 'grid-rows-[0fr] opacity-0'}`}>
+              <div id={`tasks-folder-${i}`} className={`grid transition-all duration-300 ease-in-out ${open ? 'grid-rows-[1fr] opacity-100 mt-2.5' : 'grid-rows-[0fr] opacity-0'}`}>
                 <div className="overflow-hidden">
-                  <div className={`pl-3.5 ml-5 space-y-2.5 border-l-2 ${theme.border}`}>
+                  <div className={`tasks-folder-items pl-3.5 ml-5 space-y-2.5 border-l-2 ${theme.border}`}>
                     {folder.items.map(tpl => (
                       <TaskCard key={tpl.form_id} tpl={tpl} progress={progress} t={t}
                         onClick={() => navigate(`/tugas/${tpl.form_id}`)} />

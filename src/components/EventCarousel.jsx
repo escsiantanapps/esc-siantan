@@ -2,9 +2,10 @@ import { Link } from 'react-router-dom'
 import { Calendar, MapPin } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import Carousel from '@/components/Carousel'
+import { StatusBadge } from '@/components/ui'
 
 // Carousel event di beranda (kartu hero bergambar). Memakai Carousel reusable.
-export default function EventCarousel({ events = [], interval = 4500 }) {
+export default function EventCarousel({ events = [], interval = 4500, variant = 'overlay' }) {
   if (events.length === 0) return null
 
   return (
@@ -15,6 +16,23 @@ export default function EventCarousel({ events = [], interval = 4500 }) {
         getKey={ev => ev.event_id}
         renderItem={ev => (
           <Link to={`/events/${ev.event_id}`} className="block">
+            {variant === 'preview' ? (
+              <div className="information-teaser-card glass-card rounded-3xl overflow-hidden active:scale-[0.99] transition-transform">
+                <div className="information-teaser-media relative h-36">
+                  {ev.thumbnail_url
+                    ? <img src={ev.thumbnail_url} alt={ev.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full gradient-main flex items-center justify-center"><Calendar size={32} className="text-white/85" strokeWidth={1.5} /></div>}
+                  <div className="absolute top-3 right-3"><StatusBadge status={ev.status} /></div>
+                </div>
+                <div className="information-teaser-copy p-3.5">
+                  <p className="information-teaser-title text-sm font-semibold text-gray-900 line-clamp-2">{ev.name}</p>
+                  <div className="mt-1.5 space-y-0.5">
+                    <p className="information-teaser-meta text-xs text-gray-500 flex items-center gap-1"><Calendar size={11} /> {formatDate(ev.event_date)}{ev.event_time ? ` · ${ev.event_time.slice(0, 5)}` : ''}</p>
+                    {ev.location && <p className="information-teaser-meta text-xs text-gray-500 flex items-center gap-1"><MapPin size={11} /> {ev.location}</p>}
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className="relative rounded-3xl overflow-hidden ambient-shadow active:scale-[0.99] transition-transform">
               {ev.thumbnail_url
                 ? <img src={ev.thumbnail_url} alt={ev.name} loading="lazy" decoding="async" className="w-full h-44 object-cover" />
@@ -35,6 +53,7 @@ export default function EventCarousel({ events = [], interval = 4500 }) {
                 )}
               </div>
             </div>
+            )}
           </Link>
         )}
       />

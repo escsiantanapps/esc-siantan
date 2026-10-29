@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, Newspaper, ClipboardList, BookOpen, ScanLine } from 'lucide-react'
+import { Outlet, Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Home, Newspaper, ClipboardList, BookOpen, CalendarClock, ScanLine } from 'lucide-react'
 import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAuth'
@@ -19,6 +19,7 @@ const RIGHT_ITEMS = [
   { to: '/tugas',     icon: ClipboardList, labelKey: 'nav.tasks' },
   { to: '/alkitab',   icon: BookOpen,      labelKey: 'nav.bible' },
 ]
+const WIDE_PAGES = new Set(['/', '/informasi', '/events', '/kelas', '/tugas', '/poin', '/status-pendaftaran', '/jadwal-pelayanan'])
 
 function NavItem({ to, icon: Icon, labelKey, exact }) {
   const location = useLocation()
@@ -44,7 +45,7 @@ export default function UserLayout() {
   const navigate = useNavigate()
   const { toast } = useToast()
   const { t } = useLang()
-  const { profile } = useAuth()
+  const { profile, isVolunteer } = useAuth()
   const [roadmapChecking, setRoadmapChecking] = useState(true)
   const roadmapCheckStarted = useRef(false)
   const roadmapCheckMounted = useRef(false)
@@ -86,22 +87,59 @@ export default function UserLayout() {
   // admin. Kembali ke app jemaat lewat tombol back di header panel.
   const inPanel = location.pathname.startsWith('/pks')
   const inExplanation = location.pathname === '/alkitab/penjelasan'
+  const inScanner = location.pathname === '/scan' || location.pathname === '/kelas/absen'
   const hideBottomNav = inPanel || inExplanation
+  const inHome = location.pathname === '/'
+  const desktopShell = !inPanel && !inExplanation && !inScanner
+  const desktopPageWidth = location.pathname.startsWith('/alkitab')
+      ? 'reading'
+      : WIDE_PAGES.has(location.pathname) ? 'wide' : 'compact'
 
   if (roadmapChecking) {
     return <SheepLoader fullScreen size="xl" />
   }
 
   return (
-    <div className={`app-glass-shell min-h-screen flex flex-col max-w-md mx-auto relative ${inExplanation ? 'h-dvh overflow-hidden' : ''}`}>
+    <div className={`app-glass-shell min-h-screen flex flex-col max-w-md mx-auto relative ${desktopShell ? 'app-glass-shell--desktop' : ''} ${inHome ? 'app-glass-shell--home' : ''} ${inExplanation ? 'app-glass-shell--reader h-dvh overflow-hidden' : ''} ${inScanner ? 'app-glass-shell--scanner' : ''}`}>
+      {desktopShell && (
+        <aside className="user-desktop-sidebar glass-card" aria-label={t('nav.home')}>
+          <Link to="/" className="user-desktop-brand">
+            <img src="/icons/esc-mark.svg" width="40" height="40" alt="" />
+            <span>{t('auth.brandName')}</span>
+          </Link>
+          <nav className="user-desktop-links" aria-label={t('nav.home')}>
+            {[...LEFT_ITEMS, ...RIGHT_ITEMS].map(({ to, icon: Icon, labelKey, exact }) => {
+              const active = exact ? location.pathname === to : location.pathname.startsWith(to)
+              return (
+                <NavLink key={to} to={to} replace className={`user-desktop-link ${active ? 'is-active' : ''}`}>
+                  <Icon size={20} strokeWidth={active ? 2.2 : 1.7} aria-hidden="true" />
+                  <span>{t(labelKey)}</span>
+                </NavLink>
+              )
+            })}
+            {isVolunteer && (
+              <NavLink to="/jadwal-pelayanan" replace className={`user-desktop-link ${location.pathname === '/jadwal-pelayanan' ? 'is-active' : ''}`}>
+                <CalendarClock size={20} aria-hidden="true" />
+                <span>{t('sched.title')}</span>
+              </NavLink>
+            )}
+          </nav>
+          <NavLink to="/scan" replace className="user-desktop-scan">
+            <ScanLine size={21} aria-hidden="true" />
+            <span>{t('nav.scan')}</span>
+          </NavLink>
+        </aside>
+      )}
       {/* Main content */}
       <main className={`min-h-0 flex-1 overflow-y-auto ${hideBottomNav ? 'pb-6' : 'pb-[calc(7.5rem+env(safe-area-inset-bottom))]'}`}>
-        <Outlet />
+        {inHome || !desktopShell
+          ? <Outlet />
+          : <div className={`user-desktop-page user-desktop-page--${desktopPageWidth}`}><Outlet /></div>}
       </main>
 
       {/* Bottom navigation — bar mengambang dengan tombol Scan menonjol (FAB) */}
       {!hideBottomNav && (
-      <nav className="user-bottom-nav fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[26rem] rounded-[1.75rem] border z-50">
+      <nav className={`user-bottom-nav fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[26rem] rounded-[1.75rem] border z-50 ${desktopShell ? 'user-bottom-nav--desktop' : ''}`}>
         <div className="flex items-end px-2">
           {LEFT_ITEMS.map(item => <NavItem key={item.to} {...item} />)}
 

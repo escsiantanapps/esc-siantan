@@ -97,7 +97,7 @@ export default function EventsPage() {
         )}
 
         {/* Daftar event lain — kartu dengan tile tanggal */}
-        <div className="space-y-2.5 stagger-children">
+        <div className="events-desktop-grid space-y-2.5 stagger-children">
           {rest.map(ev => (
             <Link key={ev.event_id} to={`/events/${ev.event_id}`} className="block">
               <Card glass lift className="p-3 flex items-stretch gap-3">

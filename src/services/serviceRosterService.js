@@ -40,6 +40,28 @@ export const serviceRosterService = {
     return sortRoster(data)
   },
 
+  async getPublishedServiceContext(rosterId) {
+    const link = await supabase.from('service_schedule_parts')
+      .select('occurrence_id').eq('roster_id', rosterId).maybeSingle()
+    if (link.error) throw link.error
+    if (!link.data?.occurrence_id) return { ceremonial: null, rosters: [] }
+
+    const occurrenceId = link.data.occurrence_id
+    const [occurrence, parts] = await Promise.all([
+      supabase.from('service_schedule_occurrences').select('pic').eq('occurrence_id', occurrenceId).single(),
+      supabase.from('service_schedule_parts').select('roster_id').eq('occurrence_id', occurrenceId),
+    ])
+    if (occurrence.error) throw occurrence.error
+    if (parts.error) throw parts.error
+    const rosterIds = (parts.data || []).map(part => part.roster_id)
+    if (!rosterIds.length) return { ceremonial: occurrence.data?.pic || null, rosters: [] }
+    const { data, error } = await supabase.from('service_rosters').select(rosterSelect)
+      .in('roster_id', rosterIds).in('status', ['Terbit', 'Dibatalkan'])
+      .order('ministry_id')
+    if (error) throw error
+    return { ceremonial: occurrence.data?.pic || null, rosters: (data || []).map(sortRoster) }
+  },
+
   async listManagedMinistries(profile) {
     if (profile?.status !== 'Aktif') return []
     if (['Admin', 'Super Admin'].includes(profile?.role)) {

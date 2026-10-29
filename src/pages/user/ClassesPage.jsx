@@ -36,23 +36,25 @@ export default function ClassesPage() {
   const filtered = useMemo(() => (Array.isArray(classes) ? classes : []).filter(c => c.status === tab), [classes, tab])
 
   return (
-    <div className="pb-4">
+    <div className="classes-page pb-4">
       <GradientHeader title={t('classes.title')} subtitle={t('classes.subtitle')}>
-        <Link to="/kelas/absen" className="mt-3 inline-flex items-center gap-2 bg-white/20 text-white text-sm font-medium px-4 py-2 rounded-xl hover:bg-white/30 transition-colors">
+        <Link to="/kelas/absen" className="classes-header-scan mt-3 inline-flex items-center gap-2 bg-white/20 text-white text-sm font-medium px-4 py-2 rounded-xl hover:bg-white/30 transition-colors">
           <QrCode size={16} /> {t('classes.scanAttendance')}
         </Link>
       </GradientHeader>
 
-      <div className="px-4 -mt-2 pt-4">
+      <div className="classes-content px-4 -mt-2 pt-4">
+        <div className={`classes-layout ${!loading && events.length > 0 ? 'has-events' : ''}`}>
         {!loading && events.length > 0 && (
-          <section className="mb-5">
+          <section className="classes-events mb-5">
             <SectionHeader title={t('home.event')} to="/events" />
             <EventCarousel events={events.slice(0, 6)} />
           </section>
         )}
 
+        <div className="classes-main">
         {/* Tabs status */}
-        <div className="flex gap-2 mb-4">
+        <div className="classes-tabs flex gap-2 mb-4">
           {TABS.map(({ value, key }) => (
             <button
               key={value}
@@ -87,7 +89,7 @@ export default function ClassesPage() {
         )}
 
         {/* Kartu kelas dengan cover ala Stitch */}
-        <div className="space-y-3.5 stagger-children">
+        <div className="classes-desktop-grid space-y-3.5 stagger-children">
           {filtered.map(cls => (
             <Link key={cls.class_id} to={`/kelas/${cls.class_id}`} className="block">
               <Card glass lift className="overflow-hidden">
@@ -102,20 +104,22 @@ export default function ClassesPage() {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
                   <div className="absolute top-2.5 right-2.5"><StatusBadge status={cls.status} /></div>
                 </div>
-                <div className="p-3.5">
-                  <p className="text-sm font-semibold text-gray-900">{cls.name}</p>
+                <div className="classes-card-copy p-3.5">
+                  <p className="classes-card-title text-sm font-semibold text-gray-900">{cls.name}</p>
                   <div className="mt-1.5 space-y-0.5">
                     {cls.schedule && (
-                      <p className="text-xs text-gray-400 flex items-center gap-1"><Clock size={11} /> {cls.schedule}</p>
+                      <p className="classes-card-meta text-xs text-gray-400 flex items-center gap-1"><Clock size={11} /> {cls.schedule}</p>
                     )}
                     {cls.location && (
-                      <p className="text-xs text-gray-400 flex items-center gap-1"><MapPin size={11} /> {cls.location}</p>
+                      <p className="classes-card-meta text-xs text-gray-400 flex items-center gap-1"><MapPin size={11} /> {cls.location}</p>
                     )}
                   </div>
                 </div>
               </Card>
             </Link>
           ))}
+        </div>
+        </div>
         </div>
       </div>
     </div>

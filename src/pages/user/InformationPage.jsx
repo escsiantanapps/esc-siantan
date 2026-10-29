@@ -30,7 +30,7 @@ export default function InformationPage() {
     <div className="pb-4">
       <GradientHeader title={t('info.title')} subtitle={t('info.subtitle')} />
 
-      <div className="px-4 -mt-2 pt-4 space-y-7">
+      <div className="information-content px-4 -mt-2 pt-4 space-y-7">
         {loading && (
           <div className="animate-fade-in space-y-7">
             {Array.from({ length: 2 }).map((_, i) => (
@@ -49,7 +49,7 @@ export default function InformationPage() {
         )}
 
         {!loading && (
-          <>
+          <div className="information-sections">
             {/* Section: Pengumuman */}
             <section className="animate-fade-in-up">
               <SectionHeader title={t('info.announcements')} />
@@ -61,8 +61,8 @@ export default function InformationPage() {
                   getKey={n => n.news_id}
                   renderItem={item => (
                     <Link to={`/informasi/${item.news_id}`} className="block">
-                      <div className="rounded-3xl overflow-hidden ambient-shadow bg-surface active:scale-[0.99] transition-transform">
-                        <div className="relative h-36">
+                      <div className="information-news-card rounded-3xl overflow-hidden ambient-shadow bg-surface active:scale-[0.99] transition-transform">
+                        <div className="information-news-media relative h-36">
                           {item.thumbnail_url
                             ? <img src={item.thumbnail_url} alt={item.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                             : (
@@ -75,7 +75,7 @@ export default function InformationPage() {
                             {t('info.announcementTag')}
                           </span>
                         </div>
-                        <div className="p-3.5">
+                        <div className="information-news-copy p-3.5">
                           <p className="text-sm font-semibold text-gray-900 line-clamp-1">{item.title}</p>
                           {item.content && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{truncate(item.content, 100)}</p>}
                           <p className="text-xs text-gray-400 mt-1">{formatDate(item.created_at)}</p>
@@ -93,7 +93,7 @@ export default function InformationPage() {
               {events.length === 0 ? (
                 <EmptyState icon={Bell} title={t('events.empty')} description={t('events.emptyDesc')} />
               ) : (
-                <EventCarousel events={events.slice(0, 8)} />
+                <EventCarousel events={events.slice(0, 8)} variant="preview" />
               )}
             </section>
 
@@ -108,8 +108,8 @@ export default function InformationPage() {
                   getKey={c => c.class_id}
                   renderItem={cls => (
                     <Link to={`/kelas/${cls.class_id}`} className="block">
-                      <div className="rounded-3xl overflow-hidden ambient-shadow bg-surface active:scale-[0.99] transition-transform">
-                        <div className="relative h-36">
+                      <div className="information-teaser-card glass-card rounded-3xl overflow-hidden active:scale-[0.99] transition-transform">
+                        <div className="information-teaser-media relative h-36">
                           {cls.thumbnail_url
                             ? <img src={cls.thumbnail_url} alt={cls.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                             : (
@@ -120,14 +120,14 @@ export default function InformationPage() {
                           <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                           <div className="absolute top-3 right-3"><StatusBadge status={cls.status} /></div>
                         </div>
-                        <div className="p-3.5">
-                          <p className="text-sm font-semibold text-gray-900 line-clamp-1">{cls.name}</p>
+                        <div className="information-teaser-copy p-3.5">
+                          <p className="information-teaser-title text-sm font-semibold text-gray-900 line-clamp-2">{cls.name}</p>
                           <div className="mt-1.5 space-y-0.5">
                             {cls.schedule && (
-                              <p className="text-xs text-gray-400 flex items-center gap-1"><Clock size={11} /> {cls.schedule}</p>
+                              <p className="information-teaser-meta text-xs text-gray-500 flex items-center gap-1"><Clock size={11} /> {cls.schedule}</p>
                             )}
                             {cls.location && (
-                              <p className="text-xs text-gray-400 flex items-center gap-1"><MapPin size={11} /> {cls.location}</p>
+                              <p className="information-teaser-meta text-xs text-gray-500 flex items-center gap-1"><MapPin size={11} /> {cls.location}</p>
                             )}
                           </div>
                         </div>
@@ -137,7 +137,7 @@ export default function InformationPage() {
                 />
               )}
             </section>
-          </>
+          </div>
         )}
       </div>
     </div>

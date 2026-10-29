@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BellRing, CalendarClock, ChevronLeft, MapPin, Plus, Printer, Search, Trash2, UserRound, X } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -143,13 +143,15 @@ function Picker({ roster, slot, canManageAll, onClose, onPick, t }) {
 }
 
 export default function ServiceSchedulesPage({ adminMode = false, initialTab = 'manage', legacyOnly = false, archiveOnly = false }) {
-  const { profile } = useAuth()
+  const { profile, isVolunteer } = useAuth()
   const { t } = useLang()
   const { toast, confirm } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedRosterId = searchParams.get('rosterId')
-  const [tab, setTab] = useState(adminMode ? initialTab : 'mine')
+  const [tab, setTab] = useState(adminMode ? initialTab : isVolunteer ? 'all' : 'mine')
   const [month, setMonth] = useState(nowMonth())
+  const [serviceDate, setServiceDate] = useState('')
+  const pageRef = useRef(null)
   const [managed, setManaged] = useState([])
   const [ministryId, setMinistryId] = useState('')
   const [rosters, setRosters] = useState([])
@@ -172,6 +174,15 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
   const [accessLoading, setAccessLoading] = useState(adminMode)
 
   const isAdmin = ['Admin', 'Super Admin'].includes(profile?.role)
+
+  // Layout desktop menggulir <main>, sedangkan HP menggulir window.
+  // Posisi halaman lama tidak boleh terbawa saat tab Semua Jadwal dibuka.
+  useLayoutEffect(() => {
+    if (adminMode) return
+    const scroller = pageRef.current?.closest('main')
+    if (scroller) scroller.scrollTop = 0
+    window.scrollTo(0, 0)
+  }, [adminMode, tab, selected?.roster_id])
 
   useEffect(() => {
     if (!requestedRosterId) {
@@ -257,6 +268,19 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
   }, [archiveOnly, legacyOnly, ministryId, month, profile?.user_id, t, tab, toast])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (adminMode || !selected?.roster_id || selected.status === 'Draft') return undefined
+    let active = true
+    const rosterId = selected.roster_id
+    serviceRosterService.getPublishedServiceContext(rosterId)
+      .then(context => {
+        if (active) setSelected(current => current?.roster_id === rosterId
+          ? { ...current, serviceContext: context } : current)
+      })
+      .catch(() => { if (active) toast.error(t('sched.loadFailed')) })
+    return () => { active = false }
+  }, [adminMode, selected?.roster_id, selected?.status, t, toast])
 
   const loadSettings = useCallback(async () => {
     if (!ministryId) return
@@ -441,13 +465,21 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
 
   const slotGroups = useMemo(() => {
     const groups = new Map()
-    for (const slot of selected?.service_roster_slots || []) {
-      const key = slot.position_id
-      if (!groups.has(key)) groups.set(key, { name: slot.ministry_service_positions?.name || '-', slots: [] })
+    const teamRosters = !adminMode && selected?.serviceContext?.rosters?.length
+      ? selected.serviceContext.rosters : selected ? [selected] : []
+    for (const roster of teamRosters) for (const slot of roster.service_roster_slots || []) {
+      const key = `${roster.ministry_id}:${slot.position_id}`
+      if (!groups.has(key)) groups.set(key, { key, name: slot.ministry_service_positions?.name || '-',
+        ministryName: roster.ministries?.name || '-', slots: [] })
       groups.get(key).slots.push(slot)
     }
     return [...groups.values()]
-  }, [selected])
+  }, [adminMode, selected])
+
+  const availableDates = useMemo(() => [...new Set(rosters.map(roster => roster.service_date))].sort(), [rosters])
+  const selectedServiceDate = availableDates.includes(serviceDate) ? serviceDate : ''
+  const visibleRosters = tab === 'all' && selectedServiceDate
+    ? rosters.filter(roster => roster.service_date === selectedServiceDate) : rosters
 
   if (archiveOnly && !requestedRosterId) return null
   if (adminMode && accessLoading) return <div className="py-20 text-center"><Spinner /></div>
@@ -458,19 +490,20 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
     const count = completion(selected)
     const editable = !archiveOnly && tab === 'manage' && selected.status === 'Draft'
     return (
-      <div className={adminMode ? 'mx-auto max-w-5xl' : 'mx-auto max-w-3xl px-4 pt-4 pb-8'}>
+      <div ref={pageRef} className={adminMode ? 'mx-auto max-w-5xl' : 'mx-auto max-w-3xl px-4 pt-4 pb-8'}>
         <button type="button" onClick={closeDetail} className="mb-3 flex min-h-11 items-center gap-2 text-sm font-medium text-gray-600"><ChevronLeft size={18} />{t('sched.back')}</button>
         <PageHeader title={selected.title} subtitle={`${formatDate(selected.service_date)} · ${timeText(selected)}`} action={adminMode ? <Button variant="outline" size="sm" className="min-h-11" onClick={() => exportRoster(selected)}><Printer size={16} />{t('sched.pdf')}</Button> : undefined} />
         <Card className="mb-4 p-4">
           <div className="flex flex-wrap gap-2"><Badge color={badgeColor(selected.status)}>{t(`sched.status.${selected.status}`)}</Badge><Badge color={count.filled === count.total ? 'green' : 'amber'}>{t('sched.slotsFilled', count)}</Badge></div>
           <p className="mt-3 flex items-center gap-2 text-sm text-gray-600"><MapPin size={16} />{selected.location || '-'}</p>
           <p className="mt-2 text-sm text-gray-600">{t('sched.dressCode')}: {selected.dress_code || '-'}</p>
+          {!adminMode && selected.serviceContext?.ceremonial && <p className="mt-2 text-sm text-gray-600">{t('schedMonth.pic')}: {selected.serviceContext.ceremonial}</p>}
           {selected.notes && <p className="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-600">{selected.notes}</p>}
         </Card>
         <div className="space-y-4">
           {slotGroups.length === 0 && <Card className="p-5 text-center"><p className="text-sm font-semibold text-gray-800">{t('sched.noPositionsTitle')}</p><p className="mt-1 text-xs text-gray-500">{t('sched.noPositionsDesc')}</p></Card>}
-          {slotGroups.map(group => <Card key={group.name} className="p-4">
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">{group.name}</h2>
+          {slotGroups.map(group => <Card key={group.key} className="p-4">
+            <h2 className="mb-3 text-sm font-semibold text-gray-900">{group.name}{!adminMode && <small className="ml-2 text-xs font-normal text-gray-500">· {group.ministryName}</small>}</h2>
             <div className="space-y-2">{group.slots.map(slot => <div key={slot.slot_id} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 px-3 py-2">
               <Avatar name={slot.users?.name || '?'} src={slot.users?.photo_url} size="sm" />
               <span className="min-w-0 flex-1"><span className={`block truncate text-sm ${slot.users ? 'font-medium text-gray-800' : 'text-gray-400'}`}>{slot.users?.name || t('sched.emptySlot')}</span>{slot.assignment_note && <small className="block text-xs text-gray-500">{slot.assignment_note}</small>}</span>
@@ -487,18 +520,26 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
 
   const tabs = adminMode
     ? [{ id: 'manage', label: t('sched.manage') }, ...(!legacyOnly ? [{ id: 'settings', label: t('sched.accessPositions') }] : [])]
-    : [{ id: 'mine', label: t('sched.mySchedule') }, { id: 'all', label: t('sched.allSchedules') }]
+    : isVolunteer
+      ? [{ id: 'all', label: t('sched.allSchedules') }, { id: 'mine', label: t('sched.mySchedule') }]
+      : [{ id: 'mine', label: t('sched.mySchedule') }, { id: 'all', label: t('sched.allSchedules') }]
 
   return (
-    <div className={adminMode ? 'mx-auto max-w-6xl' : 'mx-auto max-w-3xl px-4 pt-4 pb-8'}>
+    <div ref={pageRef} className={adminMode ? 'mx-auto max-w-6xl' : 'mx-auto max-w-3xl px-4 pt-4 pb-8'}>
       <PageHeader title={t('sched.title')} subtitle={t(adminMode ? 'sched.adminSubtitle' : 'sched.subtitle')} />
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-control p-1">{tabs.map(item => <button key={item.id} type="button" onClick={() => setTab(item.id)} className={`min-h-11 whitespace-nowrap rounded-lg px-4 text-sm font-medium ${tab === item.id ? 'bg-surface text-brand-700' : 'text-gray-600'}`}>{item.label}</button>)}</div>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-        {['manage', 'settings'].includes(tab) ? <Select label={t('sched.ministry')} value={ministryId} onChange={e => { setMinistryId(e.target.value); setForm(emptyForm(e.target.value)) }}>{managed.map(row => <option key={row.ministry_id} value={row.ministry_id}>{row.name}</option>)}</Select> : <Input label={t('sched.month')} type="month" value={month} onChange={e => setMonth(e.target.value)} />}
+        {['manage', 'settings'].includes(tab) ? <Select label={t('sched.ministry')} value={ministryId} onChange={e => { setMinistryId(e.target.value); setForm(emptyForm(e.target.value)) }}>{managed.map(row => <option key={row.ministry_id} value={row.ministry_id}>{row.name}</option>)}</Select> : <Input label={t('sched.month')} type="month" value={month} onChange={e => { setMonth(e.target.value); setServiceDate('') }} />}
         {tab === 'manage' && <div className="flex items-end gap-2"><Button variant="outline" disabled={!rosters.length} onClick={exportMonth}><Printer size={16} />{t('sched.pdf')}</Button><Button onClick={() => setCreateOpen(true)}><Plus size={17} />{t('sched.newSchedule')}</Button></div>}
       </div>
       {tab === 'manage' && <Input label={t('sched.month')} type="month" value={month} onChange={e => setMonth(e.target.value)} />}
+      {tab === 'all' && !loading && availableDates.length > 0 && <div className="mb-4">
+        <Select label={t('sched.serviceDateFilter')} value={selectedServiceDate} onChange={event => setServiceDate(event.target.value)}>
+          <option value="">{t('sched.allServiceDates')}</option>
+          {availableDates.map(date => <option key={date} value={date}>{formatDate(date)}</option>)}
+        </Select>
+      </div>}
 
       {tab === 'settings' ? <div className={`grid gap-5 ${isAdmin ? 'lg:grid-cols-2' : 'mx-auto max-w-2xl'}`}>
         {isAdmin && <Card className="p-4">
@@ -512,7 +553,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
           <form onSubmit={savePosition} className="mb-4 grid gap-2 sm:grid-cols-[1fr_5rem_5rem_auto]"><Input required value={positionForm.name} onChange={e => setPositionForm(f => ({ ...f, name: e.target.value }))} placeholder={t('sched.positionName')} /><Input required min="1" type="number" value={positionForm.default_slots} onChange={e => setPositionForm(f => ({ ...f, default_slots: e.target.value }))} aria-label={t('sched.defaultSlots')} /><Input type="number" value={positionForm.sort_order} onChange={e => setPositionForm(f => ({ ...f, sort_order: e.target.value }))} aria-label={t('sched.order')} /><Button type="submit"><Plus size={16} />{t('sched.add')}</Button></form>
           {positions.map(position => <div key={position.position_id} className="flex min-h-12 items-center gap-3 rounded-xl border border-gray-200 px-3"><span className={`min-w-0 flex-1 truncate text-sm ${position.is_active ? '' : 'text-gray-400 line-through'}`}>{position.name}</span><Badge>{t('sched.slotCount', { count: position.default_slots })}</Badge>{position.is_active && <button type="button" onClick={async () => { await serviceRosterService.removePosition(position.position_id); loadSettings() }} aria-label={t('sched.deactivate')} className="flex min-h-11 min-w-11 items-center justify-center text-red-500"><Trash2 size={16} /></button>}</div>)}
         </Card>
-      </div> : loading ? <div className="py-20 text-center"><Spinner /></div> : rosters.length === 0 ? <EmptyState icon={CalendarClock} title={t('sched.emptyTitle')} description={t(tab === 'manage' ? 'sched.emptyManage' : tab === 'mine' ? 'sched.emptyMine' : 'sched.emptyDesc')} action={tab === 'mine' ? <Button variant="outline" onClick={() => setMonth(followingMonth(month))}>{t('sched.nextMonth')}</Button> : undefined} /> : <div className="grid gap-3 sm:grid-cols-2">{rosters.map(roster => <ScheduleCard key={roster.roster_id} roster={roster} mine={tab === 'mine' ? profile.user_id : null} onClick={() => setSelected(roster)} t={t} />)}</div>}
+      </div> : loading ? <div className="py-20 text-center"><Spinner /></div> : visibleRosters.length === 0 ? <EmptyState icon={CalendarClock} title={t('sched.emptyTitle')} description={t(tab === 'manage' ? 'sched.emptyManage' : tab === 'mine' ? 'sched.emptyMine' : 'sched.emptyDesc')} action={tab === 'mine' ? <Button variant="outline" onClick={() => setMonth(followingMonth(month))}>{t('sched.nextMonth')}</Button> : undefined} /> : <div className="grid gap-3 sm:grid-cols-2">{visibleRosters.map(roster => <ScheduleCard key={roster.roster_id} roster={roster} mine={tab === 'mine' ? profile.user_id : null} onClick={() => setSelected(roster)} t={t} />)}</div>}
 
       {createOpen && <div className="fixed inset-0 z-[70] overflow-y-auto bg-black/40 px-4 py-8"><form onSubmit={createRoster} className="mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-surface p-5">
         <div className="mb-4 flex items-start gap-3"><div className="flex-1"><h2 className="font-semibold">{t('sched.newSchedule')}</h2><p className="text-xs text-gray-500">{t('sched.draftHint')}</p></div><button type="button" onClick={() => setCreateOpen(false)} aria-label={t('sched.close')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl hover:bg-control"><X size={18} /></button></div>
