@@ -277,6 +277,19 @@ export async function fixture(harness, options = {}) {
       }
       if (table === 'service_roster_slots') {
         if (state.rosterFailure) return reply({ message: 'Simulasi gagal memuat roster' }, 503)
+        if (url.searchParams.get('select')?.includes('service_rosters!inner')) {
+          const userId = url.searchParams.get('user_id')?.replace(/^eq\./, '')
+          const rowsForUser = (state.rosterSlots || []).flatMap(row => row.slot_id ? [row]
+            : (row.service_rosters?.service_roster_slots || []).map(slot => ({
+              ...slot, roster_id: row.roster_id, service_rosters: row.service_rosters,
+            })))
+            .filter(row => !userId || row.user_id === userId)
+            .filter(row => ['Terbit', 'Dibatalkan'].includes(row.service_rosters?.status))
+            .filter(row => url.searchParams.getAll('service_rosters.service_date').every(condition =>
+              condition.startsWith('gte.') ? row.service_rosters.service_date >= condition.slice(4)
+                : condition.startsWith('lt.') ? row.service_rosters.service_date < condition.slice(3) : true))
+          return rows(rowsForUser)
+        }
         return rows(state.rosterSlots || [])
       }
       if (table === 'service_rosters') {

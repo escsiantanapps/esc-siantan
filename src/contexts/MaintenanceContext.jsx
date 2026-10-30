@@ -3,7 +3,8 @@ import { maintenanceService } from '@/services/maintenanceService'
 
 export const MaintenanceContext = createContext(null)
 
-const POLL_INTERVAL_MS = 15000
+// Fokus tab tetap memicu pemeriksaan langsung; interval ini hanya untuk tab aktif.
+const POLL_INTERVAL_MS = 60_000
 
 export function MaintenanceProvider({ children }) {
   const [enabled, setEnabled] = useState(null)

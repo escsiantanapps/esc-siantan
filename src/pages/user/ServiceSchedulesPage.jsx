@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { BellRing, CalendarClock, ChevronLeft, MapPin, Plus, Printer, Search, Trash2, UserRound, X } from 'lucide-react'
+import { BellRing, CalendarClock, ChevronLeft, ChevronRight, MapPin, Plus, Printer, Search, Trash2, UserRound, X } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
@@ -66,9 +66,11 @@ function ScheduleCard({ roster, mine, onClick, t, adminMode }) {
               <Badge color={displayBadgeColor(status)}>{t(`sched.status.${status}`)}</Badge>
             </div>
             <p className="mt-1 text-xs text-gray-500">{timeText(roster)}{roster.location ? ` · ${roster.location}` : ''}</p>
-            <p className="mt-1 text-xs text-gray-500">
-              {roles.length ? roles.join(', ') : t('sched.slotsFilled', count)} · {roster.ministries?.name || '-'}
-            </p>
+            {mine ? <div className="mt-3 border-t border-gray-200 pt-3">
+              <p className="text-xs font-semibold text-brand-700">{t('sched.yourAssignment')}</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{roles.length ? roles.join(', ') : '-'}</p>
+              <p className="mt-0.5 text-xs text-gray-500">{roster.ministries?.name || '-'}</p>
+            </div> : <p className="mt-1 text-xs text-gray-500">{t('sched.slotsFilled', count)} · {roster.ministries?.name || '-'}</p>}
           </div>
         </div>
       </Card>
@@ -79,11 +81,6 @@ function ScheduleCard({ roster, mine, onClick, t, adminMode }) {
 function ServiceGroupCard({ group, onClick, t }) {
   const roster = group.rosters[0]
   const status = displayStatus(roster)
-  const teams = group.rosters.map(item => ({
-    ministry: item.ministries?.name || '-',
-    members: (item.service_roster_slots || []).filter(slot => slot.users?.name),
-  })).filter(team => team.members.length)
-
   return (
     <button type="button" onClick={onClick} className="w-full min-h-11 text-left">
       <Card className="p-4 hover:bg-control">
@@ -94,13 +91,8 @@ function ServiceGroupCard({ group, onClick, t }) {
           </div>
           <Badge color={displayBadgeColor(status)}>{t(`sched.status.${status}`)}</Badge>
         </div>
-        <div className="mt-3 border-t border-gray-200 pt-3">
-          {teams.length ? <div className="grid gap-3 sm:grid-cols-2">
-            {teams.map((team, index) => <div key={`${group.key}:${index}`} className="min-w-0">
-              <p className="text-xs font-semibold text-gray-600">{team.ministry}</p>
-              <p className="mt-1 text-sm text-gray-800">{team.members.map(slot => `${slot.users.name} (${slot.ministry_service_positions?.name || '-'})`).join(', ')}</p>
-            </div>)}
-          </div> : <p className="text-sm text-gray-500">{t('sched.noAssignedTitle')}</p>}
+        <div className="mt-3 flex items-center justify-between border-t border-gray-200 pt-3 text-sm font-medium text-brand-700">
+          <span>{t('sched.viewServiceTeam')}</span><ChevronRight size={18} aria-hidden="true" />
         </div>
       </Card>
     </button>
@@ -321,14 +313,21 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
     if (adminMode || !selected?.roster_id || selected.status === 'Draft') return undefined
     let active = true
     const rosterId = selected.roster_id
-    serviceRosterService.getPublishedServiceContext(rosterId)
+    serviceRosterService.getPublishedServiceContext(rosterId, { includeMemberNames: tab !== 'mine' })
+      .then(async context => context.rosters.length ? context
+        : { rosters: [tab === 'mine' ? selected : await serviceRosterService.getById(rosterId)] })
       .then(context => {
         if (active) setSelected(current => current?.roster_id === rosterId
           ? { ...current, serviceContext: context } : current)
       })
-      .catch(() => { if (active) toast.error(t('sched.loadFailed')) })
+      .catch(() => {
+        if (!active) return
+        setSelected(current => current?.roster_id === rosterId
+          ? { ...current, serviceContext: { rosters: [current] } } : current)
+        toast.error(t('sched.loadFailed'))
+      })
     return () => { active = false }
-  }, [adminMode, selected?.roster_id, selected?.status, t, toast])
+  }, [adminMode, selected?.roster_id, selected?.status, t, tab, toast])
 
   const loadSettings = useCallback(async () => {
     if (!ministryId) return
@@ -516,15 +515,16 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
     const teamRosters = !adminMode && selected?.serviceContext?.rosters?.length
       ? selected.serviceContext.rosters : selected ? [selected] : []
     for (const roster of teamRosters) for (const slot of roster.service_roster_slots || []) {
-      // Jemaat hanya perlu melihat pelayan yang sudah ditugaskan.
-      if (!adminMode && !slot.users?.name) continue
+      if (!adminMode && tab === 'mine' && slot.user_id !== profile?.user_id) continue
+      // Nama rekan hanya ditampilkan jika tersedia; tugas pribadi cukup memakai user_id.
+      if (!adminMode && tab !== 'mine' && !slot.users?.name) continue
       const key = `${roster.ministry_id}:${slot.position_id}`
       if (!groups.has(key)) groups.set(key, { key, name: slot.ministry_service_positions?.name || '-',
         ministryName: roster.ministries?.name || '-', slots: [] })
       groups.get(key).slots.push(slot)
     }
     return [...groups.values()]
-  }, [adminMode, selected])
+  }, [adminMode, profile?.user_id, selected, tab])
 
   const availableDates = useMemo(() => [...new Set(rosters.map(roster => roster.service_date))].sort(), [rosters])
   const selectedServiceDate = availableDates.includes(serviceDate) ? serviceDate : ''
@@ -559,20 +559,22 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
         <button type="button" onClick={closeDetail} className="mb-3 flex min-h-11 items-center gap-2 text-sm font-medium text-gray-600"><ChevronLeft size={18} />{t('sched.back')}</button>
         <PageHeader title={selected.title} subtitle={`${formatDate(selected.service_date)} · ${timeText(selected)}`} action={adminMode ? <Button variant="outline" size="sm" className="min-h-11" onClick={() => exportRoster(selected)}><Printer size={16} />{t('sched.pdf')}</Button> : undefined} />
         <Card className="mb-4 p-4">
-          <div className="flex flex-wrap gap-2"><Badge color={displayBadgeColor(status)}>{t(`sched.status.${status}`)}</Badge><Badge color={count.filled === count.total ? 'green' : 'amber'}>{t('sched.slotsFilled', count)}</Badge></div>
+          <div className="flex flex-wrap gap-2"><Badge color={displayBadgeColor(status)}>{t(`sched.status.${status}`)}</Badge>{adminMode && <Badge color={count.filled === count.total ? 'green' : 'amber'}>{t('sched.slotsFilled', count)}</Badge>}</div>
           <p className="mt-3 flex items-center gap-2 text-sm text-gray-600"><MapPin size={16} />{selected.location || '-'}</p>
           <p className="mt-2 text-sm text-gray-600">{t('sched.dressCode')}: {selected.dress_code || '-'}</p>
           {selected.notes && <p className="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-600">{selected.notes}</p>}
         </Card>
         <div className="space-y-4">
-          {slotGroups.length === 0 && <Card className="p-5 text-center"><p className="text-sm font-semibold text-gray-800">{t(adminMode ? 'sched.noPositionsTitle' : 'sched.noAssignedTitle')}</p><p className="mt-1 text-xs text-gray-500">{t(adminMode ? 'sched.noPositionsDesc' : 'sched.noAssignedDesc')}</p></Card>}
+          {!adminMode && <h2 className="text-base font-semibold text-gray-900">{t(tab === 'mine' ? 'sched.yourAssignments' : 'sched.team')}</h2>}
+          {!adminMode && tab === 'all' && !selected.serviceContext && slotGroups.length === 0 && <Card className="flex justify-center p-5"><Spinner /></Card>}
+          {(adminMode || tab === 'mine' || selected.serviceContext) && slotGroups.length === 0 && <Card className="p-5 text-center"><p className="text-sm font-semibold text-gray-800">{t(adminMode ? 'sched.noPositionsTitle' : 'sched.noAssignedTitle')}</p><p className="mt-1 text-xs text-gray-500">{t(adminMode ? 'sched.noPositionsDesc' : 'sched.noAssignedDesc')}</p></Card>}
           {slotGroups.map(group => <Card key={group.key} className="p-4">
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">{group.name}{!adminMode && <small className="ml-2 text-xs font-normal text-gray-500">· {group.ministryName}</small>}</h2>
-            <div className="space-y-2">{group.slots.map(slot => <div key={slot.slot_id} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 px-3 py-2">
+            <h2 className={`${tab === 'mine' && !adminMode ? '' : 'mb-3'} text-sm font-semibold text-gray-900`}>{group.name}{!adminMode && <small className="ml-2 text-xs font-normal text-gray-500">· {group.ministryName}</small>}</h2>
+            {tab === 'mine' && !adminMode ? group.slots.map(slot => slot.assignment_note && <p key={slot.slot_id} className="mt-2 text-sm text-gray-600">{slot.assignment_note}</p>) : <div className="space-y-2">{group.slots.map(slot => <div key={slot.slot_id} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 px-3 py-2">
               <Avatar name={slot.users?.name || '?'} src={slot.users?.photo_url} size="sm" />
               <span className="min-w-0 flex-1"><span className={`block truncate text-sm ${slot.users ? 'font-medium text-gray-800' : 'text-gray-400'}`}>{slot.users?.name || t('sched.emptySlot')}</span>{slot.assignment_note && <small className="block text-xs text-gray-500">{slot.assignment_note}</small>}</span>
               {editable && <><button type="button" onClick={() => setPicker(slot)} aria-label={t('sched.chooseMember')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-brand-600 hover:bg-brand-50"><UserRound size={17} /></button>{slot.user_id && <button type="button" onClick={() => setSlot(slot, null)} aria-label={t('sched.clearSlot')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-red-500 hover:bg-red-50"><X size={17} /></button>}</>}
-            </div>)}</div>
+            </div>)}</div>}
           </Card>)}
         </div>
         {editable && <div className="sticky bottom-3 mt-5 flex gap-2 rounded-2xl border border-gray-200 bg-surface/95 p-3 backdrop-blur"><Button loading={busy} onClick={publish} className="min-h-11 flex-1">{t('sched.publish')}</Button><Button variant="danger" onClick={deleteDraft} className="min-h-11"><Trash2 size={16} />{t('common.delete')}</Button></div>}

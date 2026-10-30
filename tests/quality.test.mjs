@@ -387,6 +387,8 @@ test('Bell jadwal memilih pelayanan mendatang terdekat, bukan riwayat tertua', a
   }
   const rosterSlot = (id, title, offset, start = '08:00:00') => ({
     roster_id: id,
+    slot_id: `SLOT-${id}`,
+    user_id: 'QA-USER',
     service_rosters: {
       roster_id: id,
       title,
@@ -419,6 +421,7 @@ test('Bell jadwal memilih pelayanan mendatang terdekat, bukan riwayat tertua', a
     await f.page.getByText('Jadwal: Pelayanan Besok').waitFor()
     await f.page.getByText('Jadwal: Pelayanan Lusa').waitFor()
     assert.equal(await f.page.getByText('Jadwal: Riwayat Lama 1').count(), 0)
+    assert.equal(f.requests.some(request => request.path === '/rest/v1/rpc/get_published_roster_members_v132'), false)
   })
 })
 
@@ -440,6 +443,25 @@ function nextMonthRoster(status = 'Terbit') {
   }
 }
 
+test('Daftar Semua Jadwal hanya mengambil ringkasan sampai detail dibuka', async () => {
+  const roster = nextMonthRoster()
+  await scenario({ role: 'Volunteer', rosters: [roster] }, async f => {
+    await f.goto('/jadwal-pelayanan')
+    await f.page.getByLabel('Bulan').fill(roster.service_date.slice(0, 7))
+    const card = f.page.getByRole('button', { name: /Ibadah Bulan Berikutnya/ })
+    await card.waitFor()
+    const listQuery = f.requests.find(request => request.path === '/rest/v1/service_rosters'
+      && request.search.includes('service_schedule_parts') && request.search.includes(roster.service_date.slice(0, 7)))
+    assert.ok(listQuery)
+    assert.equal(listQuery.search.includes('service_roster_slots'), false)
+    assert.equal(f.requests.some(request => request.path === '/rest/v1/rpc/get_published_roster_members_v132'), false)
+    const memberRequest = f.page.waitForRequest(request => request.url().includes('/rpc/get_published_roster_members_v132'))
+    await card.click()
+    await memberRequest
+    await f.page.getByRole('heading', { name: /Worship Leader/ }).waitFor()
+  })
+})
+
 test('Tautan bell membuka detail jadwal Terbit lintas bulan dan kembali mempertahankan bulan', async () => {
   const roster = nextMonthRoster()
   await scenario({ role: 'Volunteer', rosters: [roster], rosterSlots: [{ roster_id: roster.roster_id, service_rosters: roster }] }, async f => {
@@ -450,7 +472,8 @@ test('Tautan bell membuka detail jadwal Terbit lintas bulan dan kembali memperta
     assert.equal(await notification.getAttribute('href'), '/jadwal-pelayanan?rosterId=' + encodeURIComponent(roster.roster_id))
     await notification.click()
     await f.page.getByRole('heading', { name: roster.title, exact: true }).waitFor()
-    assert.equal(await f.page.getByText('Worship Leader', { exact: true }).count(), 1)
+    await f.page.getByRole('heading', { name: /Worship Leader/ }).waitFor()
+    assert.equal(await f.page.getByRole('heading', { name: /Worship Leader/ }).count(), 1)
     assert.equal(await f.page.getByRole('button', { name: 'Kelola', exact: true }).count(), 0)
     assert.equal(await f.page.getByRole('button', { name: 'PDF', exact: true }).count(), 0)
     await f.page.getByRole('button', { name: 'Kembali', exact: true }).click()

@@ -10,6 +10,14 @@ function monthRange(month) {
   return [start, end]
 }
 
+function todayWib() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date())
+  const value = type => parts.find(part => part.type === type)?.value || ''
+  return `${value('year')}-${value('month')}-${value('day')}`
+}
+
 const rosterSelect = `
   *,
   ministries(name),
@@ -60,7 +68,7 @@ export const serviceRosterService = {
     return (await withPublishedMemberNames([sortRoster(data)]))[0]
   },
 
-  async getPublishedServiceContext(rosterId) {
+  async getPublishedServiceContext(rosterId, { includeMemberNames = true } = {}) {
     const link = await supabase.from('service_schedule_parts')
       .select('occurrence_id').eq('roster_id', rosterId).maybeSingle()
     if (link.error) throw link.error
@@ -76,7 +84,8 @@ export const serviceRosterService = {
       .in('roster_id', rosterIds).in('status', ['Terbit', 'Dibatalkan'])
       .order('ministry_id')
     if (error) throw error
-    return { rosters: await withPublishedMemberNames((data || []).map(sortRoster)) }
+    const rosters = (data || []).map(sortRoster)
+    return { rosters: includeMemberNames ? await withPublishedMemberNames(rosters) : rosters }
   },
 
   async listManagedMinistries(profile) {
@@ -143,44 +152,44 @@ export const serviceRosterService = {
     const [start, end] = monthRange(month)
     const { data, error } = await supabase
       .from('service_rosters')
-      .select(`${rosterSelect}, service_schedule_parts(occurrence_id)`)
+      // Daftar ibadah hanya menampilkan ringkasan; tim lengkap dimuat saat dibuka.
+      .select('*, ministries(name), service_schedule_parts(occurrence_id)')
       .in('status', ['Terbit', 'Dibatalkan'])
       .gte('service_date', start)
       .lt('service_date', end)
       .order('service_date')
       .order('start_time')
     if (error) throw error
-    return withPublishedMemberNames((data || []).map(sortRoster))
+    return data || []
   },
 
   async listMine(userId, month = null) {
+    const [start, end] = month ? monthRange(month) : [todayWib(), null]
     let query = supabase
       .from('service_roster_slots')
       .select(`
-        roster_id,
-        service_rosters(
-          *, ministries(name),
-          service_roster_slots(
-            slot_id, ministry_id, position_id, slot_no, user_id, assignment_note,
-            ministry_service_positions(name, sort_order),
-            users(name, photo_url)
-          )
-        )
+        roster_id, slot_id, ministry_id, position_id, slot_no, user_id, assignment_note,
+        ministry_service_positions(name, sort_order),
+        service_rosters!inner(*, ministries(name))
       `)
       .eq('user_id', userId)
+      .in('service_rosters.status', ['Terbit', 'Dibatalkan'])
+      .gte('service_rosters.service_date', start)
+    if (end) query = query.lt('service_rosters.service_date', end)
     const { data, error } = await query
     if (error) throw error
     const unique = new Map()
     for (const row of data || []) {
-      const roster = row.service_rosters
+      const { service_rosters: roster, ...slot } = row
       if (!roster || !['Terbit', 'Dibatalkan'].includes(roster.status)) continue
       if (month && !String(roster.service_date || '').startsWith(month)) continue
-      unique.set(roster.roster_id, sortRoster(roster))
+      if (!unique.has(roster.roster_id)) unique.set(roster.roster_id, { ...roster, service_roster_slots: [] })
+      unique.get(roster.roster_id).service_roster_slots.push(slot)
     }
-    return withPublishedMemberNames([...unique.values()].sort((a, b) =>
+    return [...unique.values()].map(sortRoster).sort((a, b) =>
       String(a.service_date).localeCompare(String(b.service_date))
       || String(a.start_time).localeCompare(String(b.start_time))
-    ))
+    )
   },
 
   async listManaged(month, ministryId, { legacyOnly = false } = {}) {
