@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { BellRing, CalendarClock, ChevronLeft, ChevronRight, MapPin, Plus, Printer, Search, Trash2, UserRound, X } from 'lucide-react'
+import { BellRing, CalendarClock, CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus, Printer, Search, Trash2, UserRound, X } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLang } from '@/hooks/useLang'
 import { useToast } from '@/hooks/useToast'
@@ -46,33 +46,33 @@ const displayStatus = (roster, adminMode = false) => {
 const displayBadgeColor = status => status === 'OnShow' ? 'green'
   : status === 'Done' ? 'gray' : badgeColor(status)
 
-function ScheduleCard({ roster, mine, onClick, t, adminMode }) {
+function ScheduleCard({ roster, mine, onClick, t, lang, adminMode }) {
   const count = completion(roster)
   const status = displayStatus(roster, adminMode)
+  const dateLabel = new Date(`${roster.service_date}T12:00:00`).toLocaleDateString(
+    lang === 'en' ? 'en-US' : 'id-ID',
+    { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' },
+  )
   const roles = mine
     ? (roster.service_roster_slots || []).filter(s => s.user_id === mine).map(s => s.ministry_service_positions?.name).filter(Boolean)
     : []
   return (
     <button type="button" onClick={onClick} className="w-full min-h-11 text-left">
       <Card className="p-4 hover:bg-control">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-            <span className="text-[10px] uppercase">{new Date(`${roster.service_date}T00:00:00`).toLocaleDateString(undefined, { month: 'short' })}</span>
-            <b className="leading-4">{String(roster.service_date).slice(-2)}</b>
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <p className="line-clamp-2 font-semibold text-gray-900">{roster.title}</p>
-              <Badge color={displayBadgeColor(status)}>{t(`sched.status.${status}`)}</Badge>
-            </div>
-            <p className="mt-1 text-xs text-gray-500">{timeText(roster)}{roster.location ? ` · ${roster.location}` : ''}</p>
-            {mine ? <div className="mt-3 border-t border-gray-200 pt-3">
-              <p className="text-xs font-semibold text-brand-700">{t('sched.yourAssignment')}</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{roles.length ? roles.join(', ') : '-'}</p>
-              <p className="mt-0.5 text-xs text-gray-500">{roster.ministries?.name || '-'}</p>
-            </div> : <p className="mt-1 text-xs text-gray-500">{t('sched.slotsFilled', count)} · {roster.ministries?.name || '-'}</p>}
-          </div>
+        <p className="flex items-center gap-2 text-sm font-medium text-brand-700">
+          <CalendarDays size={16} aria-hidden="true" />
+          <span>{dateLabel}</span>
+        </p>
+        <div className="mt-3 flex items-start justify-between gap-2">
+          <p className="min-w-0 line-clamp-2 font-semibold text-gray-900">{roster.title}</p>
+          <Badge color={displayBadgeColor(status)}>{t(`sched.status.${status}`)}</Badge>
         </div>
+        <p className="mt-1 text-sm text-gray-500">{timeText(roster)}{roster.location ? ` · ${roster.location}` : ''}</p>
+        {mine ? <div className="mt-3 border-t border-gray-200 pt-3">
+          <p className="text-xs font-semibold text-brand-700">{t('sched.yourAssignment')}</p>
+          <p className="mt-1 text-sm font-semibold text-gray-900">{roles.length ? roles.join(', ') : '-'}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{roster.ministries?.name || '-'}</p>
+        </div> : <p className="mt-1 text-xs text-gray-500">{t('sched.slotsFilled', count)} · {roster.ministries?.name || '-'}</p>}
       </Card>
     </button>
   )
@@ -184,7 +184,7 @@ function Picker({ roster, slot, canManageAll, onClose, onPick, t }) {
 
 export default function ServiceSchedulesPage({ adminMode = false, initialTab = 'manage', legacyOnly = false, archiveOnly = false }) {
   const { profile, isVolunteer } = useAuth()
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const { toast, confirm } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedRosterId = searchParams.get('rosterId')
@@ -622,7 +622,7 @@ export default function ServiceSchedulesPage({ adminMode = false, initialTab = '
       </div> : loading ? <div className="py-20 text-center"><Spinner /></div> : visibleRosters.length === 0 ? <EmptyState icon={CalendarClock} title={t('sched.emptyTitle')} description={t(tab === 'manage' ? 'sched.emptyManage' : tab === 'mine' ? 'sched.emptyMine' : 'sched.emptyDesc')} action={tab === 'mine' ? <Button variant="outline" onClick={() => setMonth(followingMonth(month))}>{t('sched.nextMonth')}</Button> : undefined} /> : tab === 'all' ? <div className="space-y-6">{groupedServices.map(({ date, services }) => <section key={date}>
         <h2 className="mb-3 text-base font-semibold text-gray-900">{formatDate(date)}</h2>
         <div className="grid gap-3">{services.map(group => <ServiceGroupCard key={group.key} group={group} onClick={() => setSelected(group.rosters[0])} t={t} />)}</div>
-      </section>)}</div> : <div className="grid gap-3 sm:grid-cols-2">{visibleRosters.map(roster => <ScheduleCard key={roster.roster_id} roster={roster} mine={tab === 'mine' ? profile.user_id : null} onClick={() => setSelected(roster)} t={t} adminMode={adminMode} />)}</div>}
+      </section>)}</div> : <div className="grid gap-3 sm:grid-cols-2">{visibleRosters.map(roster => <ScheduleCard key={roster.roster_id} roster={roster} mine={tab === 'mine' ? profile.user_id : null} onClick={() => setSelected(roster)} t={t} lang={lang} adminMode={adminMode} />)}</div>}
 
       {createOpen && <div className="fixed inset-0 z-[70] overflow-y-auto bg-black/40 px-4 py-8"><form onSubmit={createRoster} className="mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-surface p-5">
         <div className="mb-4 flex items-start gap-3"><div className="flex-1"><h2 className="font-semibold">{t('sched.newSchedule')}</h2><p className="text-xs text-gray-500">{t('sched.draftHint')}</p></div><button type="button" onClick={() => setCreateOpen(false)} aria-label={t('sched.close')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl hover:bg-control"><X size={18} /></button></div>
